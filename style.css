@@ -211,6 +211,52 @@ button.small {
   white-space: nowrap;
   opacity: 0.8;
 }
+.section-note {
+  margin: 0.2rem 0;
+  opacity: 0.9;
+  font-size: 0.87rem;
+}
+.table-wrapper {
+  margin-top: 0.4rem;
+  overflow-x: auto;
+  border: 1px solid #222;
+  border-radius: 0.6rem;
+  background: linear-gradient(145deg, #0f0f0f, #151515);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 540px;
+}
+th, td {
+  padding: 0.35rem 0.45rem;
+  text-align: center;
+  border-bottom: 1px solid #222;
+  font-size: 0.82rem;
+}
+th {
+  position: sticky;
+  top: 0;
+  background: #1f1f1f;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.75rem;
+}
+tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+tbody tr:hover {
+  background: rgba(45, 108, 223, 0.08);
+}
+td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+td:nth-child(2) {
+  text-align: left;
+  opacity: 0.95;
+}
 @media (min-width: 700px) {
   body {
     padding: 0.8rem;

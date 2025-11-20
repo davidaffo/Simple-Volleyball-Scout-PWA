@@ -40,6 +40,7 @@ const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnSaveInfo = document.getElementById("btn-save-info");
 const elBtnUndo = document.getElementById("btn-undo");
+const elAggTableBody = document.getElementById("agg-table-body");
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -282,6 +283,7 @@ function recalcAllStatsAndUpdateUI() {
       updateSkillStatsUI(idx, skill.id);
     });
   });
+  renderAggregatedTable();
 }
 function renderEventsLog() {
   elEventsLog.innerHTML = "";
@@ -318,6 +320,52 @@ function renderEventsLog() {
     div.appendChild(left);
     div.appendChild(right);
     elEventsLog.appendChild(div);
+  });
+}
+function renderAggregatedTable() {
+  if (!elAggTableBody) return;
+  elAggTableBody.innerHTML = "";
+  if (!state.players || state.players.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
+    tr.appendChild(td);
+    elAggTableBody.appendChild(tr);
+    return;
+  }
+  state.players.forEach((name, idx) => {
+    SKILLS.forEach(skill => {
+      const counts =
+        (state.stats[idx] && state.stats[idx][skill.id]) || {
+          "#": 0,
+          "+": 0,
+          "-": 0,
+          "=": 0,
+          "/": 0
+        };
+      const metrics = computeMetrics(counts, skill.id);
+      const tr = document.createElement("tr");
+      const values = [
+        name,
+        skill.label,
+        counts["#"] + counts["+"] + counts["-"] + counts["="] + counts["/"],
+        counts["#"],
+        counts["+"],
+        counts["-"],
+        counts["="],
+        counts["/"],
+        metrics.pos === null ? "-" : formatPercent(metrics.pos),
+        metrics.eff === null ? "-" : formatPercent(metrics.eff),
+        metrics.prf === null ? "-" : formatPercent(metrics.prf)
+      ];
+      values.forEach(text => {
+        const td = document.createElement("td");
+        td.textContent = text;
+        tr.appendChild(td);
+      });
+      elAggTableBody.appendChild(tr);
+    });
   });
 }
 function exportCsv() {
