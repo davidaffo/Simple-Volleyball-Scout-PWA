@@ -31,6 +31,28 @@ h3 {
   background: #1b1b1b;
   border: 1px solid #333;
 }
+.tabs-nav {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.tab-btn {
+  flex: 1 1 0;
+  background: #222;
+  border: 1px solid #333;
+  color: #e6e6e6;
+}
+.tab-btn.active {
+  background: #2d6cdf;
+  border-color: #2d6cdf;
+  color: #fff;
+}
+.tab-panel {
+  display: none;
+}
+.tab-panel.active {
+  display: block;
+}
 label {
   font-size: 0.85rem;
   display: block;
@@ -243,6 +265,9 @@ th {
   letter-spacing: 0.02em;
   font-size: 0.75rem;
 }
+th[rowspan] {
+  vertical-align: middle;
+}
 tbody tr:nth-child(odd) {
   background: rgba(255, 255, 255, 0.02);
 }
@@ -256,6 +281,16 @@ td:first-child {
 td:nth-child(2) {
   text-align: left;
   opacity: 0.95;
+}
+.agg-table {
+  min-width: 1100px;
+}
+.agg-table th {
+  text-transform: none;
+}
+.agg-table thead tr:nth-child(2) th {
+  font-size: 0.72rem;
+  background: #262626;
 }
 @media (min-width: 700px) {
   body {

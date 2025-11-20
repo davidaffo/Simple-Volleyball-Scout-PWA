@@ -41,6 +41,8 @@ const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnSaveInfo = document.getElementById("btn-save-info");
 const elBtnUndo = document.getElementById("btn-undo");
 const elAggTableBody = document.getElementById("agg-table-body");
+const tabButtons = document.querySelectorAll(".tab-btn");
+const tabPanels = document.querySelectorAll(".tab-panel");
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -183,6 +185,7 @@ function handleEventClick(playerIdxStr, skillId, code) {
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
   renderEventsLog();
+  renderAggregatedTable();
 }
 function computeMetrics(counts, skillId) {
   const total =
@@ -328,44 +331,74 @@ function renderAggregatedTable() {
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 11;
+    td.colSpan = 19;
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
     return;
   }
+  const getCounts = (idx, skillId) => {
+    const base =
+      (state.stats[idx] && state.stats[idx][skillId]) || {
+        "#": 0,
+        "+": 0,
+        "-": 0,
+        "=": 0,
+        "/": 0
+      };
+    return Object.assign({ "#": 0, "+": 0, "-": 0, "=": 0, "/": 0 }, base);
+  };
+  const totalFromCounts = counts =>
+    (counts["#"] || 0) +
+    (counts["+"] || 0) +
+    (counts["-"] || 0) +
+    (counts["="] || 0) +
+    (counts["/"] || 0);
   state.players.forEach((name, idx) => {
-    SKILLS.forEach(skill => {
-      const counts =
-        (state.stats[idx] && state.stats[idx][skill.id]) || {
-          "#": 0,
-          "+": 0,
-          "-": 0,
-          "=": 0,
-          "/": 0
-        };
-      const metrics = computeMetrics(counts, skill.id);
-      const tr = document.createElement("tr");
-      const values = [
-        name,
-        skill.label,
-        counts["#"] + counts["+"] + counts["-"] + counts["="] + counts["/"],
-        counts["#"],
-        counts["+"],
-        counts["-"],
-        counts["="],
-        counts["/"],
-        metrics.pos === null ? "-" : formatPercent(metrics.pos),
-        metrics.eff === null ? "-" : formatPercent(metrics.eff),
-        metrics.prf === null ? "-" : formatPercent(metrics.prf)
-      ];
-      values.forEach(text => {
-        const td = document.createElement("td");
-        td.textContent = text;
-        tr.appendChild(td);
-      });
-      elAggTableBody.appendChild(tr);
+    const serveCounts = getCounts(idx, "serve");
+    const passCounts = getCounts(idx, "pass");
+    const attackCounts = getCounts(idx, "attack");
+    const blockCounts = getCounts(idx, "block");
+    const secondCounts = getCounts(idx, "second");
+
+    const serveMetrics = computeMetrics(serveCounts, "serve");
+    const passMetrics = computeMetrics(passCounts, "pass");
+    const attackMetrics = computeMetrics(attackCounts, "attack");
+    const secondMetrics = computeMetrics(secondCounts, "second");
+
+    const tr = document.createElement("tr");
+    const values = [
+      idx + 1,
+      name,
+
+      totalFromCounts(serveCounts),
+      serveCounts["-"] || 0,
+      serveCounts["#"] || 0,
+      serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff),
+
+      totalFromCounts(passCounts),
+      passCounts["-"] || 0,
+      passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
+      passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf),
+
+      totalFromCounts(attackCounts),
+      attackCounts["-"] || 0,
+      attackCounts["#"] || 0,
+      attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff),
+
+      totalFromCounts(blockCounts),
+      blockCounts["#"] || 0,
+
+      totalFromCounts(secondCounts),
+      secondMetrics.pos === null ? "-" : formatPercent(secondMetrics.pos),
+      secondMetrics.prf === null ? "-" : formatPercent(secondMetrics.prf)
+    ];
+    values.forEach(text => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
     });
+    elAggTableBody.appendChild(tr);
   });
 }
 function exportCsv() {
@@ -451,7 +484,28 @@ function registerServiceWorker() {
     });
   }
 }
+function initTabs() {
+  if (!tabButtons || !tabPanels) return;
+  const setActiveTab = target => {
+    tabButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.tabTarget === target);
+    });
+    tabPanels.forEach(panel => {
+      panel.classList.toggle("active", panel.dataset.tab === target);
+    });
+  };
+  tabButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.tabTarget;
+      if (target) {
+        setActiveTab(target);
+      }
+    });
+  });
+  setActiveTab("info");
+}
 function init() {
+  initTabs();
   loadState();
   applyMatchInfoToUI();
   applyPlayersFromStateToTextarea();
