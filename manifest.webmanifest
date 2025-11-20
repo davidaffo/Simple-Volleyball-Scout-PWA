@@ -1,6 +1,6 @@
 {
-  "name": "Volley Scout",
-  "short_name": "VolleyScout",
+  "name": "Simple Volleyball Scout PWA",
+  "short_name": "Simple Volley Scout",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#111111",

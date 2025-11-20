@@ -2,14 +2,14 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <title>Volley Scout</title>
+  <title>Simple Volleyball Scout PWA</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.webmanifest" />
 </head>
 <body>
-  <h1>Volley Scout</h1>
+  <h1>Simple Volleyball Scout PWA</h1>
   <div class="tabs-nav">
     <button class="tab-btn active" data-tab-target="info">Info partita</button>
     <button class="tab-btn" data-tab-target="scout">Raccolta dati</button>
@@ -38,16 +38,6 @@
         </div>
       </div>
       <div class="controls-row info-controls">
-        <div class="col set-select">
-          <label for="current-set">Set corrente</label>
-          <select id="current-set">
-            <option value="1">Set 1</option>
-            <option value="2">Set 2</option>
-            <option value="3">Set 3</option>
-            <option value="4">Set 4</option>
-            <option value="5">Set 5</option>
-          </select>
-        </div>
         <div class="col buttons-right">
           <button id="btn-save-info" class="secondary">Salva info</button>
         </div>
@@ -55,13 +45,52 @@
     </div>
     <div class="section">
       <h2>Giocatrici</h2>
-      <label for="players-input">Inserisci le giocatrici (una per riga)</label>
-      <textarea id="players-input" placeholder="Es:
+      <p class="section-note">Gestisci l'elenco con i pulsanti. Cambiare la lista azzera le statistiche del match.</p>
+      <div class="player-management">
+        <div class="add-player-row">
+          <div class="col">
+            <label for="new-player-name">Nuova giocatrice</label>
+            <div class="add-player-inline">
+              <input id="new-player-name" type="text" placeholder="Es: Martina Rossi" />
+              <button id="btn-add-player">+ Aggiungi</button>
+            </div>
+          </div>
+          <div class="col col-auto">
+            <label class="spacer-label">&nbsp;</label>
+            <button id="btn-clear-players" class="secondary">Svuota elenco</button>
+          </div>
+        </div>
+        <div id="players-list" class="players-list"></div>
+        <div class="team-manage">
+          <label for="saved-teams">Squadre salvate</label>
+          <div class="team-row">
+            <select id="saved-teams">
+              <option value="">Scegli una squadra salvata</option>
+            </select>
+            <button id="btn-load-team" class="secondary">Carica</button>
+            <button id="btn-save-team">Salva attuale</button>
+          </div>
+        </div>
+        <details class="import-panel">
+          <summary>Incolla un elenco (opzionale)</summary>
+          <label for="players-input">Incolla le giocatrici (una per riga)</label>
+          <textarea id="players-input" placeholder="Es:
 Piccardi
 Cimmino
 Bilamour"></textarea>
-      <div class="controls-row">
-        <button id="btn-apply-players">Applica giocatrici (resetta le statistiche)</button>
+          <div class="controls-row">
+            <button id="btn-apply-players">Sostituisci elenco (resetta le statistiche)</button>
+          </div>
+        </details>
+        <div class="libero-manage">
+          <label for="libero-tags">Segna i liberi (solo per colore)</label>
+          <div id="libero-tags" class="libero-tags"></div>
+        </div>
+        <details class="import-panel metrics-panel" open>
+          <summary>Regole calcolo efficienza/positività</summary>
+          <p class="section-note">Per ogni fondamentale scegli cosa considerare positivo, neutro o negativo.</p>
+          <div id="metrics-config" class="metrics-config"></div>
+        </details>
       </div>
     </div>
     <div class="section">
@@ -76,12 +105,35 @@ Bilamour"></textarea>
   <div class="tab-panel" data-tab="scout">
     <div class="section">
       <h2>Scout in tempo reale</h2>
-      <div class="controls-row">
-        <span class="badge badge-set" id="set-indicator">Set 1</span>
-        <button id="btn-undo" class="danger">↩ Annulla ultimo</button>
+      <div class="controls-row set-controls">
+        <div class="rotation-controls">
+          <button id="btn-rotate-cw" class="secondary small">↻</button>
+          <div class="rotation-display">
+            <label>Rotazione</label>
+            <div id="rotation-indicator" class="rotation-number">1</div>
+          </div>
+          <button id="btn-rotate-ccw" class="secondary small">↺</button>
+        </div>
+        <div class="col set-select-compact">
+          <label for="current-set">Set corrente</label>
+          <select id="current-set">
+            <option value="1">Set 1</option>
+            <option value="2">Set 2</option>
+            <option value="3">Set 3</option>
+            <option value="4">Set 4</option>
+            <option value="5">Set 5</option>
+          </select>
+        </div>
+        <div class="bench-inline">
+          <label>Riserve (trascina in campo)</label>
+          <div id="bench-chips" class="bench-chips bench-inline-list"></div>
+        </div>
       </div>
       <h3>Giocatrici e fondamentali</h3>
       <div id="players-container"></div>
+      <div class="controls-row undo-controls">
+        <button id="btn-undo" class="danger">↩ Annulla ultimo</button>
+      </div>
     </div>
     <div class="section">
       <h2>Log eventi (ultimi)</h2>
