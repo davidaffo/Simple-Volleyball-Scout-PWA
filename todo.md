@@ -1,2 +1,2 @@
-definire regole precise per le metriche (punto fatto o subito, non solo positiva e negativa)
+definire regole precise per le metriche (punto fatto o subito, non solo positiva e negativa), impostare anche delle metriche di default e un tasto per reimpostare il default.
 salvare in modo persistente le squadre
