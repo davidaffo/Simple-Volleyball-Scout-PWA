@@ -65,10 +65,10 @@
           <label for="saved-teams">Squadre salvate</label>
           <div class="team-row">
             <select id="saved-teams">
-              <option value="">Scegli una squadra salvata</option>
+              <option value="">Nuova squadra (vuota)</option>
             </select>
-            <button id="btn-load-team" class="secondary">Carica</button>
-            <button id="btn-save-team">Salva attuale</button>
+            <button id="btn-delete-team" class="danger">Elimina</button>
+            <button id="btn-save-team">Salva squadra</button>
           </div>
         </div>
         <details class="import-panel">
@@ -88,7 +88,10 @@ Bilamour"></textarea>
         </div>
         <details class="import-panel metrics-panel" open>
           <summary>Regole calcolo efficienza/positività</summary>
-          <p class="section-note">Per ogni fondamentale scegli cosa considerare positivo, neutro o negativo.</p>
+          <p class="section-note">Per ogni fondamentale scegli cosa vale come positivo o negativo; il resto è neutro. Positività = positivi / totali · Efficienza = (positivi - negativi) / totali · Perfezione = # / totali.</p>
+          <div class="controls-row metrics-actions">
+            <button id="btn-reset-metrics" class="secondary">Ripristina criteri di default</button>
+          </div>
           <div id="metrics-config" class="metrics-config"></div>
         </details>
       </div>
@@ -107,12 +110,12 @@ Bilamour"></textarea>
       <h2>Scout in tempo reale</h2>
       <div class="controls-row set-controls">
         <div class="rotation-controls">
-          <button id="btn-rotate-cw" class="secondary small">↻</button>
+          <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
           <div class="rotation-display">
             <label>Rotazione</label>
             <div id="rotation-indicator" class="rotation-number">1</div>
           </div>
-          <button id="btn-rotate-ccw" class="secondary small">↺</button>
+          <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
         </div>
         <div class="col set-select-compact">
           <label for="current-set">Set corrente</label>
@@ -154,27 +157,30 @@ Bilamour"></textarea>
               <th colspan="4">Battuta</th>
               <th colspan="4">Ricezione</th>
               <th colspan="4">Attacco</th>
-              <th colspan="2">Muro</th>
-              <th colspan="3">2° tocco</th>
+              <th colspan="4">Difesa</th>
+              <th colspan="4">Muro</th>
+              <th colspan="3">Alzata</th>
             </tr>
             <tr>
               <th>Tot</th>
-              <th>Err</th>
-              <th>Ace</th>
+              <th>Neg</th>
+              <th>Pos</th>
               <th>Eff</th>
 
               <th>Tot</th>
-              <th>Err</th>
+              <th>Neg</th>
               <th>Pos</th>
               <th>Prf</th>
 
               <th>Tot</th>
-              <th>Err</th>
-              <th>Pt</th>
+              <th>Neg</th>
+              <th>Pos</th>
               <th>Eff</th>
 
               <th>Tot</th>
-              <th>Pt</th>
+              <th>Neg</th>
+              <th>Pos</th>
+              <th>Eff</th>
 
               <th>Tot</th>
               <th>Pos</th>
@@ -183,7 +189,7 @@ Bilamour"></textarea>
           </thead>
           <tbody id="agg-table-body">
             <tr>
-              <td colspan="17">Registra alcuni eventi per vedere le statistiche aggregate.</td>
+              <td colspan="25">Registra alcuni eventi per vedere le statistiche aggregate.</td>
             </tr>
           </tbody>
         </table>

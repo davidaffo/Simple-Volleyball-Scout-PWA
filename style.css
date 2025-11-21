@@ -142,6 +142,12 @@ button.small {
   align-items: center;
   gap: 0.35rem;
 }
+.rotate-ccw {
+  background: #1b5e20;
+}
+.rotate-cw {
+  background: #b3261e;
+}
 .rotation-display {
   display: flex;
   flex-direction: column;
@@ -262,6 +268,10 @@ button.small {
   gap: 0.35rem;
   flex-wrap: wrap;
 }
+.event-btn.disabled-code {
+  opacity: 0.35;
+  pointer-events: none;
+}
 .skill-stats {
   font-size: 0.75rem;
   opacity: 0.85;
@@ -282,6 +292,9 @@ button.small {
 }
 .badge-attack {
   background: #b71c1c;
+}
+.badge-defense {
+  background: #546e7a;
 }
 .badge-block {
   background: #4a148c;
@@ -348,6 +361,26 @@ button.small {
   border-radius: 0.6rem;
   background: #121212;
 }
+.metric-block.disabled {
+  background: #1a1a1a;
+  border-color: #3a3a3a;
+  opacity: 0.7;
+}
+.metric-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.25rem 0.5rem;
+}
+.metric-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.metric-helper {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-bottom: 0.2rem;
+}
 .metric-title {
   font-weight: 700;
   margin-bottom: 0.25rem;
@@ -368,8 +401,24 @@ button.small {
   padding: 0.25rem 0.35rem;
   background: #1f1f1f;
 }
+.metric-toggle.toggle-skill {
+  min-width: 4.2rem;
+}
+.metric-toggle.toggle-on {
+  background: #1b5e20;
+}
+.metric-toggle.toggle-off {
+  background: #b3261e;
+}
 .metric-toggle.active {
   background: #2d6cdf;
+}
+.metrics-actions {
+  margin: 0.2rem 0;
+  justify-content: flex-end;
+}
+.metrics-actions button {
+  flex: 0 0 auto;
 }
 .col-auto {
   flex: 0 0 160px;
@@ -603,7 +652,7 @@ td:nth-child(2) {
   opacity: 0.95;
 }
 .agg-table {
-  min-width: 1100px;
+  min-width: 1350px;
 }
 .agg-table th {
   text-transform: none;

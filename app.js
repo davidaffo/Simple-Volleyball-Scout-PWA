@@ -3,18 +3,11 @@ const SKILLS = [
   { id: "serve", label: "Battuta", badgeClass: "badge-serve" },
   { id: "pass", label: "Ricezione", badgeClass: "badge-pass" },
   { id: "attack", label: "Attacco", badgeClass: "badge-attack" },
+  { id: "defense", label: "Difesa", badgeClass: "badge-defense" },
   { id: "block", label: "Muro", badgeClass: "badge-block" },
-  { id: "second", label: "2° tocco alzata", badgeClass: "badge-second" }
+  { id: "second", label: "Alzata", badgeClass: "badge-second" }
 ];
-const POSITIONS_META = [
-  { id: 1, label: "Posizione 1 · P" },
-  { id: 2, label: "Posizione 2 · S1" },
-  { id: 3, label: "Posizione 3 · C2" },
-  { id: 4, label: "Posizione 4 · O" },
-  { id: 5, label: "Posizione 5 · S2" },
-  { id: 6, label: "Posizione 6 · C1" }
-];
-const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
+const RESULT_CODES = ["#", "+", "!", "-", "/", "="];
 const RESULT_LABELS = {
   "#": "Punto / perfetto",
   "+": "Buono",
@@ -23,6 +16,25 @@ const RESULT_LABELS = {
   "=": "Neutro",
   "/": "Altro"
 };
+const METRIC_DEFAULTS = {
+  serve: { positive: ["#", "+", "!", "/"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
+  pass: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
+  defense: { positive: ["#", "+", "!"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
+  attack: { positive: ["#"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
+  block: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
+  second: { positive: ["#"], negative: ["/", "-", "="], activeCodes: RESULT_CODES, enabled: true }
+};
+const PERSISTENT_DB_NAME = "Data";
+const TEAM_STORE_NAME = "Teams";
+const TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + TEAM_STORE_NAME + "/";
+const POSITIONS_META = [
+  { id: 1, label: "Posizione 1 · P" },
+  { id: 2, label: "Posizione 2 · S1" },
+  { id: 3, label: "Posizione 3 · C2" },
+  { id: 4, label: "Posizione 4 · O" },
+  { id: 5, label: "Posizione 5 · S2" },
+  { id: 6, label: "Posizione 6 · C1" }
+];
 let state = {
   match: {
     opponent: "",
@@ -38,8 +50,12 @@ let state = {
   rotation: 1,
   liberos: [],
   savedTeams: {},
+  selectedTeam: "",
   metricsConfig: {}
 };
+function logError(context, err) {
+  console.error(context, err);
+}
 const elOpponent = document.getElementById("match-opponent");
 const elCategory = document.getElementById("match-category");
 const elDate = document.getElementById("match-date");
@@ -53,7 +69,7 @@ const elBtnAddPlayer = document.getElementById("btn-add-player");
 const elBtnClearPlayers = document.getElementById("btn-clear-players");
 const elTeamsSelect = document.getElementById("saved-teams");
 const elBtnSaveTeam = document.getElementById("btn-save-team");
-const elBtnLoadTeam = document.getElementById("btn-load-team");
+const elBtnDeleteTeam = document.getElementById("btn-delete-team");
 const elLineupChips = document.getElementById("lineup-chips");
 const elBenchChips = document.getElementById("bench-chips");
 const elRotationIndicator = document.getElementById("rotation-indicator");
@@ -61,6 +77,7 @@ const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
 const elLiberoTags = document.getElementById("libero-tags");
 const elMetricsConfig = document.getElementById("metrics-config");
+const elBtnResetMetrics = document.getElementById("btn-reset-metrics");
 let activeDropChip = null;
 let draggedPlayerName = "";
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
@@ -86,18 +103,23 @@ function loadState() {
     state.rotation = parsed.rotation || 1;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
+    state.selectedTeam = parsed.selectedTeam || "";
     state.metricsConfig = parsed.metricsConfig || {};
     cleanLiberos();
     ensureMetricsConfigDefaults();
+    migrateTeamsToPersistent();
+    syncTeamsFromStorage();
   } catch (e) {
-    console.error("Error loading state", e);
+    logError("Error loading state", e);
   }
+  syncTeamsFromStorage();
 }
 function saveState() {
   try {
+    syncTeamsFromStorage();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
-    console.error("Error saving state", e);
+    logError("Error saving state", e);
   }
 }
 function normalizePlayers(list) {
@@ -262,13 +284,78 @@ function renderPlayersManagerList() {
   });
   renderLiberoTags();
 }
+function getTeamStorageKey(name) {
+  return TEAM_PREFIX + name;
+}
+function listTeamsFromStorage() {
+  const names = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(TEAM_PREFIX)) {
+        names.push(key.slice(TEAM_PREFIX.length));
+      }
+    }
+  } catch (e) {
+    logError("Error listing teams", e);
+  }
+  return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+function loadTeamFromStorage(name) {
+  if (!name) return null;
+  try {
+    const raw = localStorage.getItem(getTeamStorageKey(name));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    logError("Error loading team " + name, e);
+    return null;
+  }
+}
+function saveTeamToStorage(name, data) {
+  if (!name) return;
+  try {
+    localStorage.setItem(getTeamStorageKey(name), JSON.stringify(data));
+  } catch (e) {
+    logError("Error saving team " + name, e);
+  }
+}
+function deleteTeamFromStorage(name) {
+  if (!name) return;
+  try {
+    localStorage.removeItem(getTeamStorageKey(name));
+  } catch (e) {
+    logError("Error deleting team " + name, e);
+  }
+}
+function loadTeamsMapFromStorage() {
+  const map = {};
+  listTeamsFromStorage().forEach(name => {
+    const data = loadTeamFromStorage(name);
+    if (data) map[name] = data;
+  });
+  return map;
+}
+function migrateTeamsToPersistent() {
+  if (!state.savedTeams || Object.keys(state.savedTeams).length === 0) return;
+  Object.entries(state.savedTeams).forEach(([name, data]) => {
+    if (!localStorage.getItem(getTeamStorageKey(name))) {
+      saveTeamToStorage(name, data);
+    }
+  });
+}
+function syncTeamsFromStorage() {
+  state.savedTeams = loadTeamsMapFromStorage();
+}
 function renderTeamsSelect() {
   if (!elTeamsSelect) return;
+  syncTeamsFromStorage();
   const names = Object.keys(state.savedTeams || {});
+  const prev = elTeamsSelect.value || state.selectedTeam || "";
   elTeamsSelect.innerHTML = "";
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = "Scegli una squadra salvata";
+  placeholder.textContent = "Nuova squadra (vuota)";
   elTeamsSelect.appendChild(placeholder);
   names.forEach(name => {
     const opt = document.createElement("option");
@@ -276,34 +363,76 @@ function renderTeamsSelect() {
     opt.textContent = name;
     elTeamsSelect.appendChild(opt);
   });
+  if (prev && names.includes(prev)) {
+    elTeamsSelect.value = prev;
+    state.selectedTeam = prev;
+  } else {
+    elTeamsSelect.value = "";
+    state.selectedTeam = "";
+  }
+  updateTeamButtonsState();
 }
 function saveCurrentTeam() {
   if (!state.players || state.players.length === 0) {
     alert("Aggiungi almeno una giocatrice prima di salvare.");
     return;
   }
-  const name = prompt("Nome della squadra da salvare:", state.match.opponent || "");
+  const existing = state.selectedTeam;
+  let name = existing;
+  if (!name) {
+    name = prompt("Nome della squadra da salvare:", state.match.opponent || "");
+    if (!name) return;
+    name = name.trim();
+  }
   if (!name) return;
-  const trimmed = name.trim();
-  if (!trimmed) return;
-  state.savedTeams = state.savedTeams || {};
-  state.savedTeams[trimmed] = {
+  const payload = {
     players: [...state.players],
     liberos: [...(state.liberos || [])]
   };
+  state.savedTeams = state.savedTeams || {};
+  state.savedTeams[name] = payload;
+  state.selectedTeam = name;
+  saveTeamToStorage(name, payload);
   saveState();
   renderTeamsSelect();
-  alert("Squadra salvata: " + trimmed);
+  alert((existing ? "Squadra sovrascritta: " : "Squadra salvata: ") + name);
 }
-function loadSavedTeam() {
+function deleteSelectedTeam() {
+  if (!elTeamsSelect) return;
+  const name = elTeamsSelect.value;
+  if (!name) return;
+  const ok = confirm("Eliminare la squadra \"" + name + "\"?");
+  if (!ok) return;
+  deleteTeamFromStorage(name);
+  syncTeamsFromStorage();
+  state.selectedTeam = "";
+  renderTeamsSelect();
+}
+function handleTeamSelectChange() {
   if (!elTeamsSelect) return;
   const selected = elTeamsSelect.value;
+  state.selectedTeam = selected;
+  updateTeamButtonsState();
   if (!selected) {
-    alert("Seleziona una squadra dalla lista.");
+    const ok = confirm(
+      "Caricare una nuova squadra vuota azzererà roster e statistiche correnti. Procedere?"
+    );
+    if (!ok) {
+      renderTeamsSelect();
+      return;
+    }
+    updatePlayersList([], { askReset: false });
+    state.liberos = [];
+    renderLiberoTags();
+    renderTeamsSelect();
     return;
   }
-  const team = state.savedTeams && state.savedTeams[selected];
-  if (!team) return;
+  const team = loadTeamFromStorage(selected);
+  if (!team) {
+    alert("Squadra non trovata o corrotta.");
+    renderTeamsSelect();
+    return;
+  }
   state.liberos = team.liberos || [];
   updatePlayersList(team.players || [], { askReset: true });
   renderLiberoTags();
@@ -330,26 +459,106 @@ function renderLiberoTags() {
     elLiberoTags.appendChild(btn);
   });
 }
+const allowedMetricCodes = new Set(RESULT_CODES);
+function normalizeMetricConfig(skillId, cfg) {
+  const def = METRIC_DEFAULTS[skillId] || METRIC_DEFAULTS.serve;
+  const uniq = list =>
+    Array.from(new Set((list || []).filter(code => allowedMetricCodes.has(code))));
+  const positive = uniq((cfg && cfg.positive) || def.positive || ["#", "+"]);
+  const negative = uniq((cfg && cfg.negative) || def.negative || ["-"]);
+  const neutral = RESULT_CODES.filter(code => !positive.includes(code) && !negative.includes(code));
+  const activeCodes = uniq((cfg && cfg.activeCodes) || def.activeCodes || RESULT_CODES);
+  const enabled = cfg && typeof cfg.enabled === "boolean" ? cfg.enabled : def.enabled !== false;
+  return { positive, neutral, negative, activeCodes, enabled };
+}
 function ensureMetricsConfigDefaults() {
   state.metricsConfig = state.metricsConfig || {};
   SKILLS.forEach(skill => {
-    if (!state.metricsConfig[skill.id]) {
-      state.metricsConfig[skill.id] = {
-        positive: ["#", "+"],
-        neutral: ["=", "/", "!"],
-        negative: ["-"]
-      };
-    }
+    state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
   });
+}
+function updateTeamButtonsState() {
+  if (!elTeamsSelect) return;
+  const selected = elTeamsSelect.value || "";
+  if (elBtnSaveTeam) {
+    elBtnSaveTeam.textContent = selected ? "Sovrascrivi" : "Salva squadra";
+  }
+  if (elBtnDeleteTeam) {
+    elBtnDeleteTeam.disabled = !selected;
+  }
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
-  const cfg = state.metricsConfig[skillId];
-  ["positive", "neutral", "negative"].forEach(cat => {
-    cfg[cat] = cfg[cat].filter(c => c !== code);
+  const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
+  const posSet = new Set(cfg.positive);
+  const negSet = new Set(cfg.negative);
+  if (category === "positive") {
+    if (posSet.has(code)) {
+      posSet.delete(code);
+    } else {
+      posSet.add(code);
+      negSet.delete(code);
+    }
+  } else if (category === "negative") {
+    if (negSet.has(code)) {
+      negSet.delete(code);
+    } else {
+      negSet.add(code);
+      posSet.delete(code);
+    }
+  } else {
+    posSet.delete(code);
+    negSet.delete(code);
+  }
+  state.metricsConfig[skillId] = normalizeMetricConfig(skillId, {
+    positive: Array.from(posSet),
+    negative: Array.from(negSet),
+    activeCodes: cfg.activeCodes,
+    enabled: cfg.enabled
   });
-  cfg[category].push(code);
-  state.metricsConfig[skillId] = cfg;
+  saveState();
+  renderMetricsConfig();
+  recalcAllStatsAndUpdateUI();
+}
+function toggleActiveCode(skillId, code) {
+  ensureMetricsConfigDefaults();
+  const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
+  const activeSet = new Set(cfg.activeCodes);
+  if (activeSet.has(code)) {
+    activeSet.delete(code);
+  } else {
+    activeSet.add(code);
+  }
+  state.metricsConfig[skillId] = normalizeMetricConfig(skillId, {
+    positive: cfg.positive,
+    negative: cfg.negative,
+    activeCodes: Array.from(activeSet),
+    enabled: cfg.enabled
+  });
+  saveState();
+  renderMetricsConfig();
+  recalcAllStatsAndUpdateUI();
+}
+function toggleSkillEnabled(skillId) {
+  ensureMetricsConfigDefaults();
+  const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
+  state.metricsConfig[skillId] = normalizeMetricConfig(skillId, {
+    positive: cfg.positive,
+    negative: cfg.negative,
+    activeCodes: cfg.activeCodes,
+    enabled: !cfg.enabled
+  });
+  saveState();
+  renderMetricsConfig();
+  renderPlayers();
+}
+function resetMetricsToDefault() {
+  const ok = confirm(
+    "Ripristinare i criteri di default per tutte le metriche e i punti fatti/subiti?"
+  );
+  if (!ok) return;
+  state.metricsConfig = {};
+  ensureMetricsConfigDefaults();
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
@@ -360,36 +569,72 @@ function renderMetricsConfig() {
   elMetricsConfig.innerHTML = "";
   SKILLS.forEach(skill => {
     const block = document.createElement("div");
-    block.className = "metric-block";
+    const enabled = state.metricsConfig[skill.id].enabled;
+    block.className = "metric-block" + (enabled ? "" : " disabled");
     const title = document.createElement("div");
     title.className = "metric-title";
     title.textContent = skill.label;
     block.appendChild(title);
-    ["positive", "neutral", "negative"].forEach(category => {
+    const helper = document.createElement("div");
+    helper.className = "metric-helper";
+  helper.textContent =
+      "Positività: positive / totale · Efficienza: (positive - negative) / totale · Perfezione: # / totale";
+  block.appendChild(helper);
+    const colsWrap = document.createElement("div");
+    colsWrap.className = "metric-cols";
+    const colLeft = document.createElement("div");
+    colLeft.className = "metric-col";
+    const colRight = document.createElement("div");
+    colRight.className = "metric-col";
+    const makeRow = rowMeta => {
       const row = document.createElement("div");
       row.className = "metric-row";
       const label = document.createElement("span");
       label.className = "metric-label";
-      label.textContent =
-        category === "positive"
-          ? "Positiva"
-          : category === "neutral"
-            ? "Neutra"
-            : "Negativa";
+      label.textContent = rowMeta.label;
       row.appendChild(label);
-      RESULT_CODES.forEach(code => {
+      if (rowMeta.type === "toggle") {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className =
-          "metric-toggle" +
-          (state.metricsConfig[skill.id][category].includes(code) ? " active" : "");
-        btn.textContent = code;
-        btn.title = (RESULT_LABELS[code] || code) + " (" + skill.label + ")";
-        btn.addEventListener("click", () => toggleMetricAssignment(skill.id, category, code));
+          "metric-toggle toggle-skill " +
+          (enabled ? "toggle-on" : "toggle-off");
+        btn.textContent = enabled ? "ON" : "OFF";
+        btn.addEventListener("click", () => toggleSkillEnabled(skill.id));
         row.appendChild(btn);
-      });
-      block.appendChild(row);
+      } else {
+        RESULT_CODES.forEach(code => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const active =
+            rowMeta.key === "activeCodes"
+              ? state.metricsConfig[skill.id].activeCodes.includes(code)
+              : state.metricsConfig[skill.id][rowMeta.key].includes(code);
+          btn.className = "metric-toggle" + (active ? " active" : "");
+          btn.textContent = code;
+          btn.title = (RESULT_LABELS[code] || code) + " (" + skill.label + ")";
+          if (rowMeta.key === "activeCodes") {
+            btn.addEventListener("click", () => toggleActiveCode(skill.id, code));
+          } else {
+            btn.addEventListener("click", () => toggleMetricAssignment(skill.id, rowMeta.key, code));
+          }
+          row.appendChild(btn);
+        });
+      }
+      return row;
+    };
+    [ { key: "enabled", label: "Scout attivo?", type: "toggle" },
+      { key: "activeCodes", label: "Codici abilitati", type: "active" } ].forEach(meta => {
+      colLeft.appendChild(makeRow(meta));
     });
+    [ { key: "positive", label: "Positivo" },
+      { key: "neutral", label: "Neutro" },
+      { key: "negative", label: "Negativo" } ].forEach(meta => {
+      colRight.appendChild(makeRow(meta));
+    });
+    colsWrap.appendChild(colLeft);
+    colsWrap.appendChild(colRight);
+    block.appendChild(colsWrap);
     elMetricsConfig.appendChild(block);
   });
 }
@@ -666,6 +911,7 @@ function renderPlayers() {
   elPlayersContainer.innerHTML = "";
   elPlayersContainer.classList.add("court-layout");
   ensureCourtShape();
+  ensureMetricsConfigDefaults();
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
@@ -715,10 +961,22 @@ function renderPlayers() {
       elPlayersContainer.appendChild(card);
       return;
     }
-    for (let i = 0; i < SKILLS.length; i += 2) {
+    const enabledSkills = SKILLS.filter(skill => {
+      const cfg = state.metricsConfig[skill.id];
+      return !cfg || cfg.enabled !== false;
+    });
+    if (enabledSkills.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "players-empty";
+      empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
+      card.appendChild(empty);
+      elPlayersContainer.appendChild(card);
+      return;
+    }
+    for (let i = 0; i < enabledSkills.length; i += 2) {
       const rowWrap = document.createElement("div");
       rowWrap.className = "skill-row-pair";
-      const subset = SKILLS.slice(i, i + 2);
+      const subset = enabledSkills.slice(i, i + 2);
       subset.forEach(skill => {
         const row = document.createElement("div");
         row.className = "skill-row";
@@ -741,9 +999,12 @@ function renderPlayers() {
         const buttons = document.createElement("div");
         buttons.className = "skill-buttons";
         RESULT_CODES.forEach(code => {
+          const cfg = state.metricsConfig[skill.id];
+          const codeActive = !cfg || (cfg.activeCodes || RESULT_CODES).includes(code);
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "small event-btn";
+          btn.className = "small event-btn" + (codeActive ? "" : " disabled-code");
+          btn.disabled = !codeActive;
           btn.textContent = code;
           btn.title = (RESULT_LABELS[code] || "") + " (" + activeName + ")";
           btn.dataset.playerIdx = String(playerIdx);
@@ -798,19 +1059,23 @@ function handleEventClick(playerIdxStr, skillId, code, playerName) {
   renderAggregatedTable();
 }
 function computeMetrics(counts, skillId) {
+  ensureMetricsConfigDefaults();
   const cfg = state.metricsConfig && state.metricsConfig[skillId];
   const total = RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
   if (!total) {
-    return { total: 0, pos: null, eff: null, prf: null };
+    return { total: 0, pos: null, eff: null, prf: null, positiveCount: 0, negativeCount: 0 };
   }
   const positiveCodes = (cfg && cfg.positive) || ["#", "+"];
   const negativeCodes = (cfg && cfg.negative) || ["-"];
-  const positive = positiveCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
-  const negative = negativeCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
-  const pos = (positive / total) * 100;
-  const eff = ((positive - negative) / total) * 100;
+  const positiveCount = positiveCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const negativeCount = negativeCodes.reduce(
+    (sum, code) => sum + (counts[code] || 0),
+    0
+  );
+  const pos = (positiveCount / total) * 100;
+  const eff = ((positiveCount - negativeCount) / total) * 100;
   const prf = ((counts["#"] || 0) / total) * 100;
-  return { total, pos, eff, prf };
+  return { total, pos, eff, prf, positiveCount, negativeCount };
 }
 function formatPercent(x) {
   if (x === null || x === undefined || isNaN(x)) return "-";
@@ -829,6 +1094,7 @@ function updateSkillStatsUI(playerIdx, skillId) {
     (state.stats[playerIdx] && state.stats[playerIdx][skillId]) || {
       "#": 0,
       "+": 0,
+      "!": 0,
       "-": 0,
       "=": 0,
       "/": 0
@@ -841,6 +1107,8 @@ function updateSkillStatsUI(playerIdx, skillId) {
       counts["#"] +
       " +:" +
       counts["+"] +
+      " !:" +
+      counts["!"] +
       " -:" +
       counts["-"] +
       " =:" +
@@ -873,6 +1141,7 @@ function recalcAllStatsAndUpdateUI() {
       state.stats[idx][ev.skillId] = {
         "#": 0,
         "+": 0,
+        "!": 0,
         "-": 0,
         "=": 0,
         "/": 0
@@ -931,7 +1200,7 @@ function renderAggregatedTable() {
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 19;
+    td.colSpan = 25;
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
@@ -952,6 +1221,7 @@ function renderAggregatedTable() {
   const totalFromCounts = counts =>
     (counts["#"] || 0) +
     (counts["+"] || 0) +
+    (counts["!"] || 0) +
     (counts["-"] || 0) +
     (counts["="] || 0) +
     (counts["/"] || 0);
@@ -959,12 +1229,15 @@ function renderAggregatedTable() {
     const serveCounts = getCounts(idx, "serve");
     const passCounts = getCounts(idx, "pass");
     const attackCounts = getCounts(idx, "attack");
+    const defenseCounts = getCounts(idx, "defense");
     const blockCounts = getCounts(idx, "block");
     const secondCounts = getCounts(idx, "second");
 
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
     const attackMetrics = computeMetrics(attackCounts, "attack");
+    const defenseMetrics = computeMetrics(defenseCounts, "defense");
+    const blockMetrics = computeMetrics(blockCounts, "block");
     const secondMetrics = computeMetrics(secondCounts, "second");
 
     const tr = document.createElement("tr");
@@ -973,22 +1246,29 @@ function renderAggregatedTable() {
       name,
 
       totalFromCounts(serveCounts),
-      serveCounts["-"] || 0,
-      serveCounts["#"] || 0,
+      serveMetrics.negativeCount || 0,
+      serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos),
       serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff),
 
       totalFromCounts(passCounts),
-      passCounts["-"] || 0,
+      passMetrics.negativeCount || 0,
       passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
       passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf),
 
       totalFromCounts(attackCounts),
-      attackCounts["-"] || 0,
-      attackCounts["#"] || 0,
+      attackMetrics.negativeCount || 0,
+      attackMetrics.pos === null ? "-" : formatPercent(attackMetrics.pos),
       attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff),
 
+      totalFromCounts(defenseCounts),
+      defenseMetrics.negativeCount || 0,
+      defenseMetrics.pos === null ? "-" : formatPercent(defenseMetrics.pos),
+      defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff),
+
       totalFromCounts(blockCounts),
-      blockCounts["#"] || 0,
+      blockMetrics.negativeCount || 0,
+      blockMetrics.pos === null ? "-" : formatPercent(blockMetrics.pos),
+      blockMetrics.eff === null ? "-" : formatPercent(blockMetrics.eff),
 
       totalFromCounts(secondCounts),
       secondMetrics.pos === null ? "-" : formatPercent(secondMetrics.pos),
@@ -1192,8 +1472,11 @@ function init() {
   if (elBtnSaveTeam) {
     elBtnSaveTeam.addEventListener("click", saveCurrentTeam);
   }
-  if (elBtnLoadTeam) {
-    elBtnLoadTeam.addEventListener("click", loadSavedTeam);
+  if (elBtnDeleteTeam) {
+    elBtnDeleteTeam.addEventListener("click", deleteSelectedTeam);
+  }
+  if (elTeamsSelect) {
+    elTeamsSelect.addEventListener("change", handleTeamSelectChange);
   }
   if (elBtnRotateCw) {
     elBtnRotateCw.addEventListener("click", () => rotateCourt("cw"));
@@ -1204,6 +1487,9 @@ function init() {
   elBtnExportCsv.addEventListener("click", exportCsv);
   elBtnResetMatch.addEventListener("click", resetMatch);
   elBtnUndo.addEventListener("click", undoLastEvent);
+  if (elBtnResetMetrics) {
+    elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
+  }
   registerServiceWorker();
 }
 document.addEventListener("DOMContentLoaded", init);
