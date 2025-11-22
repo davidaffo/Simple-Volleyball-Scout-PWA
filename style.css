@@ -179,6 +179,15 @@ button.small {
   align-items: center;
   flex-wrap: wrap;
 }
+.rotation-display {
+  position: relative;
+}
+.rotation-number {
+  cursor: pointer;
+}
+.rotation-select {
+  margin-top: 0.25rem;
+}
 .card-inline {
   background: #191919;
   border: 1px solid #2f2f2f;
@@ -553,7 +562,7 @@ button.danger:hover {
   background: #121212;
 }
 .metric-block.skill-serve { background: rgba(27, 94, 32, 0.25); }
-.metric-block.skill-pass { background: rgba(249, 168, 37, 0.25); color: #111; }
+.metric-block.skill-pass { background: rgba(249, 168, 37, 0.25); color: #fff; }
 .metric-block.skill-attack { background: rgba(183, 28, 28, 0.25); }
 .metric-block.skill-defense { background: rgba(84, 110, 122, 0.25); }
 .metric-block.skill-block { background: rgba(74, 20, 140, 0.25); }

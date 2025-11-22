@@ -92,9 +92,14 @@ const elBtnClearPlayers = document.getElementById("btn-clear-players");
 const elTeamsSelect = document.getElementById("saved-teams");
 const elBtnSaveTeam = document.getElementById("btn-save-team");
 const elBtnDeleteTeam = document.getElementById("btn-delete-team");
+const elBtnRenameTeam = document.getElementById("btn-rename-team");
+const elBtnExportTeam = document.getElementById("btn-export-team");
+const elBtnImportTeam = document.getElementById("btn-import-team");
+const elTeamFileInput = document.getElementById("team-file-input");
 const elLineupChips = document.getElementById("lineup-chips");
 const elBenchChips = document.getElementById("bench-chips");
 const elRotationIndicator = document.getElementById("rotation-indicator");
+const elRotationSelect = document.getElementById("rotation-select");
 const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
 const elLiberoTags = document.getElementById("libero-tags");
@@ -141,6 +146,7 @@ function renderChipList(container, names, lockedMap, options = {}) {
 }
 const elMetricsConfig = document.getElementById("metrics-config");
 const elBtnResetMetrics = document.getElementById("btn-reset-metrics");
+const elBtnResetCodes = document.getElementById("btn-reset-codes");
 let activeDropChip = null;
 let draggedPlayerName = "";
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
@@ -277,23 +283,35 @@ function formatNameWithNumber(name) {
   const num = getPlayerNumber(name);
   return num ? num + " - " + name : name;
 }
-function syncPlayerNumbers(names) {
-  const numbers = {};
-  const used = new Set();
+function buildNumbersForNames(names, provided = {}) {
+  const valid = value => {
+    const clean = (value || "").trim();
+    return clean && /^[0-9]{1,3}$/.test(clean) ? clean : "";
+  };
   const prev = state.playerNumbers || {};
+  const used = new Set();
+  const numbers = {};
   names.forEach(name => {
-    const existing = (prev && prev[name]) || "";
-    if (existing && !used.has(existing)) {
-      numbers[name] = existing;
-      used.add(existing);
-    } else {
+    const candidates = [valid(provided[name]), valid(prev[name])].filter(Boolean);
+    let chosen = "";
+    for (const candidate of candidates) {
+      if (!used.has(candidate)) {
+        chosen = candidate;
+        break;
+      }
+    }
+    if (!chosen) {
       let candidate = 1;
       while (used.has(String(candidate))) candidate++;
-      numbers[name] = String(candidate);
-      used.add(numbers[name]);
+      chosen = String(candidate);
     }
+    numbers[name] = chosen;
+    used.add(chosen);
   });
-  state.playerNumbers = numbers;
+  return numbers;
+}
+function syncPlayerNumbers(names) {
+  state.playerNumbers = buildNumbersForNames(names, {});
 }
 function handlePlayerNumberChange(name, value) {
   if (!name) return;
@@ -474,7 +492,6 @@ function renderPlayersManagerList() {
     editBtn.type = "button";
     editBtn.className = "pill-edit-btn";
     editBtn.textContent = "✎";
-    editBtn.title = "Modifica nome/numero";
     editBtn.addEventListener("click", () => {
       pill.classList.toggle("editing");
       if (pill.classList.contains("editing")) {
@@ -503,7 +520,6 @@ function renderPlayersManagerList() {
     removeBtn.type = "button";
     removeBtn.className = "pill-remove";
     removeBtn.dataset.playerIdx = String(idx);
-    removeBtn.title = "Rimuovi giocatrice";
     removeBtn.textContent = "✕";
     pill.appendChild(view);
     pill.appendChild(editBtn);
@@ -601,6 +617,16 @@ function renderTeamsSelect() {
   }
   updateTeamButtonsState();
 }
+function getCurrentTeamPayload(name = "") {
+  const safeName = (name || state.selectedTeam || state.match.opponent || "squadra").trim();
+  return {
+    version: 1,
+    name: safeName,
+    players: [...(state.players || [])],
+    liberos: [...(state.liberos || [])],
+    numbers: Object.assign({}, state.playerNumbers || {})
+  };
+}
 function saveCurrentTeam() {
   if (!state.players || state.players.length === 0) {
     alert("Aggiungi almeno una giocatrice prima di salvare.");
@@ -614,11 +640,7 @@ function saveCurrentTeam() {
     name = name.trim();
   }
   if (!name) return;
-  const payload = {
-    players: [...state.players],
-    liberos: [...(state.liberos || [])],
-    numbers: Object.assign({}, state.playerNumbers || {})
-  };
+  const payload = getCurrentTeamPayload(name);
   state.savedTeams = state.savedTeams || {};
   state.savedTeams[name] = payload;
   state.selectedTeam = name;
@@ -637,6 +659,155 @@ function deleteSelectedTeam() {
   syncTeamsFromStorage();
   state.selectedTeam = "";
   renderTeamsSelect();
+}
+function renameSelectedTeam() {
+  if (!elTeamsSelect) return;
+  const oldName = elTeamsSelect.value;
+  if (!oldName) {
+    alert("Seleziona una squadra da rinominare.");
+    return;
+  }
+  const currentData = loadTeamFromStorage(oldName);
+  if (!currentData) {
+    alert("Squadra non trovata o corrotta.");
+    return;
+  }
+  let newName = prompt("Nuovo nome per la squadra:", oldName) || "";
+  newName = newName.trim();
+  if (!newName) return;
+  if (newName === oldName) return;
+  const names = listTeamsFromStorage();
+  const exists = names.includes(newName);
+  if (exists) {
+    const overwrite = confirm(
+      "Esiste già una squadra con questo nome. Sovrascrivere con la squadra corrente?"
+    );
+    if (!overwrite) return;
+  }
+  saveTeamToStorage(newName, currentData);
+  deleteTeamFromStorage(oldName);
+  syncTeamsFromStorage();
+  state.selectedTeam = newName;
+  renderTeamsSelect();
+  alert("Squadra rinominata in \"" + newName + "\".");
+}
+function exportCurrentTeamToFile() {
+  if (!state.players || state.players.length === 0) {
+    alert("Aggiungi almeno una giocatrice prima di esportare.");
+    return;
+  }
+  const payload = getCurrentTeamPayload();
+  const opponentSlug = (payload.name || "squadra").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8;"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "squadra_" + (opponentSlug || "export") + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function applyImportedTeamData(data) {
+  const players = normalizePlayers((data && data.players) || []);
+  if (!players || players.length === 0) {
+    alert("Il file non contiene giocatrici valide.");
+    return;
+  }
+  if (state.events.length > 0) {
+    const ok = confirm(
+      "Importare una squadra da file azzera statistiche e sostituisce il roster corrente. Procedere?"
+    );
+    if (!ok) return;
+  }
+  const liberosRaw = Array.isArray(data && data.liberos) ? data.liberos : [];
+  const liberos = normalizePlayers(liberosRaw).filter(name => players.includes(name));
+  const numbersRaw = data && typeof data.numbers === "object" ? data.numbers : {};
+  const numbers = {};
+  const usedNumbers = new Set();
+  players.forEach(name => {
+    const raw = (numbersRaw && numbersRaw[name]) || "";
+    const clean = String(raw).trim();
+    if (clean && /^[0-9]{1,3}$/.test(clean) && !usedNumbers.has(clean)) {
+      numbers[name] = clean;
+      usedNumbers.add(clean);
+    }
+  });
+  updatePlayersList(players, { askReset: false });
+  state.liberos = liberos;
+  state.playerNumbers = numbers;
+  syncPlayerNumbers(players);
+  state.selectedTeam = "";
+  saveState();
+  renderLiberoTags();
+  renderLiberoChipsInline();
+  renderPlayers();
+  renderBenchChips();
+  renderLineupChips();
+  renderTeamsSelect();
+  alert("Squadra importata dal file.");
+}
+function parseDelimitedTeamText(text) {
+  if (!text || typeof text !== "string") return null;
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  const players = [];
+  const numbers = {};
+  const liberos = [];
+  lines.forEach(rawLine => {
+    let name = "";
+    let number = "";
+    let liberoFlag = "";
+    const parts = rawLine.split(/[\t;,]+/).map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      name = parts[0];
+      number = parts[1];
+      liberoFlag = parts[2] || "";
+    } else {
+      const match = rawLine.match(/^(.+?)\s+([0-9]{1,3})(?:\s+([Ll]))?$/);
+      if (match) {
+        name = match[1].trim();
+        number = match[2].trim();
+        liberoFlag = (match[3] || "").trim();
+      }
+    }
+    const cleanName = normalizePlayers([name])[0];
+    if (!cleanName) return;
+    players.push(cleanName);
+    if (number && /^[0-9]{1,3}$/.test(number)) {
+      numbers[cleanName] = number;
+    }
+    if (liberoFlag && liberoFlag.toLowerCase() === "l") {
+      liberos.push(cleanName);
+    }
+  });
+  if (players.length === 0) return null;
+  return { players, numbers, liberos };
+}
+function importTeamFromFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = (e.target && e.target.result) || "";
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        data = parseDelimitedTeamText(text);
+      }
+      applyImportedTeamData(data);
+    } catch (err) {
+      logError("Errore importazione squadra", err);
+      alert("File squadra non valido.");
+    }
+    if (elTeamFileInput) {
+      elTeamFileInput.value = "";
+    }
+  };
+  reader.readAsText(file);
 }
 function handleTeamSelectChange() {
   if (!elTeamsSelect) return;
@@ -762,6 +933,9 @@ function updateTeamButtonsState() {
   if (elBtnDeleteTeam) {
     elBtnDeleteTeam.disabled = !selected;
   }
+  if (elBtnRenameTeam) {
+    elBtnRenameTeam.disabled = !selected;
+  }
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
@@ -830,11 +1004,37 @@ function toggleSkillEnabled(skillId) {
 }
 function resetMetricsToDefault() {
   const ok = confirm(
-    "Ripristinare i criteri di default per tutte le metriche e i punti fatti/subiti?"
+    "Ripristinare solo i criteri (positivo/negativo) ai valori di default? Le valutazioni restano invariate."
   );
   if (!ok) return;
-  state.metricsConfig = {};
   ensureMetricsConfigDefaults();
+  SKILLS.forEach(skill => {
+    const current = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
+    const defaults = normalizeMetricConfig(skill.id, METRIC_DEFAULTS[skill.id]);
+    state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, {
+      positive: defaults.positive,
+      negative: defaults.negative,
+      activeCodes: current.activeCodes,
+      enabled: current.enabled
+    });
+  });
+  saveState();
+  renderMetricsConfig();
+  recalcAllStatsAndUpdateUI();
+}
+function resetAllActiveCodes() {
+  const ok = confirm("Riattivare tutte le valutazioni (codici abilitati) per ogni fondamentale?");
+  if (!ok) return;
+  ensureMetricsConfigDefaults();
+  SKILLS.forEach(skill => {
+    const current = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
+    state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, {
+      positive: current.positive,
+      negative: current.negative,
+      activeCodes: [...RESULT_CODES],
+      enabled: current.enabled
+    });
+  });
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
@@ -887,7 +1087,6 @@ function renderMetricsConfig() {
               : state.metricsConfig[skill.id][rowMeta.key].includes(code);
           btn.className = "metric-toggle" + (active ? " active" : "");
           btn.textContent = code;
-          btn.title = (RESULT_LABELS[code] || code) + " (" + skill.label + ")";
           if (rowMeta.key === "activeCodes") {
             btn.addEventListener("click", () => toggleActiveCode(skill.id, code));
           } else {
@@ -914,7 +1113,7 @@ function renderMetricsConfig() {
   });
 }
 function updatePlayersList(newPlayers, options = {}) {
-  const { askReset = true } = options;
+  const { askReset = true, liberos = null, playerNumbers = null } = options;
   const normalized = normalizePlayers(newPlayers);
   const changed = playersChanged(normalized);
   if (!changed) {
@@ -931,12 +1130,14 @@ function updatePlayersList(newPlayers, options = {}) {
     if (!ok) return;
   }
   state.players = normalized;
-  syncPlayerNumbers(normalized);
+  const providedNumbers = playerNumbers && typeof playerNumbers === "object" ? playerNumbers : {};
+  state.playerNumbers = buildNumbersForNames(normalized, providedNumbers);
   state.events = [];
   ensureCourtShape();
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
-  state.liberos = [];
+  const providedLiberos = Array.isArray(liberos) ? liberos : [];
+  state.liberos = providedLiberos.filter(name => normalized.includes(name));
   ensureMetricsConfigDefaults();
   state.savedTeams = state.savedTeams || {};
   initStats();
@@ -1168,11 +1369,22 @@ function updateRotationDisplay() {
   if (elRotationIndicator) {
     elRotationIndicator.textContent = String(state.rotation || 1);
   }
+  if (elRotationSelect) {
+    elRotationSelect.value = String(state.rotation || 1);
+  }
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
   const roles = BASE_ROLES;
   return roles[(index - offset + 12) % 6] || roles[index] || "";
+}
+function setRotation(value) {
+  const rot = Math.min(6, Math.max(1, parseInt(value, 10) || 1));
+  state.rotation = rot;
+  saveState();
+  updateRotationDisplay();
+  renderPlayers();
+  renderLineupChips();
 }
 function rotateCourt(direction) {
   ensureCourtShape();
@@ -1201,7 +1413,17 @@ function rotateCourt(direction) {
 }
 function applyPlayersFromTextarea() {
   if (!elPlayersInput) return;
-  const lines = elPlayersInput.value
+  const raw = elPlayersInput.value;
+  const parsed = parseDelimitedTeamText(raw);
+  if (parsed && parsed.players && parsed.players.length > 0) {
+    updatePlayersList(parsed.players, {
+      askReset: true,
+      liberos: parsed.liberos,
+      playerNumbers: parsed.numbers
+    });
+    return;
+  }
+  const lines = raw
     .split("\n")
     .map(l => l.trim())
     .filter(l => l.length > 0);
@@ -1238,7 +1460,6 @@ function renderPlayers() {
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "pill-remove clear-slot";
-    clearBtn.title = "Togli dal campo";
     clearBtn.textContent = "✕";
     clearBtn.addEventListener("click", () => {
       clearCourtAssignment(idx, "main");
@@ -1307,7 +1528,6 @@ function renderPlayers() {
           btn.className = "small event-btn" + (codeActive ? "" : " disabled-code");
           btn.disabled = !codeActive;
           btn.textContent = code;
-          btn.title = (RESULT_LABELS[code] || "") + " (" + formatNameWithNumber(activeName) + ")";
           btn.dataset.playerIdx = String(playerIdx);
           btn.dataset.playerName = activeName;
           btn.dataset.skillId = skill.id;
@@ -1332,7 +1552,6 @@ function renderPlayers() {
       btn.type = "button";
       btn.className = "small event-btn danger";
       btn.textContent = "Errore/Fallo";
-      btn.title = "Errore / fallo (punto subito)";
       btn.addEventListener("click", () => addPlayerError(idx, activeName));
       buttons.appendChild(btn);
       extraRow.appendChild(buttons);
@@ -2106,6 +2325,23 @@ function init() {
   if (elBtnDeleteTeam) {
     elBtnDeleteTeam.addEventListener("click", deleteSelectedTeam);
   }
+  if (elBtnRenameTeam) {
+    elBtnRenameTeam.addEventListener("click", renameSelectedTeam);
+  }
+  if (elBtnExportTeam) {
+    elBtnExportTeam.addEventListener("click", exportCurrentTeamToFile);
+  }
+  if (elBtnImportTeam && elTeamFileInput) {
+    elBtnImportTeam.addEventListener("click", () => {
+      elTeamFileInput.value = "";
+      elTeamFileInput.click();
+    });
+    elTeamFileInput.addEventListener("change", e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (file) importTeamFromFile(file);
+    });
+  }
   if (elTeamsSelect) {
     elTeamsSelect.addEventListener("change", handleTeamSelectChange);
   }
@@ -2115,11 +2351,30 @@ function init() {
   if (elBtnRotateCcw) {
     elBtnRotateCcw.addEventListener("click", () => rotateCourt("ccw"));
   }
+  if (elRotationSelect) {
+    elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
+  }
+  if (elRotationIndicator && elRotationSelect) {
+    const openSelect = () => {
+      elRotationSelect.focus();
+      elRotationSelect.click();
+    };
+    elRotationIndicator.addEventListener("click", openSelect);
+    elRotationIndicator.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openSelect();
+      }
+    });
+  }
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
+  }
+  if (elBtnResetCodes) {
+    elBtnResetCodes.addEventListener("click", resetAllActiveCodes);
   }
   if (elBtnScoreForPlus) {
     elBtnScoreForPlus.addEventListener("click", () => handleManualScore("for", 1));
