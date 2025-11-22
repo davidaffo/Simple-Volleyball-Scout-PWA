@@ -13,8 +13,16 @@ h1, h2, h3 {
   font-weight: 600;
 }
 h1 {
-  font-size: 1.4rem;
-  text-align: center;
+  font-size: 1.1rem;
+  text-align: left;
+  margin: 0.1rem 0 0.2rem 0.15rem;
+}
+.app-title {
+  position: fixed;
+  top: 0.3rem;
+  left: 0.35rem;
+  z-index: 21;
+  color: #e8e8e8;
 }
 h2 {
   font-size: 1.1rem;
@@ -30,8 +38,8 @@ h4 {
   font-weight: 600;
 }
 .section {
-  margin-top: 0.4rem;
-  padding: 0.4rem;
+  margin-top: 0.35rem;
+  padding: 0.32rem 0.35rem;
   border-radius: 0.6rem;
   background: #1b1b1b;
   border: 1px solid #333;
@@ -51,6 +59,29 @@ h4 {
   background: #2d6cdf;
   border-color: #2d6cdf;
   color: #fff;
+}
+.tabs-nav.floating {
+  position: fixed;
+  top: 0.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 0.25rem;
+  background: rgba(17, 17, 17, 0.72);
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.tabs-nav.floating.centered {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+.tabs-nav.floating .tab-btn {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.85rem;
 }
 .tab-panel {
   display: none;
@@ -97,10 +128,9 @@ button {
   cursor: pointer;
   background: #2d6cdf;
   color: #fff;
-  transition: transform 0.05s ease, box-shadow 0.05s ease, background 0.1s ease;
+  transition: box-shadow 0.05s ease, background 0.1s ease;
 }
 button:active {
-  transform: scale(0.97);
   box-shadow: 0 0 0;
 }
 button.secondary {
@@ -135,12 +165,126 @@ button.small {
 }
 .set-controls {
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.28rem;
+  margin-bottom: 0.05rem;
+}
+.set-controls.grid-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: start;
+}
+.rotation-block {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.card-inline {
+  background: #191919;
+  border: 1px solid #2f2f2f;
+  border-radius: 0.7rem;
+  padding: 0.25rem 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.undo-inline {
+  align-self: center;
+}
+.score-card {
+  background: #191919;
+  border: 1px solid #2f2f2f;
+  border-radius: 0.7rem;
+  padding: 0.18rem 0.3rem;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+.score-card.wide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+.score-card-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+.score-set-select {
+  min-width: 110px;
+}
+.score-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.score-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  justify-content: center;
+  overflow-x: auto;
+}
+.score-actions button {
+  flex: 0 0 auto;
+  min-width: 82px;
+  padding: 0.18rem 0.3rem;
+  font-size: 0.76rem;
+}
+.score-card.detail {
+  min-width: 130px;
+}
+.score-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+.score-value.emph {
+  font-size: 1.3rem;
+}
+.score-value.small {
+  font-size: 0.95rem;
+}
+.score-sets {
+  font-size: 0.88rem;
+  color: #d4d4d4;
+  line-height: 1.35;
+}
+.score-sets.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: flex-start;
+}
+.score-set-chip {
+  background: #0f0f0f;
+  border: 1px solid #2b2b2b;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+button:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  background: #3b7cff;
+}
+button.secondary:hover {
+  background: #555;
+}
+button.danger:hover {
+  background: #c7372d;
 }
 .rotation-controls {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.28rem;
 }
 .rotate-ccw {
   background: #1b5e20;
@@ -154,10 +298,10 @@ button.small {
   align-items: center;
 }
 .rotation-number {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
-  padding: 0.15rem 0.5rem;
-  border-radius: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.45rem;
   background: #1f1f1f;
   border: 1px solid #2d6cdf;
   min-width: 2rem;
@@ -172,22 +316,48 @@ button.small {
 .bench-inline {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  flex: 1 1 240px;
+  align-items: flex-start;
+  gap: 0.12rem;
+  flex: 2 1 260px;
+  min-width: 220px;
+  max-width: 320px;
+}
+.bench-inline label {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 .bench-inline-list {
-  padding: 0.2rem 0;
+  padding: 0.05rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  max-height: 80px;
+  overflow-y: auto;
+  width: 100%;
+}
+.libero-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  flex: 1 1 140px;
+  min-width: 140px;
+}
+.libero-inline label {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 .undo-controls button {
   flex: 0 0 220px;
 }
 #players-container {
   display: grid;
-  gap: 0.6rem;
-  min-height: 240px;
+  gap: 0.4rem;
+  min-height: 200px;
 }
 .court-layout {
-  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
   grid-template-areas:
     "pos4 pos3 pos2"
     "pos5 pos6 pos1";
@@ -196,18 +366,20 @@ button.small {
   background: #181818;
   border-radius: 0.8rem;
   border: 1px solid #333;
-  padding: 0.4rem;
+  padding: 0.34rem;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
 }
 .court-card {
   border: 1px dashed #2f2f2f;
-  min-height: 200px;
+  min-height: 165px;
+  position: relative;
 }
 .court-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.25rem;
   font-weight: 600;
 }
@@ -237,7 +409,7 @@ button.small {
 .skill-row-pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 .skill-row-pair .skill-row {
   background: #0f0f0f;
@@ -251,22 +423,41 @@ button.small {
 .skill-row {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.2rem 0.25rem;
-  border-radius: 0.4rem;
+  gap: 0.12rem;
+  padding: 0.18rem 0.24rem;
+  border-radius: 0.35rem;
   background: #101010;
+}
+.skill-row.error-row {
+  padding: 0.12rem 0.2rem;
 }
 .skill-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   opacity: 0.9;
 }
 .skill-buttons {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.24rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.skill-buttons button {
+  min-width: 44px;
+  padding: 0.34rem 0.52rem;
+  font-size: 1rem;
+}
+.error-row .skill-buttons {
   flex-wrap: wrap;
+  justify-content: stretch;
+}
+.error-row .skill-buttons button {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.86rem;
 }
 .event-btn.disabled-code {
   opacity: 0.35;
@@ -361,6 +552,12 @@ button.small {
   border-radius: 0.6rem;
   background: #121212;
 }
+.metric-block.skill-serve { background: rgba(27, 94, 32, 0.25); }
+.metric-block.skill-pass { background: rgba(249, 168, 37, 0.25); color: #111; }
+.metric-block.skill-attack { background: rgba(183, 28, 28, 0.25); }
+.metric-block.skill-defense { background: rgba(84, 110, 122, 0.25); }
+.metric-block.skill-block { background: rgba(74, 20, 140, 0.25); }
+.metric-block.skill-second { background: rgba(0, 131, 143, 0.25); }
 .metric-block.disabled {
   background: #1a1a1a;
   border-color: #3a3a3a;
@@ -435,9 +632,9 @@ button.small {
 .player-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.45rem;
-  border-radius: 0.7rem;
+  gap: 0.25rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.6rem;
   background: linear-gradient(145deg, #1c1c1c, #111);
   border: 1px solid #2b2b2b;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -449,9 +646,48 @@ button.small {
   padding: 0.05rem 0.35rem;
   font-size: 0.78rem;
 }
+.pill-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
 .pill-name {
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+.pill-edit-btn {
+  background: #444;
+  min-width: auto;
+  padding: 0.25rem 0.4rem;
+}
+.pill-edit-fields {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+.player-pill.editing .pill-view {
+  display: none;
+}
+.player-pill.editing .pill-edit-fields {
+  display: inline-flex;
+}
+.pill-name-input {
+  width: 160px;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.4rem;
+  border: 1px solid #444;
+  background: #0f0f0f;
+  color: #f5f5f5;
+  font-size: 0.85rem;
+}
+.pill-number-input {
+  width: 70px;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.4rem;
+  border: 1px solid #444;
+  background: #0f0f0f;
+  color: #f5f5f5;
+  font-size: 0.85rem;
 }
 .pill-remove {
   background: #3b3b3b;
@@ -530,7 +766,7 @@ button.small {
 .bench-chip {
   background: #2b2b2b;
   border-radius: 0.65rem;
-  padding: 0.3rem 0.5rem;
+  padding: 0.24rem 0.4rem;
   border: 1px solid #3a3a3a;
   cursor: grab;
 }
@@ -553,6 +789,13 @@ button.small {
   gap: 0.35rem;
   margin-top: 0.25rem;
 }
+.libero-inline .libero-tags {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  max-height: 80px;
+  overflow-y: auto;
+}
 .libero-tag {
   border: 1px solid #3a3a3a;
   background: #1b1b1b;
@@ -566,6 +809,10 @@ button.small {
 }
 .libero-flag {
   color: #9ad1ff;
+}
+.replaced-chip {
+  border-style: dashed;
+  opacity: 0.9;
 }
 .bench-empty {
   opacity: 0.8;
@@ -643,13 +890,45 @@ tbody tr:nth-child(odd) {
 tbody tr:hover {
   background: rgba(45, 108, 223, 0.08);
 }
-td:first-child {
-  text-align: left;
+.agg-table td {
+  text-align: center;
+}
+.agg-table td:first-child {
+  text-align: center;
   font-weight: 600;
 }
-td:nth-child(2) {
-  text-align: left;
-  opacity: 0.95;
+.agg-table td:nth-child(2) {
+  text-align: center;
+  opacity: 1;
+}
+.score-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.rotation-wrapper {
+  margin-bottom: 0.5rem;
+}
+.rotation-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rotation-table th,
+.rotation-table td {
+  padding: 0.4rem 0.35rem;
+  text-align: center;
+}
+.rotation-row.total {
+  font-weight: 700;
+}
+.rotation-row.best {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+.rotation-row.worst {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
 }
 .agg-table {
   min-width: 1350px;
@@ -660,6 +939,30 @@ td:nth-child(2) {
 .agg-table thead tr:nth-child(2) th {
   font-size: 0.72rem;
   background: #262626;
+}
+.skill-hidden {
+  display: none;
+}
+.skill-col.skill-serve {
+  background: rgba(27, 94, 32, 0.12);
+}
+.skill-col.skill-pass {
+  background: rgba(249, 168, 37, 0.12);
+  color: #f4d07a;
+}
+.skill-col.skill-attack {
+  background: rgba(183, 28, 28, 0.12);
+  color: #f29999;
+}
+.skill-col.skill-defense {
+  background: rgba(84, 110, 122, 0.12);
+}
+.skill-col.skill-block {
+  background: rgba(74, 20, 140, 0.12);
+  color: #c9a7ff;
+}
+.skill-col.skill-second {
+  background: rgba(0, 131, 143, 0.12);
 }
 @media (min-width: 700px) {
   body {

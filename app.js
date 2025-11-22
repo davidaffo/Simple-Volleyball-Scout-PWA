@@ -24,6 +24,23 @@ const METRIC_DEFAULTS = {
   block: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
   second: { positive: ["#"], negative: ["/", "-", "="], activeCodes: RESULT_CODES, enabled: true }
 };
+const POINT_RULES = {
+  made: {
+    serve: new Set(["#"]),
+    attack: new Set(["#"]),
+    block: new Set(["#"]),
+    manual: new Set(["for"])
+  },
+  conceded: {
+    attack: new Set(["=", "/"]),
+    serve: new Set(["="]),
+    pass: new Set(["="]),
+    defense: new Set(["="]),
+    block: new Set(["/", "="]),
+    second: new Set(["="]),
+    manual: new Set(["against", "error"])
+  }
+};
 const PERSISTENT_DB_NAME = "Data";
 const TEAM_STORE_NAME = "Teams";
 const TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + TEAM_STORE_NAME + "/";
@@ -40,10 +57,13 @@ let state = {
     opponent: "",
     category: "",
     date: "",
-    notes: ""
+    notes: "",
+    leg: "",
+    matchType: ""
   },
   currentSet: 1,
   players: [],
+  playerNumbers: {},
   events: [],
   stats: {},
   court: [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }],
@@ -60,6 +80,8 @@ const elOpponent = document.getElementById("match-opponent");
 const elCategory = document.getElementById("match-category");
 const elDate = document.getElementById("match-date");
 const elNotes = document.getElementById("match-notes");
+const elLeg = document.getElementById("match-leg");
+const elMatchType = document.getElementById("match-type");
 const elCurrentSet = document.getElementById("current-set");
 const elPlayersInput = document.getElementById("players-input");
 const elPlayersContainer = document.getElementById("players-container");
@@ -76,6 +98,47 @@ const elRotationIndicator = document.getElementById("rotation-indicator");
 const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
 const elLiberoTags = document.getElementById("libero-tags");
+const elLiberoTagsInline = document.getElementById("libero-tags-inline");
+function renderChipList(container, names, lockedMap, options = {}) {
+  if (!container) return;
+  container.innerHTML = "";
+  const {
+    isLiberoColumn = false,
+    highlightLibero = false,
+    emptyText = "Nessuna riserva disponibile.",
+    replacedSet = new Set()
+  } = options;
+  if (!names || names.length === 0) {
+    const span = document.createElement("span");
+    span.className = "bench-empty";
+    span.textContent = emptyText;
+    container.appendChild(span);
+    return;
+  }
+  const libSet = new Set(state.liberos || []);
+  names.forEach(name => {
+    const chip = document.createElement("div");
+    const classes = ["bench-chip"];
+    if (isLiberoColumn || (highlightLibero && libSet.has(name))) {
+      classes.push("libero-flag");
+    }
+    if (replacedSet.has(name)) {
+      classes.push("replaced-chip");
+    }
+    if (lockedMap[name] !== undefined) classes.push("bench-locked");
+    chip.className = classes.join(" ");
+    chip.draggable = true;
+    chip.dataset.playerName = name;
+    const label = document.createElement("span");
+    label.textContent =
+      formatNameWithNumber(name) + (lockedMap[name] !== undefined ? " (sost. libero)" : "");
+    chip.appendChild(label);
+    chip.addEventListener("dragstart", handleBenchDragStart);
+    chip.addEventListener("dragend", handleBenchDragEnd);
+    chip.addEventListener("click", () => handleBenchClick(name));
+    container.appendChild(chip);
+  });
+}
 const elMetricsConfig = document.getElementById("metrics-config");
 const elBtnResetMetrics = document.getElementById("btn-reset-metrics");
 let activeDropChip = null;
@@ -89,8 +152,24 @@ const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnSaveInfo = document.getElementById("btn-save-info");
 const elBtnUndo = document.getElementById("btn-undo");
 const elAggTableBody = document.getElementById("agg-table-body");
+const elRotationTableBody = document.getElementById("rotation-table-body");
+const elLiveScore = document.getElementById("live-score");
+const elAggScore = document.getElementById("agg-score");
+const elAggSetCards = document.getElementById("agg-set-cards");
+const elBtnScoreForPlus = document.getElementById("btn-score-for-plus");
+const elBtnScoreForMinus = document.getElementById("btn-score-for-minus");
+const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
+const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
+const SKILL_COLUMN_MAP = {
+  serve: [1, 2, 3, 4],
+  pass: [5, 6, 7, 8],
+  attack: [9, 10, 11, 12],
+  defense: [13, 14, 15, 16],
+  block: [17, 18, 19, 20],
+  second: [21, 22, 23]
+};
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -98,6 +177,7 @@ function loadState() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return;
     state = Object.assign(state, parsed);
+    state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
     ensureCourtShape();
     cleanCourtPlayers();
     state.rotation = parsed.rotation || 1;
@@ -105,6 +185,7 @@ function loadState() {
     state.savedTeams = parsed.savedTeams || {};
     state.selectedTeam = parsed.selectedTeam || "";
     state.metricsConfig = parsed.metricsConfig || {};
+    syncPlayerNumbers(state.players || []);
     cleanLiberos();
     ensureMetricsConfigDefaults();
     migrateTeamsToPersistent();
@@ -135,6 +216,110 @@ function normalizePlayers(list) {
     }
   });
   return names;
+}
+function replacePlayerNameEverywhere(oldName, newName, idx) {
+  ensureCourtShape();
+  state.court = state.court.map(slot => {
+    const updated = Object.assign({}, slot);
+    if (updated.main === oldName) updated.main = newName;
+    if (updated.replaced === oldName) updated.replaced = newName;
+    return updated;
+  });
+  state.liberos = (state.liberos || []).map(n => (n === oldName ? newName : n));
+  (state.events || []).forEach(ev => {
+    if (ev.playerIdx === idx || ev.playerName === oldName) {
+      ev.playerName = newName;
+    }
+  });
+}
+function renamePlayerAtIndex(idx, nextNameRaw) {
+  if (!state.players || !state.players[idx]) return;
+  const normalized = normalizePlayers([nextNameRaw])[0];
+  if (!normalized) {
+    alert("Inserisci un nome valido.");
+    renderPlayersManagerList();
+    return;
+  }
+  const duplicate = state.players.some(
+    (p, i) => i !== idx && p.toLowerCase() === normalized.toLowerCase()
+  );
+  if (duplicate) {
+    alert("Nome già presente nella lista.");
+    renderPlayersManagerList();
+    return;
+  }
+  const oldName = state.players[idx];
+  if (oldName === normalized) return;
+  state.players[idx] = normalized;
+  state.playerNumbers = state.playerNumbers || {};
+  const oldNumber = state.playerNumbers[oldName];
+  delete state.playerNumbers[oldName];
+  if (oldNumber) {
+    state.playerNumbers[normalized] = oldNumber;
+  }
+  replacePlayerNameEverywhere(oldName, normalized, idx);
+  saveState();
+  applyPlayersFromStateToTextarea();
+  renderPlayersManagerList();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  renderLiberoTags();
+  renderAggregatedTable();
+  renderEventsLog();
+}
+function getPlayerNumber(name) {
+  if (!name || !state.playerNumbers) return "";
+  return state.playerNumbers[name] || "";
+}
+function formatNameWithNumber(name) {
+  const num = getPlayerNumber(name);
+  return num ? num + " - " + name : name;
+}
+function syncPlayerNumbers(names) {
+  const numbers = {};
+  const used = new Set();
+  const prev = state.playerNumbers || {};
+  names.forEach(name => {
+    const existing = (prev && prev[name]) || "";
+    if (existing && !used.has(existing)) {
+      numbers[name] = existing;
+      used.add(existing);
+    } else {
+      let candidate = 1;
+      while (used.has(String(candidate))) candidate++;
+      numbers[name] = String(candidate);
+      used.add(numbers[name]);
+    }
+  });
+  state.playerNumbers = numbers;
+}
+function handlePlayerNumberChange(name, value) {
+  if (!name) return;
+  const clean = (value || "").trim();
+  if (clean && !/^[0-9]{1,3}$/.test(clean)) {
+    alert("Inserisci un numero di 1-3 cifre.");
+    renderPlayersManagerList();
+    return;
+  }
+  const dup = Object.entries(state.playerNumbers || {}).find(
+    ([otherName, num]) => otherName !== name && num && num === clean
+  );
+  if (dup) {
+    alert("Numero già assegnato a " + dup[0]);
+    renderPlayersManagerList();
+    return;
+  }
+  state.playerNumbers = state.playerNumbers || {};
+  state.playerNumbers[name] = clean;
+  saveState();
+  renderPlayersManagerList();
+  renderPlayers();
+  renderBenchChips();
+  renderLineupChips();
+  renderAggregatedTable();
+  renderEventsLog();
 }
 function playersChanged(nextPlayers) {
   const normalizedNext = normalizePlayers(nextPlayers);
@@ -184,8 +369,15 @@ function setCourtPlayer(posIdx, target, playerName) {
   const prevMain = slot.main;
   const updated = Object.assign({}, slot);
   updated.main = name;
-  if ((state.liberos || []).includes(name)) {
-    updated.replaced = prevMain || slot.replaced || "";
+  const isIncomingLibero = (state.liberos || []).includes(name);
+  const prevWasLibero = (state.liberos || []).includes(prevMain);
+  if (isIncomingLibero) {
+    if (prevWasLibero) {
+      // mantieni l'aggancio alla titolare originale se stai sostituendo un libero con un altro libero
+      updated.replaced = slot.replaced || "";
+    } else {
+      updated.replaced = prevMain || slot.replaced || "";
+    }
   } else {
     updated.replaced = "";
   }
@@ -195,6 +387,7 @@ function setCourtPlayer(posIdx, target, playerName) {
   saveState();
   renderPlayers();
   renderBenchChips();
+  renderLiberoChipsInline();
   renderLineupChips();
   updateRotationDisplay();
 }
@@ -213,6 +406,7 @@ function clearCourtAssignment(posIdx, target) {
   saveState();
   renderPlayers();
   renderBenchChips();
+  renderLiberoChipsInline();
   renderLineupChips();
   updateRotationDisplay();
 }
@@ -265,20 +459,55 @@ function renderPlayersManagerList() {
   state.players.forEach((name, idx) => {
     const pill = document.createElement("div");
     pill.className = "player-pill";
+    const view = document.createElement("div");
+    view.className = "pill-view";
     const number = document.createElement("span");
     number.className = "pill-index";
-    number.textContent = "#" + (idx + 1);
+    const numVal = getPlayerNumber(name) || idx + 1;
+    number.textContent = "#" + numVal;
     const label = document.createElement("span");
     label.className = "pill-name";
     label.textContent = name;
+    view.appendChild(number);
+    view.appendChild(label);
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "pill-edit-btn";
+    editBtn.textContent = "✎";
+    editBtn.title = "Modifica nome/numero";
+    editBtn.addEventListener("click", () => {
+      pill.classList.toggle("editing");
+      if (pill.classList.contains("editing")) {
+        nameInput.focus();
+      }
+    });
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = name;
+    nameInput.className = "pill-name-input";
+    nameInput.addEventListener("change", () => renamePlayerAtIndex(idx, nameInput.value));
+    const numInput = document.createElement("input");
+    numInput.type = "number";
+    numInput.min = "0";
+    numInput.max = "999";
+    numInput.className = "pill-number-input";
+    numInput.value = getPlayerNumber(name);
+    numInput.addEventListener("change", e => {
+      handlePlayerNumberChange(name, numInput.value);
+    });
+    const editFields = document.createElement("div");
+    editFields.className = "pill-edit-fields";
+    editFields.appendChild(nameInput);
+    editFields.appendChild(numInput);
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "pill-remove";
     removeBtn.dataset.playerIdx = String(idx);
     removeBtn.title = "Rimuovi giocatrice";
     removeBtn.textContent = "✕";
-    pill.appendChild(number);
-    pill.appendChild(label);
+    pill.appendChild(view);
+    pill.appendChild(editBtn);
+    pill.appendChild(editFields);
     pill.appendChild(removeBtn);
     elPlayersList.appendChild(pill);
   });
@@ -387,7 +616,8 @@ function saveCurrentTeam() {
   if (!name) return;
   const payload = {
     players: [...state.players],
-    liberos: [...(state.liberos || [])]
+    liberos: [...(state.liberos || [])],
+    numbers: Object.assign({}, state.playerNumbers || {})
   };
   state.savedTeams = state.savedTeams || {};
   state.savedTeams[name] = payload;
@@ -434,29 +664,75 @@ function handleTeamSelectChange() {
     return;
   }
   state.liberos = team.liberos || [];
+  state.playerNumbers = team.numbers || {};
   updatePlayersList(team.players || [], { askReset: true });
   renderLiberoTags();
   renderTeamsSelect();
+  renderLiberoChipsInline();
 }
 function renderLiberoTags() {
-  if (!elLiberoTags) return;
-  elLiberoTags.innerHTML = "";
+  const mainContainers = [elLiberoTags].filter(Boolean);
+  const inlineContainers = [elLiberoTagsInline].filter(Boolean);
+  [...mainContainers, ...inlineContainers].forEach(container => {
+    container.innerHTML = "";
+  });
   if (!state.players || state.players.length === 0) {
-    const span = document.createElement("div");
-    span.className = "players-empty";
-    span.textContent = "Aggiungi giocatrici per segnare i liberi.";
-    elLiberoTags.appendChild(span);
+    [...mainContainers].forEach(container => {
+      const span = document.createElement("div");
+      span.className = "players-empty";
+      span.textContent = "Aggiungi giocatrici per segnare i liberi.";
+      container.appendChild(span);
+    });
+    inlineContainers.forEach(container => {
+      const span = document.createElement("div");
+      span.className = "players-empty";
+      span.textContent = "Nessun libero selezionato.";
+      container.appendChild(span);
+    });
     return;
   }
   const libSet = new Set(state.liberos || []);
-  state.players.forEach(name => {
-    const btn = document.createElement("button");
-    const active = libSet.has(name);
-    btn.type = "button";
-    btn.className = "libero-tag" + (active ? " active" : "");
-    btn.textContent = name;
-    btn.addEventListener("click", () => toggleLibero(name));
-    elLiberoTags.appendChild(btn);
+  // Impostazioni: mostra tutte le giocatrici, evidenziando i liberi
+  mainContainers.forEach(container => {
+    state.players.forEach(name => {
+      const btn = document.createElement("button");
+      const active = libSet.has(name);
+      btn.type = "button";
+      btn.className = "libero-tag" + (active ? " active" : "");
+      btn.textContent = formatNameWithNumber(name);
+      btn.addEventListener("click", () => toggleLibero(name));
+      container.appendChild(btn);
+    });
+  });
+  // Inline: lista drag dei liberi disponibili (anche se in campo, marcati come bloccati)
+  inlineContainers.forEach(container => {
+    const used = getUsedNames();
+    if (libSet.size === 0) {
+      const span = document.createElement("div");
+      span.className = "players-empty";
+      span.textContent = "Nessun libero selezionato.";
+      container.appendChild(span);
+      return;
+    }
+    state.players.forEach(name => {
+      if (!libSet.has(name)) return;
+      const chip = document.createElement("div");
+      const classes = ["bench-chip", "libero-flag"];
+      const isUsed = used.has(name);
+      if (isUsed) classes.push("bench-locked");
+      chip.className = classes.join(" ");
+      chip.draggable = !isUsed;
+      chip.dataset.playerName = name;
+      const label = document.createElement("span");
+      label.textContent = formatNameWithNumber(name) + (isUsed ? " (in campo)" : "");
+      chip.appendChild(label);
+      if (!isUsed) {
+        chip.addEventListener("dragstart", handleBenchDragStart);
+        chip.addEventListener("dragend", handleBenchDragEnd);
+        chip.addEventListener("click", () => handleBenchClick(name));
+      }
+      container.appendChild(chip);
+    });
   });
 }
 const allowedMetricCodes = new Set(RESULT_CODES);
@@ -570,16 +846,15 @@ function renderMetricsConfig() {
   SKILLS.forEach(skill => {
     const block = document.createElement("div");
     const enabled = state.metricsConfig[skill.id].enabled;
-    block.className = "metric-block" + (enabled ? "" : " disabled");
+    block.className = "metric-block skill-" + skill.id + (enabled ? "" : " disabled");
     const title = document.createElement("div");
     title.className = "metric-title";
     title.textContent = skill.label;
     block.appendChild(title);
     const helper = document.createElement("div");
     helper.className = "metric-helper";
-  helper.textContent =
-      "Positività: positive / totale · Efficienza: (positive - negative) / totale · Perfezione: # / totale";
-  block.appendChild(helper);
+    helper.textContent = "";
+    block.appendChild(helper);
     const colsWrap = document.createElement("div");
     colsWrap.className = "metric-cols";
     const colLeft = document.createElement("div");
@@ -643,6 +918,8 @@ function updatePlayersList(newPlayers, options = {}) {
   const normalized = normalizePlayers(newPlayers);
   const changed = playersChanged(normalized);
   if (!changed) {
+    syncPlayerNumbers(normalized);
+    saveState();
     applyPlayersFromStateToTextarea();
     renderPlayersManagerList();
     return;
@@ -654,6 +931,7 @@ function updatePlayersList(newPlayers, options = {}) {
     if (!ok) return;
   }
   state.players = normalized;
+  syncPlayerNumbers(normalized);
   state.events = [];
   ensureCourtShape();
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
@@ -667,6 +945,7 @@ function updatePlayersList(newPlayers, options = {}) {
   renderPlayers();
   renderPlayersManagerList();
   renderBenchChips();
+  renderLiberoChipsInline();
   renderLineupChips();
   renderLiberoTags();
   renderMetricsConfig();
@@ -772,7 +1051,36 @@ function getUsedNames() {
 }
 function getBenchPlayers() {
   const used = getUsedNames();
-  return (state.players || []).filter(name => !used.has(name));
+  const libSet = new Set(state.liberos || []);
+  const replaced = new Set(getReplacedByLiberos());
+  return (state.players || []).filter(
+    name => !used.has(name) && !libSet.has(name) && !replaced.has(name)
+  );
+}
+function getBenchLiberos() {
+  const used = getUsedNames();
+  const libSet = new Set(state.liberos || []);
+  const replaced = new Set(getReplacedByLiberos());
+  const names = [];
+  (state.players || []).forEach(name => {
+    if (libSet.has(name) && !used.has(name)) {
+      names.push(name);
+    }
+  });
+  replaced.forEach(name => {
+    if (!used.has(name)) names.push(name);
+  });
+  return Array.from(new Set(names));
+}
+function getReplacedByLiberos() {
+  ensureCourtShape();
+  const list = [];
+  state.court.forEach(slot => {
+    if (slot.main && (state.liberos || []).includes(slot.main) && slot.replaced) {
+      list.push(slot.replaced);
+    }
+  });
+  return list;
 }
 function cleanLiberos() {
   const valid = new Set(state.players || []);
@@ -790,6 +1098,7 @@ function toggleLibero(name) {
   saveState();
   renderBenchChips();
   renderLiberoTags();
+  renderLiberoChipsInline();
   renderPlayers();
 }
 function getLockedMap() {
@@ -815,29 +1124,21 @@ function renderBenchChips() {
   elBenchChips.innerHTML = "";
   const bench = getBenchPlayers();
   const lockedMap = getLockedMap();
-  if (bench.length === 0) {
-    const span = document.createElement("span");
-    span.className = "bench-empty";
-    span.textContent = "Nessuna riserva disponibile.";
-    elBenchChips.appendChild(span);
-    return;
-  }
-  bench.forEach(name => {
-    const chip = document.createElement("div");
-    const classes = ["bench-chip"];
-    if ((state.liberos || []).includes(name)) classes.push("libero-flag");
-    if (lockedMap[name] !== undefined) classes.push("bench-locked");
-    chip.className = classes.join(" ");
-    chip.draggable = true;
-    chip.dataset.playerName = name;
-    const label = document.createElement("span");
-    label.textContent =
-      name + (lockedMap[name] !== undefined ? " (sost. libero)" : "");
-    chip.appendChild(label);
-    chip.addEventListener("dragstart", handleBenchDragStart);
-    chip.addEventListener("dragend", handleBenchDragEnd);
-    chip.addEventListener("click", () => handleBenchClick(name));
-    elBenchChips.appendChild(chip);
+  renderChipList(elBenchChips, bench, lockedMap, {
+    highlightLibero: false,
+    emptyText: "Nessuna riserva disponibile.",
+    replacedSet: new Set()
+  });
+}
+function renderLiberoChipsInline() {
+  if (!elLiberoTagsInline) return;
+  elLiberoTagsInline.innerHTML = "";
+  const liberos = getBenchLiberos();
+  const lockedMap = getLockedMap();
+  renderChipList(elLiberoTagsInline, liberos, lockedMap, {
+    isLiberoColumn: true,
+    emptyText: "Nessun libero disponibile.",
+    replacedSet: new Set(getReplacedByLiberos())
   });
 }
 function renderLineupChips() {
@@ -856,7 +1157,7 @@ function renderLineupChips() {
     const nameSpan = document.createElement("span");
     nameSpan.className = "chip-name";
     const active = slot.main;
-    nameSpan.textContent = active || "—";
+    nameSpan.textContent = active ? formatNameWithNumber(active) : "—";
     if (!active) chip.classList.add("chip-empty");
     chip.appendChild(roleSpan);
     chip.appendChild(nameSpan);
@@ -928,7 +1229,7 @@ function renderPlayers() {
       "Posizione " + (idx + 1) + " · " + getRoleLabel(idx);
     const nameLabel = document.createElement("span");
     nameLabel.className = "court-name";
-    nameLabel.textContent = slot.main || "Trascina una giocatrice qui";
+    nameLabel.textContent = slot.main ? formatNameWithNumber(slot.main) : "Trascina una giocatrice qui";
     header.appendChild(posLabel);
     if ((state.liberos || []).includes(slot.main)) {
       nameLabel.classList.add("libero-flag");
@@ -946,10 +1247,10 @@ function renderPlayers() {
     card.appendChild(header);
 
     const activeName = slot.main;
-    card.addEventListener("dragenter", e => handlePositionDragOver(e, card));
-    card.addEventListener("dragover", e => handlePositionDragOver(e, card));
-    card.addEventListener("dragleave", () => handlePositionDragLeave(card));
-    card.addEventListener("drop", e => handlePositionDrop(e, card));
+    card.addEventListener("dragenter", e => handlePositionDragOver(e, card), true);
+    card.addEventListener("dragover", e => handlePositionDragOver(e, card), true);
+    card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);
+    card.addEventListener("drop", e => handlePositionDrop(e, card), true);
 
     if (!activeName) {
       elPlayersContainer.appendChild(card);
@@ -978,8 +1279,8 @@ function renderPlayers() {
       rowWrap.className = "skill-row-pair";
       const subset = enabledSkills.slice(i, i + 2);
       subset.forEach(skill => {
-        const row = document.createElement("div");
-        row.className = "skill-row";
+    const row = document.createElement("div");
+    row.className = "skill-row skill-" + skill.id;
         row.dataset.playerIdx = String(playerIdx);
         row.dataset.playerName = activeName;
         row.dataset.skillId = skill.id;
@@ -1006,7 +1307,7 @@ function renderPlayers() {
           btn.className = "small event-btn" + (codeActive ? "" : " disabled-code");
           btn.disabled = !codeActive;
           btn.textContent = code;
-          btn.title = (RESULT_LABELS[code] || "") + " (" + activeName + ")";
+          btn.title = (RESULT_LABELS[code] || "") + " (" + formatNameWithNumber(activeName) + ")";
           btn.dataset.playerIdx = String(playerIdx);
           btn.dataset.playerName = activeName;
           btn.dataset.skillId = skill.id;
@@ -1021,6 +1322,21 @@ function renderPlayers() {
         rowWrap.appendChild(row);
       });
       card.appendChild(rowWrap);
+    }
+    if (activeName) {
+      const extraRow = document.createElement("div");
+      extraRow.className = "skill-row error-row";
+      const buttons = document.createElement("div");
+      buttons.className = "skill-buttons";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "small event-btn danger";
+      btn.textContent = "Errore/Fallo";
+      btn.title = "Errore / fallo (punto subito)";
+      btn.addEventListener("click", () => addPlayerError(idx, activeName));
+      buttons.appendChild(btn);
+      extraRow.appendChild(buttons);
+      card.appendChild(extraRow);
     }
     elPlayersContainer.appendChild(card);
   });
@@ -1134,6 +1450,12 @@ function recalcAllStatsAndUpdateUI() {
   initStats();
   state.events.forEach(ev => {
     const idx = ev.playerIdx;
+    if (ev.skillId === "manual") {
+      return;
+    }
+    if (idx === null || idx === undefined || idx < 0 || !state.players[idx]) {
+      return;
+    }
     if (!state.stats[idx]) {
       state.stats[idx] = {};
     }
@@ -1155,6 +1477,7 @@ function recalcAllStatsAndUpdateUI() {
       updateSkillStatsUI(idx, skill.id);
     });
   });
+  renderLiveScore();
   renderAggregatedTable();
 }
 function renderEventsLog() {
@@ -1181,7 +1504,7 @@ function renderEventsLog() {
       "[S" +
       ev.set +
       "] " +
-      (ev.playerName || "#" + ev.playerIdx) +
+      (ev.playerName ? formatNameWithNumber(ev.playerName) : "#" + ev.playerIdx) +
       " - " +
       ev.skillId +
       " " +
@@ -1194,6 +1517,199 @@ function renderEventsLog() {
     elEventsLog.appendChild(div);
   });
 }
+function getPointDirection(ev) {
+  if (ev.pointDirection === "for" || ev.pointDirection === "against") {
+    return ev.pointDirection;
+  }
+  const skill = ev.skillId;
+  const code = ev.code;
+  if (POINT_RULES.made[skill] && POINT_RULES.made[skill].has(code)) return "for";
+  if (POINT_RULES.conceded[skill] && POINT_RULES.conceded[skill].has(code)) return "against";
+  return null;
+}
+function computePointsSummary(targetSet) {
+  const target = targetSet ? parseInt(targetSet, 10) : null;
+  const rotations = {};
+  for (let r = 1; r <= 6; r++) {
+    rotations[r] = { for: 0, against: 0 };
+  }
+  let totalFor = 0;
+  let totalAgainst = 0;
+  const filteredEvents = (state.events || []).filter(ev => {
+    if (target === null) return true;
+    return ev.set === target;
+  });
+  filteredEvents.forEach(ev => {
+    const direction = getPointDirection(ev);
+    if (!direction) return;
+    const value = typeof ev.value === "number" ? ev.value : 1;
+    const rot = ev.rotation && ev.rotation >= 1 && ev.rotation <= 6 ? ev.rotation : 1;
+    if (!rotations[rot]) {
+      rotations[rot] = { for: 0, against: 0 };
+    }
+    if (direction === "for") {
+      rotations[rot].for += value;
+      totalFor += value;
+    } else if (direction === "against") {
+      rotations[rot].against += value;
+      totalAgainst += value;
+    }
+  });
+  const rotationList = Object.keys(rotations).map(key => {
+    const rotNum = parseInt(key, 10);
+    const obj = rotations[rotNum] || { for: 0, against: 0 };
+    const forVal = Math.max(0, obj.for);
+    const againstVal = Math.max(0, obj.against);
+    return { rotation: rotNum, for: forVal, against: againstVal, delta: forVal - againstVal };
+  });
+  const totalForClean = Math.max(0, totalFor);
+  const totalAgainstClean = Math.max(0, totalAgainst);
+  const hasEvents = totalForClean + totalAgainstClean > 0;
+  const maxDelta = rotationList.reduce((acc, r) => Math.max(acc, r.delta), -Infinity);
+  const minDelta = rotationList.reduce((acc, r) => Math.min(acc, r.delta), Infinity);
+  const best = hasEvents ? rotationList.find(r => r.delta === maxDelta) : null;
+  const worst = hasEvents ? rotationList.find(r => r.delta === minDelta) : null;
+  return {
+    totalFor: totalForClean,
+    totalAgainst: totalAgainstClean,
+    rotations: rotationList,
+    bestRotation: hasEvents && best ? best.rotation : null,
+    worstRotation: hasEvents && worst ? worst.rotation : null,
+    bestDelta: hasEvents && best ? best.delta : null,
+    worstDelta: hasEvents && worst ? worst.delta : null
+  };
+}
+function computeSetScores() {
+  const setMap = {};
+  (state.events || []).forEach(ev => {
+    const setNum = parseInt(ev.set, 10) || 1;
+    const direction = getPointDirection(ev);
+    if (!direction) return;
+    const value = typeof ev.value === "number" ? ev.value : 1;
+    if (!setMap[setNum]) {
+      setMap[setNum] = { for: 0, against: 0 };
+    }
+    if (direction === "for") {
+      setMap[setNum].for += value;
+    } else if (direction === "against") {
+      setMap[setNum].against += value;
+    }
+  });
+  const sets = Object.keys(setMap)
+    .map(k => parseInt(k, 10))
+    .sort((a, b) => a - b)
+    .map(setNum => {
+      const entry = setMap[setNum];
+      const forVal = Math.max(0, entry.for);
+      const againstVal = Math.max(0, entry.against);
+      return { set: setNum, for: forVal, against: againstVal, delta: forVal - againstVal };
+    });
+  const totalFor = sets.reduce((sum, s) => sum + s.for, 0);
+  const totalAgainst = sets.reduce((sum, s) => sum + s.against, 0);
+  return { sets, totalFor: Math.max(0, totalFor), totalAgainst: Math.max(0, totalAgainst) };
+}
+function formatDelta(value) {
+  if (value === null || value === undefined || isNaN(value)) return "0";
+  if (value > 0) return "+" + value;
+  return String(value);
+}
+function renderLiveScore() {
+  const summary = computePointsSummary(state.currentSet || 1);
+  const totalLabel = summary.totalFor + " - " + summary.totalAgainst;
+  if (elLiveScore) {
+    elLiveScore.textContent = totalLabel;
+    elLiveScore.classList.add("emph");
+  }
+}
+function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
+  const rot = state.rotation || 1;
+  const event = {
+    t: new Date().toISOString(),
+    set: state.currentSet,
+    rotation: rot,
+    playerIdx: playerIdx,
+    playerName: playerName,
+    skillId: "manual",
+    code: codeLabel || direction,
+    pointDirection: direction,
+    value: value
+  };
+  state.events.push(event);
+  saveState();
+  renderEventsLog();
+  recalcAllStatsAndUpdateUI();
+}
+function handleManualScore(direction, delta) {
+  const value = delta > 0 ? 1 : -1;
+  addManualPoint(direction, value, direction, null, "Squadra");
+}
+function addPlayerError(playerIdx, playerName) {
+  addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice");
+}
+function renderScoreAndRotations(summary) {
+  const effectiveSummary = summary || computePointsSummary();
+  const totalLabel = effectiveSummary.totalFor + " - " + effectiveSummary.totalAgainst;
+  if (elAggScore) {
+    elAggScore.textContent = totalLabel;
+  }
+  if (elAggSetCards) {
+    elAggSetCards.innerHTML = "";
+    const setsData = computeSetScores();
+    if (!setsData.sets || setsData.sets.length === 0) {
+      const span = document.createElement("div");
+      span.className = "score-set-chip";
+      span.textContent = "Nessun set";
+      elAggSetCards.appendChild(span);
+    } else {
+      setsData.sets.forEach(s => {
+        const chip = document.createElement("div");
+        chip.className = "score-set-chip";
+        chip.textContent = "S" + s.set + ": " + s.for + "-" + s.against;
+        elAggSetCards.appendChild(chip);
+      });
+    }
+  }
+  const hasEvents = effectiveSummary.totalFor + effectiveSummary.totalAgainst > 0;
+  if (!elRotationTableBody) return;
+  elRotationTableBody.innerHTML = "";
+  if (!hasEvents) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.textContent = "Registra eventi per vedere le rotazioni.";
+    tr.appendChild(td);
+    elRotationTableBody.appendChild(tr);
+    return;
+  }
+  const highlightEnabled =
+    effectiveSummary.bestRotation !== null && effectiveSummary.worstRotation !== null;
+  effectiveSummary.rotations.forEach(rot => {
+    const tr = document.createElement("tr");
+    tr.className = "rotation-row";
+    if (highlightEnabled && rot.rotation === effectiveSummary.bestRotation) {
+      tr.classList.add("best");
+    }
+    if (
+      highlightEnabled &&
+      rot.rotation === effectiveSummary.worstRotation &&
+      effectiveSummary.worstRotation !== effectiveSummary.bestRotation
+    ) {
+      tr.classList.add("worst");
+    }
+    const cells = [
+      rot.rotation,
+      rot.for,
+      rot.against,
+      formatDelta(rot.delta)
+    ];
+    cells.forEach(text => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    elRotationTableBody.appendChild(tr);
+  });
+}
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
   elAggTableBody.innerHTML = "";
@@ -1204,6 +1720,7 @@ function renderAggregatedTable() {
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
+    renderScoreAndRotations(computePointsSummary());
     return;
   }
   const getCounts = (idx, skillId) => {
@@ -1225,6 +1742,32 @@ function renderAggregatedTable() {
     (counts["-"] || 0) +
     (counts["="] || 0) +
     (counts["/"] || 0);
+  const addSkillClassesToRow = rowEl => {
+    if (!rowEl) return;
+    const tds = Array.from(rowEl.children);
+    Object.keys(SKILL_COLUMN_MAP).forEach(skillId => {
+      const idxs = SKILL_COLUMN_MAP[skillId] || [];
+      idxs.forEach(i => {
+        if (tds[i]) {
+          tds[i].classList.add("skill-col", "skill-" + skillId);
+        }
+      });
+    });
+  };
+  const emptyCounts = () => ({ "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 });
+  const totalsBySkill = {
+    serve: emptyCounts(),
+    pass: emptyCounts(),
+    attack: emptyCounts(),
+    defense: emptyCounts(),
+    block: emptyCounts(),
+    second: emptyCounts()
+  };
+  const addCounts = (target, source) => {
+    RESULT_CODES.forEach(code => {
+      target[code] = (target[code] || 0) + (source[code] || 0);
+    });
+  };
   state.players.forEach((name, idx) => {
     const serveCounts = getCounts(idx, "serve");
     const passCounts = getCounts(idx, "pass");
@@ -1240,10 +1783,16 @@ function renderAggregatedTable() {
     const blockMetrics = computeMetrics(blockCounts, "block");
     const secondMetrics = computeMetrics(secondCounts, "second");
 
+    addCounts(totalsBySkill.serve, serveCounts);
+    addCounts(totalsBySkill.pass, passCounts);
+    addCounts(totalsBySkill.attack, attackCounts);
+    addCounts(totalsBySkill.defense, defenseCounts);
+    addCounts(totalsBySkill.block, blockCounts);
+    addCounts(totalsBySkill.second, secondCounts);
+
     const tr = document.createElement("tr");
     const values = [
-      idx + 1,
-      name,
+      formatNameWithNumber(name),
 
       totalFromCounts(serveCounts),
       serveMetrics.negativeCount || 0,
@@ -1279,8 +1828,59 @@ function renderAggregatedTable() {
       td.textContent = text;
       tr.appendChild(td);
     });
+    addSkillClassesToRow(tr);
     elAggTableBody.appendChild(tr);
   });
+  const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
+  const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
+  const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
+  const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
+  const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
+  const secondTotalsMetrics = computeMetrics(totalsBySkill.second, "second");
+  const totalsRow = document.createElement("tr");
+  totalsRow.className = "rotation-row total";
+  const totalValues = [
+    "Totale squadra",
+
+    totalFromCounts(totalsBySkill.serve),
+    serveTotalsMetrics.negativeCount || 0,
+    serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos),
+    serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff),
+
+    totalFromCounts(totalsBySkill.pass),
+    passTotalsMetrics.negativeCount || 0,
+    passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos),
+    passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf),
+
+    totalFromCounts(totalsBySkill.attack),
+    attackTotalsMetrics.negativeCount || 0,
+    attackTotalsMetrics.pos === null ? "-" : formatPercent(attackTotalsMetrics.pos),
+    attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff),
+
+    totalFromCounts(totalsBySkill.defense),
+    defenseTotalsMetrics.negativeCount || 0,
+    defenseTotalsMetrics.pos === null ? "-" : formatPercent(defenseTotalsMetrics.pos),
+    defenseTotalsMetrics.eff === null ? "-" : formatPercent(defenseTotalsMetrics.eff),
+
+    totalFromCounts(totalsBySkill.block),
+    blockTotalsMetrics.negativeCount || 0,
+    blockTotalsMetrics.pos === null ? "-" : formatPercent(blockTotalsMetrics.pos),
+    blockTotalsMetrics.eff === null ? "-" : formatPercent(blockTotalsMetrics.eff),
+
+    totalFromCounts(totalsBySkill.second),
+    secondTotalsMetrics.pos === null ? "-" : formatPercent(secondTotalsMetrics.pos),
+    secondTotalsMetrics.prf === null ? "-" : formatPercent(secondTotalsMetrics.prf)
+  ];
+  totalValues.forEach(text => {
+    const td = document.createElement("td");
+    td.textContent = text;
+    totalsRow.appendChild(td);
+  });
+  addSkillClassesToRow(totalsRow);
+  elAggTableBody.appendChild(totalsRow);
+  const summaryAll = computePointsSummary();
+  renderScoreAndRotations(summaryAll);
+  applyAggColumnsVisibility();
 }
 function exportCsv() {
   if (!state.events || state.events.length === 0) {
@@ -1363,6 +1963,22 @@ function undoLastEvent() {
   recalcAllStatsAndUpdateUI();
   renderEventsLog();
 }
+function applyAggColumnsVisibility() {
+  ensureMetricsConfigDefaults();
+  Object.keys(SKILL_COLUMN_MAP).forEach(skillId => {
+    const cfg = state.metricsConfig[skillId];
+    const enabled = !cfg || cfg.enabled !== false;
+    const selector = ".skill-col.skill-" + skillId;
+    const nodes = document.querySelectorAll(selector);
+    nodes.forEach(node => {
+      if (enabled) {
+        node.classList.remove("skill-hidden");
+      } else {
+        node.classList.add("skill-hidden");
+      }
+    });
+  });
+}
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
@@ -1400,10 +2016,12 @@ function init() {
   applyPlayersFromStateToTextarea();
   renderPlayersManagerList();
   renderBenchChips();
+  renderLiberoChipsInline();
   renderLineupChips();
   renderLiberoTags();
   renderMetricsConfig();
   renderTeamsSelect();
+  renderLiveScore();
   renderPlayers();
   if (!state.players || state.players.length === 0) {
     updatePlayersList(["Piccardi", "Cimmino", "Bilamour"], { askReset: false });
@@ -1416,32 +2034,43 @@ function init() {
     renderEventsLog();
     renderAggregatedTable();
     renderBenchChips();
+    renderLiberoChipsInline();
     renderLineupChips();
     renderLiberoTags();
     renderMetricsConfig();
     renderTeamsSelect();
   }
-  elCurrentSet.addEventListener("change", () => {
-    state.currentSet = parseInt(elCurrentSet.value, 10) || 1;
-    saveState();
-  });
-  elBtnSaveInfo.addEventListener("click", () => {
-    saveMatchInfoFromUI();
-    alert("Info partita salvate.");
-  });
-  elBtnApplyPlayers.addEventListener("click", () => {
-    applyPlayersFromTextarea();
-  });
-  elPlayersContainer.addEventListener("click", e => {
-    const target = e.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (!target.classList.contains("event-btn")) return;
-    const playerIdx = target.dataset.playerIdx;
-    const playerName = target.dataset.playerName;
-    const skillId = target.dataset.skillId;
-    const code = target.dataset.code;
-    handleEventClick(playerIdx, skillId, code, playerName);
-  });
+
+  if (elCurrentSet) {
+    elCurrentSet.addEventListener("change", () => {
+      state.currentSet = parseInt(elCurrentSet.value, 10) || 1;
+      saveState();
+      renderLiveScore();
+    });
+  }
+  if (elBtnSaveInfo) {
+    elBtnSaveInfo.addEventListener("click", () => {
+      saveMatchInfoFromUI();
+      alert("Info partita salvate.");
+    });
+  }
+  if (elBtnApplyPlayers) {
+    elBtnApplyPlayers.addEventListener("click", () => {
+      applyPlayersFromTextarea();
+    });
+  }
+  if (elPlayersContainer) {
+    elPlayersContainer.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.classList.contains("event-btn")) return;
+      const playerIdx = target.dataset.playerIdx;
+      const playerName = target.dataset.playerName;
+      const skillId = target.dataset.skillId;
+      const code = target.dataset.code;
+      handleEventClick(playerIdx, skillId, code, playerName);
+    });
+  }
   if (elBtnAddPlayer) {
     elBtnAddPlayer.addEventListener("click", addPlayerFromInput);
   }
@@ -1457,10 +2086,12 @@ function init() {
     elPlayersList.addEventListener("click", e => {
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
-      if (!target.classList.contains("pill-remove")) return;
-      const idx = parseInt(target.dataset.playerIdx, 10);
-      if (isNaN(idx)) return;
-      removePlayerAtIndex(idx);
+      if (target.classList.contains("pill-remove")) {
+        const idx = parseInt(target.dataset.playerIdx, 10);
+        if (!isNaN(idx)) {
+          removePlayerAtIndex(idx);
+        }
+      }
     });
   }
   if (elBtnClearPlayers) {
@@ -1484,11 +2115,26 @@ function init() {
   if (elBtnRotateCcw) {
     elBtnRotateCcw.addEventListener("click", () => rotateCourt("ccw"));
   }
-  elBtnExportCsv.addEventListener("click", exportCsv);
-  elBtnResetMatch.addEventListener("click", resetMatch);
-  elBtnUndo.addEventListener("click", undoLastEvent);
+  if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
+  if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
+  if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
+  }
+  if (elBtnScoreForPlus) {
+    elBtnScoreForPlus.addEventListener("click", () => handleManualScore("for", 1));
+  }
+  if (elBtnScoreForMinus) {
+    elBtnScoreForMinus.addEventListener("click", () => handleManualScore("for", -1));
+  }
+  if (elBtnScoreAgainstPlus) {
+    elBtnScoreAgainstPlus.addEventListener("click", () => handleManualScore("against", 1));
+  }
+  if (elBtnScoreAgainstMinus) {
+    elBtnScoreAgainstMinus.addEventListener("click", () => handleManualScore("against", -1));
+  }
+  if (elBtnScoreError) {
+    elBtnScoreError.addEventListener("click", handleManualError);
   }
   registerServiceWorker();
 }
