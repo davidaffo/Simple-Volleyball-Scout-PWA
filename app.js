@@ -2529,6 +2529,11 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
   recalcAllStatsAndUpdateUI();
 }
 function handleManualScore(direction, delta) {
+  const summary = computePointsSummary(state.currentSet || 1);
+  if (delta < 0) {
+    if (direction === "for" && summary.totalFor <= 0) return;
+    if (direction === "against" && summary.totalAgainst <= 0) return;
+  }
   const value = delta > 0 ? 1 : -1;
   addManualPoint(direction, value, direction, null, "Squadra");
 }

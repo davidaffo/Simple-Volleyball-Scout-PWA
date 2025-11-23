@@ -335,6 +335,22 @@ button.danger:hover {
 .rotate-cw {
   background: #b3261e;
 }
+.mobile-floating-bar .rotate-cw {
+  background: #b3261e;
+}
+.mobile-floating-bar .rotate-ccw {
+  background: #1b5e20;
+}
+.mobile-floating-bar .rotate-cw:hover,
+.mobile-floating-bar .rotate-cw:active {
+  background: #c7372d;
+  box-shadow: none;
+}
+.mobile-floating-bar .rotate-ccw:hover,
+.mobile-floating-bar .rotate-ccw:active {
+  background: #2b7a30;
+  box-shadow: none;
+}
 .rotation-display {
   display: flex;
   flex-direction: column;
