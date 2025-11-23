@@ -44,6 +44,25 @@ const POINT_RULES = {
 const PERSISTENT_DB_NAME = "Data";
 const TEAM_STORE_NAME = "Teams";
 const TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + TEAM_STORE_NAME + "/";
+const TEMPLATE_TEAM = {
+  players: [
+    "Palleggiatore 1",
+    "Palleggiatore 2",
+    "Schiacciatore 1",
+    "Schiacciatore 2",
+    "Schiacciatore 3",
+    "Schiacciatore 4",
+    "Opposto 1",
+    "Opposto 2",
+    "Centrale 1",
+    "Centrale 2",
+    "Centrale 3",
+    "Centrale 4",
+    "Libero 1",
+    "Libero 2"
+  ],
+  liberos: ["Libero 1", "Libero 2"]
+};
 const POSITIONS_META = [
   { id: 1, label: "Posizione 1 · P" },
   { id: 2, label: "Posizione 2 · S1" },
@@ -83,6 +102,7 @@ const elNotes = document.getElementById("match-notes");
 const elLeg = document.getElementById("match-leg");
 const elMatchType = document.getElementById("match-type");
 const elCurrentSet = document.getElementById("current-set");
+const elCurrentSetFloating = document.getElementById("current-set-floating");
 const elPlayersInput = document.getElementById("players-input");
 const elPlayersContainer = document.getElementById("players-container");
 const elPlayersList = document.getElementById("players-list");
@@ -100,8 +120,15 @@ const elLineupChips = document.getElementById("lineup-chips");
 const elBenchChips = document.getElementById("bench-chips");
 const elRotationIndicator = document.getElementById("rotation-indicator");
 const elRotationSelect = document.getElementById("rotation-select");
+const elRotationIndicatorFloating = document.getElementById("rotation-indicator-floating");
+const elRotationIndicatorModal = document.getElementById("rotation-indicator-modal");
+const elRotationSelectFloating = document.getElementById("rotation-select-floating");
 const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
+const elBtnRotateCwFloating = document.getElementById("btn-rotate-cw-floating");
+const elBtnRotateCcwFloating = document.getElementById("btn-rotate-ccw-floating");
+const elBtnRotateCwModal = document.getElementById("btn-rotate-cw-modal");
+const elBtnRotateCcwModal = document.getElementById("btn-rotate-ccw-modal");
 const elLiberoTags = document.getElementById("libero-tags");
 const elLiberoTagsInline = document.getElementById("libero-tags-inline");
 const elSkillModal = document.getElementById("skill-modal");
@@ -111,6 +138,16 @@ const elSkillModalTitle = document.getElementById("skill-modal-title");
 const elSkillModalClose = document.getElementById("skill-modal-close");
 let modalMode = "skill";
 let modalSubPosIdx = -1;
+let mobileLineupOrder = [];
+const MINI_SLOT_ORDER = [3, 2, 1, 4, 5, 0]; // visual order matches court grid (top: pos4,pos3,pos2 / bottom: pos5,pos6,pos1)
+let touchDragName = "";
+let touchDragFromSlot = -1;
+let touchDragFromList = false;
+let touchDragOverSlot = -1;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+let touchGhost = null;
 function renderChipList(container, names, lockedMap, options = {}) {
   if (!container) return;
   container.innerHTML = "";
@@ -161,23 +198,43 @@ let dragSourceType = "";
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
+const elEventsLogSummary = document.getElementById("events-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
 const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnSaveInfo = document.getElementById("btn-save-info");
 const elBtnUndo = document.getElementById("btn-undo");
+const elBtnUndoFloating = document.getElementById("btn-undo-floating");
+const elBtnOpenActionsModal = document.getElementById("btn-open-actions-modal");
+const elActionsModal = document.getElementById("floating-actions-modal");
+const elActionsClose = document.getElementById("floating-actions-close");
+const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
+const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
+const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
+const elMobileLineupClose = document.getElementById("mobile-lineup-close");
+const elMobileLineupList = document.getElementById("mobile-lineup-list");
+const elMiniCourt = document.getElementById("mini-court");
+const elMobileLineupConfirm = document.getElementById("mobile-lineup-confirm");
 const elAggTableBody = document.getElementById("agg-table-body");
 const elRotationTableBody = document.getElementById("rotation-table-body");
 const elLiveScore = document.getElementById("live-score");
+const elLiveScoreFloating = document.getElementById("live-score-floating");
+const elLiveScoreModal = document.getElementById("live-score-modal");
 const elAggScore = document.getElementById("agg-score");
 const elAggSetCards = document.getElementById("agg-set-cards");
 const elBtnScoreForPlus = document.getElementById("btn-score-for-plus");
 const elBtnScoreForMinus = document.getElementById("btn-score-for-minus");
 const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
 const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
+const elBtnScoreForPlusModal = document.getElementById("btn-score-for-plus-modal");
+const elBtnScoreForMinusModal = document.getElementById("btn-score-for-minus-modal");
+const elBtnScoreAgainstPlusModal = document.getElementById("btn-score-against-plus-modal");
+const elBtnScoreAgainstMinusModal = document.getElementById("btn-score-against-minus-modal");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
 const tabDots = document.querySelectorAll(".tab-dot");
+const elToggleLogMobile = document.getElementById("toggle-log-mobile");
+const elLogSection = document.querySelector("[data-log-section]");
 let activeTab = "info";
 const SKILL_COLUMN_MAP = {
   serve: [1, 2, 3, 4],
@@ -376,6 +433,19 @@ function isLibero(name) {
   if (!name) return false;
   return (state.liberos || []).includes(name);
 }
+function canPlaceInSlot(name, posIdx, showAlert = true) {
+  if (!name) return true;
+  if (isLibero(name) && FRONT_ROW_INDEXES.has(posIdx)) {
+    if (showAlert) alert("Non puoi mettere il libero in prima linea.");
+    return false;
+  }
+  const lockedMap = getLockedMap();
+  if (lockedMap[name] !== undefined && lockedMap[name] !== posIdx) {
+    if (showAlert) alert("Questa giocatrice può rientrare solo nella sua posizione (sostituita dal libero).");
+    return false;
+  }
+  return true;
+}
 function isMobileLayout() {
   return (
     window.matchMedia("(max-width: 900px)").matches ||
@@ -394,15 +464,7 @@ function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
   const name = (playerName || "").trim();
   if (!name) return;
-  const lockedMap = getLockedMap();
-  if (lockedMap[name] !== undefined && lockedMap[name] !== posIdx) {
-    alert("Questa giocatrice può rientrare solo nella sua posizione (sostituita dal libero).");
-    return;
-  }
-  if ((state.liberos || []).includes(name) && FRONT_ROW_INDEXES.has(posIdx)) {
-    alert("Non puoi mettere il libero in prima linea.");
-    return;
-  }
+  if (!canPlaceInSlot(name, posIdx, true)) return;
   reserveNamesInCourt(name);
   const slot = state.court[posIdx] || { main: "", replaced: "" };
   const prevMain = slot.main;
@@ -488,19 +550,29 @@ function initStats() {
     });
   });
 }
+function syncCurrentSetUI(value) {
+  const setValue = String(value || 1);
+  if (elCurrentSet) {
+    elCurrentSet.value = setValue;
+  }
+  if (elCurrentSetFloating) {
+    elCurrentSetFloating.value = setValue;
+  }
+}
 function applyMatchInfoToUI() {
   elOpponent.value = state.match.opponent || "";
   elCategory.value = state.match.category || "";
   elDate.value = state.match.date || "";
   elNotes.value = state.match.notes || "";
-  elCurrentSet.value = String(state.currentSet || 1);
+  syncCurrentSetUI(state.currentSet || 1);
 }
 function saveMatchInfoFromUI() {
   state.match.opponent = elOpponent.value.trim();
   state.match.category = elCategory.value.trim();
   state.match.date = elDate.value;
   state.match.notes = elNotes.value.trim();
-  state.currentSet = parseInt(elCurrentSet.value, 10) || 1;
+  const setValue = (elCurrentSetFloating && elCurrentSetFloating.value) || (elCurrentSet && elCurrentSet.value) || 1;
+  setCurrentSet(setValue, { save: false });
   saveState();
 }
 function applyPlayersFromStateToTextarea() {
@@ -860,15 +932,13 @@ function handleTeamSelectChange() {
   updateTeamButtonsState();
   if (!selected) {
     const ok = confirm(
-      "Caricare una nuova squadra vuota azzererà roster e statistiche correnti. Procedere?"
+      "Caricare una nuova squadra precompilata (14 giocatrici e 2 liberi) azzererà roster e statistiche correnti. Procedere?"
     );
     if (!ok) {
       renderTeamsSelect();
       return;
     }
-    updatePlayersList([], { askReset: false });
-    state.liberos = [];
-    renderLiberoTags();
+    applyTemplateTeam({ askReset: false });
     renderTeamsSelect();
     return;
   }
@@ -980,6 +1050,21 @@ function updateTeamButtonsState() {
   if (elBtnRenameTeam) {
     elBtnRenameTeam.disabled = !selected;
   }
+}
+function buildTemplateNumbers() {
+  const numbers = {};
+  TEMPLATE_TEAM.players.forEach((name, idx) => {
+    numbers[name] = String(idx + 1);
+  });
+  return numbers;
+}
+function applyTemplateTeam(options = {}) {
+  const { askReset = true } = options;
+  updatePlayersList(TEMPLATE_TEAM.players, {
+    askReset,
+    liberos: TEMPLATE_TEAM.liberos,
+    playerNumbers: buildTemplateNumbers()
+  });
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
@@ -1447,11 +1532,29 @@ function updateRotationDisplay() {
   if (elRotationSelect) {
     elRotationSelect.value = String(state.rotation || 1);
   }
+  if (elRotationIndicatorFloating) {
+    elRotationIndicatorFloating.textContent = String(state.rotation || 1);
+  }
+  if (elRotationSelectFloating) {
+    elRotationSelectFloating.value = String(state.rotation || 1);
+  }
+  if (elRotationIndicatorModal) {
+    elRotationIndicatorModal.textContent = String(state.rotation || 1);
+  }
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
   const roles = BASE_ROLES;
   return roles[(index - offset + 12) % 6] || roles[index] || "";
+}
+function setCurrentSet(value, options = {}) {
+  const setNum = Math.min(5, Math.max(1, parseInt(value, 10) || 1));
+  state.currentSet = setNum;
+  syncCurrentSetUI(setNum);
+  if (options.save !== false) {
+    saveState();
+  }
+  renderLiveScore();
 }
 function setRotation(value) {
   const rot = Math.min(6, Math.max(1, parseInt(value, 10) || 1));
@@ -1485,6 +1588,16 @@ function rotateCourt(direction) {
   renderLineupChips();
   renderBenchChips();
   updateRotationDisplay();
+}
+function openActionsModal() {
+  if (!elActionsModal) return;
+  elActionsModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeActionsModal() {
+  if (!elActionsModal) return;
+  elActionsModal.classList.add("hidden");
+  document.body.style.overflow = "";
 }
 function resetDragState() {
   draggedPlayerName = "";
@@ -1702,12 +1815,12 @@ function renderPlayers() {
   elPlayersContainer.classList.add("court-layout");
   ensureCourtShape();
   ensureMetricsConfigDefaults();
+  const mobileMode = isMobileLayout();
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
     const slot = state.court[idx] || { main: "" };
     const activeName = slot.main;
-    const mobileMode = isMobileLayout();
     let playerIdx = -1;
     if (activeName) {
       playerIdx = state.players.findIndex(p => p === activeName);
@@ -1945,17 +2058,18 @@ function recalcAllStatsAndUpdateUI() {
   renderAggregatedTable();
 }
 function renderEventsLog() {
-  elEventsLog.innerHTML = "";
+  if (elEventsLog) {
+    elEventsLog.innerHTML = "";
+  }
+  let summaryText = "Nessun evento";
   if (!state.events || state.events.length === 0) {
-    elEventsLog.textContent = "Nessun evento ancora registrato.";
+    if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
+    if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
     return;
   }
   const recent = state.events.slice(-40).reverse();
-  recent.forEach(ev => {
-    const div = document.createElement("div");
-    div.className = "event-line";
-    const left = document.createElement("span");
-    left.className = "event-left";
+  const latest = recent[0];
+  const formatEv = ev => {
     const dateObj = new Date(ev.t);
     const timeStr = isNaN(dateObj.getTime())
       ? ""
@@ -1964,7 +2078,7 @@ function renderEventsLog() {
           minute: "2-digit",
           second: "2-digit"
         });
-    left.textContent =
+    const leftText =
       "[S" +
       ev.set +
       "] " +
@@ -1973,13 +2087,28 @@ function renderEventsLog() {
       ev.skillId +
       " " +
       ev.code;
+    return { leftText, timeStr };
+  };
+  const latestFmt = formatEv(latest);
+  summaryText = latestFmt.leftText;
+  recent.forEach(ev => {
+    if (!elEventsLog) return;
+    const div = document.createElement("div");
+    div.className = "event-line";
+    const left = document.createElement("span");
+    left.className = "event-left";
+    const fmt = formatEv(ev);
+    left.textContent = fmt.leftText;
     const right = document.createElement("span");
     right.className = "event-right";
-    right.textContent = timeStr;
+    right.textContent = fmt.timeStr;
     div.appendChild(left);
     div.appendChild(right);
     elEventsLog.appendChild(div);
   });
+  if (elEventsLogSummary) {
+    elEventsLogSummary.textContent = summaryText;
+  }
 }
 function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
@@ -2084,6 +2213,302 @@ function renderLiveScore() {
     elLiveScore.textContent = totalLabel;
     elLiveScore.classList.add("emph");
   }
+  if (elLiveScoreFloating) {
+    const prefix = "S" + (state.currentSet || 1) + " · ";
+    elLiveScoreFloating.textContent = prefix + totalLabel;
+  }
+  if (elLiveScoreModal) {
+    elLiveScoreModal.textContent = totalLabel;
+  }
+  if (elBtnOpenActionsModal) {
+    elBtnOpenActionsModal.textContent = "S" + (state.currentSet || 1) + " · " + totalLabel;
+  }
+}
+function renderMobileLineupMiniCourt() {
+  if (!elMiniCourt) return;
+  elMiniCourt.innerHTML = "";
+  const slots = MINI_SLOT_ORDER.map(idx => mobileLineupOrder[idx] || "");
+  slots.forEach((name, visualIdx) => {
+    const slotIdx = MINI_SLOT_ORDER[visualIdx];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const selectedClass =
+      touchDragName &&
+      touchDragFromSlot === slotIdx &&
+      touchDragName === name &&
+      !touchDragFromList
+        ? " touch-selected"
+        : "";
+    const overClass = touchDragOverSlot === slotIdx ? " drop-over" : "";
+    btn.className = "mini-slot" + (name ? "" : " empty") + selectedClass + overClass;
+    btn.textContent = name ? formatNameWithNumber(name) : "Pos " + (slotIdx + 1);
+    btn.dataset.slotIndex = String(slotIdx);
+    if (name) {
+      btn.draggable = true;
+      btn.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", name);
+        e.dataTransfer.setData("source-slot", String(slotIdx));
+        e.dataTransfer.setData("source-list", "false");
+        e.dataTransfer.effectAllowed = "move";
+      });
+      btn.addEventListener("touchstart", ev => startTouchDrag(name, slotIdx, false, ev), {
+        passive: true
+      });
+    }
+    btn.addEventListener("touchmove", handleTouchMove, { passive: false });
+    btn.addEventListener("touchend", handleTouchEnd, { passive: false });
+    btn.addEventListener("dragover", e => {
+      e.preventDefault();
+      btn.classList.add("drop-over");
+    });
+    btn.addEventListener("dragleave", () => btn.classList.remove("drop-over"));
+    btn.addEventListener("drop", e => {
+      e.preventDefault();
+      btn.classList.remove("drop-over");
+      const nameDropped = e.dataTransfer.getData("text/plain");
+      if (!nameDropped) return;
+      const fromSlot = parseInt(e.dataTransfer.getData("source-slot"), 10);
+      const fromList = e.dataTransfer.getData("source-list") === "true";
+      if (!canPlaceInSlot(nameDropped, slotIdx, true)) return;
+      if (!fromList && !isNaN(fromSlot) && fromSlot === slotIdx) return;
+      const currentOccupant = mobileLineupOrder[slotIdx] || "";
+      if (!fromList && !isNaN(fromSlot) && currentOccupant) {
+        if (!canPlaceInSlot(currentOccupant, fromSlot, true)) return;
+      }
+      if (!fromList && !isNaN(fromSlot)) {
+        mobileLineupOrder[fromSlot] = "";
+      }
+      if (!fromList && !isNaN(fromSlot) && currentOccupant && fromSlot >= 0 && fromSlot < 6) {
+        mobileLineupOrder[fromSlot] = currentOccupant;
+      }
+      mobileLineupOrder[slotIdx] = nameDropped;
+      renderMobileLineupMiniCourt();
+      renderMobileLineupList();
+    });
+    btn.addEventListener("click", () => {
+      mobileLineupOrder[slotIdx] = "";
+      renderMobileLineupMiniCourt();
+      renderMobileLineupList();
+    });
+    elMiniCourt.appendChild(btn);
+  });
+}
+function renderMobileLineupList() {
+  if (!elMobileLineupList) return;
+  elMobileLineupList.innerHTML = "";
+  const used = new Set(mobileLineupOrder.filter(Boolean));
+  if (!state.players || state.players.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Aggiungi giocatrici nella sezione gestione.";
+    elMobileLineupList.appendChild(empty);
+    return;
+  }
+  state.players.forEach(name => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const selectedClass =
+      touchDragName && touchDragName === name && touchDragFromList ? " touch-selected" : "";
+    btn.className = "mobile-lineup-chip" + (used.has(name) ? " selected" : "") + selectedClass;
+    btn.textContent = formatNameWithNumber(name);
+    btn.disabled = used.has(name);
+    btn.draggable = !used.has(name);
+    btn.addEventListener("click", () => {
+      let nextIndex = -1;
+      mobileLineupOrder.every((slot, idx) => {
+        if (!slot && canPlaceInSlot(name, idx, false)) {
+          nextIndex = idx;
+          return false;
+        }
+        return true;
+      });
+      if (nextIndex === -1) {
+        alert("Nessuna posizione disponibile per questa giocatrice.");
+        return;
+      }
+      mobileLineupOrder[nextIndex] = name;
+      renderMobileLineupMiniCourt();
+      renderMobileLineupList();
+    });
+    if (!used.has(name)) {
+      btn.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", name);
+        e.dataTransfer.setData("source-slot", "-1");
+        e.dataTransfer.setData("source-list", "true");
+        e.dataTransfer.effectAllowed = "copyMove";
+      });
+      btn.addEventListener("touchstart", ev => startTouchDrag(name, -1, true, ev), {
+        passive: true
+      });
+      btn.addEventListener("touchmove", handleTouchMove, { passive: false });
+      btn.addEventListener("touchend", handleTouchEnd, { passive: false });
+    }
+    elMobileLineupList.appendChild(btn);
+  });
+  elMobileLineupList.ondragover = e => {
+    e.preventDefault();
+  };
+  elMobileLineupList.ondrop = e => {
+    e.preventDefault();
+    const fromSlot = parseInt(e.dataTransfer.getData("source-slot"), 10);
+    const fromList = e.dataTransfer.getData("source-list") === "true";
+    if (!fromList && !isNaN(fromSlot) && fromSlot >= 0 && fromSlot < 6) {
+      mobileLineupOrder[fromSlot] = "";
+      renderMobileLineupMiniCourt();
+      renderMobileLineupList();
+    }
+  };
+  elMobileLineupList.addEventListener("touchmove", handleTouchMove, { passive: false });
+  elMobileLineupList.addEventListener("touchend", handleTouchEnd, { passive: false });
+}
+function openMobileLineupModal() {
+  if (!elMobileLineupModal) return;
+  ensureCourtShape();
+  mobileLineupOrder = Array.from({ length: 6 }, (_, idx) => state.court[idx]?.main || "");
+  elMobileLineupModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  renderMobileLineupMiniCourt();
+  renderMobileLineupList();
+}
+function closeMobileLineupModal() {
+  if (!elMobileLineupModal) return;
+  elMobileLineupModal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+function createTouchGhost(text, x, y) {
+  removeTouchGhost();
+  const ghost = document.createElement("div");
+  ghost.className = "touch-drag-ghost";
+  ghost.textContent = text;
+  ghost.style.left = x + "px";
+  ghost.style.top = y + "px";
+  document.body.appendChild(ghost);
+  touchGhost = ghost;
+}
+function moveTouchGhost(x, y) {
+  if (!touchGhost) return;
+  touchGhost.style.left = x + "px";
+  touchGhost.style.top = y + "px";
+}
+function removeTouchGhost() {
+  if (touchGhost && touchGhost.parentNode) {
+    touchGhost.parentNode.removeChild(touchGhost);
+  }
+  touchGhost = null;
+}
+function resetTouchDragState() {
+  touchDragName = "";
+  touchDragFromSlot = -1;
+  touchDragFromList = false;
+  touchDragOverSlot = -1;
+  removeTouchGhost();
+  renderMobileLineupMiniCourt();
+  renderMobileLineupList();
+}
+function startTouchDrag(name, sourceSlot, fromList, e) {
+  touchDragName = name;
+  touchDragFromSlot = sourceSlot;
+  touchDragFromList = fromList;
+  touchDragOverSlot = -1;
+  const t = e && e.touches && e.touches[0];
+  touchStartX = t ? t.clientX : 0;
+  touchStartY = t ? t.clientY : 0;
+  touchStartTime = Date.now();
+  createTouchGhost(formatNameWithNumber(name), touchStartX, touchStartY);
+  renderMobileLineupMiniCourt();
+  renderMobileLineupList();
+}
+function updateTouchOver(x, y) {
+  const elAtPoint = document.elementFromPoint(x, y);
+  const slotEl = elAtPoint && elAtPoint.closest(".mini-slot");
+  if (slotEl && slotEl.dataset.slotIndex) {
+    touchDragOverSlot = parseInt(slotEl.dataset.slotIndex, 10);
+  } else {
+    touchDragOverSlot = -1;
+  }
+  renderMobileLineupMiniCourt();
+}
+function applyTouchDrop(toSlot, dropToList) {
+  if (!touchDragName) return;
+  if (dropToList) {
+    if (touchDragFromSlot >= 0 && touchDragFromSlot < 6) {
+      mobileLineupOrder[touchDragFromSlot] = "";
+    }
+    resetTouchDragState();
+    return;
+  }
+  if (toSlot === null || toSlot === undefined || toSlot < 0) {
+    resetTouchDragState();
+    return;
+  }
+  if (!canPlaceInSlot(touchDragName, toSlot, true)) {
+    resetTouchDragState();
+    return;
+  }
+  const currentOccupant = mobileLineupOrder[toSlot] || "";
+  if (touchDragFromSlot >= 0 && currentOccupant) {
+    if (!canPlaceInSlot(currentOccupant, touchDragFromSlot, true)) {
+      resetTouchDragState();
+      return;
+    }
+  }
+  if (touchDragFromSlot >= 0 && touchDragFromSlot < 6) {
+    mobileLineupOrder[touchDragFromSlot] = "";
+  }
+  if (touchDragFromSlot >= 0 && touchDragFromSlot < 6 && currentOccupant) {
+    mobileLineupOrder[touchDragFromSlot] = currentOccupant;
+  }
+  mobileLineupOrder[toSlot] = touchDragName;
+  resetTouchDragState();
+}
+function handleTouchMove(e) {
+  if (!touchDragName) return;
+  if (!e.touches || !e.touches[0]) return;
+  const t = e.touches[0];
+  updateTouchOver(t.clientX, t.clientY);
+  moveTouchGhost(t.clientX, t.clientY);
+  e.preventDefault();
+}
+function handleTouchEnd(e) {
+  if (!touchDragName) return;
+  const touch = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+  const x = touch ? touch.clientX : 0;
+  const y = touch ? touch.clientY : 0;
+  const elapsed = Date.now() - touchStartTime;
+  const dist = Math.hypot(x - touchStartX, y - touchStartY);
+  const isTap = dist < 10 && elapsed < 200;
+  const elAtPoint = document.elementFromPoint(x, y);
+  const slotEl = elAtPoint && elAtPoint.closest(".mini-slot");
+  const listEl = elAtPoint && elAtPoint.closest(".mobile-lineup-list");
+  if (isTap) {
+    if (touchDragFromList) {
+      let nextIndex = -1;
+      mobileLineupOrder.every((slot, idx) => {
+        if (!slot && canPlaceInSlot(touchDragName, idx, false)) {
+          nextIndex = idx;
+          return false;
+        }
+        return true;
+      });
+      if (nextIndex !== -1) {
+        mobileLineupOrder[nextIndex] = touchDragName;
+      }
+    } else if (touchDragFromSlot >= 0) {
+      mobileLineupOrder[touchDragFromSlot] = "";
+    }
+    resetTouchDragState();
+    e.preventDefault();
+    return;
+  }
+  if (slotEl && slotEl.dataset.slotIndex) {
+    const targetSlot = parseInt(slotEl.dataset.slotIndex, 10);
+    applyTouchDrop(targetSlot, false);
+  } else if (listEl) {
+    applyTouchDrop(-1, true);
+  } else {
+    resetTouchDragState();
+  }
+  e.preventDefault();
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
   const rot = state.rotation || 1;
@@ -2400,6 +2825,8 @@ function resetMatch() {
   state.events = [];
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
+  state.currentSet = 1;
+  syncCurrentSetUI(1);
   initStats();
   saveState();
   recalcAllStatsAndUpdateUI();
@@ -2455,6 +2882,7 @@ function registerServiceWorker() {
 function setActiveTab(target) {
   if (!target) return;
   activeTab = target;
+  document.body.dataset.activeTab = target;
   tabButtons.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tabTarget === target);
   });
@@ -2519,6 +2947,7 @@ function initSwipeTabs() {
 function init() {
   initTabs();
   initSwipeTabs();
+  document.body.dataset.activeTab = activeTab;
   loadState();
   applyMatchInfoToUI();
   updateRotationDisplay();
@@ -2533,7 +2962,7 @@ function init() {
   renderLiveScore();
   renderPlayers();
   if (!state.players || state.players.length === 0) {
-    updatePlayersList(["Piccardi", "Cimmino", "Bilamour"], { askReset: false });
+    applyTemplateTeam({ askReset: false });
   } else {
     if (!state.stats || Object.keys(state.stats).length === 0) {
       initStats();
@@ -2550,13 +2979,10 @@ function init() {
     renderTeamsSelect();
   }
 
-  if (elCurrentSet) {
-    elCurrentSet.addEventListener("change", () => {
-      state.currentSet = parseInt(elCurrentSet.value, 10) || 1;
-      saveState();
-      renderLiveScore();
-    });
-  }
+  [elCurrentSet, elCurrentSetFloating].forEach(select => {
+    if (!select) return;
+    select.addEventListener("change", () => setCurrentSet(select.value));
+  });
   if (elBtnSaveInfo) {
     elBtnSaveInfo.addEventListener("click", () => {
       saveMatchInfoFromUI();
@@ -2641,8 +3067,25 @@ function init() {
   if (elBtnRotateCcw) {
     elBtnRotateCcw.addEventListener("click", () => rotateCourt("ccw"));
   }
+  if (elBtnRotateCwFloating) {
+    elBtnRotateCwFloating.addEventListener("click", () => rotateCourt("cw"));
+  }
+  if (elBtnRotateCcwFloating) {
+    elBtnRotateCcwFloating.addEventListener("click", () => rotateCourt("ccw"));
+  }
+  if (elBtnRotateCwModal) {
+    elBtnRotateCwModal.addEventListener("click", () => rotateCourt("cw"));
+  }
+  if (elBtnRotateCcwModal) {
+    elBtnRotateCcwModal.addEventListener("click", () => rotateCourt("ccw"));
+  }
   if (elRotationSelect) {
     elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
+  }
+  if (elRotationSelectFloating) {
+    elRotationSelectFloating.addEventListener("change", () =>
+      setRotation(elRotationSelectFloating.value)
+    );
   }
   if (elRotationIndicator && elRotationSelect) {
     const openSelect = () => {
@@ -2657,9 +3100,97 @@ function init() {
       }
     });
   }
+  if (elRotationIndicatorFloating) {
+    const openModalFromRot = () => openActionsModal();
+    elRotationIndicatorFloating.addEventListener("click", openModalFromRot);
+    elRotationIndicatorFloating.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openModalFromRot();
+      }
+    });
+  }
+  if (elRotationIndicatorModal && elRotationSelectFloating) {
+    const openSelectFloating = () => {
+      elRotationSelectFloating.focus();
+      elRotationSelectFloating.click();
+    };
+    elRotationIndicatorModal.addEventListener("click", openSelectFloating);
+    elRotationIndicatorModal.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openSelectFloating();
+      }
+    });
+  }
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
+  if (elBtnUndoFloating) elBtnUndoFloating.addEventListener("click", undoLastEvent);
+  if (elToggleLogMobile && elLogSection) {
+    elToggleLogMobile.addEventListener("click", () => {
+      const isOpen = elLogSection.classList.toggle("open");
+      elToggleLogMobile.setAttribute("aria-expanded", String(isOpen));
+      elToggleLogMobile.textContent = isOpen ? "Chiudi log eventi" : "Apri log eventi";
+    });
+  }
+  if (elBtnOpenLineupMobile) {
+    elBtnOpenLineupMobile.addEventListener("click", () => openMobileLineupModal());
+  }
+  if (elBtnOpenLineupMobileFloating) {
+    elBtnOpenLineupMobileFloating.addEventListener("click", () => openMobileLineupModal());
+  }
+  if (elMobileLineupClose) {
+    elMobileLineupClose.addEventListener("click", closeMobileLineupModal);
+  }
+  if (elMobileLineupModal) {
+    elMobileLineupModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeLineup !== undefined || target.classList.contains("mobile-lineup__backdrop")) {
+        closeMobileLineupModal();
+      }
+    });
+  }
+  if (elMobileLineupConfirm) {
+    elMobileLineupConfirm.addEventListener("click", () => {
+      const filled = mobileLineupOrder.filter(Boolean);
+      if (filled.length < 6) {
+        alert("Inserisci 6 giocatrici per impostare la rotazione.");
+        return;
+      }
+      ensureCourtShape();
+      mobileLineupOrder.slice(0, 6).forEach((name, idx) => {
+        state.court[idx] = { main: name, replaced: "" };
+      });
+      saveState();
+      renderPlayers();
+      renderBenchChips();
+      renderLineupChips();
+      renderLiberoChipsInline();
+      updateRotationDisplay();
+      closeMobileLineupModal();
+    });
+  }
+  if (elBtnOpenActionsModal) {
+    elBtnOpenActionsModal.addEventListener("click", openActionsModal);
+  }
+  if (elActionsClose) {
+    elActionsClose.addEventListener("click", closeActionsModal);
+  }
+  if (elActionsModal) {
+    elActionsModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeActions !== undefined || target.classList.contains("floating-actions__backdrop")) {
+        closeActionsModal();
+      }
+    });
+  }
+  if (elBtnScoreForPlusModal) elBtnScoreForPlusModal.addEventListener("click", () => handleManualScore("for", 1));
+  if (elBtnScoreForMinusModal) elBtnScoreForMinusModal.addEventListener("click", () => handleManualScore("for", -1));
+  if (elBtnScoreAgainstPlusModal) elBtnScoreAgainstPlusModal.addEventListener("click", () => handleManualScore("against", 1));
+  if (elBtnScoreAgainstMinusModal) elBtnScoreAgainstMinusModal.addEventListener("click", () => handleManualScore("against", -1));
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
   }
@@ -2704,6 +3235,8 @@ function init() {
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
       closeSkillModal();
+      closeActionsModal();
+      closeMobileLineupModal();
     }
   });
   document.addEventListener("click", e => {
