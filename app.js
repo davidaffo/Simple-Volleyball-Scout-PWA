@@ -149,6 +149,8 @@ const elBtnResetMetrics = document.getElementById("btn-reset-metrics");
 const elBtnResetCodes = document.getElementById("btn-reset-codes");
 let activeDropChip = null;
 let draggedPlayerName = "";
+let draggedFromPos = null;
+let dragSourceType = "";
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
@@ -361,6 +363,10 @@ function cleanCourtPlayers() {
   cleanLiberos();
   ensureMetricsConfigDefaults();
 }
+function isLibero(name) {
+  if (!name) return false;
+  return (state.liberos || []).includes(name);
+}
 function reserveNamesInCourt(name) {
   state.court = state.court.map(slot => {
     const cleaned = Object.assign({}, slot);
@@ -408,6 +414,29 @@ function setCourtPlayer(posIdx, target, playerName) {
   renderLiberoChipsInline();
   renderLineupChips();
   updateRotationDisplay();
+}
+function swapCourtPlayers(fromIdx, toIdx) {
+  ensureCourtShape();
+  if (fromIdx === toIdx) return;
+  const fromSlot = state.court[fromIdx] || { main: "", replaced: "" };
+  const toSlot = state.court[toIdx] || { main: "", replaced: "" };
+  const fromName = fromSlot.main;
+  if (!fromName) return;
+  const toName = toSlot.main;
+  if (isLibero(fromName) && FRONT_ROW_INDEXES.has(toIdx)) {
+    alert("Non puoi spostare il libero in prima linea.");
+    return;
+  }
+  if (isLibero(toName) && FRONT_ROW_INDEXES.has(fromIdx)) {
+    alert("Non puoi spostare il libero in prima linea.");
+    return;
+  }
+  setCourtPlayer(toIdx, "main", fromName);
+  if (toName) {
+    setCourtPlayer(fromIdx, "main", toName);
+  } else {
+    clearCourtAssignment(fromIdx, "main");
+  }
 }
 function clearCourtAssignment(posIdx, target) {
   ensureCourtShape();
@@ -1187,6 +1216,8 @@ function handleBenchDragStart(e) {
   const name = target.dataset.playerName;
   if (!name || !e.dataTransfer) return;
   draggedPlayerName = name;
+  draggedFromPos = null;
+  dragSourceType = "bench";
   e.dataTransfer.setData("text/plain", name);
   e.dataTransfer.effectAllowed = "move";
   if (activeDropChip) {
@@ -1195,11 +1226,23 @@ function handleBenchDragStart(e) {
   }
 }
 function handleBenchDragEnd() {
-  draggedPlayerName = "";
+  resetDragState();
+}
+function handleCourtDragStart(e, posIdx) {
+  const slot = state.court[posIdx] || { main: "" };
+  if (!slot.main || !e.dataTransfer) return;
+  draggedPlayerName = slot.main;
+  draggedFromPos = posIdx;
+  dragSourceType = "court";
+  e.dataTransfer.setData("text/plain", slot.main);
+  e.dataTransfer.effectAllowed = "move";
   if (activeDropChip) {
     activeDropChip.classList.remove("drop-over");
     activeDropChip = null;
   }
+}
+function handleCourtDragEnd() {
+  resetDragState();
 }
 function handlePositionDragOver(e, card) {
   const name =
@@ -1226,8 +1269,17 @@ function handlePositionDrop(e, card) {
   const posIdx = parseInt(card.dataset.posIndex, 10);
   const target = card.dataset.dropTarget || "main";
   card.classList.remove("drop-over");
-  if (!name || isNaN(posIdx)) return;
+  if (!name || isNaN(posIdx)) {
+    resetDragState();
+    return;
+  }
+  if (dragSourceType === "court" && draggedFromPos !== null) {
+    swapCourtPlayers(draggedFromPos, posIdx);
+    resetDragState();
+    return;
+  }
   setCourtPlayer(posIdx, target, name);
+  resetDragState();
 }
 function handleBenchClick(name) {
   ensureCourtShape();
@@ -1411,6 +1463,15 @@ function rotateCourt(direction) {
   renderBenchChips();
   updateRotationDisplay();
 }
+function resetDragState() {
+  draggedPlayerName = "";
+  draggedFromPos = null;
+  dragSourceType = "";
+  if (activeDropChip) {
+    activeDropChip.classList.remove("drop-over");
+    activeDropChip = null;
+  }
+}
 function applyPlayersFromTextarea() {
   if (!elPlayersInput) return;
   const raw = elPlayersInput.value;
@@ -1439,12 +1500,16 @@ function renderPlayers() {
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
     const slot = state.court[idx] || { main: "" };
+    const activeName = slot.main;
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
     card.dataset.posIndex = String(idx);
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
-    header.className = "court-header";
+    header.className = "court-header" + (activeName ? " draggable" : "");
+    header.draggable = !!activeName;
+    header.addEventListener("dragstart", e => handleCourtDragStart(e, idx));
+    header.addEventListener("dragend", handleCourtDragEnd);
     const posLabel = document.createElement("span");
     posLabel.className = "court-pos-label";
     posLabel.textContent =
@@ -1467,7 +1532,6 @@ function renderPlayers() {
     header.appendChild(clearBtn);
     card.appendChild(header);
 
-    const activeName = slot.main;
     card.addEventListener("dragenter", e => handlePositionDragOver(e, card), true);
     card.addEventListener("dragover", e => handlePositionDragOver(e, card), true);
     card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);

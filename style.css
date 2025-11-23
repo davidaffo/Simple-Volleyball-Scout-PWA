@@ -392,6 +392,12 @@ button.danger:hover {
   gap: 0.25rem;
   font-weight: 600;
 }
+.court-header.draggable {
+  cursor: grab;
+}
+.court-header.draggable:active {
+  cursor: grabbing;
+}
 .court-pos-label {
   font-size: 0.9rem;
   color: #9fb4ff;
