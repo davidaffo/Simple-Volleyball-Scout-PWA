@@ -16,6 +16,11 @@
     <button class="tab-btn" data-tab-target="scout">Raccolta dati</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
   </div>
+  <div class="tab-dots floating" aria-label="Navigazione tab mobile">
+    <button class="tab-dot active" data-tab-target="info" aria-label="Impostazioni"></button>
+    <button class="tab-dot" data-tab-target="scout" aria-label="Scout"></button>
+    <button class="tab-dot" data-tab-target="aggregated" aria-label="Analisi"></button>
+  </div>
 
   <div class="tab-panel active" data-tab="info">
     <div class="section">
@@ -261,6 +266,16 @@ Bianchi 18"></textarea>
     </div>
   </div>
   <noscript>Questa applicazione richiede JavaScript abilitato.</noscript>
+  <div id="skill-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-skill onclick="window._closeSkillModal && window._closeSkillModal()"></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div id="skill-modal-title" class="skill-modal__title"></div>
+        <button id="skill-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-skill="true" onclick="window._closeSkillModal && window._closeSkillModal()">✕</button>
+      </div>
+      <div id="skill-modal-body" class="skill-modal__body"></div>
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

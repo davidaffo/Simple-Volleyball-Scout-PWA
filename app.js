@@ -104,6 +104,13 @@ const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
 const elLiberoTags = document.getElementById("libero-tags");
 const elLiberoTagsInline = document.getElementById("libero-tags-inline");
+const elSkillModal = document.getElementById("skill-modal");
+const elSkillModalBackdrop = document.querySelector(".skill-modal__backdrop");
+const elSkillModalBody = document.getElementById("skill-modal-body");
+const elSkillModalTitle = document.getElementById("skill-modal-title");
+const elSkillModalClose = document.getElementById("skill-modal-close");
+let modalMode = "skill";
+let modalSubPosIdx = -1;
 function renderChipList(container, names, lockedMap, options = {}) {
   if (!container) return;
   container.innerHTML = "";
@@ -170,6 +177,8 @@ const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
 const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
+const tabDots = document.querySelectorAll(".tab-dot");
+let activeTab = "info";
 const SKILL_COLUMN_MAP = {
   serve: [1, 2, 3, 4],
   pass: [5, 6, 7, 8],
@@ -366,6 +375,12 @@ function cleanCourtPlayers() {
 function isLibero(name) {
   if (!name) return false;
   return (state.liberos || []).includes(name);
+}
+function isMobileLayout() {
+  return (
+    window.matchMedia("(max-width: 900px)").matches ||
+    window.matchMedia("(pointer: coarse)").matches
+  );
 }
 function reserveNamesInCourt(name) {
   state.court = state.court.map(slot => {
@@ -1373,6 +1388,10 @@ function releaseReplaced(name, keepIdx) {
   });
 }
 function renderBenchChips() {
+  if (isMobileLayout()) {
+    if (elBenchChips) elBenchChips.innerHTML = "";
+    return;
+  }
   if (!elBenchChips) return;
   elBenchChips.innerHTML = "";
   const bench = getBenchPlayers();
@@ -1384,6 +1403,10 @@ function renderBenchChips() {
   });
 }
 function renderLiberoChipsInline() {
+  if (isMobileLayout()) {
+    if (elLiberoTagsInline) elLiberoTagsInline.innerHTML = "";
+    return;
+  }
   if (!elLiberoTagsInline) return;
   elLiberoTagsInline.innerHTML = "";
   const liberos = getBenchLiberos();
@@ -1472,6 +1495,108 @@ function resetDragState() {
     activeDropChip = null;
   }
 }
+function openSkillModal(playerIdx, playerName) {
+  if (!elSkillModal || !elSkillModalBody) return;
+  const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
+  if (isNaN(idx) || !state.players[idx]) return;
+  modalMode = "skill";
+  modalSubPosIdx = -1;
+  elSkillModalBody.innerHTML = "";
+  const title =
+    formatNameWithNumber(playerName || state.players[idx]) || (playerName || "Giocatrice");
+  if (elSkillModalTitle) {
+    elSkillModalTitle.textContent = title;
+  }
+  renderSkillRows(elSkillModalBody, idx, state.players[idx], {
+    stacked: false,
+    columns: 3,
+    closeAfterAction: true
+  });
+  elSkillModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function openSubModal(posIdx) {
+  if (!elSkillModal || !elSkillModalBody) return;
+  modalMode = "sub";
+  modalSubPosIdx = posIdx;
+  elSkillModalBody.innerHTML = "";
+  if (elSkillModalTitle) {
+    elSkillModalTitle.textContent = "Sostituisci posizione " + (posIdx + 1);
+  }
+  const bench = getBenchPlayers();
+  const liberos = getBenchLiberos();
+  const candidates = Array.from(new Set([...bench, ...liberos]));
+  if (candidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessuna riserva disponibile.";
+    elSkillModalBody.appendChild(empty);
+  } else {
+    candidates.forEach(name => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const isLib = (state.liberos || []).includes(name);
+      btn.className = "sub-option-btn" + (isLib ? " libero" : "");
+      btn.textContent = formatNameWithNumber(name);
+      if (isLib) {
+        const tag = document.createElement("span");
+        tag.className = "sub-libero-tag";
+        tag.textContent = "Libero";
+        btn.appendChild(tag);
+      }
+      btn.addEventListener("click", () => {
+        setCourtPlayer(posIdx, "main", name);
+        closeSkillModal();
+      });
+      elSkillModalBody.appendChild(btn);
+    });
+  }
+  elSkillModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+}
+function closeSkillModal() {
+  if (!elSkillModal) return;
+  elSkillModal.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+// esponi per gli handler inline (fallback mobile)
+window._closeSkillModal = closeSkillModal;
+function attachModalCloseHandlers() {
+  const closeHandler = e => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closeSkillModal();
+  };
+  const events = ["click", "pointerup", "pointerdown", "touchend", "touchstart"];
+  const closeButtons = [elSkillModalClose, document.querySelector(".skill-modal__close-abs")];
+  closeButtons.forEach(btn => {
+    if (!btn) return;
+    events.forEach(evt => {
+      btn.addEventListener(evt, closeHandler, { passive: false, capture: true });
+    });
+    btn.onclick = closeHandler;
+  });
+  if (elSkillModalBackdrop) {
+    events.forEach(evt =>
+      elSkillModalBackdrop.addEventListener(evt, closeHandler, { passive: false })
+    );
+  }
+  if (elSkillModal) {
+    elSkillModal.addEventListener(
+      "click",
+      e => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("[data-close-skill]")) {
+          closeHandler(e);
+        }
+      },
+      true
+    );
+  }
+}
 function applyPlayersFromTextarea() {
   if (!elPlayersInput) return;
   const raw = elPlayersInput.value;
@@ -1490,6 +1615,87 @@ function applyPlayersFromTextarea() {
     .filter(l => l.length > 0);
   updatePlayersList(lines, { askReset: true });
 }
+function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
+  if (!targetEl) return;
+  const { stacked = false, closeAfterAction = false, columns = 2 } = options;
+  const enabledSkills = SKILLS.filter(skill => {
+    const cfg = state.metricsConfig[skill.id];
+    return !cfg || cfg.enabled !== false;
+  });
+  if (enabledSkills.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
+    targetEl.appendChild(empty);
+    return;
+  }
+  const chunkSize = stacked ? 1 : columns;
+  for (let i = 0; i < enabledSkills.length; i += chunkSize) {
+    const rowWrap = document.createElement("div");
+    rowWrap.className = "skill-row-pair" + (stacked ? " stacked" : "");
+    const subset = enabledSkills.slice(i, i + chunkSize);
+    subset.forEach(skill => {
+      const row = document.createElement("div");
+      row.className = "skill-row skill-" + skill.id;
+      row.dataset.playerIdx = String(playerIdx);
+      row.dataset.playerName = activeName;
+      row.dataset.skillId = skill.id;
+      const header = document.createElement("div");
+      header.className = "skill-header";
+      const title = document.createElement("div");
+      title.className = "player-name";
+      title.textContent = skill.label;
+      const badge = document.createElement("span");
+      badge.className = "skill-badge " + (skill.badgeClass || "");
+      badge.textContent = skill.label;
+      header.appendChild(title);
+      header.appendChild(badge);
+      const btns = document.createElement("div");
+      btns.className = "skill-buttons";
+      (state.metricsConfig[skill.id]?.activeCodes || RESULT_CODES).forEach(code => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "event-btn";
+        btn.textContent = code;
+        btn.dataset.playerIdx = String(playerIdx);
+        btn.dataset.playerName = activeName;
+        btn.dataset.skillId = skill.id;
+        btn.dataset.code = code;
+        btn.title = RESULT_LABELS[code] || "";
+        btn.addEventListener("click", () => {
+          handleEventClick(playerIdx, skill.id, code, activeName);
+          if (closeAfterAction) closeSkillModal();
+        });
+        btns.appendChild(btn);
+      });
+      row.appendChild(header);
+      row.appendChild(btns);
+      rowWrap.appendChild(row);
+    });
+    targetEl.appendChild(rowWrap);
+  }
+  if (activeName) {
+    const extraRow = document.createElement("div");
+    extraRow.className = "skill-row error-row";
+    const lbl = document.createElement("div");
+    lbl.className = "skill-header";
+    lbl.textContent = "Altri";
+    const buttons = document.createElement("div");
+    buttons.className = "skill-buttons";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "small event-btn danger";
+    btn.textContent = "Errore/Fallo";
+    btn.addEventListener("click", () => {
+      addPlayerError(playerIdx, activeName);
+      if (closeAfterAction) closeSkillModal();
+    });
+    buttons.appendChild(btn);
+    extraRow.appendChild(lbl);
+    extraRow.appendChild(buttons);
+    targetEl.appendChild(extraRow);
+  }
+}
 function renderPlayers() {
   if (!elPlayersContainer) return;
   elPlayersContainer.innerHTML = "";
@@ -1501,6 +1707,11 @@ function renderPlayers() {
     const meta = POSITIONS_META[idx];
     const slot = state.court[idx] || { main: "" };
     const activeName = slot.main;
+    const mobileMode = isMobileLayout();
+    let playerIdx = -1;
+    if (activeName) {
+      playerIdx = state.players.findIndex(p => p === activeName);
+    }
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
     card.dataset.posIndex = String(idx);
@@ -1510,18 +1721,37 @@ function renderPlayers() {
     header.draggable = !!activeName;
     header.addEventListener("dragstart", e => handleCourtDragStart(e, idx));
     header.addEventListener("dragend", handleCourtDragEnd);
+    const tagBar = document.createElement("div");
+    tagBar.className = "court-tagbar";
     const posLabel = document.createElement("span");
     posLabel.className = "court-pos-label";
     posLabel.textContent =
       "Posizione " + (idx + 1) + " · " + getRoleLabel(idx);
-    const nameLabel = document.createElement("span");
+    const tagLibero = document.createElement("span");
+    tagLibero.className = "court-libero-pill";
+    tagLibero.textContent = "Libero";
+    tagLibero.style.visibility = isLibero(slot.main) ? "visible" : "hidden";
+    tagBar.appendChild(posLabel);
+    tagBar.appendChild(tagLibero);
+    header.appendChild(tagBar);
+    const nameBlock = document.createElement("div");
+    nameBlock.className = "court-name-block";
+    const nameLabel = document.createElement("div");
     nameLabel.className = "court-name";
-    nameLabel.textContent = slot.main ? formatNameWithNumber(slot.main) : "Trascina una giocatrice qui";
-    header.appendChild(posLabel);
-    if ((state.liberos || []).includes(slot.main)) {
+    if (isLibero(slot.main)) {
       nameLabel.classList.add("libero-flag");
     }
-    header.appendChild(nameLabel);
+    nameLabel.textContent = slot.main
+      ? formatNameWithNumber(slot.main)
+      : "Trascina una giocatrice qui";
+    nameBlock.appendChild(nameLabel);
+    if (isLibero(slot.main) && slot.replaced) {
+      const subText = document.createElement("div");
+      subText.className = "libero-replace";
+      subText.textContent = "Sostituisce: " + formatNameWithNumber(slot.replaced);
+      nameBlock.appendChild(subText);
+    }
+    header.appendChild(nameBlock);
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "pill-remove clear-slot";
@@ -1537,90 +1767,41 @@ function renderPlayers() {
     card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);
     card.addEventListener("drop", e => handlePositionDrop(e, card), true);
 
-    if (!activeName) {
+    if (mobileMode) {
+      card.classList.add("mobile-card");
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      const isLib = isLibero(activeName);
+      const replacedText =
+        isLib && slot.replaced ? " (sost. " + formatNameWithNumber(slot.replaced) + ")" : "";
+      const roleText = getRoleLabel(idx);
+      openBtn.className = "open-skill-btn mobile-full-btn" + (isLib ? " libero-btn" : "");
+      openBtn.textContent = activeName
+        ? formatNameWithNumber(activeName) +
+          " · Pos " +
+          (idx + 1) +
+          (roleText ? " · " + roleText : "") +
+          (isLib ? " · Libero" : "") +
+          replacedText
+        : "Pos " + (idx + 1) + " · Nessuna";
+      openBtn.disabled = !activeName;
+      openBtn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
+      card.appendChild(openBtn);
+      const subBtn = document.createElement("button");
+      subBtn.type = "button";
+      subBtn.className = "mobile-sub-btn secondary";
+      subBtn.textContent = "Sostituisci";
+      subBtn.addEventListener("click", () => openSubModal(idx));
+      card.appendChild(subBtn);
       elPlayersContainer.appendChild(card);
       return;
     }
 
-    const playerIdx = state.players.findIndex(p => p === activeName);
-    if (playerIdx === -1) {
+    if (!activeName || playerIdx === -1) {
       elPlayersContainer.appendChild(card);
       return;
     }
-    const enabledSkills = SKILLS.filter(skill => {
-      const cfg = state.metricsConfig[skill.id];
-      return !cfg || cfg.enabled !== false;
-    });
-    if (enabledSkills.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "players-empty";
-      empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
-      card.appendChild(empty);
-      elPlayersContainer.appendChild(card);
-      return;
-    }
-    for (let i = 0; i < enabledSkills.length; i += 2) {
-      const rowWrap = document.createElement("div");
-      rowWrap.className = "skill-row-pair";
-      const subset = enabledSkills.slice(i, i + 2);
-      subset.forEach(skill => {
-    const row = document.createElement("div");
-    row.className = "skill-row skill-" + skill.id;
-        row.dataset.playerIdx = String(playerIdx);
-        row.dataset.playerName = activeName;
-        row.dataset.skillId = skill.id;
-        const header = document.createElement("div");
-        header.className = "skill-header";
-        const left = document.createElement("span");
-        const badge = document.createElement("span");
-        badge.className = "badge " + skill.badgeClass;
-        badge.textContent = skill.label;
-        left.appendChild(badge);
-        const right = document.createElement("span");
-        right.textContent = "";
-        right.className = "skill-counts";
-        header.appendChild(left);
-        header.appendChild(right);
-        row.appendChild(header);
-        const buttons = document.createElement("div");
-        buttons.className = "skill-buttons";
-        RESULT_CODES.forEach(code => {
-          const cfg = state.metricsConfig[skill.id];
-          const codeActive = !cfg || (cfg.activeCodes || RESULT_CODES).includes(code);
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "small event-btn" + (codeActive ? "" : " disabled-code");
-          btn.disabled = !codeActive;
-          btn.textContent = code;
-          btn.dataset.playerIdx = String(playerIdx);
-          btn.dataset.playerName = activeName;
-          btn.dataset.skillId = skill.id;
-          btn.dataset.code = code;
-          buttons.appendChild(btn);
-        });
-        row.appendChild(buttons);
-        const statsDiv = document.createElement("div");
-        statsDiv.className = "skill-stats";
-        statsDiv.textContent = "Tot: 0";
-        row.appendChild(statsDiv);
-        rowWrap.appendChild(row);
-      });
-      card.appendChild(rowWrap);
-    }
-    if (activeName) {
-      const extraRow = document.createElement("div");
-      extraRow.className = "skill-row error-row";
-      const buttons = document.createElement("div");
-      buttons.className = "skill-buttons";
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "small event-btn danger";
-      btn.textContent = "Errore/Fallo";
-      btn.addEventListener("click", () => addPlayerError(idx, activeName));
-      buttons.appendChild(btn);
-      extraRow.appendChild(buttons);
-      card.appendChild(extraRow);
-    }
+    renderSkillRows(card, playerIdx, activeName);
     elPlayersContainer.appendChild(card);
   });
   recalcAllStatsAndUpdateUI();
@@ -2271,16 +2452,21 @@ function registerServiceWorker() {
     });
   }
 }
+function setActiveTab(target) {
+  if (!target) return;
+  activeTab = target;
+  tabButtons.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tabTarget === target);
+  });
+  tabDots.forEach(dot => {
+    dot.classList.toggle("active", dot.dataset.tabTarget === target);
+  });
+  tabPanels.forEach(panel => {
+    panel.classList.toggle("active", panel.dataset.tab === target);
+  });
+}
 function initTabs() {
   if (!tabButtons || !tabPanels) return;
-  const setActiveTab = target => {
-    tabButtons.forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.tabTarget === target);
-    });
-    tabPanels.forEach(panel => {
-      panel.classList.toggle("active", panel.dataset.tab === target);
-    });
-  };
   tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tabTarget;
@@ -2289,10 +2475,50 @@ function initTabs() {
       }
     });
   });
+  tabDots.forEach(dot => {
+    dot.addEventListener("click", () => {
+      const target = dot.dataset.tabTarget;
+      if (target) setActiveTab(target);
+    });
+  });
   setActiveTab("info");
+}
+function initSwipeTabs() {
+  if (!("ontouchstart" in window)) return;
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  const minDistance = 90;
+  const maxOffset = 50;
+  const maxTime = 700;
+  const tabsOrder = ["info", "scout", "aggregated"];
+  const onStart = e => {
+    const t = (e.changedTouches && e.changedTouches[0]) || e;
+    startX = t.clientX;
+    startY = t.clientY;
+    startTime = Date.now();
+  };
+  const onEnd = e => {
+    if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
+    const t = (e.changedTouches && e.changedTouches[0]) || e;
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const dt = Date.now() - startTime;
+    if (dt > maxTime) return;
+    if (Math.abs(dy) > maxOffset) return;
+    if (Math.abs(dx) < minDistance) return;
+    const dir = dx > 0 ? "right" : "left";
+    const idx = tabsOrder.indexOf(activeTab);
+    if (idx === -1) return;
+    const nextIdx = dir === "left" ? Math.min(tabsOrder.length - 1, idx + 1) : Math.max(0, idx - 1);
+    if (nextIdx !== idx) setActiveTab(tabsOrder[nextIdx]);
+  };
+  document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchend", onEnd, { passive: true });
 }
 function init() {
   initTabs();
+  initSwipeTabs();
   loadState();
   applyMatchInfoToUI();
   updateRotationDisplay();
@@ -2455,6 +2681,41 @@ function init() {
   if (elBtnScoreError) {
     elBtnScoreError.addEventListener("click", handleManualError);
   }
+  if (elSkillModalClose) {
+    elSkillModalClose.addEventListener("click", closeSkillModal);
+  }
+  if (elSkillModal) {
+    elSkillModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose =
+        target.dataset.closeSkill ||
+        !!target.closest("[data-close-skill]") ||
+        target === elSkillModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeSkillModal();
+      }
+    });
+  }
+  window.addEventListener("resize", () => {
+    renderPlayers();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      closeSkillModal();
+    }
+  });
+  document.addEventListener("click", e => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const closer = target.closest("[data-close-skill]");
+    if (closer && !elSkillModal?.classList.contains("hidden")) {
+      e.preventDefault();
+      closeSkillModal();
+    }
+  });
+  attachModalCloseHandlers();
   registerServiceWorker();
 }
 document.addEventListener("DOMContentLoaded", init);
