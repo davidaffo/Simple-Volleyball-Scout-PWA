@@ -119,22 +119,8 @@ Bianchi 18"></textarea>
   </div>
 
   <div class="tab-panel" data-tab="scout">
-    <div class="mobile-floating-bar" aria-label="Azioni rapide scout">
-      <div class="floating-rot">
-        <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
-        <div class="rotation-display minimal">
-          <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
-        </div>
-        <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
-      </div>
-      <button id="btn-undo-floating" class="small danger" aria-label="Annulla ultimo evento">↩</button>
-      <button id="btn-open-lineup-mobile-floating" class="floating-lineup-btn small secondary" aria-label="Imposta formazione">Imposta formazione</button>
-      <button id="btn-open-actions-modal" class="floating-score-btn" aria-haspopup="dialog" aria-label="Apri modifica punteggio e rotazione">
-        <span id="live-score-floating" aria-live="polite">S1 · 0 - 0</span>
-      </button>
-    </div>
     <div class="section">
-      <h2>Scout in tempo reale</h2>
+      <h2 class="scout-title">Scout in tempo reale</h2>
       <div class="set-controls grid-row">
         <div class="block rotation-block">
           <div class="rotation-controls">
@@ -193,8 +179,27 @@ Bianchi 18"></textarea>
           <div id="libero-tags-inline" class="libero-tags"></div>
         </div>
       </div>
-      <h3>Giocatrici e fondamentali</h3>
-      <div id="players-container"></div>
+      <div class="players-area">
+        <div class="mobile-floating-bar" aria-label="Azioni rapide scout">
+          <div class="floating-rot">
+            <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
+            <div class="rotation-display minimal">
+              <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+            </div>
+            <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
+          </div>
+          <div class="floating-undo-wrap">
+            <span id="floating-log-summary" class="floating-log-summary" aria-live="polite"></span>
+            <button id="btn-undo-floating" class="small danger" aria-label="Annulla ultimo evento">↩</button>
+          </div>
+          <button id="btn-open-lineup-mobile-floating" class="floating-lineup-btn small secondary" aria-label="Imposta formazione">Imposta formazione</button>
+          <button id="btn-open-actions-modal" class="floating-score-btn" aria-haspopup="dialog" aria-label="Apri modifica punteggio e rotazione">
+            <span id="live-score-floating" aria-live="polite">S1 · 0 - 0</span>
+          </button>
+        </div>
+        <h3 class="players-title">Giocatrici e fondamentali</h3>
+        <div id="players-container"></div>
+      </div>
     </div>
     <div class="section log-section" data-log-section>
       <h2>Log eventi (ultimi)</h2>

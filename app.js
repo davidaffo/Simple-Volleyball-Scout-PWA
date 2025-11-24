@@ -199,6 +199,7 @@ const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
 const elEventsLogSummary = document.getElementById("events-log-summary");
+const elFloatingLogSummary = document.getElementById("floating-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
 const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
@@ -350,6 +351,29 @@ function getPlayerNumber(name) {
 function formatNameWithNumber(name) {
   const num = getPlayerNumber(name);
   return num ? num + " - " + name : name;
+}
+const SKILL_SHORT_LABELS = {
+  serve: "BA",
+  pass: "RI",
+  attack: "AT",
+  defense: "DF",
+  block: "MU",
+  second: "AL",
+  manual: "MN"
+};
+function getShortSkill(id) {
+  if (!id) return "";
+  return SKILL_SHORT_LABELS[id] || id.slice(0, 2).toUpperCase();
+}
+function getInitials(name) {
+  if (!name) return "";
+  return name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0].toUpperCase())
+    .join("");
 }
 function buildNumbersForNames(names, provided = {}) {
   const valid = value => {
@@ -1900,12 +1924,6 @@ function renderPlayers() {
       openBtn.disabled = !activeName;
       openBtn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
       card.appendChild(openBtn);
-      const subBtn = document.createElement("button");
-      subBtn.type = "button";
-      subBtn.className = "mobile-sub-btn secondary";
-      subBtn.textContent = "Sostituisci";
-      subBtn.addEventListener("click", () => openSubModal(idx));
-      card.appendChild(subBtn);
       elPlayersContainer.appendChild(card);
       return;
     }
@@ -2062,9 +2080,11 @@ function renderEventsLog() {
     elEventsLog.innerHTML = "";
   }
   let summaryText = "Nessun evento";
+  let compactSummary = "";
   if (!state.events || state.events.length === 0) {
     if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
+    if (elFloatingLogSummary) elFloatingLogSummary.textContent = "—";
     return;
   }
   const recent = state.events.slice(-40).reverse();
@@ -2087,10 +2107,21 @@ function renderEventsLog() {
       ev.skillId +
       " " +
       ev.code;
-    return { leftText, timeStr };
+    const shortSkill = getShortSkill(ev.skillId);
+    const num = getPlayerNumber(ev.playerName);
+    const initials = getInitials(ev.playerName);
+    const compact =
+      (num || initials || "#" + (typeof ev.playerIdx === "number" ? ev.playerIdx + 1 : "?")) +
+      " " +
+      shortSkill +
+      " " +
+      (ev.code || "");
+    const compactClean = compact.trim();
+    return { leftText, timeStr, compact: compactClean };
   };
   const latestFmt = formatEv(latest);
   summaryText = latestFmt.leftText;
+  compactSummary = latestFmt.compact;
   recent.forEach(ev => {
     if (!elEventsLog) return;
     const div = document.createElement("div");
@@ -2108,6 +2139,9 @@ function renderEventsLog() {
   });
   if (elEventsLogSummary) {
     elEventsLogSummary.textContent = summaryText;
+  }
+  if (elFloatingLogSummary) {
+    elFloatingLogSummary.textContent = compactSummary || "—";
   }
 }
 function getPointDirection(ev) {
