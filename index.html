@@ -13,7 +13,7 @@
   <h1 class="app-title">Simple Volleyball Scout PWA</h1>
   <div class="tabs-nav floating centered">
     <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
-    <button class="tab-btn" data-tab-target="scout">Raccolta dati</button>
+    <button class="tab-btn" data-tab-target="scout">Scout live</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
   </div>
   <div class="tab-dots floating" aria-label="Navigazione tab mobile">
@@ -41,6 +41,13 @@
         <div class="col">
           <label for="match-notes">Note</label>
           <input id="match-notes" type="text" />
+        </div>
+        <div class="col">
+          <label>Tema</label>
+          <div class="theme-toggle">
+            <button type="button" id="theme-dark" class="secondary" aria-pressed="false" title="Tema scuro">🌙</button>
+            <button type="button" id="theme-light" class="secondary" aria-pressed="false" title="Tema chiaro">☀️</button>
+          </div>
         </div>
       </div>
       <div class="controls-row info-controls">

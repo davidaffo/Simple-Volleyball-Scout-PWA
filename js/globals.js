@@ -7,6 +7,18 @@ const SKILLS = [
   { id: "block", label: "Muro", badgeClass: "badge-block" },
   { id: "second", label: "Alzata", badgeClass: "badge-second" }
 ];
+const SKILL_COLORS = {
+  serve: { bg: "#1b5e20", text: "#d1fae5", soft: "rgba(27, 94, 32, 0.18)" },
+  pass: { bg: "#f9a825", text: "#ffffff", soft: "rgba(249, 168, 37, 0.18)" },
+  attack: { bg: "#b71c1c", text: "#ffe4e6", soft: "rgba(183, 28, 28, 0.18)" },
+  defense: { bg: "#546e7a", text: "#e2e8f0", soft: "rgba(84, 110, 122, 0.18)" },
+  block: { bg: "#4a148c", text: "#ede9fe", soft: "rgba(74, 20, 140, 0.18)" },
+  second: { bg: "#00838f", text: "#ccfbf1", soft: "rgba(0, 131, 143, 0.18)" }
+};
+const THEME_TEXT = {
+  dark: "#ffffff",
+  light: "#0f172a"
+};
 const RESULT_CODES = ["#", "+", "!", "-", "/", "="];
 const RESULT_LABELS = {
   "#": "Punto / perfetto",
@@ -80,6 +92,7 @@ let state = {
     leg: "",
     matchType: ""
   },
+  theme: "dark",
   currentSet: 1,
   players: [],
   playerNumbers: {},
@@ -136,6 +149,8 @@ const elSkillModalBackdrop = document.querySelector(".skill-modal__backdrop");
 const elSkillModalBody = document.getElementById("skill-modal-body");
 const elSkillModalTitle = document.getElementById("skill-modal-title");
 const elSkillModalClose = document.getElementById("skill-modal-close");
+const elThemeToggleDark = document.getElementById("theme-dark");
+const elThemeToggleLight = document.getElementById("theme-light");
 let modalMode = "skill";
 let modalSubPosIdx = -1;
 let mobileLineupOrder = [];
@@ -148,3 +163,13 @@ let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
 let touchGhost = null;
+
+function applySkillThemeVars() {
+  const root = document.documentElement;
+  Object.entries(SKILL_COLORS).forEach(([id, colors]) => {
+    root.style.setProperty(`--skill-${id}-bg`, colors.bg);
+    root.style.setProperty(`--skill-${id}-text`, colors.text);
+    root.style.setProperty(`--skill-${id}-soft`, colors.soft || colors.bg);
+  });
+}
+applySkillThemeVars();

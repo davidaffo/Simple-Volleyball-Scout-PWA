@@ -88,6 +88,21 @@ const tabDots = document.querySelectorAll(".tab-dot");
 const elToggleLogMobile = document.getElementById("toggle-log-mobile");
 const elLogSection = document.querySelector("[data-log-section]");
 let activeTab = "info";
+
+function applyTheme(theme) {
+  const next = theme === "light" ? "light" : "dark";
+  document.body.dataset.theme = next;
+  state.theme = next;
+  const textColor = (THEME_TEXT && THEME_TEXT[next]) || "#ffffff";
+  document.documentElement.style.setProperty("--text-color", textColor);
+  if (elThemeToggleDark && elThemeToggleLight) {
+    const isLight = next === "light";
+    elThemeToggleLight.classList.toggle("active", isLight);
+    elThemeToggleDark.classList.toggle("active", !isLight);
+    elThemeToggleLight.setAttribute("aria-pressed", String(isLight));
+    elThemeToggleDark.setAttribute("aria-pressed", String(!isLight));
+  }
+}
 const SKILL_COLUMN_MAP = {
   serve: [1, 2, 3, 4],
   pass: [5, 6, 7, 8],
@@ -103,6 +118,7 @@ function loadState() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return;
     state = Object.assign(state, parsed);
+    state.theme = parsed.theme || "dark";
     state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
     ensureCourtShape();
     cleanCourtPlayers();

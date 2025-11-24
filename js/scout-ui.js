@@ -121,6 +121,10 @@ function applyPlayersFromTextarea() {
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
   const { stacked = false, closeAfterAction = false, columns = 2 } = options;
+  const getSkillColors = skillId => {
+    const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
+    return SKILL_COLORS[skillId] || fallback;
+  };
   const enabledSkills = SKILLS.filter(skill => {
     const cfg = state.metricsConfig[skill.id];
     return !cfg || cfg.enabled !== false;
@@ -144,10 +148,16 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     row.dataset.playerName = activeName;
     row.dataset.skillId = skill.id;
     const header = document.createElement("div");
-    header.className = "skill-header skill-title skill-" + skill.id;
-    header.textContent = skill.label;
-      const btns = document.createElement("div");
-      btns.className = "skill-buttons";
+    header.className = "skill-header";
+    const title = document.createElement("span");
+    title.className = "skill-title skill-" + skill.id;
+    const colors = getSkillColors(skill.id);
+    title.textContent = skill.label;
+    title.style.backgroundColor = colors.bg;
+    title.style.color = colors.text;
+    header.appendChild(title);
+    const btns = document.createElement("div");
+    btns.className = "skill-buttons";
       (state.metricsConfig[skill.id]?.activeCodes || RESULT_CODES).forEach(code => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1378,6 +1388,7 @@ function init() {
   initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
   loadState();
+  applyTheme(state.theme || "dark");
   applyMatchInfoToUI();
   updateRotationDisplay();
   applyPlayersFromStateToTextarea();
@@ -1417,6 +1428,17 @@ function init() {
       saveMatchInfoFromUI();
       alert("Info partita salvate.");
     });
+  }
+  if (elThemeToggleDark && elThemeToggleLight) {
+    elThemeToggleDark.addEventListener("click", () => {
+      applyTheme("dark");
+      saveState();
+    });
+    elThemeToggleLight.addEventListener("click", () => {
+      applyTheme("light");
+      saveState();
+    });
+    applyTheme(state.theme || "dark");
   }
   if (elBtnApplyPlayers) {
     elBtnApplyPlayers.addEventListener("click", () => {
