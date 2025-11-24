@@ -912,6 +912,7 @@ function renderLiberoTags() {
   });
 }
 const allowedMetricCodes = new Set(RESULT_CODES);
+const SETTINGS_RESULT_CODES = ["#", "+", "!", "-", "/", "="];
 function normalizeMetricConfig(skillId, cfg) {
   const def = METRIC_DEFAULTS[skillId] || METRIC_DEFAULTS.serve;
   const uniq = list =>
@@ -922,6 +923,13 @@ function normalizeMetricConfig(skillId, cfg) {
   const activeCodes = uniq((cfg && cfg.activeCodes) || def.activeCodes || RESULT_CODES);
   const enabled = cfg && typeof cfg.enabled === "boolean" ? cfg.enabled : def.enabled !== false;
   return { positive, neutral, negative, activeCodes, enabled };
+}
+function getCodeTone(skillId, code) {
+  ensureMetricsConfigDefaults();
+  const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
+  if (cfg.positive.includes(code)) return "positive";
+  if (cfg.negative.includes(code)) return "negative";
+  return "neutral";
 }
 function ensureMetricsConfigDefaults() {
   state.metricsConfig = state.metricsConfig || {};
@@ -989,6 +997,7 @@ function toggleMetricAssignment(skillId, category, code) {
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
+  renderPlayers();
 }
 function toggleActiveCode(skillId, code) {
   ensureMetricsConfigDefaults();
@@ -1008,6 +1017,7 @@ function toggleActiveCode(skillId, code) {
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
+  renderPlayers();
 }
 function toggleSkillEnabled(skillId) {
   ensureMetricsConfigDefaults();
@@ -1041,6 +1051,7 @@ function resetMetricsToDefault() {
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
+  renderPlayers();
 }
 function resetAllActiveCodes() {
   const ok = confirm("Riattivare tutte le valutazioni (codici abilitati) per ogni fondamentale?");
@@ -1058,6 +1069,7 @@ function resetAllActiveCodes() {
   saveState();
   renderMetricsConfig();
   recalcAllStatsAndUpdateUI();
+  renderPlayers();
 }
 function renderMetricsConfig() {
   if (!elMetricsConfig) return;
@@ -1098,14 +1110,17 @@ function renderMetricsConfig() {
         btn.addEventListener("click", () => toggleSkillEnabled(skill.id));
         row.appendChild(btn);
       } else {
-        RESULT_CODES.forEach(code => {
+        SETTINGS_RESULT_CODES.forEach(code => {
           const btn = document.createElement("button");
           btn.type = "button";
           const active =
             rowMeta.key === "activeCodes"
               ? state.metricsConfig[skill.id].activeCodes.includes(code)
               : state.metricsConfig[skill.id][rowMeta.key].includes(code);
-          btn.className = "metric-toggle" + (active ? " active" : "");
+          const tone = getCodeTone(skill.id, code);
+          let cls = "metric-toggle";
+          if (active) cls += " active code-" + tone;
+          btn.className = cls;
           btn.textContent = code;
           if (rowMeta.key === "activeCodes") {
             btn.addEventListener("click", () => toggleActiveCode(skill.id, code));

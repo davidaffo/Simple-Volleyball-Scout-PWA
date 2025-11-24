@@ -1,1 +1,1 @@
-tasto fallo non visibile su mobile e titoli duplicati
+tasto fallo non visibile su mobile, da sistemare popup

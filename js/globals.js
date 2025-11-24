@@ -19,7 +19,7 @@ const THEME_TEXT = {
   dark: "#ffffff",
   light: "#0f172a"
 };
-const RESULT_CODES = ["#", "+", "!", "-", "/", "="];
+const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
 const RESULT_LABELS = {
   "#": "Punto / perfetto",
   "+": "Buono",

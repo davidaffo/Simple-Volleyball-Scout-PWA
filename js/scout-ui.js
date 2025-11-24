@@ -158,10 +158,15 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     header.appendChild(title);
     const btns = document.createElement("div");
     btns.className = "skill-buttons";
-      (state.metricsConfig[skill.id]?.activeCodes || RESULT_CODES).forEach(code => {
+      const codes = (state.metricsConfig[skill.id]?.activeCodes || RESULT_CODES).slice();
+      if (!codes.includes("/")) codes.push("/");
+      if (!codes.includes("=")) codes.push("=");
+      const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
+      ordered.forEach(code => {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "event-btn";
+        const tone = typeof getCodeTone === "function" ? getCodeTone(skill.id, code) : "neutral";
+        btn.className = "event-btn code-" + tone;
         btn.textContent = code;
         btn.dataset.playerIdx = String(playerIdx);
         btn.dataset.playerName = activeName;
@@ -372,7 +377,7 @@ function computeMetrics(counts, skillId) {
   if (!total) {
     return { total: 0, pos: null, eff: null, prf: null, positiveCount: 0, negativeCount: 0 };
   }
-  const positiveCodes = (cfg && cfg.positive) || ["#", "+"];
+  const positiveCodes = Array.from(new Set([...(cfg && cfg.positive ? cfg.positive : []), "#", "+"]));
   const negativeCodes = (cfg && cfg.negative) || ["-"];
   const positiveCount = positiveCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
   const negativeCount = negativeCodes.reduce(
@@ -380,7 +385,9 @@ function computeMetrics(counts, skillId) {
     0
   );
   const pos = (positiveCount / total) * 100;
-  const eff = ((positiveCount - negativeCount) / total) * 100;
+  const cfgPositivesOnly = (cfg && cfg.positive) || [];
+  const effPosCount = cfgPositivesOnly.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const eff = ((effPosCount - negativeCount) / total) * 100;
   const prf = ((counts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
 }
