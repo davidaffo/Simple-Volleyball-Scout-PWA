@@ -1,0 +1,1 @@
+tasto fallo non visibile su mobile e titoli duplicati

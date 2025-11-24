@@ -1,9 +1,11 @@
-const CACHE_NAME = "volley-scout-cache-v1";
+const CACHE_NAME = "volley-scout-cache-v2";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
-  "./app.js"
+  "./js/globals.js",
+  "./js/roster-lineup.js",
+  "./js/scout-ui.js"
 ];
 self.addEventListener("install", event => {
   event.waitUntil(
