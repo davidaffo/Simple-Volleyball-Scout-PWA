@@ -198,6 +198,7 @@ let dragSourceType = "";
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
+const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
 const elFloatingLogSummary = document.getElementById("floating-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
@@ -1799,8 +1800,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         btn.dataset.skillId = skill.id;
         btn.dataset.code = code;
         btn.title = RESULT_LABELS[code] || "";
-        btn.addEventListener("click", () => {
-          handleEventClick(playerIdx, skill.id, code, activeName);
+        btn.addEventListener("click", e => {
+          handleEventClick(playerIdx, skill.id, code, activeName, e.currentTarget);
           if (closeAfterAction) closeSkillModal();
         });
         btns.appendChild(btn);
@@ -1938,7 +1939,31 @@ function renderPlayers() {
   recalcAllStatsAndUpdateUI();
   renderLineupChips();
 }
-function handleEventClick(playerIdxStr, skillId, code, playerName) {
+function animateEventToLog(sourceEl, skillId, code) {
+  if (!sourceEl || !elEventsLog) return;
+  const src = sourceEl.getBoundingClientRect();
+  const dest = elEventsLog.getBoundingClientRect();
+  const flyer = document.createElement("div");
+  flyer.className = "event-flyer badge";
+  if (skillId) flyer.classList.add("badge-" + skillId);
+  flyer.textContent = code || "";
+  const startX = src.left + src.width / 2;
+  const startY = src.top + src.height / 2;
+  const destX = dest.left + Math.min(dest.width * 0.15, 28);
+  const destY = dest.top + 12;
+  flyer.style.setProperty("--sx", startX + "px");
+  flyer.style.setProperty("--sy", startY + "px");
+  flyer.style.setProperty("--dx", destX - startX + "px");
+  flyer.style.setProperty("--dy", destY - startY + "px");
+  document.body.appendChild(flyer);
+  requestAnimationFrame(() => flyer.classList.add("run"));
+  flyer.addEventListener("animationend", () => {
+    flyer.remove();
+    elEventsLog.classList.add("log-pulse");
+    setTimeout(() => elEventsLog.classList.remove("log-pulse"), 320);
+  });
+}
+function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   let playerIdx = parseInt(playerIdxStr, 10);
   if (isNaN(playerIdx) || !state.players[playerIdx]) {
     playerIdx = state.players.findIndex(p => p === playerName);
@@ -1964,8 +1989,11 @@ function handleEventClick(playerIdxStr, skillId, code, playerName) {
   }
   state.stats[playerIdx][skillId][code] =
     (state.stats[playerIdx][skillId][code] || 0) + 1;
+  animateEventToLog(sourceEl, skillId, code);
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
+  renderLiveScore();
+  renderScoreAndRotations(computePointsSummary());
   renderEventsLog();
   renderAggregatedTable();
 }
@@ -2085,6 +2113,7 @@ function renderEventsLog() {
     if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
     if (elFloatingLogSummary) elFloatingLogSummary.textContent = "—";
+    if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
     return;
   }
   const recent = state.events.slice(-40).reverse();
@@ -2142,6 +2171,9 @@ function renderEventsLog() {
   }
   if (elFloatingLogSummary) {
     elFloatingLogSummary.textContent = compactSummary || "—";
+  }
+  if (elUndoLastSummary) {
+    elUndoLastSummary.textContent = compactSummary || "—";
   }
 }
 function getPointDirection(ev) {
@@ -3031,18 +3063,6 @@ function init() {
   if (elBtnApplyPlayers) {
     elBtnApplyPlayers.addEventListener("click", () => {
       applyPlayersFromTextarea();
-    });
-  }
-  if (elPlayersContainer) {
-    elPlayersContainer.addEventListener("click", e => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!target.classList.contains("event-btn")) return;
-      const playerIdx = target.dataset.playerIdx;
-      const playerName = target.dataset.playerName;
-      const skillId = target.dataset.skillId;
-      const code = target.dataset.code;
-      handleEventClick(playerIdx, skillId, code, playerName);
     });
   }
   if (elBtnAddPlayer) {
