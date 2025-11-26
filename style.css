@@ -362,14 +362,14 @@ body[data-theme="light"] .score-card.wide {
 }
 .score-actions {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  justify-content: center;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: stretch;
+  width: 100%;
 }
 .score-actions button {
-  flex: 0 0 auto;
-  min-width: 82px;
+  flex: 1 1 120px;
+  min-width: 0;
   padding: 0.18rem 0.3rem;
   font-size: 0.76rem;
 }
@@ -908,6 +908,9 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
+}
+.team-row + .team-row {
+  margin-top: 0.35rem;
 }
 .team-row select {
   flex: 2 1 180px;
@@ -2240,5 +2243,12 @@ body[data-theme="light"] .mobile-floating-bar {
   }
   .mini-court {
     grid-template-columns: repeat(3, minmax(70px, 1fr));
+  }
+  .score-actions {
+    gap: 0.3rem;
+  }
+  .score-actions button {
+    flex: 1 1 calc(50% - 0.3rem);
+    min-width: 0;
   }
 }
