@@ -1217,11 +1217,8 @@ function renderAggregatedTable() {
   renderScoreAndRotations(summaryAll);
   applyAggColumnsVisibility();
 }
-function exportCsv() {
-  if (!state.events || state.events.length === 0) {
-    alert("Nessun evento da esportare.");
-    return;
-  }
+function buildCsvString() {
+  if (!state.events || state.events.length === 0) return "";
   const header = [
     "timestamp",
     "set",
@@ -1253,9 +1250,10 @@ function exportCsv() {
     ];
     lines.push(row.join(";"));
   });
-  const blob = new Blob([lines.join("\n")], {
-    type: "text/csv;charset=utf-8;"
-  });
+  return lines.join("\n");
+}
+function downloadCsv(csvText) {
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
@@ -1265,6 +1263,48 @@ function exportCsv() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+function exportCsv() {
+  const csv = buildCsvString();
+  if (!csv) {
+    alert("Nessun evento da esportare.");
+    return;
+  }
+  const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
+  if (isNative && navigator.share) {
+    navigator
+      .share({
+        title: "Simple Volleyball Scout - CSV",
+        text: csv
+      })
+      .catch(() => downloadCsv(csv));
+    return;
+  }
+  downloadCsv(csv);
+}
+function copyCsvToClipboard() {
+  const csv = buildCsvString();
+  if (!csv) {
+    alert("Nessun evento da copiare.");
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(csv)
+      .then(() => alert("CSV copiato negli appunti."))
+      .catch(() => fallbackCopy(csv));
+  } else {
+    fallbackCopy(csv);
+  }
+}
+function fallbackCopy(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+  alert("CSV copiato negli appunti.");
 }
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
@@ -1586,6 +1626,7 @@ function init() {
     });
   }
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
+  if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   if (elBtnUndoFloating) elBtnUndoFloating.addEventListener("click", undoLastEvent);

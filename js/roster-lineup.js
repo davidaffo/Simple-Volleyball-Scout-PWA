@@ -53,6 +53,7 @@ const elEventsLogSummary = document.getElementById("events-log-summary");
 const elFloatingLogSummary = document.getElementById("floating-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
 const elBtnExportCsv = document.getElementById("btn-export-csv");
+const elBtnCopyCsv = document.getElementById("btn-copy-csv");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnSaveInfo = document.getElementById("btn-save-info");
 const elBtnUndo = document.getElementById("btn-undo");
