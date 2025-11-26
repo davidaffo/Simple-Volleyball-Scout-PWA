@@ -1317,13 +1317,29 @@ function applyAggColumnsVisibility() {
   });
 }
 function registerServiceWorker() {
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker
-        .register("service-worker.js")
-        .catch(err => console.error("SW registration failed", err));
-    });
+  // Capacitor native webview does not support service workers (capacitor:// scheme).
+  const isNativeApp = (() => {
+    const cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === "function") {
+      try {
+        return cap.isNativePlatform();
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  })();
+  const supportsSw = "serviceWorker" in navigator;
+  const secureContext =
+    window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost";
+  if (!supportsSw || !secureContext || isNativeApp) {
+    return;
   }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("service-worker.js")
+      .catch(err => console.error("SW registration failed", err));
+  });
 }
 function setActiveTab(target) {
   if (!target) return;
