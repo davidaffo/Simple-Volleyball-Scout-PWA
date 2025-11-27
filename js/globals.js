@@ -105,21 +105,8 @@ let state = {
   selectedTeam: "",
   metricsConfig: {}
 };
-function isNativeCapacitor() {
-  return !!(
-    window.Capacitor &&
-    typeof window.Capacitor.isNativePlatform === "function" &&
-    window.Capacitor.isNativePlatform()
-  );
-}
-function getCapacitorShare() {
-  const cap = window.Capacitor;
-  if (!cap || typeof cap.isNativePlatform !== "function" || !cap.isNativePlatform()) return null;
-  const plugins = cap.Plugins || {};
-  return plugins.Share || cap.Share || null;
-}
 function canUseShare() {
-  return typeof navigator !== "undefined" && !!navigator.share;
+  return typeof navigator !== "undefined" && typeof navigator.share === "function";
 }
 function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
@@ -131,24 +118,6 @@ function downloadBlob(blob, fileName) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-async function shareTextNative(title, text) {
-  const sharePlugin = getCapacitorShare();
-  if (sharePlugin) {
-    try {
-      await sharePlugin.share({ title, text, dialogTitle: title });
-      return true;
-    } catch (_) {
-      // fallthrough to web share
-    }
-  }
-  if (!isNativeCapacitor() || !canUseShare()) return false;
-  try {
-    await navigator.share({ title, text });
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -157,26 +126,29 @@ function blobToDataUrl(blob) {
     reader.readAsDataURL(blob);
   });
 }
-async function shareBlobNative(title, blob, fileName) {
-  const sharePlugin = getCapacitorShare();
-  if (sharePlugin) {
+async function shareBlob(title, blob, fileName) {
+  const file = new File([blob], fileName || "export.bin", { type: blob.type || "application/octet-stream" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
-      const dataUrl = await blobToDataUrl(blob);
-      await sharePlugin.share({
-        title,
-        url: dataUrl,
-        text: fileName || "",
-        dialogTitle: title
-      });
+      await navigator.share({ title, files: [file] });
       return true;
     } catch (_) {
-      // fallthrough to web share
+      // fallthrough to data URL share
     }
   }
-  if (!isNativeCapacitor() || !canUseShare()) return false;
+  if (!canUseShare()) return false;
   try {
     const dataUrl = await blobToDataUrl(blob);
-    await navigator.share({ title, url: dataUrl });
+    await navigator.share({ title, url: dataUrl, text: fileName || "" });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+async function shareText(title, text) {
+  if (!canUseShare()) return false;
+  try {
+    await navigator.share({ title, text });
     return true;
   } catch (_) {
     return false;

@@ -1,9 +1,0 @@
-{
-  "appId": "it.davidaffo.simplevolleyscout",
-  "appName": "Simple Volleyball Scout",
-  "webDir": "www",
-  "bundledWebRuntime": false,
-  "server": {
-    "androidScheme": "https"
-  }
-}

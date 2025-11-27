@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Simple Volleyball Scout</string>
-    <string name="title_activity_main">Simple Volleyball Scout</string>
-    <string name="package_name">it.davidaffo.simplevolleyscout</string>
-    <string name="custom_url_scheme">it.davidaffo.simplevolleyscout</string>
-</resources>

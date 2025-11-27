@@ -1279,17 +1279,16 @@ function exportCsv() {
     alert("Nessun evento da esportare.");
     return;
   }
-  const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
-  if (isNative && navigator.share) {
+  if (navigator.share) {
     navigator
       .share({
         title: "Simple Volleyball Scout - CSV",
         text: csv
       })
       .catch(() => downloadCsv(csv));
-    return;
+  } else {
+    downloadCsv(csv);
   }
-  downloadCsv(csv);
 }
 function copyCsvToClipboard() {
   const csv = buildCsvString();
@@ -1389,12 +1388,9 @@ async function captureAnalysisAsPdf() {
     const blob = pdf.output("blob");
     const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
     const fileName = "analisi_" + opponentSlug + ".pdf";
-    const shared = await shareBlobNative("Simple Volleyball Scout - PDF", blob, fileName);
+    const shared = await shareBlob("Simple Volleyball Scout - PDF", blob, fileName);
     if (!shared) {
       downloadBlob(blob, fileName);
-      if (isNativeCapacitor()) {
-        alert("Download salvato. Se non lo trovi, prova a condividerlo dal file manager.");
-      }
     }
   } finally {
     document.body.classList.remove("pdf-capture");
@@ -1428,13 +1424,10 @@ async function exportMatchToFile() {
   const payload = buildMatchExportPayload();
   const json = JSON.stringify(payload, null, 2);
   const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
-  const shared = await shareTextNative("Simple Volleyball Scout - Match", json);
+  const shared = await shareText("Simple Volleyball Scout - Match", json);
   if (!shared) {
     const blob = new Blob([json], { type: "application/json" });
     downloadBlob(blob, "match_" + opponentSlug + ".json");
-    if (isNativeCapacitor()) {
-      alert("File JSON scaricato. Se la webview non scarica, installa l'ultima app aggiornata.");
-    }
   }
 }
 function applyImportedMatch(nextState) {
@@ -1860,22 +1853,10 @@ function applyAggColumnsVisibility() {
   });
 }
 function registerServiceWorker() {
-  // Capacitor native webview does not support service workers (capacitor:// scheme).
-  const isNativeApp = (() => {
-    const cap = window.Capacitor;
-    if (cap && typeof cap.isNativePlatform === "function") {
-      try {
-        return cap.isNativePlatform();
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  })();
   const supportsSw = "serviceWorker" in navigator;
   const secureContext =
     window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost";
-  if (!supportsSw || !secureContext || isNativeApp) {
+  if (!supportsSw || !secureContext) {
     return;
   }
   window.addEventListener("load", () => {

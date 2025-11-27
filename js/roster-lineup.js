@@ -714,15 +714,12 @@ async function exportCurrentTeamToFile() {
   const payload = getCurrentTeamPayload();
   const opponentSlug = (payload.name || "squadra").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
   const json = JSON.stringify(payload, null, 2);
-  const shared = await shareTextNative("Simple Volleyball Scout - Squadra", json);
+  const shared = await shareText("Simple Volleyball Scout - Squadra", json);
   if (!shared) {
     const blob = new Blob([json], {
       type: "application/json;charset=utf-8;"
     });
     downloadBlob(blob, "squadra_" + (opponentSlug || "export") + ".json");
-    if (isNativeCapacitor()) {
-      alert("File squadra scaricato. Se non lo trovi, aggiorna l'app o condividi dal file manager.");
-    }
   }
 }
 function applyImportedTeamData(data) {

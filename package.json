@@ -4,18 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:web": "rm -rf www && mkdir -p www && cp -R index.html style.css js icons manifest.json service-worker.js www/",
-    "cap:init": "npm run build:web && npx cap sync android",
-    "cap:sync": "npm run build:web && npx cap sync",
-    "cap:open": "npx cap open android",
-    "cap:run": "npm run build:web && npx cap run android"
-  },
-  "dependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/share": "^6.0.0"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^6.1.2"
+    "build:web": "rm -rf www && mkdir -p www && cp -R index.html style.css js icons manifest.json service-worker.js www/"
   }
 }
