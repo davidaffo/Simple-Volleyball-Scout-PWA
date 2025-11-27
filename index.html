@@ -120,6 +120,9 @@ Bianchi 18"></textarea>
       <h2>Azioni match</h2>
       <div class="controls-row">
         <button id="btn-reset-match" class="danger">Reset match</button>
+        <button id="btn-export-match" class="secondary">Esporta match</button>
+        <button id="btn-import-match" class="secondary">Importa match</button>
+        <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
       </div>
     </div>
   </div>
@@ -219,13 +222,14 @@ Bianchi 18"></textarea>
     </div>
   </div>
 
-  <div class="tab-panel" data-tab="aggregated">
+  <div class="tab-panel" data-tab="aggregated" id="aggregated-panel">
     <div class="section">
       <h2>Tabella aggregata</h2>
       <p class="section-note">Sintesi delle statistiche raccolte: mostriamo solo le colonne gestite dall'app.</p>
       <div class="controls-row">
         <button id="btn-export-csv">Esporta CSV</button>
         <button id="btn-copy-csv" class="secondary">Copia CSV</button>
+        <button id="btn-export-pdf" class="secondary">Esporta PDF</button>
       </div>
       <div class="score-summary">
         <div class="score-card">

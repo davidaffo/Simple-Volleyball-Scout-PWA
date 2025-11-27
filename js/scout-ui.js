@@ -1306,6 +1306,499 @@ function fallbackCopy(text) {
   document.body.removeChild(textarea);
   alert("CSV copiato negli appunti.");
 }
+function loadScriptOnce(url, globalCheck) {
+  return new Promise((resolve, reject) => {
+    if (globalCheck && globalCheck()) {
+      resolve();
+      return;
+    }
+    const existing = document.querySelector('script[src="' + url + '"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", e => reject(e));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = e => reject(e);
+    document.head.appendChild(script);
+  });
+}
+async function ensurePdfLibs() {
+  await loadScriptOnce(
+    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+    () => typeof window.html2canvas === "function"
+  );
+  await loadScriptOnce(
+    "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+    () => window.jspdf && typeof window.jspdf.jsPDF === "function"
+  );
+}
+async function captureAnalysisAsPdf() {
+  await ensurePdfLibs();
+  const aggPanel = document.getElementById("aggregated-panel");
+  if (!aggPanel) {
+    throw new Error("Pannello analisi non trovato");
+  }
+  const prevTab = activeTab;
+  const prevTheme = state.theme || document.body.dataset.theme || "dark";
+  setActiveTab("aggregated");
+  applyTheme("light");
+  document.body.classList.add("pdf-capture");
+  await new Promise(res => setTimeout(res, 120));
+  const canvas = await window.html2canvas(aggPanel, {
+    backgroundColor: "#ffffff",
+    scale: 1.3,
+    useCORS: true,
+    scrollX: 0,
+    scrollY: -window.scrollY,
+    windowWidth: document.documentElement.offsetWidth,
+    windowHeight: document.documentElement.offsetHeight
+  });
+  const imgData = canvas.toDataURL("image/jpeg", 0.72);
+  const pdf = new window.jspdf.jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4"
+  });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 5;
+  const imgWidth = canvas.width;
+  const imgHeight = canvas.height;
+  const renderWidth = pageWidth - margin * 2;
+  const ratio = renderWidth / imgWidth;
+  let renderHeight = imgHeight * ratio;
+  if (renderHeight > pageHeight - margin * 2) {
+    const ratioH = (pageHeight - margin * 2) / imgHeight;
+    renderHeight = imgHeight * ratioH;
+  }
+  pdf.addImage(imgData, "PNG", margin, margin, renderWidth, renderHeight);
+  const blob = pdf.output("blob");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
+  a.href = url;
+  a.download = "analisi_" + opponentSlug + ".pdf";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  document.body.classList.remove("pdf-capture");
+  applyTheme(prevTheme);
+  if (prevTab) setActiveTab(prevTab);
+}
+function buildMatchExportPayload() {
+  return {
+    app: "simple-volley-scout",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    state: {
+      match: state.match,
+      theme: state.theme,
+      currentSet: state.currentSet,
+      rotation: state.rotation,
+      players: state.players,
+      playerNumbers: state.playerNumbers,
+      liberos: state.liberos,
+      court: state.court,
+      events: state.events,
+      stats: state.stats,
+      metricsConfig: state.metricsConfig,
+      savedTeams: state.savedTeams,
+      selectedTeam: state.selectedTeam
+    }
+  };
+}
+function exportMatchToFile() {
+  const payload = buildMatchExportPayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
+  a.href = url;
+  a.download = "match_" + opponentSlug + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function applyImportedMatch(nextState) {
+  const fallback = () => alert("File match non valido.");
+  if (!nextState || !nextState.players || !nextState.events) {
+    fallback();
+    return;
+  }
+  const merged = Object.assign({}, state, nextState);
+  merged.match = nextState.match || state.match || {};
+  merged.playerNumbers = nextState.playerNumbers || {};
+  merged.liberos = nextState.liberos || [];
+  merged.court =
+    nextState.court ||
+    [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }];
+  merged.metricsConfig = nextState.metricsConfig || state.metricsConfig || {};
+  merged.savedTeams = nextState.savedTeams || state.savedTeams || {};
+  merged.selectedTeam = nextState.selectedTeam || state.selectedTeam || "";
+  merged.rotation = nextState.rotation || 1;
+  merged.currentSet = nextState.currentSet || 1;
+  state = merged;
+  saveState();
+  applyTheme(state.theme || "dark");
+  applyMatchInfoToUI();
+  applyPlayersFromStateToTextarea();
+  renderPlayersManagerList();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  renderLiberoTags();
+  renderMetricsConfig();
+  updateRotationDisplay();
+  syncCurrentSetUI(state.currentSet || 1);
+  initStats();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog();
+  renderTeamsSelect();
+  alert("Match importato correttamente.");
+}
+function handleImportMatchFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const txt = (e.target && e.target.result) || "";
+      const parsed = JSON.parse(txt);
+      const nextState = parsed && parsed.state ? parsed.state : parsed;
+      applyImportedMatch(nextState);
+    } catch (err) {
+      console.error("Import match error", err);
+      alert("Errore durante l'import del match.");
+    } finally {
+      if (elMatchFileInput) elMatchFileInput.value = "";
+    }
+  };
+  reader.readAsText(file);
+}
+function buildAggregatedDataForPdf() {
+  const emptyCounts = () => ({ "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 });
+  const getCounts = (idx, skillId) => {
+    const base =
+      (state.stats[idx] && state.stats[idx][skillId]) || {
+        "#": 0,
+        "+": 0,
+        "!": 0,
+        "-": 0,
+        "=": 0,
+        "/": 0
+      };
+    return Object.assign(emptyCounts(), base);
+  };
+  const totalFromCounts = counts =>
+    (counts["#"] || 0) +
+    (counts["+"] || 0) +
+    (counts["!"] || 0) +
+    (counts["-"] || 0) +
+    (counts["="] || 0) +
+    (counts["/"] || 0);
+  const totalsBySkill = {
+    serve: emptyCounts(),
+    pass: emptyCounts(),
+    attack: emptyCounts(),
+    defense: emptyCounts(),
+    block: emptyCounts(),
+    second: emptyCounts()
+  };
+  const addCounts = (target, source) => {
+    RESULT_CODES.forEach(code => {
+      target[code] = (target[code] || 0) + (source[code] || 0);
+    });
+  };
+  const rows = state.players.map((name, idx) => {
+    const serveCounts = getCounts(idx, "serve");
+    const passCounts = getCounts(idx, "pass");
+    const attackCounts = getCounts(idx, "attack");
+    const defenseCounts = getCounts(idx, "defense");
+    const blockCounts = getCounts(idx, "block");
+    const secondCounts = getCounts(idx, "second");
+
+    const serveMetrics = computeMetrics(serveCounts, "serve");
+    const passMetrics = computeMetrics(passCounts, "pass");
+    const attackMetrics = computeMetrics(attackCounts, "attack");
+    const defenseMetrics = computeMetrics(defenseCounts, "defense");
+    const blockMetrics = computeMetrics(blockCounts, "block");
+    const secondMetrics = computeMetrics(secondCounts, "second");
+
+    addCounts(totalsBySkill.serve, serveCounts);
+    addCounts(totalsBySkill.pass, passCounts);
+    addCounts(totalsBySkill.attack, attackCounts);
+    addCounts(totalsBySkill.defense, defenseCounts);
+    addCounts(totalsBySkill.block, blockCounts);
+    addCounts(totalsBySkill.second, secondCounts);
+
+    return {
+      name: formatNameWithNumber(name),
+      serve: {
+        tot: totalFromCounts(serveCounts),
+        neg: serveMetrics.negativeCount || 0,
+        pos: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos),
+        eff: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff)
+      },
+      pass: {
+        tot: totalFromCounts(passCounts),
+        neg: passMetrics.negativeCount || 0,
+        pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
+        prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      attack: {
+        tot: totalFromCounts(attackCounts),
+        neg: attackMetrics.negativeCount || 0,
+        pos: attackMetrics.pos === null ? "-" : formatPercent(attackMetrics.pos),
+        eff: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff)
+      },
+      defense: {
+        tot: totalFromCounts(defenseCounts),
+        neg: defenseMetrics.negativeCount || 0,
+        pos: defenseMetrics.pos === null ? "-" : formatPercent(defenseMetrics.pos),
+        eff: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff)
+      },
+      block: {
+        tot: totalFromCounts(blockCounts),
+        neg: blockMetrics.negativeCount || 0,
+        pos: blockMetrics.pos === null ? "-" : formatPercent(blockMetrics.pos),
+        eff: blockMetrics.eff === null ? "-" : formatPercent(blockMetrics.eff)
+      },
+      second: {
+        tot: totalFromCounts(secondCounts),
+        pos: secondMetrics.pos === null ? "-" : formatPercent(secondMetrics.pos),
+        prf: secondMetrics.prf === null ? "-" : formatPercent(secondMetrics.prf)
+      }
+    };
+  });
+  const totals = (() => {
+    const serveMetrics = computeMetrics(totalsBySkill.serve, "serve");
+    const passMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const attackMetrics = computeMetrics(totalsBySkill.attack, "attack");
+    const defenseMetrics = computeMetrics(totalsBySkill.defense, "defense");
+    const blockMetrics = computeMetrics(totalsBySkill.block, "block");
+    const secondMetrics = computeMetrics(totalsBySkill.second, "second");
+    return {
+      name: "Totale squadra",
+      serve: {
+        tot: totalFromCounts(totalsBySkill.serve),
+        neg: serveMetrics.negativeCount || 0,
+        pos: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos),
+        eff: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff)
+      },
+      pass: {
+        tot: totalFromCounts(totalsBySkill.pass),
+        neg: passMetrics.negativeCount || 0,
+        pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
+        prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      attack: {
+        tot: totalFromCounts(totalsBySkill.attack),
+        neg: attackMetrics.negativeCount || 0,
+        pos: attackMetrics.pos === null ? "-" : formatPercent(attackMetrics.pos),
+        eff: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff)
+      },
+      defense: {
+        tot: totalFromCounts(totalsBySkill.defense),
+        neg: defenseMetrics.negativeCount || 0,
+        pos: defenseMetrics.pos === null ? "-" : formatPercent(defenseMetrics.pos),
+        eff: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff)
+      },
+      block: {
+        tot: totalFromCounts(totalsBySkill.block),
+        neg: blockMetrics.negativeCount || 0,
+        pos: blockMetrics.pos === null ? "-" : formatPercent(blockMetrics.pos),
+        eff: blockMetrics.eff === null ? "-" : formatPercent(blockMetrics.eff)
+      },
+      second: {
+        tot: totalFromCounts(totalsBySkill.second),
+        pos: secondMetrics.pos === null ? "-" : formatPercent(secondMetrics.pos),
+        prf: secondMetrics.prf === null ? "-" : formatPercent(secondMetrics.prf)
+      }
+    };
+  })();
+  return { rows, totals };
+}
+function padCell(text, width) {
+  const str = (text === null || text === undefined ? "" : String(text)).replace(/\s+/g, " ");
+  if (str.length === width) return str;
+  if (str.length > width) return str.slice(0, width);
+  return str + " ".repeat(width - str.length);
+}
+function formatAggRow(row) {
+  const widths = [
+    16, // nome
+    4, 4, 4, 4, // serve
+    4, 4, 4, 4, // pass
+    4, 4, 4, 4, // attack
+    4, 4, 4, 4, // defense
+    4, 4, 4, 4, // block
+    4, 4, 4 // second
+  ];
+  const cells = [
+    row.name || "",
+    row.serve.tot,
+    row.serve.neg,
+    row.serve.pos,
+    row.serve.eff,
+    row.pass.tot,
+    row.pass.neg,
+    row.pass.pos,
+    row.pass.prf,
+    row.attack.tot,
+    row.attack.neg,
+    row.attack.pos,
+    row.attack.eff,
+    row.defense.tot,
+    row.defense.neg,
+    row.defense.pos,
+    row.defense.eff,
+    row.block.tot,
+    row.block.neg,
+    row.block.pos,
+    row.block.eff,
+    row.second.tot,
+    row.second.pos,
+    row.second.prf
+  ];
+  return cells
+    .map((c, i) => padCell(c, widths[i] || 4))
+    .join(" | ");
+}
+function buildAnalysisPdfLines() {
+  const lines = [];
+  const matchInfo = state.match || {};
+  const setsData = computeSetScores();
+  const pointsSummary = computePointsSummary();
+  const aggData = buildAggregatedDataForPdf();
+  lines.push("Simple Volleyball Scout - Analisi");
+  const infoParts = [];
+  if (matchInfo.opponent) infoParts.push("Avversario: " + matchInfo.opponent);
+  if (matchInfo.category) infoParts.push("Categoria: " + matchInfo.category);
+  if (matchInfo.date) infoParts.push("Data: " + matchInfo.date);
+  if (infoParts.length > 0) lines.push(infoParts.join(" · "));
+  lines.push("Punteggio totale: " + pointsSummary.totalFor + " - " + pointsSummary.totalAgainst);
+  if (setsData && setsData.sets && setsData.sets.length > 0) {
+    lines.push(
+      "Set: " +
+        setsData.sets
+          .map(s => "S" + s.set + " " + s.for + "-" + s.against)
+          .join(" | ")
+    );
+  }
+  lines.push("Rotazioni (fatti - subiti - delta):");
+  pointsSummary.rotations.forEach(r => {
+    lines.push(
+      "  Rot " +
+        r.rotation +
+        ": " +
+        r.for +
+        " - " +
+        r.against +
+        " (Δ " +
+        formatDelta(r.delta) +
+        ")"
+    );
+  });
+  lines.push("");
+  lines.push(
+    formatAggRow({
+      name: "Atleta",
+      serve: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
+      pass: { tot: "Tot", neg: "Neg", pos: "Pos", prf: "Prf" },
+      attack: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
+      defense: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
+      block: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
+      second: { tot: "Tot", pos: "Pos", prf: "Prf" }
+    })
+  );
+  lines.push("-".repeat(140));
+  aggData.rows.forEach(r => lines.push(formatAggRow(r)));
+  lines.push("-".repeat(140));
+  lines.push(formatAggRow(aggData.totals));
+  return lines;
+}
+function escapePdfText(str) {
+  return str.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+function buildSimplePdf(lines, opts = {}) {
+  const fontSize = opts.fontSize || 10;
+  const lineHeight = opts.lineHeight || 12;
+  const margin = opts.margin || 32;
+  const pageWidth = opts.landscape ? 842 : 595;
+  const pageHeight = opts.landscape ? 595 : 842;
+  let y = pageHeight - margin;
+  const contentParts = [];
+  contentParts.push("BT");
+  contentParts.push("/F1 " + fontSize + " Tf");
+  contentParts.push(lineHeight + " TL");
+  contentParts.push(margin + " " + y + " Td");
+  lines.forEach(line => {
+    contentParts.push("(" + escapePdfText(line) + ") Tj");
+    contentParts.push("0 -" + lineHeight + " Td");
+    y -= lineHeight;
+  });
+  contentParts.push("ET");
+  const contentStream = contentParts.join("\n");
+  const contentLength = new TextEncoder().encode(contentStream).length;
+  const objects = [];
+  objects.push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj");
+  objects.push("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj");
+  objects.push(
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " +
+      pageWidth +
+      " " +
+      pageHeight +
+      "] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj"
+  );
+  objects.push(
+    "4 0 obj\n<< /Length " +
+      contentLength +
+      " >>\nstream\n" +
+      contentStream +
+      "\nendstream\nendobj"
+  );
+  objects.push("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>\nendobj");
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  let currentOffset = pdf.length;
+  objects.forEach(obj => {
+    offsets.push(currentOffset);
+    pdf += obj + "\n";
+    currentOffset = pdf.length;
+  });
+  const xrefStart = currentOffset;
+  pdf += "xref\n0 " + (objects.length + 1) + "\n";
+  pdf += "0000000000 65535 f \n";
+  offsets.forEach(off => {
+    pdf += String(off).padStart(10, "0") + " 00000 n \n";
+  });
+  pdf +=
+    "trailer\n<< /Size " +
+    (objects.length + 1) +
+    " /Root 1 0 R >>\nstartxref\n" +
+    xrefStart +
+    "\n%%EOF";
+  return new TextEncoder().encode(pdf);
+}
+function exportAnalysisPdf() {
+  const hasEvents = state.events && state.events.length > 0;
+  if (!hasEvents) {
+    alert("Nessun evento da esportare.");
+    return;
+  }
+  captureAnalysisAsPdf().catch(err => {
+    console.error("PDF export failed", err);
+    alert("Impossibile generare il PDF. Controlla la connessione o riprova.");
+  });
+}
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
   state.events = [];
@@ -1627,6 +2120,15 @@ function init() {
   }
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
+  if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
+  if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
+  if (elBtnImportMatch && elMatchFileInput) {
+    elBtnImportMatch.addEventListener("click", () => elMatchFileInput.click());
+    elMatchFileInput.addEventListener("change", e => {
+      const file = e.target && e.target.files && e.target.files[0];
+      if (file) handleImportMatchFile(file);
+    });
+  }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   if (elBtnUndoFloating) elBtnUndoFloating.addEventListener("click", undoLastEvent);

@@ -130,12 +130,40 @@ body[data-theme="light"] .tab-btn.active {
 body[data-theme="light"] .tab-panel {
   color: #0f172a;
 }
+.print-analysis .tab-panel {
+  display: none !important;
+}
+.print-analysis .tab-panel[data-tab="aggregated"] {
+  display: block !important;
+}
+.print-analysis {
+  background: #fff !important;
+  color: #0f172a !important;
+}
+.print-analysis .section {
+  background: #ffffff !important;
+  border-color: #d6d6d6 !important;
+  color: #0f172a !important;
+}
 .theme-toggle {
   display: inline-flex;
   gap: 0.25rem;
 }
 .theme-toggle button {
   min-width: 44px;
+}
+.pdf-capture .tabs-nav,
+.pdf-capture .tab-dots,
+.pdf-capture .mobile-floating-bar,
+.pdf-capture .mobile-log-toggle,
+.pdf-capture #toggle-log-mobile {
+  display: none !important;
+}
+.pdf-capture .controls-row {
+  display: none !important;
+}
+.pdf-capture .section {
+  background: #f8fafc;
 }
 .tab-dots {
   display: none;
@@ -2250,5 +2278,74 @@ body[data-theme="light"] .mobile-floating-bar {
   .score-actions button {
     flex: 1 1 calc(50% - 0.3rem);
     min-width: 0;
+  }
+}
+
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 11px;
+    padding: 0.2rem;
+  }
+  .tabs-nav,
+  .tab-dots,
+  .mobile-floating-bar,
+  .mobile-log-toggle,
+  #toggle-log-mobile,
+  .floating-actions-modal,
+  .skill-modal,
+  .mobile-lineup-modal {
+    display: none !important;
+  }
+  .controls-row,
+  button,
+  select,
+  input,
+  textarea {
+    display: none !important;
+  }
+  .tab-panel {
+    display: none !important;
+    padding-top: 0;
+  }
+  .tab-panel[data-tab="aggregated"] {
+    display: block !important;
+  }
+  .section {
+    background: #ffffff !important;
+    border-color: #d6d6d6 !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+  .score-card,
+  .score-card.wide {
+    background: #ffffff !important;
+    border-color: #dfe3eb !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+  .agg-table,
+  .rotation-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .agg-table th,
+  .agg-table td,
+  .rotation-table th,
+  .rotation-table td {
+    word-break: break-word;
+    white-space: normal;
+    padding: 3px 4px !important;
+    font-size: 10px;
+  }
+  .table-wrapper,
+  .rotation-wrapper,
+  .score-summary {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
