@@ -76,7 +76,8 @@ body[data-theme="light"] .section {
 .tabs-nav {
   display: flex;
   gap: 0.4rem;
-  margin: 0.5rem 0;
+  margin: 0.1rem 0 0.2rem;
+  align-items: center;
 }
 .tab-btn {
   flex: 1 1 0;
@@ -99,22 +100,31 @@ body[data-theme="light"] .tab-btn.active {
   color: #fff;
 }
 .tabs-nav.floating {
-  position: fixed;
-  top: 0.35rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 0.25rem;
+  position: sticky;
+  top: 0;
+  left: 0;
+  transform: none;
+  z-index: 15;
+  padding: 0.12rem 0.2rem;
   background: rgba(17, 17, 17, 0.72);
   border-radius: 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(6px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 180ms ease, background 180ms ease;
+  margin-bottom: 0.15rem;
+}
+.tabs-nav .app-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: inherit;
 }
 .tabs-nav.floating.centered {
-  left: 50%;
-  right: auto;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  transform: none;
 }
 .tabs-nav.floating .tab-btn {
   flex: 0 0 auto;
@@ -195,8 +205,10 @@ body[data-theme="light"] .tab-dots .tab-dot.active {
   background: #2563eb;
   border-color: #2563eb;
 }
+.tab-dots.hide-on-scroll {
+}
 .tab-panel {
-  padding-top: 2.8rem;
+  padding-top: 0.6rem;
 }
 label {
   font-size: 0.85rem;
@@ -557,11 +569,9 @@ body[data-theme="light"] .rotation-number {
 }
 .bench-inline-list {
   padding: 0.05rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  max-height: 80px;
-  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.2rem 0.35rem;
   width: 100%;
 }
 .libero-inline {
@@ -610,9 +620,25 @@ body[data-theme="light"] .player-card {
   border: 1px dashed #2f2f2f;
   min-height: 165px;
   position: relative;
+  background: rgba(255, 255, 255, 0.01);
 }
 body[data-theme="light"] .court-card {
   border-color: #d1d5db;
+}
+.court-card.empty::after {
+  content: attr(data-pos-number);
+  position: absolute;
+  inset: 0.35rem;
+  display: grid;
+  place-items: center;
+  font-size: 3.2rem;
+  font-weight: 800;
+  color: rgba(59, 130, 246, 0.28);
+  pointer-events: none;
+  letter-spacing: -2px;
+}
+body[data-theme="light"] .court-card.empty::after {
+  color: rgba(37, 99, 235, 0.3);
 }
 .court-header {
   display: flex;
@@ -1856,6 +1882,8 @@ body[data-theme="light"] .mini-court {
   color: #dbeafe;
   min-height: 42px;
   font-weight: 700;
+  position: relative;
+  overflow: hidden;
 }
 body[data-theme="light"] .mini-slot {
   background: rgba(37, 99, 235, 0.12);
@@ -1890,6 +1918,21 @@ body[data-theme="light"] .mini-slot {
   color: #9aa4b5;
   background: rgba(255, 255, 255, 0.04);
   border-color: #3a465c;
+}
+.mini-slot.empty::after {
+  content: attr(data-pos-number);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: rgba(147, 197, 253, 0.24);
+  pointer-events: none;
+  letter-spacing: -1px;
+}
+body[data-theme="light"] .mini-slot.empty::after {
+  color: rgba(37, 99, 235, 0.3);
 }
 .mobile-lineup-list {
   display: grid;

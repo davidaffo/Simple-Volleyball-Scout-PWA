@@ -105,6 +105,83 @@ let state = {
   selectedTeam: "",
   metricsConfig: {}
 };
+function isNativeCapacitor() {
+  return !!(
+    window.Capacitor &&
+    typeof window.Capacitor.isNativePlatform === "function" &&
+    window.Capacitor.isNativePlatform()
+  );
+}
+function getCapacitorShare() {
+  const cap = window.Capacitor;
+  if (!cap || typeof cap.isNativePlatform !== "function" || !cap.isNativePlatform()) return null;
+  const plugins = cap.Plugins || {};
+  return plugins.Share || cap.Share || null;
+}
+function canUseShare() {
+  return typeof navigator !== "undefined" && !!navigator.share;
+}
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+async function shareTextNative(title, text) {
+  const sharePlugin = getCapacitorShare();
+  if (sharePlugin) {
+    try {
+      await sharePlugin.share({ title, text, dialogTitle: title });
+      return true;
+    } catch (_) {
+      // fallthrough to web share
+    }
+  }
+  if (!isNativeCapacitor() || !canUseShare()) return false;
+  try {
+    await navigator.share({ title, text });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = err => reject(err);
+    reader.readAsDataURL(blob);
+  });
+}
+async function shareBlobNative(title, blob, fileName) {
+  const sharePlugin = getCapacitorShare();
+  if (sharePlugin) {
+    try {
+      const dataUrl = await blobToDataUrl(blob);
+      await sharePlugin.share({
+        title,
+        url: dataUrl,
+        text: fileName || "",
+        dialogTitle: title
+      });
+      return true;
+    } catch (_) {
+      // fallthrough to web share
+    }
+  }
+  if (!isNativeCapacitor() || !canUseShare()) return false;
+  try {
+    const dataUrl = await blobToDataUrl(blob);
+    await navigator.share({ title, url: dataUrl });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 function logError(context, err) {
   console.error(context, err);
 }

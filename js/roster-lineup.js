@@ -83,10 +83,12 @@ const elBtnScoreForPlus = document.getElementById("btn-score-for-plus");
 const elBtnScoreForMinus = document.getElementById("btn-score-for-minus");
 const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
 const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
+const elBtnScoreTeamError = document.getElementById("btn-score-team-error");
 const elBtnScoreForPlusModal = document.getElementById("btn-score-for-plus-modal");
 const elBtnScoreForMinusModal = document.getElementById("btn-score-for-minus-modal");
 const elBtnScoreAgainstPlusModal = document.getElementById("btn-score-against-plus-modal");
 const elBtnScoreAgainstMinusModal = document.getElementById("btn-score-against-minus-modal");
+const elBtnScoreTeamErrorModal = document.getElementById("btn-score-team-error-modal");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
 const tabDots = document.querySelectorAll(".tab-dot");
@@ -703,24 +705,24 @@ function renameSelectedTeam() {
   renderTeamsSelect();
   alert("Squadra rinominata in \"" + newName + "\".");
 }
-function exportCurrentTeamToFile() {
+async function exportCurrentTeamToFile() {
   if (!state.players || state.players.length === 0) {
     alert("Aggiungi almeno una giocatrice prima di esportare.");
     return;
   }
   const payload = getCurrentTeamPayload();
   const opponentSlug = (payload.name || "squadra").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json;charset=utf-8;"
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "squadra_" + (opponentSlug || "export") + ".json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const json = JSON.stringify(payload, null, 2);
+  const shared = await shareTextNative("Simple Volleyball Scout - Squadra", json);
+  if (!shared) {
+    const blob = new Blob([json], {
+      type: "application/json;charset=utf-8;"
+    });
+    downloadBlob(blob, "squadra_" + (opponentSlug || "export") + ".json");
+    if (isNativeCapacitor()) {
+      alert("File squadra scaricato. Se non lo trovi, aggiorna l'app o condividi dal file manager.");
+    }
+  }
 }
 function applyImportedTeamData(data) {
   const players = normalizePlayers((data && data.players) || []);

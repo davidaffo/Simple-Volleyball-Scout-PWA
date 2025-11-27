@@ -225,6 +225,10 @@ function renderPlayers() {
     }
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
+    card.dataset.posNumber = String(idx + 1);
+    if (!activeName) {
+      card.classList.add("empty");
+    }
     card.dataset.posIndex = String(idx);
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
@@ -682,7 +686,9 @@ function renderMobileLineupMiniCourt() {
         : "";
     const overClass = touchDragOverSlot === slotIdx ? " drop-over" : "";
     btn.className = "mini-slot" + (name ? "" : " empty") + selectedClass + overClass;
-    btn.textContent = name ? formatNameWithNumber(name) : "Pos " + (slotIdx + 1);
+    btn.dataset.posNumber = String(slotIdx + 1);
+    btn.textContent = name ? formatNameWithNumber(name) : "";
+    btn.setAttribute("aria-label", name ? formatNameWithNumber(name) : "Slot " + (slotIdx + 1));
     btn.dataset.slotIndex = String(slotIdx);
     if (name) {
       btn.draggable = true;
@@ -980,6 +986,9 @@ function handleManualScore(direction, delta) {
 }
 function addPlayerError(playerIdx, playerName) {
   addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice");
+}
+function handleTeamError() {
+  addManualPoint("against", 1, "team-error", null, "Squadra");
 }
 function renderScoreAndRotations(summary) {
   const effectiveSummary = summary || computePointsSummary();
@@ -1347,48 +1356,51 @@ async function captureAnalysisAsPdf() {
   setActiveTab("aggregated");
   applyTheme("light");
   document.body.classList.add("pdf-capture");
-  await new Promise(res => setTimeout(res, 120));
-  const canvas = await window.html2canvas(aggPanel, {
-    backgroundColor: "#ffffff",
-    scale: 1.3,
-    useCORS: true,
-    scrollX: 0,
-    scrollY: -window.scrollY,
-    windowWidth: document.documentElement.offsetWidth,
-    windowHeight: document.documentElement.offsetHeight
-  });
-  const imgData = canvas.toDataURL("image/jpeg", 0.72);
-  const pdf = new window.jspdf.jsPDF({
-    orientation: "landscape",
-    unit: "mm",
-    format: "a4"
-  });
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 5;
-  const imgWidth = canvas.width;
-  const imgHeight = canvas.height;
-  const renderWidth = pageWidth - margin * 2;
-  const ratio = renderWidth / imgWidth;
-  let renderHeight = imgHeight * ratio;
-  if (renderHeight > pageHeight - margin * 2) {
-    const ratioH = (pageHeight - margin * 2) / imgHeight;
-    renderHeight = imgHeight * ratioH;
+  try {
+    await new Promise(res => setTimeout(res, 120));
+    const canvas = await window.html2canvas(aggPanel, {
+      backgroundColor: "#ffffff",
+      scale: 1.3,
+      useCORS: true,
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      windowWidth: document.documentElement.offsetWidth,
+      windowHeight: document.documentElement.offsetHeight
+    });
+    const imgData = canvas.toDataURL("image/jpeg", 0.72);
+    const pdf = new window.jspdf.jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 5;
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    const renderWidth = pageWidth - margin * 2;
+    const ratio = renderWidth / imgWidth;
+    let renderHeight = imgHeight * ratio;
+    if (renderHeight > pageHeight - margin * 2) {
+      const ratioH = (pageHeight - margin * 2) / imgHeight;
+      renderHeight = imgHeight * ratioH;
+    }
+    pdf.addImage(imgData, "PNG", margin, margin, renderWidth, renderHeight);
+    const blob = pdf.output("blob");
+    const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
+    const fileName = "analisi_" + opponentSlug + ".pdf";
+    const shared = await shareBlobNative("Simple Volleyball Scout - PDF", blob, fileName);
+    if (!shared) {
+      downloadBlob(blob, fileName);
+      if (isNativeCapacitor()) {
+        alert("Download salvato. Se non lo trovi, prova a condividerlo dal file manager.");
+      }
+    }
+  } finally {
+    document.body.classList.remove("pdf-capture");
+    applyTheme(prevTheme);
+    if (prevTab) setActiveTab(prevTab);
   }
-  pdf.addImage(imgData, "PNG", margin, margin, renderWidth, renderHeight);
-  const blob = pdf.output("blob");
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
-  a.href = url;
-  a.download = "analisi_" + opponentSlug + ".pdf";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  document.body.classList.remove("pdf-capture");
-  applyTheme(prevTheme);
-  if (prevTab) setActiveTab(prevTab);
 }
 function buildMatchExportPayload() {
   return {
@@ -1412,20 +1424,18 @@ function buildMatchExportPayload() {
     }
   };
 }
-function exportMatchToFile() {
+async function exportMatchToFile() {
   const payload = buildMatchExportPayload();
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const json = JSON.stringify(payload, null, 2);
   const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
-  a.href = url;
-  a.download = "match_" + opponentSlug + ".json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const shared = await shareTextNative("Simple Volleyball Scout - Match", json);
+  if (!shared) {
+    const blob = new Blob([json], { type: "application/json" });
+    downloadBlob(blob, "match_" + opponentSlug + ".json");
+    if (isNativeCapacitor()) {
+      alert("File JSON scaricato. Se la webview non scarica, installa l'ultima app aggiornata.");
+    }
+  }
 }
 function applyImportedMatch(nextState) {
   const fallback = () => alert("File match non valido.");
@@ -2214,8 +2224,11 @@ function init() {
   if (elBtnScoreAgainstMinus) {
     elBtnScoreAgainstMinus.addEventListener("click", () => handleManualScore("against", -1));
   }
-  if (elBtnScoreError) {
-    elBtnScoreError.addEventListener("click", handleManualError);
+  if (elBtnScoreTeamError) {
+    elBtnScoreTeamError.addEventListener("click", handleTeamError);
+  }
+  if (elBtnScoreTeamErrorModal) {
+    elBtnScoreTeamErrorModal.addEventListener("click", handleTeamError);
   }
   if (elSkillModalClose) {
     elSkillModalClose.addEventListener("click", closeSkillModal);
