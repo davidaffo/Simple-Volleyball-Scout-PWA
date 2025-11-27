@@ -17,6 +17,7 @@ function openSkillModal(playerIdx, playerName) {
   });
   elSkillModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
 }
 function openSubModal(posIdx) {
   if (!elSkillModal || !elSkillModalBody) return;
@@ -56,11 +57,42 @@ function openSubModal(posIdx) {
   }
   elSkillModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
 }
 function closeSkillModal() {
   if (!elSkillModal) return;
   elSkillModal.classList.add("hidden");
   document.body.style.overflow = "";
+  document.body.classList.remove("modal-open");
+}
+function setupInstallPrompt() {
+  let deferredPrompt = null;
+  if (!elInstallBtn) return;
+  const showInstall = () => elInstallBtn.classList.add("visible");
+  const hideInstall = () => elInstallBtn.classList.remove("visible");
+
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    showInstall();
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    hideInstall();
+  });
+  elInstallBtn.addEventListener("click", async () => {
+    if (!deferredPrompt) {
+      hideInstall();
+      return;
+    }
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice.catch(() => null);
+    deferredPrompt = null;
+    hideInstall();
+    if (choice && choice.outcome === "dismissed") {
+      // keep button hidden until next prompt event
+    }
+  });
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
@@ -2251,6 +2283,7 @@ function init() {
     }
   });
   attachModalCloseHandlers();
+  setupInstallPrompt();
   registerServiceWorker();
 }
 document.addEventListener("DOMContentLoaded", init);

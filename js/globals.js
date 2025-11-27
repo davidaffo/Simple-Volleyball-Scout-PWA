@@ -200,6 +200,7 @@ const elSkillModalTitle = document.getElementById("skill-modal-title");
 const elSkillModalClose = document.getElementById("skill-modal-close");
 const elThemeToggleDark = document.getElementById("theme-dark");
 const elThemeToggleLight = document.getElementById("theme-light");
+const elInstallBtn = document.getElementById("install-app-btn");
 let modalMode = "skill";
 let modalSubPosIdx = -1;
 let mobileLineupOrder = [];

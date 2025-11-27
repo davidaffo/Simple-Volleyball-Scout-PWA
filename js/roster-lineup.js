@@ -45,6 +45,7 @@ let activeDropChip = null;
 let draggedPlayerName = "";
 let draggedFromPos = null;
 let dragSourceType = "";
+let benchDropZoneInitialized = false;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
@@ -1239,6 +1240,23 @@ function handleBenchDragStart(e) {
 function handleBenchDragEnd() {
   resetDragState();
 }
+function handleBenchDropZoneOver(e) {
+  if (dragSourceType !== "court" || draggedFromPos === null) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  if (elBenchChips) elBenchChips.classList.add("bench-drop-over");
+}
+function handleBenchDropZoneLeave() {
+  if (elBenchChips) elBenchChips.classList.remove("bench-drop-over");
+}
+function handleBenchDropZoneDrop(e) {
+  e.preventDefault();
+  if (dragSourceType === "court" && draggedFromPos !== null) {
+    clearCourtAssignment(draggedFromPos, "main");
+  }
+  handleBenchDropZoneLeave();
+  resetDragState();
+}
 function handleCourtDragStart(e, posIdx) {
   const slot = state.court[posIdx] || { main: "" };
   if (!slot.main || !e.dataTransfer) return;
@@ -1384,6 +1402,7 @@ function releaseReplaced(name, keepIdx) {
   });
 }
 function renderBenchChips() {
+  ensureBenchDropZone();
   if (isMobileLayout()) {
     if (elBenchChips) elBenchChips.innerHTML = "";
     return;
@@ -1397,6 +1416,14 @@ function renderBenchChips() {
     emptyText: "Nessuna riserva disponibile.",
     replacedSet: new Set()
   });
+}
+function ensureBenchDropZone() {
+  if (!elBenchChips || benchDropZoneInitialized) return;
+  elBenchChips.addEventListener("dragenter", handleBenchDropZoneOver, true);
+  elBenchChips.addEventListener("dragover", handleBenchDropZoneOver, true);
+  elBenchChips.addEventListener("dragleave", handleBenchDropZoneLeave, true);
+  elBenchChips.addEventListener("drop", handleBenchDropZoneDrop, true);
+  benchDropZoneInitialized = true;
 }
 function renderLiberoChipsInline() {
   if (isMobileLayout()) {
@@ -1514,6 +1541,7 @@ function resetDragState() {
   draggedPlayerName = "";
   draggedFromPos = null;
   dragSourceType = "";
+  handleBenchDropZoneLeave();
   if (activeDropChip) {
     activeDropChip.classList.remove("drop-over");
     activeDropChip = null;

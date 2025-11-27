@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:web": "rm -rf www && mkdir -p www && cp -R index.html style.css js icons manifest.json service-worker.js www/"
+    "build:web": "rm -rf www && mkdir -p www && cp -R index.html style.css js icons manifest.json service-worker.js www/",
+    "serve": "npm run build:web && npx serve www --listen ${PORT:-3000}",
+    "tunnel": "PORT=${PORT:-3000} bash scripts/serve-tunnel.sh"
   }
 }
