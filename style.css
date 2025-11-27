@@ -550,6 +550,18 @@ body[data-theme="light"] .rotation-number {
 .floating-score-btn:hover {
   background: #1d2f52;
 }
+.mobile-team-error {
+  display: none;
+  margin-top: 0.4rem;
+}
+.mobile-team-error .full-width {
+  width: 100%;
+}
+@media (max-width: 900px), (pointer: coarse) {
+  .mobile-team-error {
+    display: block;
+  }
+}
 .floating-lineup-btn {
   white-space: nowrap;
 }
@@ -641,21 +653,21 @@ body[data-theme="light"] .court-card.empty::after {
   color: rgba(37, 99, 235, 0.3);
 }
 .court-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.35rem;
   font-weight: 600;
 }
 .court-header .clear-slot {
-  margin-left: auto;
-  align-self: flex-start;
+  margin-left: 0;
+  align-self: center;
 }
 .court-header .court-tagbar {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
   align-items: center;
-  width: 100%;
+  gap: 0.25rem;
+  white-space: nowrap;
 }
 .court-header.draggable {
   cursor: grab;
@@ -664,12 +676,35 @@ body[data-theme="light"] .court-card.empty::after {
   cursor: grabbing;
 }
 .court-pos-label {
-  font-size: 0.9rem;
-  color: #9fb4ff;
+  font-size: 0.85rem;
+  color: #c7d5ff;
+  margin-right: 0.35rem;
+  white-space: nowrap;
 }
 .court-name {
   font-size: 0.95rem;
-  flex: 1;
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.court-role-tag {
+  font-size: 0.82rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  background: #112041;
+  color: #dbeafe;
+  border: 1px solid #233a7a;
+  white-space: nowrap;
+}
+body[data-theme="light"] .court-role-tag {
+  background: #e5edff;
+  color: #0f172a;
+  border-color: #bfd0ff;
 }
 .court-name-block {
   display: flex;
@@ -677,10 +712,18 @@ body[data-theme="light"] .court-card.empty::after {
   gap: 0.1rem;
   width: 100%;
 }
+.court-name-block.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .libero-replace {
   font-size: 0.8rem;
   color: #9ad1ff;
   opacity: 0.9;
+  width: 100%;
 }
 .court-libero-pill {
   font-size: 0.75rem;

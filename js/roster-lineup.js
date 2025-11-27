@@ -84,6 +84,7 @@ const elBtnScoreForMinus = document.getElementById("btn-score-for-minus");
 const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
 const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
 const elBtnScoreTeamError = document.getElementById("btn-score-team-error");
+const elBtnScoreTeamErrorMobile = document.getElementById("btn-score-team-error-mobile");
 const elBtnScoreForPlusModal = document.getElementById("btn-score-for-plus-modal");
 const elBtnScoreForMinusModal = document.getElementById("btn-score-for-minus-modal");
 const elBtnScoreAgainstPlusModal = document.getElementById("btn-score-against-plus-modal");

@@ -172,7 +172,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         btn.dataset.playerName = activeName;
         btn.dataset.skillId = skill.id;
         btn.dataset.code = code;
-        btn.title = RESULT_LABELS[code] || "";
         btn.addEventListener("click", e => {
           handleEventClick(playerIdx, skill.id, code, activeName, e.currentTarget);
           if (closeAfterAction) closeSkillModal();
@@ -240,8 +239,7 @@ function renderPlayers() {
     tagBar.className = "court-tagbar";
     const posLabel = document.createElement("span");
     posLabel.className = "court-pos-label";
-    posLabel.textContent =
-      "Posizione " + (idx + 1) + " · " + getRoleLabel(idx);
+    posLabel.textContent = "Pos " + (idx + 1);
     const tagLibero = document.createElement("span");
     tagLibero.className = "court-libero-pill";
     tagLibero.textContent = "Libero";
@@ -250,7 +248,7 @@ function renderPlayers() {
     tagBar.appendChild(tagLibero);
     header.appendChild(tagBar);
     const nameBlock = document.createElement("div");
-    nameBlock.className = "court-name-block";
+    nameBlock.className = "court-name-block inline";
     const nameLabel = document.createElement("div");
     nameLabel.className = "court-name";
     if (isLibero(slot.main)) {
@@ -259,7 +257,11 @@ function renderPlayers() {
     nameLabel.textContent = slot.main
       ? formatNameWithNumber(slot.main)
       : "Trascina una giocatrice qui";
+    const roleTag = document.createElement("span");
+    roleTag.className = "court-role-tag";
+    roleTag.textContent = getRoleLabel(idx);
     nameBlock.appendChild(nameLabel);
+    nameBlock.appendChild(roleTag);
     if (isLibero(slot.main) && slot.replaced) {
       const subText = document.createElement("div");
       subText.className = "libero-replace";
@@ -286,19 +288,17 @@ function renderPlayers() {
       card.classList.add("mobile-card");
       const openBtn = document.createElement("button");
       openBtn.type = "button";
-      const isLib = isLibero(activeName);
-      const replacedText =
-        isLib && slot.replaced ? " (sost. " + formatNameWithNumber(slot.replaced) + ")" : "";
-      const roleText = getRoleLabel(idx);
-      openBtn.className = "open-skill-btn mobile-full-btn" + (isLib ? " libero-btn" : "");
-      openBtn.textContent = activeName
-        ? formatNameWithNumber(activeName) +
-          " · Pos " +
-          (idx + 1) +
-          (roleText ? " · " + roleText : "") +
-          (isLib ? " · Libero" : "") +
-          replacedText
-        : "Pos " + (idx + 1) + " · Nessuna";
+    const isLib = isLibero(activeName);
+    const replacedText =
+      isLib && slot.replaced ? " (sost. " + formatNameWithNumber(slot.replaced) + ")" : "";
+    const roleText = getRoleLabel(idx);
+    openBtn.className = "open-skill-btn mobile-full-btn" + (isLib ? " libero-btn" : "");
+    openBtn.textContent = activeName
+      ? formatNameWithNumber(activeName) +
+        (roleText ? " · " + roleText : "") +
+        (isLib ? " · Libero" : "") +
+        replacedText
+      : "Pos " + (idx + 1) + " · Nessuna";
       openBtn.disabled = !activeName;
       openBtn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
       card.appendChild(openBtn);
@@ -2226,6 +2226,9 @@ function init() {
   }
   if (elBtnScoreTeamError) {
     elBtnScoreTeamError.addEventListener("click", handleTeamError);
+  }
+  if (elBtnScoreTeamErrorMobile) {
+    elBtnScoreTeamErrorMobile.addEventListener("click", handleTeamError);
   }
   if (elBtnScoreTeamErrorModal) {
     elBtnScoreTeamErrorModal.addEventListener("click", handleTeamError);
