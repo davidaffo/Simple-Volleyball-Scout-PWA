@@ -16,11 +16,13 @@
     <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
     <button class="tab-btn" data-tab-target="scout">Scout live</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
+    <button class="tab-btn" data-tab-target="video">Video</button>
   </div>
   <div class="tab-dots floating" aria-label="Navigazione tab mobile">
     <button class="tab-dot active" data-tab-target="info" aria-label="Impostazioni"></button>
     <button class="tab-dot" data-tab-target="scout" aria-label="Scout"></button>
     <button class="tab-dot" data-tab-target="aggregated" aria-label="Analisi"></button>
+    <button class="tab-dot" data-tab-target="video" aria-label="Video"></button>
   </div>
 
   <div class="tab-panel active" data-tab="info">
@@ -309,6 +311,83 @@ Bianchi 18"></textarea>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-panel" data-tab="video" id="video-panel">
+    <div class="section video-analysis">
+      <div class="video-analysis__head">
+        <div>
+          <h2>Analisi video</h2>
+          <p class="section-note">Carica un video e sincronizza le skill registrate per saltare al momento corretto.</p>
+        </div>
+        <div class="video-analysis__actions">
+          <label class="file-btn" for="video-file-input">Carica video</label>
+          <input id="video-file-input" type="file" accept="video/*" hidden />
+          <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
+        </div>
+      </div>
+      <div class="video-analysis__grid">
+        <div class="video-skills">
+          <div class="video-meta">
+            <div class="video-meta__row">
+              <span>Video:</span>
+              <strong id="video-file-label">Nessun file caricato</strong>
+            </div>
+            <div class="video-meta__row">
+              <span>Allineamento:</span>
+              <strong id="video-sync-label">La prima skill parte da 0:00</strong>
+            </div>
+          </div>
+          <div class="table-wrapper video-table-wrapper">
+            <table class="video-skills-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Giocatrice</th>
+                  <th>Skill</th>
+                  <th>Valut.</th>
+                  <th>Set</th>
+                  <th>Rot</th>
+                  <th>Video</th>
+                </tr>
+              </thead>
+              <tbody id="video-skills-body">
+                <tr>
+                  <td colspan="7">Registra alcune skill per vederle qui.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="video-editor" id="video-editor">
+            <div class="video-editor__head">
+              <h3>Skill selezionata</h3>
+              <button id="btn-video-seek" class="secondary small" type="button">Vai al timestamp</button>
+            </div>
+            <div class="video-editor__grid">
+              <label for="video-player-select">Giocatrice</label>
+              <select id="video-player-select"></select>
+              <label for="video-skill-select">Fondamentale</label>
+              <select id="video-skill-select"></select>
+              <label for="video-code-select">Valutazione</label>
+              <select id="video-code-select"></select>
+              <label for="video-set-input">Set</label>
+              <input id="video-set-input" type="number" min="1" max="5" />
+              <label for="video-rotation-input">Rotazione</label>
+              <input id="video-rotation-input" type="number" min="1" max="6" />
+              <label for="video-time-input">Timestamp video (s)</label>
+              <input id="video-time-input" type="number" min="0" step="0.1" />
+            </div>
+            <div class="video-editor__actions">
+              <span id="video-selected-label" class="video-selected-label">Nessuna skill selezionata</span>
+              <button id="btn-video-save" type="button">Salva modifiche</button>
+            </div>
+          </div>
+        </div>
+        <div class="video-player-wrap">
+          <video id="analysis-video" controls preload="metadata"></video>
+          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato.</p>
+        </div>
       </div>
     </div>
   </div>

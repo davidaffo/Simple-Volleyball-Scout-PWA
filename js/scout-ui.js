@@ -4,6 +4,8 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
+let selectedVideoEventIdx = null;
+let videoObjectUrl = "";
 function renderSkillChoice(playerIdx, playerName) {
   if (!elSkillModalBody) return;
   modalMode = "skill";
@@ -502,6 +504,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   renderScoreAndRotations(computePointsSummary());
   renderEventsLog();
   renderAggregatedTable();
+  renderVideoAnalysis();
 }
 function computeMetrics(counts, skillId) {
   ensureMetricsConfigDefaults();
@@ -610,6 +613,7 @@ function recalcAllStatsAndUpdateUI() {
   });
   renderLiveScore();
   renderAggregatedTable();
+  renderVideoAnalysis();
 }
 function renderEventsLog() {
   if (elEventsLog) {
@@ -683,6 +687,265 @@ function renderEventsLog() {
   if (elUndoLastSummary) {
     elUndoLastSummary.textContent = compactSummary || "—";
   }
+}
+function getVideoSkillEvents() {
+  return (state.events || [])
+    .map((ev, idx) => ({ ev, idx }))
+    .filter(item => item.ev && item.ev.skillId && item.ev.skillId !== "manual");
+}
+function getVideoBaseTimeMs(eventsList) {
+  const list = eventsList || getVideoSkillEvents();
+  if (!list.length) return null;
+  const baseMs = new Date(list[0].ev.t).getTime();
+  return isNaN(baseMs) ? null : baseMs;
+}
+function computeEventVideoTime(ev, baseMs) {
+  if (ev && typeof ev.videoTime === "number") {
+    return Math.max(0, ev.videoTime);
+  }
+  const offset =
+    state.video && typeof state.video.offsetSeconds === "number" ? state.video.offsetSeconds : 0;
+  if (!ev) return Math.max(0, offset);
+  const base = typeof baseMs === "number" ? baseMs : null;
+  if (!base) return Math.max(0, offset);
+  const evMs = new Date(ev.t).getTime();
+  const delta = isNaN(evMs) ? 0 : (evMs - base) / 1000;
+  if (!isFinite(delta)) return Math.max(0, offset);
+  return Math.max(0, offset + delta);
+}
+function formatVideoTimestamp(seconds) {
+  if (!isFinite(seconds)) return "0:00";
+  const total = Math.max(0, seconds);
+  let minutes = Math.floor(total / 60);
+  let secRounded = Math.round((total - minutes * 60) * 10) / 10;
+  if (secRounded >= 60) {
+    minutes += 1;
+    secRounded = 0;
+  }
+  const [secIntStr, decimals] = secRounded.toFixed(1).split(".");
+  const secStr = secIntStr.padStart(2, "0");
+  return minutes + ":" + secStr + "." + (decimals || "0");
+}
+function renderVideoSelectOptions() {
+  if (elVideoPlayerSelect) {
+    elVideoPlayerSelect.innerHTML = "";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "—";
+    elVideoPlayerSelect.appendChild(emptyOpt);
+    (state.players || []).forEach((name, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = formatNameWithNumber(name);
+      elVideoPlayerSelect.appendChild(opt);
+    });
+  }
+  if (elVideoSkillSelect) {
+    elVideoSkillSelect.innerHTML = "";
+    SKILLS.forEach(skill => {
+      const opt = document.createElement("option");
+      opt.value = skill.id;
+      opt.textContent = skill.label;
+      elVideoSkillSelect.appendChild(opt);
+    });
+  }
+  if (elVideoCodeSelect) {
+    elVideoCodeSelect.innerHTML = "";
+    RESULT_CODES.forEach(code => {
+      const opt = document.createElement("option");
+      opt.value = code;
+      const label = RESULT_LABELS[code] || code;
+      opt.textContent = code + " · " + label;
+      elVideoCodeSelect.appendChild(opt);
+    });
+  }
+}
+function updateVideoSyncLabel() {
+  if (!elVideoSyncLabel) return;
+  const offset =
+    state.video && typeof state.video.offsetSeconds === "number" ? state.video.offsetSeconds : 0;
+  elVideoSyncLabel.textContent =
+    offset > 0 ? "Prima skill allineata a " + formatVideoTimestamp(offset) : "La prima skill parte da 0:00";
+}
+function renderVideoEditor(eventIdx, baseMs) {
+  if (!elVideoSelectedLabel) return;
+  const ev = state.events && state.events[eventIdx];
+  if (!ev || ev.skillId === "manual") {
+    elVideoSelectedLabel.textContent = "Nessuna skill selezionata";
+    if (elVideoTimeInput) elVideoTimeInput.value = "";
+    if (elVideoSetInput) elVideoSetInput.value = "";
+    if (elVideoRotationInput) elVideoRotationInput.value = "";
+    if (elVideoPlayerSelect) elVideoPlayerSelect.value = "";
+    if (elVideoSkillSelect && elVideoSkillSelect.options.length) {
+      elVideoSkillSelect.selectedIndex = 0;
+    }
+    if (elVideoCodeSelect && elVideoCodeSelect.options.length) {
+      elVideoCodeSelect.selectedIndex = 0;
+    }
+    return;
+  }
+  const playerIdx =
+    typeof ev.playerIdx === "number" && state.players[ev.playerIdx]
+      ? ev.playerIdx
+      : state.players.findIndex(name => name === ev.playerName);
+  const skillLabel = (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId;
+  const playerLabel = formatNameWithNumber(ev.playerName || state.players[playerIdx]) || "—";
+  elVideoSelectedLabel.textContent =
+    "#" + (eventIdx + 1) + " · " + playerLabel + " · " + skillLabel + " " + (ev.code || "");
+  const videoTime = computeEventVideoTime(ev, baseMs);
+  if (elVideoTimeInput) elVideoTimeInput.value = videoTime.toFixed(1);
+  if (elVideoSetInput) elVideoSetInput.value = ev.set || "";
+  if (elVideoRotationInput) elVideoRotationInput.value = ev.rotation || "";
+  if (elVideoPlayerSelect) elVideoPlayerSelect.value = playerIdx >= 0 ? String(playerIdx) : "";
+  if (elVideoSkillSelect) elVideoSkillSelect.value = ev.skillId || "";
+  if (elVideoCodeSelect) elVideoCodeSelect.value = ev.code || "";
+}
+function renderVideoAnalysis() {
+  if (!elVideoSkillsBody) return;
+  renderVideoSelectOptions();
+  const skillEvents = getVideoSkillEvents();
+  const baseMs = getVideoBaseTimeMs(skillEvents);
+  updateVideoSyncLabel();
+  if (elVideoFileLabel) {
+    elVideoFileLabel.textContent =
+      (state.video && state.video.fileName) || "Nessun file caricato";
+  }
+  elVideoSkillsBody.innerHTML = "";
+  if (!skillEvents.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.textContent = "Registra alcune skill per vederle qui.";
+    tr.appendChild(td);
+    elVideoSkillsBody.appendChild(tr);
+    selectedVideoEventIdx = null;
+    renderVideoEditor(null, baseMs);
+    return;
+  }
+  if (selectedVideoEventIdx === null || !skillEvents.some(item => item.idx === selectedVideoEventIdx)) {
+    selectedVideoEventIdx = skillEvents[0].idx;
+  }
+  skillEvents.forEach(({ ev, idx }, displayIdx) => {
+    const tr = document.createElement("tr");
+    if (idx === selectedVideoEventIdx) tr.classList.add("selected");
+    const videoTime = computeEventVideoTime(ev, baseMs);
+    const skillLabel = (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId;
+    const cells = [
+      String(displayIdx + 1),
+      formatNameWithNumber(ev.playerName || state.players[ev.playerIdx]) || "—",
+      skillLabel,
+      ev.code || "",
+      ev.set || "1",
+      ev.rotation || "-",
+      formatVideoTimestamp(videoTime)
+    ];
+    cells.forEach(text => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    tr.addEventListener("click", () => {
+      selectedVideoEventIdx = idx;
+      renderVideoEditor(selectedVideoEventIdx, baseMs);
+      renderVideoAnalysis();
+    });
+    tr.addEventListener("dblclick", () => {
+      seekVideoToTime(videoTime);
+    });
+    elVideoSkillsBody.appendChild(tr);
+  });
+  renderVideoEditor(selectedVideoEventIdx, baseMs);
+}
+function seekVideoToTime(seconds) {
+  if (!elAnalysisVideo || !isFinite(seconds)) return;
+  try {
+    elAnalysisVideo.currentTime = Math.max(0, seconds);
+    elAnalysisVideo.play().catch(() => {});
+  } catch (_) {
+    // ignore errors when seeking
+  }
+}
+function handleVideoFileChange(file) {
+  if (!file || !elAnalysisVideo) return;
+  try {
+    if (videoObjectUrl) {
+      URL.revokeObjectURL(videoObjectUrl);
+    }
+  } catch (_) {
+    // ignore revoke errors
+  }
+  const url = URL.createObjectURL(file);
+  videoObjectUrl = url;
+  elAnalysisVideo.src = url;
+  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  state.video.fileName = file.name || "video";
+  saveState();
+  renderVideoAnalysis();
+}
+function syncFirstSkillToVideo() {
+  if (!elAnalysisVideo) return;
+  const skillEvents = getVideoSkillEvents();
+  if (!skillEvents.length) {
+    alert("Registra almeno una skill per poter sincronizzare.");
+    return;
+  }
+  const baseMs = getVideoBaseTimeMs(skillEvents);
+  const currentVideoTime = isFinite(elAnalysisVideo.currentTime) ? elAnalysisVideo.currentTime : 0;
+  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  state.video.offsetSeconds = Math.max(0, currentVideoTime);
+  const base = typeof baseMs === "number" ? baseMs : null;
+  if (base !== null) {
+    skillEvents.forEach(({ ev }) => {
+      const evMs = new Date(ev.t).getTime();
+      const delta = isNaN(evMs) ? 0 : (evMs - base) / 1000;
+      ev.videoTime = Math.max(0, state.video.offsetSeconds + delta);
+    });
+  }
+  saveState();
+  renderVideoAnalysis();
+}
+function saveSelectedVideoEvent() {
+  if (selectedVideoEventIdx === null) {
+    alert("Seleziona una skill dalla tabella per modificarla.");
+    return;
+  }
+  const ev = state.events && state.events[selectedVideoEventIdx];
+  if (!ev) return;
+  const playerIdx = parseInt(elVideoPlayerSelect?.value || "", 10);
+  if (!isNaN(playerIdx) && state.players[playerIdx]) {
+    ev.playerIdx = playerIdx;
+    ev.playerName = state.players[playerIdx];
+  }
+  if (elVideoSkillSelect && elVideoSkillSelect.value) {
+    ev.skillId = elVideoSkillSelect.value;
+  }
+  if (elVideoCodeSelect && elVideoCodeSelect.value) {
+    ev.code = elVideoCodeSelect.value;
+  }
+  const setVal = parseInt(elVideoSetInput?.value || "", 10);
+  if (!isNaN(setVal) && setVal > 0) {
+    ev.set = setVal;
+  }
+  const rotVal = parseInt(elVideoRotationInput?.value || "", 10);
+  if (!isNaN(rotVal) && rotVal >= 1 && rotVal <= 6) {
+    ev.rotation = rotVal;
+  }
+  const videoTimeVal = parseFloat(elVideoTimeInput?.value || "");
+  if (!isNaN(videoTimeVal) && videoTimeVal >= 0) {
+    ev.videoTime = videoTimeVal;
+  }
+  saveState();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog();
+  renderVideoAnalysis();
+}
+function seekSelectedVideoEvent() {
+  if (selectedVideoEventIdx === null) return;
+  const ev = state.events && state.events[selectedVideoEventIdx];
+  if (!ev) return;
+  const baseMs = getVideoBaseTimeMs();
+  const time = computeEventVideoTime(ev, baseMs);
+  seekVideoToTime(time);
 }
 function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
@@ -1524,7 +1787,8 @@ function buildMatchExportPayload() {
       stats: state.stats,
       metricsConfig: state.metricsConfig,
       savedTeams: state.savedTeams,
-      selectedTeam: state.selectedTeam
+      selectedTeam: state.selectedTeam,
+      video: state.video
     }
   };
 }
@@ -1553,6 +1817,7 @@ function applyImportedMatch(nextState) {
   merged.selectedTeam = nextState.selectedTeam || state.selectedTeam || "";
   merged.rotation = nextState.rotation || 1;
   merged.currentSet = nextState.currentSet || 1;
+  merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "" };
   state = merged;
   saveState();
   applyTheme(state.theme || "dark");
@@ -1913,6 +2178,13 @@ function resetMatch() {
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
   state.currentSet = 1;
+  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  state.video.offsetSeconds = 0;
+  selectedVideoEventIdx = null;
+  if (elAnalysisVideo) {
+    elAnalysisVideo.pause();
+    elAnalysisVideo.currentTime = 0;
+  }
   syncCurrentSetUI(1);
   initStats();
   saveState();
@@ -2010,7 +2282,7 @@ function initSwipeTabs() {
   const minDistance = 90;
   const maxOffset = 50;
   const maxTime = 700;
-  const tabsOrder = ["info", "scout", "aggregated"];
+  const tabsOrder = ["info", "scout", "aggregated", "video"];
   const onStart = e => {
     const t = (e.changedTouches && e.changedTouches[0]) || e;
     startX = t.clientX;
@@ -2292,6 +2564,27 @@ function init() {
   if (elBtnScoreForMinusModal) elBtnScoreForMinusModal.addEventListener("click", () => handleManualScore("for", -1));
   if (elBtnScoreAgainstPlusModal) elBtnScoreAgainstPlusModal.addEventListener("click", () => handleManualScore("against", 1));
   if (elBtnScoreAgainstMinusModal) elBtnScoreAgainstMinusModal.addEventListener("click", () => handleManualScore("against", -1));
+  if (elVideoFileInput) {
+    elVideoFileInput.addEventListener("change", e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (file) {
+        handleVideoFileChange(file);
+      }
+      if (input) {
+        input.value = "";
+      }
+    });
+  }
+  if (elBtnSyncFirstSkill) {
+    elBtnSyncFirstSkill.addEventListener("click", syncFirstSkillToVideo);
+  }
+  if (elBtnVideoSave) {
+    elBtnVideoSave.addEventListener("click", saveSelectedVideoEvent);
+  }
+  if (elBtnVideoSeek) {
+    elBtnVideoSeek.addEventListener("click", seekSelectedVideoEvent);
+  }
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
   }
@@ -2355,6 +2648,7 @@ function init() {
       closeSkillModal();
     }
   });
+  renderVideoAnalysis();
   attachModalCloseHandlers();
   setupInstallPrompt();
   registerServiceWorker();

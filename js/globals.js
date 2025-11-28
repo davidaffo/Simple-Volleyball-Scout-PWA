@@ -103,7 +103,11 @@ let state = {
   liberos: [],
   savedTeams: {},
   selectedTeam: "",
-  metricsConfig: {}
+  metricsConfig: {},
+  video: {
+    offsetSeconds: 0,
+    fileName: ""
+  }
 };
 function canUseShare() {
   return typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -198,6 +202,21 @@ const elSkillModalBackdrop = document.querySelector(".skill-modal__backdrop");
 const elSkillModalBody = document.getElementById("skill-modal-body");
 const elSkillModalTitle = document.getElementById("skill-modal-title");
 const elSkillModalClose = document.getElementById("skill-modal-close");
+const elVideoFileInput = document.getElementById("video-file-input");
+const elAnalysisVideo = document.getElementById("analysis-video");
+const elVideoSkillsBody = document.getElementById("video-skills-body");
+const elVideoFileLabel = document.getElementById("video-file-label");
+const elVideoSyncLabel = document.getElementById("video-sync-label");
+const elBtnSyncFirstSkill = document.getElementById("btn-sync-first-skill");
+const elVideoPlayerSelect = document.getElementById("video-player-select");
+const elVideoSkillSelect = document.getElementById("video-skill-select");
+const elVideoCodeSelect = document.getElementById("video-code-select");
+const elVideoSetInput = document.getElementById("video-set-input");
+const elVideoRotationInput = document.getElementById("video-rotation-input");
+const elVideoTimeInput = document.getElementById("video-time-input");
+const elBtnVideoSave = document.getElementById("btn-video-save");
+const elBtnVideoSeek = document.getElementById("btn-video-seek");
+const elVideoSelectedLabel = document.getElementById("video-selected-label");
 const elThemeToggleDark = document.getElementById("theme-dark");
 const elThemeToggleLight = document.getElementById("theme-light");
 const elInstallBtn = document.getElementById("install-app-btn");
