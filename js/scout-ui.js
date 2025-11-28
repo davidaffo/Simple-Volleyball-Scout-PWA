@@ -1,20 +1,117 @@
+function getEnabledSkills() {
+  return SKILLS.filter(skill => {
+    const cfg = state.metricsConfig[skill.id];
+    return !cfg || cfg.enabled !== false;
+  });
+}
+function renderSkillChoice(playerIdx, playerName) {
+  if (!elSkillModalBody) return;
+  modalMode = "skill";
+  modalSubPosIdx = -1;
+  elSkillModalBody.innerHTML = "";
+  if (elSkillModalTitle) {
+    const title =
+      formatNameWithNumber(playerName || state.players[playerIdx]) ||
+      (playerName || "Giocatrice");
+    elSkillModalTitle.textContent = title + " · scegli fondamentale";
+  }
+  const enabledSkills = getEnabledSkills();
+  if (enabledSkills.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
+    elSkillModalBody.appendChild(empty);
+    return;
+  }
+  const grid = document.createElement("div");
+  grid.className = "modal-skill-grid";
+  enabledSkills.forEach(skill => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "modal-skill-btn";
+    btn.innerHTML = `<span>${skill.label}</span><span class="modal-skill-badge badge-${skill.id}">${skill.label[0]}</span>`;
+    btn.addEventListener("click", () => renderSkillCodes(playerIdx, playerName, skill.id));
+    grid.appendChild(btn);
+  });
+  elSkillModalBody.appendChild(grid);
+  const extraRow = document.createElement("div");
+  extraRow.className = "modal-skill-extra";
+  const errorBtn = document.createElement("button");
+  errorBtn.type = "button";
+  errorBtn.className = "small event-btn danger full-width";
+  errorBtn.textContent = "Errore/Fallo";
+  errorBtn.addEventListener("click", () => {
+    addPlayerError(playerIdx, playerName || state.players[playerIdx]);
+    closeSkillModal();
+  });
+  extraRow.appendChild(errorBtn);
+  elSkillModalBody.appendChild(extraRow);
+}
+function renderSkillCodes(playerIdx, playerName, skillId) {
+  if (!elSkillModalBody) return;
+  modalMode = "skill-codes";
+  modalSubPosIdx = -1;
+  elSkillModalBody.innerHTML = "";
+  const skill = SKILLS.find(s => s.id === skillId);
+  const title =
+    formatNameWithNumber(playerName || state.players[playerIdx]) ||
+    (playerName || "Giocatrice");
+  if (elSkillModalTitle) {
+    elSkillModalTitle.textContent =
+      (skill ? skill.label + " · " : "") + title;
+  }
+  const header = document.createElement("div");
+  header.className = "modal-skill-head";
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "secondary modal-skill-back";
+  backBtn.textContent = "Indietro";
+  backBtn.addEventListener("click", () => renderSkillChoice(playerIdx, playerName));
+  header.appendChild(backBtn);
+  elSkillModalBody.appendChild(header);
+
+  const codesWrap = document.createElement("div");
+  codesWrap.className = "modal-skill-codes";
+  const codes = (state.metricsConfig[skillId]?.activeCodes || RESULT_CODES).slice();
+  if (!codes.includes("/")) codes.push("/");
+  if (!codes.includes("=")) codes.push("=");
+  const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
+  ordered.forEach(code => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const tone = typeof getCodeTone === "function" ? getCodeTone(skillId, code) : "neutral";
+    btn.className = "event-btn code-" + tone;
+    btn.textContent = code;
+    btn.dataset.playerIdx = String(playerIdx);
+    btn.dataset.playerName = playerName || state.players[playerIdx];
+    btn.dataset.skillId = skillId;
+    btn.dataset.code = code;
+    btn.addEventListener("click", e => {
+      handleEventClick(playerIdx, skillId, code, playerName, e.currentTarget);
+      closeSkillModal();
+    });
+    codesWrap.appendChild(btn);
+  });
+  elSkillModalBody.appendChild(codesWrap);
+
+  const extraRow = document.createElement("div");
+  extraRow.className = "modal-skill-extra";
+  const errorBtn = document.createElement("button");
+  errorBtn.type = "button";
+  errorBtn.className = "small event-btn danger full-width";
+  errorBtn.textContent = "Errore/Fallo";
+  errorBtn.addEventListener("click", () => {
+    addPlayerError(playerIdx, playerName || state.players[playerIdx]);
+    closeSkillModal();
+  });
+  extraRow.appendChild(errorBtn);
+  elSkillModalBody.appendChild(extraRow);
+}
 function openSkillModal(playerIdx, playerName) {
   if (!elSkillModal || !elSkillModalBody) return;
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
   if (isNaN(idx) || !state.players[idx]) return;
-  modalMode = "skill";
-  modalSubPosIdx = -1;
-  elSkillModalBody.innerHTML = "";
-  const title =
-    formatNameWithNumber(playerName || state.players[idx]) || (playerName || "Giocatrice");
-  if (elSkillModalTitle) {
-    elSkillModalTitle.textContent = title;
-  }
-  renderSkillRows(elSkillModalBody, idx, state.players[idx], {
-    stacked: false,
-    columns: 3,
-    closeAfterAction: true
-  });
+  renderSkillChoice(idx, playerName);
   elSkillModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   document.body.classList.add("modal-open");
@@ -1311,16 +1408,7 @@ function exportCsv() {
     alert("Nessun evento da esportare.");
     return;
   }
-  if (navigator.share) {
-    navigator
-      .share({
-        title: "Simple Volleyball Scout - CSV",
-        text: csv
-      })
-      .catch(() => downloadCsv(csv));
-  } else {
-    downloadCsv(csv);
-  }
+  downloadCsv(csv);
 }
 function copyCsvToClipboard() {
   const csv = buildCsvString();
@@ -1328,23 +1416,14 @@ function copyCsvToClipboard() {
     alert("Nessun evento da copiare.");
     return;
   }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard
-      .writeText(csv)
-      .then(() => alert("CSV copiato negli appunti."))
-      .catch(() => fallbackCopy(csv));
-  } else {
-    fallbackCopy(csv);
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    alert("Copia negli appunti non supportata su questo dispositivo.");
+    return;
   }
-}
-function fallbackCopy(text) {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  document.body.removeChild(textarea);
-  alert("CSV copiato negli appunti.");
+  navigator.clipboard
+    .writeText(csv)
+    .then(() => alert("CSV copiato negli appunti."))
+    .catch(() => alert("Impossibile copiare negli appunti su questo dispositivo."));
 }
 function loadScriptOnce(url, globalCheck) {
   return new Promise((resolve, reject) => {
@@ -1420,10 +1499,7 @@ async function captureAnalysisAsPdf() {
     const blob = pdf.output("blob");
     const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
     const fileName = "analisi_" + opponentSlug + ".pdf";
-    const shared = await shareBlob("Simple Volleyball Scout - PDF", blob, fileName);
-    if (!shared) {
-      downloadBlob(blob, fileName);
-    }
+    downloadBlob(blob, fileName);
   } finally {
     document.body.classList.remove("pdf-capture");
     applyTheme(prevTheme);
@@ -1456,11 +1532,8 @@ async function exportMatchToFile() {
   const payload = buildMatchExportPayload();
   const json = JSON.stringify(payload, null, 2);
   const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
-  const shared = await shareText("Simple Volleyball Scout - Match", json);
-  if (!shared) {
-    const blob = new Blob([json], { type: "application/json" });
-    downloadBlob(blob, "match_" + opponentSlug + ".json");
-  }
+  const blob = new Blob([json], { type: "application/json" });
+  downloadBlob(blob, "match_" + opponentSlug + ".json");
 }
 function applyImportedMatch(nextState) {
   const fallback = () => alert("File match non valido.");

@@ -1839,6 +1839,63 @@ body[data-theme="light"] .skill-modal__head {
   padding: 0.55rem 0.75rem;
   border-radius: 0.65rem;
 }
+.modal-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+.modal-skill-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  font-weight: 700;
+  font-size: 1rem;
+}
+body[data-theme="light"] .modal-skill-btn {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+.modal-skill-btn .modal-skill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+.modal-skill-head {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 0.35rem;
+}
+.modal-skill-back {
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+}
+.modal-skill-codes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+.modal-skill-codes .event-btn {
+  min-height: 52px;
+  font-size: 1.1rem;
+}
+.modal-skill-extra {
+  display: flex;
+  margin-top: 0.2rem;
+}
+.modal-skill-extra .full-width {
+  width: 100%;
+}
 .floating-actions-modal {
   position: fixed;
   inset: 0;
@@ -2119,10 +2176,35 @@ body[data-theme="light"] .mini-slot.empty::after {
     align-items: flex-start;
   }
   .floating-actions__content {
-    width: 100vw;
-    height: 100vh;
-    max-height: none;
-    border-radius: 0;
+    width: calc(100vw - 0.8rem);
+    height: auto;
+    max-height: calc(100dvh - 1.6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    margin: 0.4rem;
+    border-radius: 0.7rem;
+    overflow: auto;
+    padding: 0.5rem;
+  }
+  @media (orientation: landscape) {
+    .floating-actions__content {
+      height: auto;
+      max-height: calc(100dvh - 1.6rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+    }
+    .floating-actions__body {
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-flow: column;
+      gap: 0.5rem;
+      overflow: auto;
+      padding-bottom: 0.2rem;
+      align-items: start;
+    }
+    .floating-actions__row {
+      height: 100%;
+    }
   }
   .mobile-lineup-modal {
     align-items: flex-start;
