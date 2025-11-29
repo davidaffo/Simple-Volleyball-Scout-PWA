@@ -4,8 +4,12 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
-let selectedVideoEventIdx = null;
 let videoObjectUrl = "";
+let ytPlayer = null;
+let ytApiPromise = null;
+let ytPlayerReady = false;
+let currentYoutubeId = "";
+let youtubeFallback = false;
 function renderSkillChoice(playerIdx, playerName) {
   if (!elSkillModalBody) return;
   modalMode = "skill";
@@ -163,35 +167,6 @@ function closeSkillModal() {
   elSkillModal.classList.add("hidden");
   document.body.style.overflow = "";
   document.body.classList.remove("modal-open");
-}
-function setupInstallPrompt() {
-  let deferredPrompt = null;
-  if (!elInstallBtn) return;
-  const showInstall = () => elInstallBtn.classList.add("visible");
-  const hideInstall = () => elInstallBtn.classList.remove("visible");
-
-  window.addEventListener("beforeinstallprompt", e => {
-    e.preventDefault();
-    deferredPrompt = e;
-    showInstall();
-  });
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    hideInstall();
-  });
-  elInstallBtn.addEventListener("click", async () => {
-    if (!deferredPrompt) {
-      hideInstall();
-      return;
-    }
-    deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice.catch(() => null);
-    deferredPrompt = null;
-    hideInstall();
-    if (choice && choice.outcome === "dismissed") {
-      // keep button hidden until next prompt event
-    }
-  });
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
@@ -726,39 +701,157 @@ function formatVideoTimestamp(seconds) {
   const secStr = secIntStr.padStart(2, "0");
   return minutes + ":" + secStr + "." + (decimals || "0");
 }
-function renderVideoSelectOptions() {
-  if (elVideoPlayerSelect) {
-    elVideoPlayerSelect.innerHTML = "";
-    const emptyOpt = document.createElement("option");
-    emptyOpt.value = "";
-    emptyOpt.textContent = "—";
-    elVideoPlayerSelect.appendChild(emptyOpt);
-    (state.players || []).forEach((name, idx) => {
-      const opt = document.createElement("option");
-      opt.value = String(idx);
-      opt.textContent = formatNameWithNumber(name);
-      elVideoPlayerSelect.appendChild(opt);
-    });
+function parseYoutubeId(url) {
+  if (!url) return "";
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname.includes("youtu.be")) {
+      return u.pathname.replace("/", "");
+    }
+    if (u.hostname.includes("youtube.com")) {
+      return u.searchParams.get("v") || "";
+    }
+    return "";
+  } catch (_) {
+    return "";
   }
-  if (elVideoSkillSelect) {
-    elVideoSkillSelect.innerHTML = "";
-    SKILLS.forEach(skill => {
-      const opt = document.createElement("option");
-      opt.value = skill.id;
-      opt.textContent = skill.label;
-      elVideoSkillSelect.appendChild(opt);
-    });
+}
+function buildYoutubeEmbedSrc(id, startSeconds = 0, enableApi = false) {
+  const start = Math.max(0, Math.floor(startSeconds));
+  const origin =
+    window.location && window.location.origin && window.location.origin.startsWith("http")
+      ? "&origin=" + encodeURIComponent(window.location.origin)
+      : "";
+  const apiParam = enableApi ? "1" : "0";
+  return (
+    "https://www.youtube.com/embed/" +
+    id +
+    "?enablejsapi=" +
+    apiParam +
+    "&rel=0&playsinline=1&start=" +
+    start +
+    origin
+  );
+}
+function loadYoutubeApi() {
+  if (window.YT && typeof window.YT.Player === "function") {
+    return Promise.resolve();
   }
-  if (elVideoCodeSelect) {
-    elVideoCodeSelect.innerHTML = "";
-    RESULT_CODES.forEach(code => {
-      const opt = document.createElement("option");
-      opt.value = code;
-      const label = RESULT_LABELS[code] || code;
-      opt.textContent = code + " · " + label;
-      elVideoCodeSelect.appendChild(opt);
-    });
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise(resolve => {
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    script.async = true;
+    script.onload = () => {
+      if (window.YT && typeof window.YT.Player === "function") {
+        resolve();
+      }
+    };
+    window.onYouTubeIframeAPIReady = () => {
+      resolve();
+    };
+    document.body.appendChild(script);
+  });
+  return ytApiPromise;
+}
+async function renderYoutubePlayer(startSeconds = 0) {
+  const id = state.video && state.video.youtubeId;
+  const hasYoutube = !!id;
+  if (elAnalysisVideo) {
+    elAnalysisVideo.style.display = hasYoutube ? "none" : "block";
   }
+  if (!elYoutubeFrame) return;
+  elYoutubeFrame.style.display = hasYoutube ? "block" : "none";
+  if (!hasYoutube) {
+    if (ytPlayer && ytPlayer.stopVideo) {
+      ytPlayer.stopVideo();
+    }
+    elYoutubeFrame.src = "";
+    ytPlayerReady = false;
+    currentYoutubeId = "";
+    return;
+  }
+  const start = Math.max(0, startSeconds || 0);
+  currentYoutubeId = id;
+  youtubeFallback = false;
+  try {
+    await loadYoutubeApi();
+    if (ytPlayer) {
+      ytPlayer.loadVideoById(id, start);
+      ytPlayerReady = true;
+      return;
+    }
+    ytPlayer = new YT.Player("youtube-frame", {
+      videoId: id,
+      host: "https://www.youtube.com",
+      playerVars: {
+        start: start,
+        rel: 0,
+        playsinline: 1,
+        origin: window.location.origin
+      },
+      events: {
+        onReady: () => {
+          ytPlayerReady = true;
+          if (start) ytPlayer.seekTo(start, true);
+        },
+        onError: () => {
+          ytPlayerReady = false;
+          youtubeFallback = true;
+          ytPlayer = null;
+          if (elYoutubeFrame) {
+            elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+          }
+        }
+      }
+    });
+  } catch (_) {
+    youtubeFallback = true;
+    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+  }
+}
+function handleYoutubeUrlLoad(url) {
+  const id = parseYoutubeId(url);
+  if (!id) {
+    alert("Inserisci un link YouTube valido.");
+    return;
+  }
+  if (videoObjectUrl) {
+    try {
+      URL.revokeObjectURL(videoObjectUrl);
+    } catch (_) {
+      // ignore
+    }
+    videoObjectUrl = "";
+  }
+  if (elAnalysisVideo) {
+    elAnalysisVideo.pause();
+    elAnalysisVideo.removeAttribute("src");
+    elAnalysisVideo.load();
+  }
+  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  state.video.youtubeId = id;
+  state.video.youtubeUrl = url.trim();
+  state.video.fileName = "YouTube: " + state.video.youtubeUrl;
+  saveState();
+  renderYoutubePlayer(0);
+  renderVideoAnalysis();
+}
+function clearYoutubeSource() {
+  if (!state.video) return;
+  state.video.youtubeId = "";
+  state.video.youtubeUrl = "";
+  if (ytPlayer && ytPlayer.stopVideo) {
+    ytPlayer.stopVideo();
+  }
+  ytPlayer = null;
+  ytPlayerReady = false;
+  youtubeFallback = false;
+  if (elYoutubeFrame) {
+    elYoutubeFrame.src = "";
+    elYoutubeFrame.style.display = "none";
+  }
+  currentYoutubeId = "";
 }
 function updateVideoSyncLabel() {
   if (!elVideoSyncLabel) return;
@@ -767,48 +860,174 @@ function updateVideoSyncLabel() {
   elVideoSyncLabel.textContent =
     offset > 0 ? "Prima skill allineata a " + formatVideoTimestamp(offset) : "La prima skill parte da 0:00";
 }
-function renderVideoEditor(eventIdx, baseMs) {
-  if (!elVideoSelectedLabel) return;
-  const ev = state.events && state.events[eventIdx];
-  if (!ev || ev.skillId === "manual") {
-    elVideoSelectedLabel.textContent = "Nessuna skill selezionata";
-    if (elVideoTimeInput) elVideoTimeInput.value = "";
-    if (elVideoSetInput) elVideoSetInput.value = "";
-    if (elVideoRotationInput) elVideoRotationInput.value = "";
-    if (elVideoPlayerSelect) elVideoPlayerSelect.value = "";
-    if (elVideoSkillSelect && elVideoSkillSelect.options.length) {
-      elVideoSkillSelect.selectedIndex = 0;
-    }
-    if (elVideoCodeSelect && elVideoCodeSelect.options.length) {
-      elVideoCodeSelect.selectedIndex = 0;
-    }
-    return;
+function resolvePlayerIdx(ev) {
+  if (typeof ev.playerIdx === "number" && state.players[ev.playerIdx]) {
+    return ev.playerIdx;
   }
-  const playerIdx =
-    typeof ev.playerIdx === "number" && state.players[ev.playerIdx]
-      ? ev.playerIdx
-      : state.players.findIndex(name => name === ev.playerName);
-  const skillLabel = (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId;
-  const playerLabel = formatNameWithNumber(ev.playerName || state.players[playerIdx]) || "—";
-  elVideoSelectedLabel.textContent =
-    "#" + (eventIdx + 1) + " · " + playerLabel + " · " + skillLabel + " " + (ev.code || "");
-  const videoTime = computeEventVideoTime(ev, baseMs);
-  if (elVideoTimeInput) elVideoTimeInput.value = videoTime.toFixed(1);
-  if (elVideoSetInput) elVideoSetInput.value = ev.set || "";
-  if (elVideoRotationInput) elVideoRotationInput.value = ev.rotation || "";
-  if (elVideoPlayerSelect) elVideoPlayerSelect.value = playerIdx >= 0 ? String(playerIdx) : "";
-  if (elVideoSkillSelect) elVideoSkillSelect.value = ev.skillId || "";
-  if (elVideoCodeSelect) elVideoCodeSelect.value = ev.code || "";
+  return state.players.findIndex(name => name === ev.playerName);
+}
+function refreshAfterVideoEdit(shouldRecalcStats) {
+  saveState();
+  if (shouldRecalcStats) {
+    recalcAllStatsAndUpdateUI();
+    renderEventsLog();
+  }
+  renderVideoAnalysis();
+}
+function createPlayerSelect(ev, onDone) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  (state.players || []).forEach((name, idx) => {
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = formatNameWithNumber(name);
+    select.appendChild(opt);
+  });
+  const playerIdx = resolvePlayerIdx(ev);
+  select.value = playerIdx >= 0 ? String(playerIdx) : "";
+  select.addEventListener("change", () => {
+    const val = parseInt(select.value, 10);
+    if (!isNaN(val) && state.players[val]) {
+      ev.playerIdx = val;
+      ev.playerName = state.players[val];
+      refreshAfterVideoEdit(true);
+    }
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createSkillSelect(ev, onDone) {
+  const select = document.createElement("select");
+  SKILLS.forEach(skill => {
+    const opt = document.createElement("option");
+    opt.value = skill.id;
+    opt.textContent = skill.label;
+    select.appendChild(opt);
+  });
+  select.value = ev.skillId || SKILLS[0]?.id || "";
+  select.addEventListener("change", () => {
+    if (select.value) {
+      ev.skillId = select.value;
+      refreshAfterVideoEdit(true);
+    }
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createCodeSelect(ev, onDone) {
+  const select = document.createElement("select");
+  RESULT_CODES.forEach(code => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = code;
+    select.appendChild(opt);
+  });
+  select.value = ev.code || RESULT_CODES[0];
+  select.addEventListener("change", () => {
+    ev.code = select.value;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createSetInput(ev, onDone) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = "5";
+  input.value = ev.set || "";
+  input.addEventListener("change", () => {
+    const val = parseInt(input.value, 10);
+    if (!isNaN(val) && val > 0) {
+      ev.set = val;
+      refreshAfterVideoEdit(true);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return input;
+}
+function createRotationInput(ev, onDone) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = "6";
+  input.value = ev.rotation || "";
+  input.addEventListener("change", () => {
+    const val = parseInt(input.value, 10);
+    if (!isNaN(val) && val >= 1 && val <= 6) {
+      ev.rotation = val;
+      refreshAfterVideoEdit(true);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return input;
+}
+function createVideoTimeInput(ev, videoTime, onDone) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "0";
+  input.step = "0.1";
+  input.value = videoTime.toFixed(1);
+  input.addEventListener("change", () => {
+    const val = parseFloat(input.value || "");
+    if (!isNaN(val) && val >= 0) {
+      ev.videoTime = val;
+      refreshAfterVideoEdit(false);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return input;
+}
+function makeEditableCell(td, factory) {
+  const startEdit = () => {
+    if (td.dataset.editing === "true") return;
+    td.dataset.editing = "true";
+    td.innerHTML = "";
+    const control = factory(() => {
+      td.dataset.editing = "false";
+    });
+    td.appendChild(control);
+    if (typeof control.focus === "function") {
+      control.focus();
+    }
+  };
+  td.addEventListener("click", e => {
+    e.stopPropagation();
+    startEdit();
+  });
 }
 function renderVideoAnalysis() {
   if (!elVideoSkillsBody) return;
-  renderVideoSelectOptions();
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
   updateVideoSyncLabel();
   if (elVideoFileLabel) {
-    elVideoFileLabel.textContent =
-      (state.video && state.video.fileName) || "Nessun file caricato";
+    const label =
+      (state.video && state.video.youtubeId && state.video.youtubeUrl) ||
+      (state.video && state.video.fileName) ||
+      "Nessun file caricato";
+    elVideoFileLabel.textContent = label;
   }
   elVideoSkillsBody.innerHTML = "";
   if (!skillEvents.length) {
@@ -818,48 +1037,69 @@ function renderVideoAnalysis() {
     td.textContent = "Registra alcune skill per vederle qui.";
     tr.appendChild(td);
     elVideoSkillsBody.appendChild(tr);
-    selectedVideoEventIdx = null;
-    renderVideoEditor(null, baseMs);
     return;
   }
-  if (selectedVideoEventIdx === null || !skillEvents.some(item => item.idx === selectedVideoEventIdx)) {
-    selectedVideoEventIdx = skillEvents[0].idx;
-  }
-  skillEvents.forEach(({ ev, idx }, displayIdx) => {
+  skillEvents.forEach(({ ev }, displayIdx) => {
     const tr = document.createElement("tr");
-    if (idx === selectedVideoEventIdx) tr.classList.add("selected");
     const videoTime = computeEventVideoTime(ev, baseMs);
-    const skillLabel = (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId;
     const cells = [
-      String(displayIdx + 1),
-      formatNameWithNumber(ev.playerName || state.players[ev.playerIdx]) || "—",
-      skillLabel,
-      ev.code || "",
-      ev.set || "1",
-      ev.rotation || "-",
-      formatVideoTimestamp(videoTime)
+      { text: String(displayIdx + 1) },
+      {
+        text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
+        editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done))
+      },
+      {
+        text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId,
+        editable: td => makeEditableCell(td, done => createSkillSelect(ev, done))
+      },
+      {
+        text: ev.code || "",
+        editable: td => makeEditableCell(td, done => createCodeSelect(ev, done))
+      },
+      {
+        text: ev.set || "1",
+        editable: td => makeEditableCell(td, done => createSetInput(ev, done))
+      },
+      {
+        text: ev.rotation || "-",
+        editable: td => makeEditableCell(td, done => createRotationInput(ev, done))
+      },
+      {
+        text: formatVideoTimestamp(videoTime),
+        editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
+      }
     ];
-    cells.forEach(text => {
+    cells.forEach(cell => {
       const td = document.createElement("td");
-      td.textContent = text;
+      td.textContent = cell.text || "";
+      if (cell.editable) {
+        cell.editable(td);
+      }
       tr.appendChild(td);
-    });
-    tr.addEventListener("click", () => {
-      selectedVideoEventIdx = idx;
-      renderVideoEditor(selectedVideoEventIdx, baseMs);
-      renderVideoAnalysis();
     });
     tr.addEventListener("dblclick", () => {
       seekVideoToTime(videoTime);
     });
     elVideoSkillsBody.appendChild(tr);
   });
-  renderVideoEditor(selectedVideoEventIdx, baseMs);
 }
 function seekVideoToTime(seconds) {
-  if (!elAnalysisVideo || !isFinite(seconds)) return;
+  if (!isFinite(seconds)) return;
+  const target = Math.max(0, seconds);
+  if (state.video && state.video.youtubeId) {
+    if (ytPlayer && ytPlayerReady && typeof ytPlayer.seekTo === "function") {
+      ytPlayer.seekTo(target, true);
+      if (typeof ytPlayer.playVideo === "function") {
+        ytPlayer.playVideo();
+      }
+    } else if (elYoutubeFrame) {
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, !youtubeFallback);
+    }
+    return;
+  }
+  if (!elAnalysisVideo) return;
   try {
-    elAnalysisVideo.currentTime = Math.max(0, seconds);
+    elAnalysisVideo.currentTime = target;
     elAnalysisVideo.play().catch(() => {});
   } catch (_) {
     // ignore errors when seeking
@@ -867,6 +1107,7 @@ function seekVideoToTime(seconds) {
 }
 function handleVideoFileChange(file) {
   if (!file || !elAnalysisVideo) return;
+  clearYoutubeSource();
   try {
     if (videoObjectUrl) {
       URL.revokeObjectURL(videoObjectUrl);
@@ -877,21 +1118,32 @@ function handleVideoFileChange(file) {
   const url = URL.createObjectURL(file);
   videoObjectUrl = url;
   elAnalysisVideo.src = url;
-  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.fileName = file.name || "video";
+  state.video.youtubeId = "";
+  state.video.youtubeUrl = "";
   saveState();
   renderVideoAnalysis();
 }
 function syncFirstSkillToVideo() {
-  if (!elAnalysisVideo) return;
   const skillEvents = getVideoSkillEvents();
   if (!skillEvents.length) {
     alert("Registra almeno una skill per poter sincronizzare.");
     return;
   }
   const baseMs = getVideoBaseTimeMs(skillEvents);
-  const currentVideoTime = isFinite(elAnalysisVideo.currentTime) ? elAnalysisVideo.currentTime : 0;
-  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  let currentVideoTime = 0;
+  if (state.video && state.video.youtubeId) {
+    if (ytPlayer && ytPlayerReady && typeof ytPlayer.getCurrentTime === "function") {
+      currentVideoTime = ytPlayer.getCurrentTime() || 0;
+    } else {
+      alert("Apri e avvia il video YouTube per sincronizzare.");
+      return;
+    }
+  } else if (elAnalysisVideo) {
+    currentVideoTime = isFinite(elAnalysisVideo.currentTime) ? elAnalysisVideo.currentTime : 0;
+  }
+  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = Math.max(0, currentVideoTime);
   const base = typeof baseMs === "number" ? baseMs : null;
   if (base !== null) {
@@ -903,49 +1155,6 @@ function syncFirstSkillToVideo() {
   }
   saveState();
   renderVideoAnalysis();
-}
-function saveSelectedVideoEvent() {
-  if (selectedVideoEventIdx === null) {
-    alert("Seleziona una skill dalla tabella per modificarla.");
-    return;
-  }
-  const ev = state.events && state.events[selectedVideoEventIdx];
-  if (!ev) return;
-  const playerIdx = parseInt(elVideoPlayerSelect?.value || "", 10);
-  if (!isNaN(playerIdx) && state.players[playerIdx]) {
-    ev.playerIdx = playerIdx;
-    ev.playerName = state.players[playerIdx];
-  }
-  if (elVideoSkillSelect && elVideoSkillSelect.value) {
-    ev.skillId = elVideoSkillSelect.value;
-  }
-  if (elVideoCodeSelect && elVideoCodeSelect.value) {
-    ev.code = elVideoCodeSelect.value;
-  }
-  const setVal = parseInt(elVideoSetInput?.value || "", 10);
-  if (!isNaN(setVal) && setVal > 0) {
-    ev.set = setVal;
-  }
-  const rotVal = parseInt(elVideoRotationInput?.value || "", 10);
-  if (!isNaN(rotVal) && rotVal >= 1 && rotVal <= 6) {
-    ev.rotation = rotVal;
-  }
-  const videoTimeVal = parseFloat(elVideoTimeInput?.value || "");
-  if (!isNaN(videoTimeVal) && videoTimeVal >= 0) {
-    ev.videoTime = videoTimeVal;
-  }
-  saveState();
-  recalcAllStatsAndUpdateUI();
-  renderEventsLog();
-  renderVideoAnalysis();
-}
-function seekSelectedVideoEvent() {
-  if (selectedVideoEventIdx === null) return;
-  const ev = state.events && state.events[selectedVideoEventIdx];
-  if (!ev) return;
-  const baseMs = getVideoBaseTimeMs();
-  const time = computeEventVideoTime(ev, baseMs);
-  seekVideoToTime(time);
 }
 function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
@@ -2178,12 +2387,20 @@ function resetMatch() {
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
   state.currentSet = 1;
-  state.video = state.video || { offsetSeconds: 0, fileName: "" };
+  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
-  selectedVideoEventIdx = null;
+  state.video.youtubeId = "";
+  state.video.youtubeUrl = "";
+  if (ytPlayer && ytPlayer.stopVideo) {
+    ytPlayer.stopVideo();
+  }
   if (elAnalysisVideo) {
     elAnalysisVideo.pause();
     elAnalysisVideo.currentTime = 0;
+  }
+  if (elYoutubeFrame) {
+    elYoutubeFrame.src = "";
+    elYoutubeFrame.style.display = "none";
   }
   syncCurrentSetUI(1);
   initStats();
@@ -2312,6 +2529,7 @@ function init() {
   initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
   loadState();
+  renderYoutubePlayer();
   applyTheme(state.theme || "dark");
   applyMatchInfoToUI();
   updateRotationDisplay();
@@ -2579,11 +2797,19 @@ function init() {
   if (elBtnSyncFirstSkill) {
     elBtnSyncFirstSkill.addEventListener("click", syncFirstSkillToVideo);
   }
-  if (elBtnVideoSave) {
-    elBtnVideoSave.addEventListener("click", saveSelectedVideoEvent);
+  if (elBtnLoadYoutube) {
+    elBtnLoadYoutube.addEventListener("click", () => {
+      const url = (elYoutubeUrlInput && elYoutubeUrlInput.value) || "";
+      handleYoutubeUrlLoad(url);
+    });
   }
-  if (elBtnVideoSeek) {
-    elBtnVideoSeek.addEventListener("click", seekSelectedVideoEvent);
+  if (elYoutubeUrlInput) {
+    elYoutubeUrlInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleYoutubeUrlLoad(elYoutubeUrlInput.value || "");
+      }
+    });
   }
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
@@ -2650,7 +2876,6 @@ function init() {
   });
   renderVideoAnalysis();
   attachModalCloseHandlers();
-  setupInstallPrompt();
   registerServiceWorker();
 }
 document.addEventListener("DOMContentLoaded", init);

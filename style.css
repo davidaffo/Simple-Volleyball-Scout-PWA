@@ -105,13 +105,6 @@ body[data-theme="light"] .tab-btn.active {
   background: #2563eb;
   color: #fff;
 }
-.install-btn {
-  display: none;
-  gap: 0.25rem;
-}
-.install-btn.visible {
-  display: inline-flex;
-}
 .tabs-nav.floating {
   position: sticky;
   top: 0;
@@ -1631,6 +1624,15 @@ body[data-theme="light"] .rotation-table td {
   display: inline-flex;
   gap: 0.4rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+.youtube-input {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.youtube-input input {
+  min-width: 220px;
 }
 .video-analysis__grid {
   display: grid;
@@ -1672,13 +1674,10 @@ body[data-theme="light"] .rotation-table td {
   padding: 0.35rem 0.4rem;
   text-align: left;
   border-bottom: 1px solid #1f2937;
+  vertical-align: middle;
 }
 .video-skills-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.04);
-}
-.video-skills-table tbody tr.selected {
-  background: rgba(45, 108, 223, 0.14);
-  border-left: 3px solid #2d6cdf;
 }
 .video-skills-table td:nth-child(1) {
   width: 46px;
@@ -1687,44 +1686,29 @@ body[data-theme="light"] .rotation-table td {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.video-editor {
-  margin-top: 0.4rem;
-  padding: 0.55rem;
-  border-radius: 0.55rem;
-  border: 1px solid #1f2937;
-  background: rgba(255, 255, 255, 0.03);
-}
-.video-editor__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
-}
-.video-editor__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.4rem 0.5rem;
-  align-items: center;
-}
-.video-editor__grid label {
-  font-size: 0.86rem;
-  color: #cbd5e1;
-}
-.video-editor__grid input,
-.video-editor__grid select {
+.video-skills-table select,
+.video-skills-table input[type="number"] {
   width: 100%;
+  font: inherit;
+  padding: 0.25rem 0.3rem;
+  background: #0b1220;
+  color: #e2e8f0;
+  border: 1px solid #1f2937;
+  border-radius: 0.35rem;
 }
-.video-editor__actions {
-  margin-top: 0.45rem;
+.video-skills-table select:focus,
+.video-skills-table input[type="number"]:focus {
+  outline: 1px solid #2d6cdf;
+}
+.video-time-cell {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
-.video-selected-label {
-  font-size: 0.9rem;
-  color: #cbd5e1;
+.video-time-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
 }
 .video-player-wrap {
   position: sticky;
@@ -1740,13 +1724,17 @@ body[data-theme="light"] .rotation-table td {
   border: 1px solid #111827;
   min-height: 260px;
 }
+.youtube-frame {
+  display: none;
+  width: 100%;
+  min-height: 260px;
+  border: 0;
+  border-radius: 0.8rem;
+  background: #0b0f1a;
+}
 body[data-theme="light"] .video-meta {
   background: #f1f5f9;
   border-color: #cbd5e1;
-}
-body[data-theme="light"] .video-editor__grid label,
-body[data-theme="light"] .video-selected-label {
-  color: #0f172a;
 }
 body[data-theme="light"] .video-skills-table th,
 body[data-theme="light"] .video-skills-table td {
@@ -1755,8 +1743,14 @@ body[data-theme="light"] .video-skills-table td {
 body[data-theme="light"] .video-skills-table tbody tr:hover {
   background: #f8fafc;
 }
-body[data-theme="light"] .video-skills-table tbody tr.selected {
-  background: #e0ecff;
+body[data-theme="light"] .video-skills-table select,
+body[data-theme="light"] .video-skills-table input[type="number"] {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+body[data-theme="light"] .video-time-label {
+  color: #475569;
 }
 @media (max-width: 960px) {
   .video-analysis__grid {

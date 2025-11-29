@@ -20,14 +20,6 @@ const THEME_TEXT = {
   light: "#0f172a"
 };
 const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
-const RESULT_LABELS = {
-  "#": "Punto / perfetto",
-  "+": "Buono",
-  "!": "Ripetizione positiva",
-  "-": "Errore",
-  "=": "Neutro",
-  "/": "Altro"
-};
 const METRIC_DEFAULTS = {
   serve: { positive: ["#", "+", "!", "/"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
   pass: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
@@ -106,7 +98,9 @@ let state = {
   metricsConfig: {},
   video: {
     offsetSeconds: 0,
-    fileName: ""
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: ""
   }
 };
 function canUseShare() {
@@ -208,18 +202,11 @@ const elVideoSkillsBody = document.getElementById("video-skills-body");
 const elVideoFileLabel = document.getElementById("video-file-label");
 const elVideoSyncLabel = document.getElementById("video-sync-label");
 const elBtnSyncFirstSkill = document.getElementById("btn-sync-first-skill");
-const elVideoPlayerSelect = document.getElementById("video-player-select");
-const elVideoSkillSelect = document.getElementById("video-skill-select");
-const elVideoCodeSelect = document.getElementById("video-code-select");
-const elVideoSetInput = document.getElementById("video-set-input");
-const elVideoRotationInput = document.getElementById("video-rotation-input");
-const elVideoTimeInput = document.getElementById("video-time-input");
-const elBtnVideoSave = document.getElementById("btn-video-save");
-const elBtnVideoSeek = document.getElementById("btn-video-seek");
-const elVideoSelectedLabel = document.getElementById("video-selected-label");
+const elYoutubeUrlInput = document.getElementById("youtube-url-input");
+const elBtnLoadYoutube = document.getElementById("btn-load-youtube");
+const elYoutubeFrame = document.getElementById("youtube-frame");
 const elThemeToggleDark = document.getElementById("theme-dark");
 const elThemeToggleLight = document.getElementById("theme-light");
-const elInstallBtn = document.getElementById("install-app-btn");
 let modalMode = "skill";
 let modalSubPosIdx = -1;
 let mobileLineupOrder = [];

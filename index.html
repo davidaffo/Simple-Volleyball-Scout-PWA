@@ -12,7 +12,6 @@
 <body>
   <div class="tabs-nav floating centered">
     <h1 class="app-title">Simple Volleyball Scout PWA</h1>
-    <button id="install-app-btn" class="secondary install-btn" type="button" aria-label="Installa l'app">Installa</button>
     <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
     <button class="tab-btn" data-tab-target="scout">Scout live</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
@@ -325,6 +324,10 @@ Bianchi 18"></textarea>
           <label class="file-btn" for="video-file-input">Carica video</label>
           <input id="video-file-input" type="file" accept="video/*" hidden />
           <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
+          <div class="youtube-input">
+            <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
+            <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
+          </div>
         </div>
       </div>
       <div class="video-analysis__grid">
@@ -359,34 +362,17 @@ Bianchi 18"></textarea>
               </tbody>
             </table>
           </div>
-          <div class="video-editor" id="video-editor">
-            <div class="video-editor__head">
-              <h3>Skill selezionata</h3>
-              <button id="btn-video-seek" class="secondary small" type="button">Vai al timestamp</button>
-            </div>
-            <div class="video-editor__grid">
-              <label for="video-player-select">Giocatrice</label>
-              <select id="video-player-select"></select>
-              <label for="video-skill-select">Fondamentale</label>
-              <select id="video-skill-select"></select>
-              <label for="video-code-select">Valutazione</label>
-              <select id="video-code-select"></select>
-              <label for="video-set-input">Set</label>
-              <input id="video-set-input" type="number" min="1" max="5" />
-              <label for="video-rotation-input">Rotazione</label>
-              <input id="video-rotation-input" type="number" min="1" max="6" />
-              <label for="video-time-input">Timestamp video (s)</label>
-              <input id="video-time-input" type="number" min="0" step="0.1" />
-            </div>
-            <div class="video-editor__actions">
-              <span id="video-selected-label" class="video-selected-label">Nessuna skill selezionata</span>
-              <button id="btn-video-save" type="button">Salva modifiche</button>
-            </div>
-          </div>
         </div>
         <div class="video-player-wrap">
           <video id="analysis-video" controls preload="metadata"></video>
-          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato.</p>
+          <iframe
+            id="youtube-frame"
+            class="youtube-frame"
+            title="YouTube player"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen
+          ></iframe>
+          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato. Puoi usare un file o un link YouTube.</p>
         </div>
       </div>
     </div>

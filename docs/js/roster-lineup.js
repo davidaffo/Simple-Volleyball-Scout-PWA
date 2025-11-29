@@ -136,11 +136,20 @@ function loadState() {
     state.savedTeams = parsed.savedTeams || {};
     state.selectedTeam = parsed.selectedTeam || "";
     state.metricsConfig = parsed.metricsConfig || {};
-    state.video = parsed.video || state.video || { offsetSeconds: 0, fileName: "" };
+    state.video =
+      parsed.video ||
+      state.video || {
+        offsetSeconds: 0,
+        fileName: "",
+        youtubeId: "",
+        youtubeUrl: ""
+      };
     if (typeof state.video.offsetSeconds !== "number") {
       state.video.offsetSeconds = 0;
     }
     state.video.fileName = state.video.fileName || "";
+    state.video.youtubeId = state.video.youtubeId || "";
+    state.video.youtubeUrl = state.video.youtubeUrl || "";
     syncPlayerNumbers(state.players || []);
     cleanLiberos();
     ensureMetricsConfigDefaults();
