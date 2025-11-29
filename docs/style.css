@@ -1338,6 +1338,7 @@ body[data-theme="light"] .chip-empty {
   padding: 0.24rem 0.4rem;
   border: 1px solid #3a3a3a;
   cursor: grab;
+  touch-action: none;
 }
 body[data-theme="light"] .bench-chip {
   background: #f1f5f9;
@@ -1380,13 +1381,16 @@ body[data-theme="light"] .bench-chips.bench-drop-over {
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.25rem;
+  touch-action: none;
 }
 .libero-inline .libero-tags {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.12rem;
-  max-height: 80px;
-  overflow-y: auto;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+  scrollbar-width: thin;
 }
 .libero-tag {
   border: 1px solid #3a3a3a;
@@ -1394,6 +1398,7 @@ body[data-theme="light"] .bench-chips.bench-drop-over {
   border-radius: 0.6rem;
   padding: 0.2rem 0.45rem;
   font-size: 0.85rem;
+  white-space: nowrap;
 }
 .libero-tag.active {
   border-color: #2d6cdf;
@@ -2615,10 +2620,6 @@ body[data-theme="light"] .mobile-floating-bar {
     display: grid;
     grid-template-columns: 1fr;
   }
-  .bench-inline,
-  .libero-inline {
-    display: none;
-  }
   .set-controls .rotation-block,
   .set-controls .card-inline,
   .set-controls .score-card {
@@ -2626,6 +2627,10 @@ body[data-theme="light"] .mobile-floating-bar {
   }
   .bench-inline-list {
     max-height: none;
+    width: 100%;
+  }
+  .libero-inline {
+    display: none;
   }
   .set-controls {
     gap: 0.45rem;

@@ -35,6 +35,13 @@ function renderChipList(container, names, lockedMap, options = {}) {
     chip.addEventListener("dragstart", handleBenchDragStart);
     chip.addEventListener("dragend", handleBenchDragEnd);
     chip.addEventListener("click", () => handleBenchClick(name));
+    chip.addEventListener("pointerdown", ev => handleBenchPointerDown(ev, name));
+    chip.addEventListener("touchstart", ev => handleBenchTouchStart(ev, name), {
+      passive: false
+    });
+    chip.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
+    chip.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
+    chip.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
     container.appendChild(chip);
   });
 }
@@ -46,6 +53,12 @@ let draggedPlayerName = "";
 let draggedFromPos = null;
 let dragSourceType = "";
 let benchDropZoneInitialized = false;
+let touchBenchName = "";
+let touchBenchOverPos = -1;
+let touchBenchGhost = null;
+let touchBenchStart = { x: 0, y: 0 };
+let benchTouchListenersAttached = false;
+let touchBenchPointerId = null;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const elEventsLog = document.getElementById("events-log");
@@ -353,6 +366,15 @@ function canPlaceInSlot(name, posIdx, showAlert = true) {
     if (showAlert) alert("Non puoi mettere il libero in prima linea.");
     return false;
   }
+  if (isLibero(name)) {
+    const anotherLibero = (state.court || []).find(
+      slot => slot.main && slot.main !== name && isLibero(slot.main)
+    );
+    if (anotherLibero) {
+      if (showAlert) alert("Puoi avere solo un libero in campo alla volta.");
+      return false;
+    }
+  }
   const lockedMap = getLockedMap();
   if (lockedMap[name] !== undefined && lockedMap[name] !== posIdx) {
     if (showAlert) alert("Questa giocatrice può rientrare solo nella sua posizione (sostituita dal libero).");
@@ -365,6 +387,12 @@ function isMobileLayout() {
     window.matchMedia("(max-width: 900px)").matches ||
     window.matchMedia("(pointer: coarse)").matches
   );
+}
+function isTouchInput() {
+  const hasFine = window.matchMedia("(any-pointer: fine)").matches;
+  const hasCoarse = window.matchMedia("(any-pointer: coarse)").matches;
+  // Consider touch-only devices when there's no fine pointer available
+  return hasCoarse && !hasFine;
 }
 function reserveNamesInCourt(name) {
   state.court = state.court.map(slot => {
@@ -1268,6 +1296,163 @@ function handleBenchDropZoneDrop(e) {
   handleBenchDropZoneLeave();
   resetDragState();
 }
+function ensureBenchTouchListeners() {
+  if (benchTouchListenersAttached) return;
+  document.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
+  document.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
+  document.addEventListener("pointermove", handleBenchPointerMove, { passive: false });
+  document.addEventListener("pointerup", handleBenchPointerUp, { passive: false });
+  document.addEventListener("pointercancel", handleBenchPointerCancel, { passive: false });
+  benchTouchListenersAttached = true;
+}
+function createBenchTouchGhost(text, x, y) {
+  if (touchBenchGhost && touchBenchGhost.parentNode) {
+    touchBenchGhost.parentNode.removeChild(touchBenchGhost);
+  }
+  const ghost = document.createElement("div");
+  ghost.className = "touch-drag-ghost";
+  ghost.textContent = text;
+  ghost.style.left = x + "px";
+  ghost.style.top = y + "px";
+  document.body.appendChild(ghost);
+  touchBenchGhost = ghost;
+}
+function moveBenchTouchGhost(x, y) {
+  if (!touchBenchGhost) return;
+  touchBenchGhost.style.left = x + "px";
+  touchBenchGhost.style.top = y + "px";
+}
+function clearBenchTouch() {
+  const prev = document.querySelector(".court-card.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (touchBenchGhost && touchBenchGhost.parentNode) {
+    touchBenchGhost.parentNode.removeChild(touchBenchGhost);
+  }
+  touchBenchGhost = null;
+  touchBenchName = "";
+  touchBenchOverPos = -1;
+  touchBenchPointerId = null;
+  document.body.style.overflow = "";
+}
+function updateBenchTouchOver(x, y) {
+  const elAt = document.elementFromPoint(x, y);
+  const card = elAt && elAt.closest(".court-card");
+  const prev = document.querySelector(".court-card.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (!card || !card.dataset.posIndex) {
+    touchBenchOverPos = -1;
+    return;
+  }
+  const posIdx = parseInt(card.dataset.posIndex, 10);
+  if (isNaN(posIdx) || !canPlaceInSlot(touchBenchName, posIdx, false)) {
+    touchBenchOverPos = -1;
+    return;
+  }
+  touchBenchOverPos = posIdx;
+  card.classList.add("drop-over");
+}
+function handleBenchTouchStart(e, name) {
+  if (!isMobileLayout()) return;
+  const t = e.touches && e.touches[0];
+  if (!t) return;
+  ensureBenchTouchListeners();
+  touchBenchName = name;
+  touchBenchStart = { x: t.clientX, y: t.clientY };
+  createBenchTouchGhost(formatNameWithNumber(name), t.clientX, t.clientY);
+  updateBenchTouchOver(t.clientX, t.clientY);
+  document.body.style.overflow = "hidden";
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleBenchTouchMove(e) {
+  if (!touchBenchName) return;
+  const t = e.touches && e.touches[0];
+  if (!t) return;
+  moveBenchTouchGhost(t.clientX, t.clientY);
+  updateBenchTouchOver(t.clientX, t.clientY);
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleBenchTouchEnd(e) {
+  if (!touchBenchName) return;
+  const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+  const endX = t ? t.clientX : touchBenchStart.x;
+  const endY = t ? t.clientY : touchBenchStart.y;
+  const dist = Math.hypot(endX - touchBenchStart.x, endY - touchBenchStart.y);
+  if (dist < 8) {
+    handleBenchClick(touchBenchName);
+    clearBenchTouch();
+    return;
+  }
+  if (touchBenchOverPos >= 0 && canPlaceInSlot(touchBenchName, touchBenchOverPos, true)) {
+    setCourtPlayer(touchBenchOverPos, "main", touchBenchName);
+  }
+  e.stopPropagation();
+  clearBenchTouch();
+}
+function handleBenchTouchCancel() {
+  clearBenchTouch();
+}
+function handleBenchPointerDown(e, name) {
+  if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
+  if (!isMobileLayout()) return;
+  ensureBenchTouchListeners();
+  touchBenchPointerId = e.pointerId;
+  touchBenchName = name;
+  touchBenchStart = { x: e.clientX, y: e.clientY };
+  createBenchTouchGhost(formatNameWithNumber(name), e.clientX, e.clientY);
+  updateBenchTouchOver(e.clientX, e.clientY);
+  document.body.style.overflow = "hidden";
+  if (e.target && typeof e.target.setPointerCapture === "function") {
+    e.target.setPointerCapture(e.pointerId);
+  }
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleBenchPointerMove(e) {
+  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
+  if (!touchBenchName) return;
+  moveBenchTouchGhost(e.clientX, e.clientY);
+  updateBenchTouchOver(e.clientX, e.clientY);
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleBenchPointerUp(e) {
+  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
+  if (e.target && typeof e.target.releasePointerCapture === "function") {
+    e.target.releasePointerCapture(e.pointerId);
+  }
+  handleBenchPointerDrop(e);
+}
+function handleBenchPointerCancel(e) {
+  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
+  if (e.target && typeof e.target.releasePointerCapture === "function") {
+    e.target.releasePointerCapture(e.pointerId);
+  }
+  clearBenchTouch();
+  touchBenchPointerId = null;
+}
+function handleBenchPointerDrop(e) {
+  if (!touchBenchName) {
+    clearBenchTouch();
+    touchBenchPointerId = null;
+    return;
+  }
+  const dist = Math.hypot(e.clientX - touchBenchStart.x, e.clientY - touchBenchStart.y);
+  if (dist < 8) {
+    handleBenchClick(touchBenchName);
+  } else if (
+    touchBenchOverPos >= 0 &&
+    canPlaceInSlot(touchBenchName, touchBenchOverPos, true)
+  ) {
+    setCourtPlayer(touchBenchOverPos, "main", touchBenchName);
+  }
+  e.stopPropagation();
+  e.preventDefault();
+  clearBenchTouch();
+  touchBenchPointerId = null;
+}
 function handleCourtDragStart(e, posIdx) {
   const slot = state.court[posIdx] || { main: "" };
   if (!slot.main || !e.dataTransfer) return;
@@ -1414,17 +1599,15 @@ function releaseReplaced(name, keepIdx) {
 }
 function renderBenchChips() {
   ensureBenchDropZone();
-  if (isMobileLayout()) {
-    if (elBenchChips) elBenchChips.innerHTML = "";
-    return;
-  }
   if (!elBenchChips) return;
   elBenchChips.innerHTML = "";
-  const bench = getBenchPlayers();
+  const mobileLiberoOnly = isTouchInput();
+  const bench = mobileLiberoOnly ? getBenchLiberos() : getBenchPlayers();
   const lockedMap = getLockedMap();
   renderChipList(elBenchChips, bench, lockedMap, {
-    highlightLibero: false,
-    emptyText: "Nessuna riserva disponibile.",
+    highlightLibero: true,
+    isLiberoColumn: mobileLiberoOnly,
+    emptyText: mobileLiberoOnly ? "Nessun libero disponibile." : "Nessuna riserva disponibile.",
     replacedSet: new Set()
   });
 }
@@ -1437,10 +1620,6 @@ function ensureBenchDropZone() {
   benchDropZoneInitialized = true;
 }
 function renderLiberoChipsInline() {
-  if (isMobileLayout()) {
-    if (elLiberoTagsInline) elLiberoTagsInline.innerHTML = "";
-    return;
-  }
   if (!elLiberoTagsInline) return;
   elLiberoTagsInline.innerHTML = "";
   const liberos = getBenchLiberos();

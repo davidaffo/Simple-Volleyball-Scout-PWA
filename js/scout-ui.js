@@ -1345,14 +1345,19 @@ function renderMobileLineupList() {
   if (!elMobileLineupList) return;
   elMobileLineupList.innerHTML = "";
   const used = new Set(mobileLineupOrder.filter(Boolean));
-  if (!state.players || state.players.length === 0) {
+  const mobileMode = isMobileLayout();
+  const liberoSet = new Set(state.liberos || []);
+  const playersList = (state.players || []).filter(
+    name => !(mobileMode && liberoSet.has(name))
+  );
+  if (!playersList || playersList.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
     empty.textContent = "Aggiungi giocatrici nella sezione gestione.";
     elMobileLineupList.appendChild(empty);
     return;
   }
-  state.players.forEach(name => {
+  playersList.forEach(name => {
     const btn = document.createElement("button");
     btn.type = "button";
     const selectedClass =
