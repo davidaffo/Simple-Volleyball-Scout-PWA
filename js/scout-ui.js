@@ -763,6 +763,8 @@ async function renderYoutubePlayer(startSeconds = 0) {
   }
   if (!elYoutubeFrame) return;
   elYoutubeFrame.style.display = hasYoutube ? "block" : "none";
+  // se stiamo servendo da file:// o senza origin valido, forziamo il fallback embed per evitare errori 153
+  const isFileOrigin = window.location && window.location.protocol === "file:";
   if (!hasYoutube) {
     if (ytPlayer && ytPlayer.stopVideo) {
       ytPlayer.stopVideo();
@@ -774,7 +776,11 @@ async function renderYoutubePlayer(startSeconds = 0) {
   }
   const start = Math.max(0, startSeconds || 0);
   currentYoutubeId = id;
-  youtubeFallback = false;
+  youtubeFallback = isFileOrigin;
+  if (youtubeFallback) {
+    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+    return;
+  }
   try {
     await loadYoutubeApi();
     if (ytPlayer) {
@@ -1034,7 +1040,7 @@ function renderVideoAnalysis() {
   if (!skillEvents.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7;
+    td.colSpan = 8;
     td.textContent = "Registra alcune skill per vederle qui.";
     tr.appendChild(td);
     elVideoSkillsBody.appendChild(tr);
@@ -1068,6 +1074,16 @@ function renderVideoAnalysis() {
       {
         text: formatVideoTimestamp(videoTime),
         editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
+      },
+      {
+        render: td => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "secondary small video-seek-btn";
+          btn.textContent = "▶";
+          btn.addEventListener("click", () => seekVideoToTime(videoTime));
+          td.appendChild(btn);
+        }
       }
     ];
     cells.forEach(cell => {
@@ -1075,6 +1091,10 @@ function renderVideoAnalysis() {
       td.textContent = cell.text || "";
       if (cell.editable) {
         cell.editable(td);
+      }
+      if (cell.render) {
+        td.textContent = "";
+        cell.render(td);
       }
       tr.appendChild(td);
     });

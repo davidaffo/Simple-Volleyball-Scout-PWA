@@ -1720,6 +1720,10 @@ body[data-theme="light"] .rotation-table td {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.video-skills-table td:nth-child(8) {
+  width: 70px;
+  text-align: center;
+}
 .video-skills-table select,
 .video-skills-table input[type="number"] {
   width: 100%;
@@ -1729,6 +1733,9 @@ body[data-theme="light"] .rotation-table td {
   color: #e2e8f0;
   border: 1px solid #1f2937;
   border-radius: 0.35rem;
+}
+.video-seek-btn {
+  padding: 0.18rem 0.6rem;
 }
 .video-skills-table select:focus,
 .video-skills-table input[type="number"]:focus {
