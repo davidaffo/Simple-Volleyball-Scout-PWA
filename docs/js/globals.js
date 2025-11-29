@@ -89,6 +89,8 @@ let state = {
   selectedTeam: "",
   metricsConfig: {},
   pointRules: {},
+  autoRotate: true,
+  autoRotatePending: false,
   video: {
     offsetSeconds: 0,
     fileName: "",

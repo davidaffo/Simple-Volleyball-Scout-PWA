@@ -464,6 +464,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     code: code
   };
   state.events.push(event);
+  handleAutoRotationFromEvent(event);
   if (!state.stats[playerIdx]) {
     state.stats[playerIdx] = {};
   }
@@ -1565,6 +1566,29 @@ function handleTouchEnd(e) {
   }
   e.preventDefault();
 }
+function handleAutoRotationFromEvent(eventObj) {
+  if (!state || !state.autoRotate) {
+    state.autoRotatePending = false;
+    return;
+  }
+  if (typeof ensurePointRulesDefaults === "function") {
+    ensurePointRulesDefaults();
+  }
+  if (eventObj.skillId === "pass") {
+    state.autoRotatePending = true;
+    return;
+  }
+  const direction = getPointDirection(eventObj);
+  if (direction === "for") {
+    if (state.autoRotatePending && typeof rotateCourt === "function") {
+      // Side-out rotation: advance in the same direction as manual CCW button
+      rotateCourt("ccw");
+    }
+    state.autoRotatePending = false;
+  } else if (direction === "against") {
+    state.autoRotatePending = false;
+  }
+}
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
   const rot = state.rotation || 1;
   const event = {
@@ -1579,6 +1603,7 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
     value: value
   };
   state.events.push(event);
+  handleAutoRotationFromEvent(event);
   saveState();
   renderEventsLog();
   recalcAllStatsAndUpdateUI();
@@ -2394,6 +2419,7 @@ function resetMatch() {
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
   state.currentSet = 1;
+  state.autoRotatePending = false;
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
@@ -2667,6 +2693,7 @@ function init() {
   if (elBtnRotateCcwModal) {
     elBtnRotateCcwModal.addEventListener("click", () => rotateCourt("ccw"));
   }
+  const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
   if (elRotationSelect) {
     elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
   }
@@ -2675,6 +2702,17 @@ function init() {
       setRotation(elRotationSelectFloating.value)
     );
   }
+  if (elAutoRotateToggle) {
+    elAutoRotateToggle.addEventListener("change", () =>
+      setAutoRotateEnabled(elAutoRotateToggle.checked)
+    );
+  }
+  if (elAutoRotateToggleFloating) {
+    elAutoRotateToggleFloating.addEventListener("change", () =>
+      setAutoRotateEnabled(elAutoRotateToggleFloating.checked)
+    );
+  }
+  setAutoRotateEnabled(state.autoRotate !== false);
   if (elRotationIndicator && elRotationSelect) {
     const openSelect = () => {
       elRotationSelect.focus();

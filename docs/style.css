@@ -446,6 +446,20 @@ body[data-theme="light"] .score-card.wide {
   padding: 0.18rem 0.3rem;
   font-size: 0.76rem;
 }
+.score-actions button#btn-score-team-point,
+.score-actions button#btn-score-team-point-modal,
+.score-actions button#btn-score-team-point-mobile {
+  background: #166534;
+  border-color: #22c55e;
+  color: #ecfdf3;
+}
+body[data-theme="light"] .score-actions button#btn-score-team-point,
+body[data-theme="light"] .score-actions button#btn-score-team-point-modal,
+body[data-theme="light"] .score-actions button#btn-score-team-point-mobile {
+  background: #16a34a;
+  border-color: #22c55e;
+  color: #0f172a;
+}
 .score-card.detail {
   min-width: 130px;
 }
@@ -522,6 +536,21 @@ button.danger:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+.auto-rotate-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+}
+.auto-rotate-toggle.floating {
+  margin-top: 0;
+  font-size: 0.8rem;
+}
+.auto-rotate-toggle input {
+  width: 16px;
+  height: 16px;
 }
 .rotation-number {
   font-size: 1rem;

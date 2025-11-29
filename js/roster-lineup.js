@@ -80,6 +80,8 @@ const elBtnUndoFloating = document.getElementById("btn-undo-floating");
 const elBtnOpenActionsModal = document.getElementById("btn-open-actions-modal");
 const elActionsModal = document.getElementById("floating-actions-modal");
 const elActionsClose = document.getElementById("floating-actions-close");
+const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
+const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
 const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
 const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
@@ -164,6 +166,8 @@ function loadState() {
     state.video.fileName = state.video.fileName || "";
     state.video.youtubeId = state.video.youtubeId || "";
     state.video.youtubeUrl = state.video.youtubeUrl || "";
+    state.autoRotate = parsed.autoRotate !== false;
+    state.autoRotatePending = false;
     state.pointRules = parsed.pointRules || state.pointRules || {};
     syncPlayerNumbers(state.players || []);
     cleanLiberos();
@@ -1772,11 +1776,28 @@ function updateRotationDisplay() {
   if (elRotationIndicatorModal) {
     elRotationIndicatorModal.textContent = String(state.rotation || 1);
   }
+  syncAutoRotateToggle();
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
   const roles = BASE_ROLES;
   return roles[(index - offset + 12) % 6] || roles[index] || "";
+}
+function syncAutoRotateToggle() {
+  if (elAutoRotateToggle) {
+    elAutoRotateToggle.checked = !!state.autoRotate;
+  }
+  if (elAutoRotateToggleFloating) {
+    elAutoRotateToggleFloating.checked = !!state.autoRotate;
+  }
+}
+function setAutoRotateEnabled(enabled) {
+  state.autoRotate = !!enabled;
+  if (!state.autoRotate) {
+    state.autoRotatePending = false;
+  }
+  saveState();
+  syncAutoRotateToggle();
 }
 function setCurrentSet(value, options = {}) {
   const setNum = Math.min(5, Math.max(1, parseInt(value, 10) || 1));
