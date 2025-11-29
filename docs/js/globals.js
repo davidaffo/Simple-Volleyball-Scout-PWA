@@ -20,6 +20,15 @@ const THEME_TEXT = {
   light: "#0f172a"
 };
 const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
+const POINT_RULE_DEFAULTS = {
+  serve: { for: ["#"], against: ["="] },
+  pass: { for: [], against: ["="] },
+  defense: { for: [], against: ["="] },
+  attack: { for: ["#"], against: ["=", "/"] },
+  block: { for: ["#"], against: ["/", "="] },
+  second: { for: [], against: ["="] },
+  manual: { for: ["for"], against: ["against", "error"] }
+};
 const METRIC_DEFAULTS = {
   serve: { positive: ["#", "+", "!", "/"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
   pass: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
@@ -27,23 +36,6 @@ const METRIC_DEFAULTS = {
   attack: { positive: ["#"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
   block: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
   second: { positive: ["#"], negative: ["/", "-", "="], activeCodes: RESULT_CODES, enabled: true }
-};
-const POINT_RULES = {
-  made: {
-    serve: new Set(["#"]),
-    attack: new Set(["#"]),
-    block: new Set(["#"]),
-    manual: new Set(["for"])
-  },
-  conceded: {
-    attack: new Set(["=", "/"]),
-    serve: new Set(["="]),
-    pass: new Set(["="]),
-    defense: new Set(["="]),
-    block: new Set(["/", "="]),
-    second: new Set(["="]),
-    manual: new Set(["against", "error"])
-  }
 };
 const PERSISTENT_DB_NAME = "Data";
 const TEAM_STORE_NAME = "Teams";
@@ -96,6 +88,7 @@ let state = {
   savedTeams: {},
   selectedTeam: "",
   metricsConfig: {},
+  pointRules: {},
   video: {
     offsetSeconds: 0,
     fileName: "",

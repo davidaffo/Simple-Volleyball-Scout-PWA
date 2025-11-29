@@ -48,6 +48,7 @@ function renderChipList(container, names, lockedMap, options = {}) {
 const elMetricsConfig = document.getElementById("metrics-config");
 const elBtnResetMetrics = document.getElementById("btn-reset-metrics");
 const elBtnResetCodes = document.getElementById("btn-reset-codes");
+const elBtnResetPoints = document.getElementById("btn-reset-points");
 let activeDropChip = null;
 let draggedPlayerName = "";
 let draggedFromPos = null;
@@ -163,9 +164,11 @@ function loadState() {
     state.video.fileName = state.video.fileName || "";
     state.video.youtubeId = state.video.youtubeId || "";
     state.video.youtubeUrl = state.video.youtubeUrl || "";
+    state.pointRules = parsed.pointRules || state.pointRules || {};
     syncPlayerNumbers(state.players || []);
     cleanLiberos();
     ensureMetricsConfigDefaults();
+    ensurePointRulesDefaults();
     migrateTeamsToPersistent();
     syncTeamsFromStorage();
   } catch (e) {
@@ -958,6 +961,7 @@ function renderLiberoTags() {
 }
 const allowedMetricCodes = new Set(RESULT_CODES);
 const SETTINGS_RESULT_CODES = ["#", "+", "!", "-", "/", "="];
+const allowedPointCodes = new Set([...SETTINGS_RESULT_CODES, "for", "against", "error"]);
 function normalizeMetricConfig(skillId, cfg) {
   const def = METRIC_DEFAULTS[skillId] || METRIC_DEFAULTS.serve;
   const uniq = list =>
@@ -968,6 +972,20 @@ function normalizeMetricConfig(skillId, cfg) {
   const activeCodes = uniq((cfg && cfg.activeCodes) || def.activeCodes || RESULT_CODES);
   const enabled = cfg && typeof cfg.enabled === "boolean" ? cfg.enabled : def.enabled !== false;
   return { positive, neutral, negative, activeCodes, enabled };
+}
+function normalizePointRule(skillId, cfg) {
+  const def = POINT_RULE_DEFAULTS[skillId] || { for: [], against: [] };
+  const uniq = list =>
+    Array.from(new Set((list || []).filter(code => allowedPointCodes.has(code))));
+  const made = uniq((cfg && cfg.for) || def.for || []);
+  const conceded = uniq((cfg && cfg.against) || def.against || []);
+  return { for: made, against: conceded };
+}
+function ensurePointRulesDefaults() {
+  state.pointRules = state.pointRules || {};
+  SKILLS.forEach(skill => {
+    state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
+  });
 }
 function getCodeTone(skillId, code) {
   ensureMetricsConfigDefaults();
@@ -1012,6 +1030,7 @@ function applyTemplateTeam(options = {}) {
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
   const posSet = new Set(cfg.positive);
   const negSet = new Set(cfg.negative);
@@ -1044,8 +1063,41 @@ function toggleMetricAssignment(skillId, category, code) {
   recalcAllStatsAndUpdateUI();
   renderPlayers();
 }
+function togglePointRule(skillId, category, code) {
+  ensurePointRulesDefaults();
+  const cfg = normalizePointRule(skillId, state.pointRules[skillId]);
+  const forSet = new Set(cfg.for);
+  const againstSet = new Set(cfg.against);
+  if (category === "for") {
+    if (forSet.has(code)) {
+      forSet.delete(code);
+    } else {
+      forSet.add(code);
+      againstSet.delete(code);
+    }
+  } else if (category === "against") {
+    if (againstSet.has(code)) {
+      againstSet.delete(code);
+    } else {
+      againstSet.add(code);
+      forSet.delete(code);
+    }
+  } else {
+    forSet.delete(code);
+    againstSet.delete(code);
+  }
+  state.pointRules[skillId] = normalizePointRule(skillId, {
+    for: Array.from(forSet),
+    against: Array.from(againstSet)
+  });
+  saveState();
+  renderMetricsConfig();
+  recalcAllStatsAndUpdateUI();
+  renderPlayers();
+}
 function toggleActiveCode(skillId, code) {
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
   const activeSet = new Set(cfg.activeCodes);
   if (activeSet.has(code)) {
@@ -1066,6 +1118,7 @@ function toggleActiveCode(skillId, code) {
 }
 function toggleSkillEnabled(skillId) {
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   const cfg = normalizeMetricConfig(skillId, state.metricsConfig[skillId]);
   state.metricsConfig[skillId] = normalizeMetricConfig(skillId, {
     positive: cfg.positive,
@@ -1083,6 +1136,7 @@ function resetMetricsToDefault() {
   );
   if (!ok) return;
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   SKILLS.forEach(skill => {
     const current = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
     const defaults = normalizeMetricConfig(skill.id, METRIC_DEFAULTS[skill.id]);
@@ -1102,6 +1156,7 @@ function resetAllActiveCodes() {
   const ok = confirm("Riattivare tutte le valutazioni (codici abilitati) per ogni fondamentale?");
   if (!ok) return;
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   SKILLS.forEach(skill => {
     const current = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
     state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, {
@@ -1116,9 +1171,22 @@ function resetAllActiveCodes() {
   recalcAllStatsAndUpdateUI();
   renderPlayers();
 }
+function resetPointRulesToDefault() {
+  const ok = confirm("Ripristinare le regole punti ai valori di default?");
+  if (!ok) return;
+  ensurePointRulesDefaults();
+  SKILLS.forEach(skill => {
+    state.pointRules[skill.id] = normalizePointRule(skill.id, POINT_RULE_DEFAULTS[skill.id]);
+  });
+  saveState();
+  renderMetricsConfig();
+  recalcAllStatsAndUpdateUI();
+  renderPlayers();
+}
 function renderMetricsConfig() {
   if (!elMetricsConfig) return;
   ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
   elMetricsConfig.innerHTML = "";
   SKILLS.forEach(skill => {
     const block = document.createElement("div");
@@ -1132,17 +1200,19 @@ function renderMetricsConfig() {
     helper.className = "metric-helper";
     helper.textContent = "";
     block.appendChild(helper);
-    const colsWrap = document.createElement("div");
-    colsWrap.className = "metric-cols";
-    const colLeft = document.createElement("div");
-    colLeft.className = "metric-col";
-    const colRight = document.createElement("div");
-    colRight.className = "metric-col";
-    const makeRow = rowMeta => {
-      const row = document.createElement("div");
-      row.className = "metric-row";
-      const label = document.createElement("span");
-      label.className = "metric-label";
+  const colsWrap = document.createElement("div");
+  colsWrap.className = "metric-cols";
+  const colLeft = document.createElement("div");
+  colLeft.className = "metric-col";
+  const colRight = document.createElement("div");
+  colRight.className = "metric-col";
+  const colPoints = document.createElement("div");
+  colPoints.className = "metric-col";
+  const makeRow = rowMeta => {
+    const row = document.createElement("div");
+    row.className = "metric-row";
+    const label = document.createElement("span");
+    label.className = "metric-label";
       label.textContent = rowMeta.label;
       row.appendChild(label);
       if (rowMeta.type === "toggle") {
@@ -1186,8 +1256,41 @@ function renderMetricsConfig() {
       { key: "negative", label: "Negativo" } ].forEach(meta => {
       colRight.appendChild(makeRow(meta));
     });
+    const pointCfg = normalizePointRule(skill.id, state.pointRules[skill.id]);
+    const pointRow = meta => {
+      const row = document.createElement("div");
+      row.className = "metric-row";
+      const label = document.createElement("span");
+      label.className = "metric-label";
+      label.textContent = meta.label;
+      row.appendChild(label);
+      SETTINGS_RESULT_CODES.forEach(code => {
+        const active =
+          meta.key === "for"
+            ? pointCfg.for.includes(code)
+            : meta.key === "against"
+              ? pointCfg.against.includes(code)
+              : !pointCfg.for.includes(code) && !pointCfg.against.includes(code);
+        const tone = meta.key === "for" ? "positive" : meta.key === "against" ? "negative" : "neutral";
+        let cls = "metric-toggle code-" + tone;
+        if (active) cls += " active";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = cls;
+        btn.textContent = code;
+        btn.addEventListener("click", () => togglePointRule(skill.id, meta.key, code));
+        row.appendChild(btn);
+      });
+      return row;
+    };
+    [ { key: "for", label: "Punto" },
+      { key: "against", label: "Punto subito" },
+      { key: "neutral", label: "Neutro (no punto)" } ].forEach(meta => {
+      colPoints.appendChild(pointRow(meta));
+    });
     colsWrap.appendChild(colLeft);
     colsWrap.appendChild(colRight);
+    colsWrap.appendChild(colPoints);
     block.appendChild(colsWrap);
     elMetricsConfig.appendChild(block);
   });

@@ -1160,10 +1160,12 @@ function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
     return ev.pointDirection;
   }
+  ensurePointRulesDefaults();
   const skill = ev.skillId;
   const code = ev.code;
-  if (POINT_RULES.made[skill] && POINT_RULES.made[skill].has(code)) return "for";
-  if (POINT_RULES.conceded[skill] && POINT_RULES.conceded[skill].has(code)) return "against";
+  const cfg = normalizePointRule(skill, state.pointRules && state.pointRules[skill]);
+  if (cfg.for.includes(code)) return "for";
+  if (cfg.against.includes(code)) return "against";
   return null;
 }
 function computePointsSummary(targetSet) {
@@ -2821,6 +2823,9 @@ function init() {
   }
   if (elBtnResetCodes) {
     elBtnResetCodes.addEventListener("click", resetAllActiveCodes);
+  }
+  if (elBtnResetPoints) {
+    elBtnResetPoints.addEventListener("click", resetPointRulesToDefault);
   }
   if (elBtnScoreForPlus) {
     elBtnScoreForPlus.addEventListener("click", () => handleManualScore("for", 1));
