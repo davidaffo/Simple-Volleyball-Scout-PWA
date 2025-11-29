@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simple Volleyball Scout PWA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111111" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+</head>
+<body>
+  <div class="tabs-nav floating centered">
+    <h1 class="app-title">Simple Volleyball Scout PWA</h1>
+    <button id="install-app-btn" class="secondary install-btn" type="button" aria-label="Installa l'app">Installa</button>
+    <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
+    <button class="tab-btn" data-tab-target="scout">Scout live</button>
+    <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
+    <button class="tab-btn" data-tab-target="video">Video</button>
+  </div>
+  <div class="tab-dots floating" aria-label="Navigazione tab mobile">
+    <button class="tab-dot active" data-tab-target="info" aria-label="Impostazioni"></button>
+    <button class="tab-dot" data-tab-target="scout" aria-label="Scout"></button>
+    <button class="tab-dot" data-tab-target="aggregated" aria-label="Analisi"></button>
+    <button class="tab-dot" data-tab-target="video" aria-label="Video"></button>
+  </div>
+
+  <div class="tab-panel active" data-tab="info">
+    <div class="section">
+      <h2>Impostazioni partita</h2>
+      <div class="top-bar">
+        <div class="col">
+          <label for="match-opponent">Avversario</label>
+          <input id="match-opponent" type="text" />
+        </div>
+        <div class="col">
+          <label for="match-category">Categoria</label>
+          <input id="match-category" type="text" />
+        </div>
+        <div class="col">
+          <label for="match-date">Data</label>
+          <input id="match-date" type="date" />
+        </div>
+        <div class="col">
+          <label for="match-notes">Note</label>
+          <input id="match-notes" type="text" />
+        </div>
+        <div class="col">
+          <label>Tema</label>
+          <div class="theme-toggle">
+            <button type="button" id="theme-dark" class="secondary" aria-pressed="false" title="Tema scuro">🌙</button>
+            <button type="button" id="theme-light" class="secondary" aria-pressed="false" title="Tema chiaro">☀️</button>
+          </div>
+        </div>
+      </div>
+      <div class="controls-row info-controls">
+        <div class="col buttons-right">
+          <button id="btn-save-info" class="secondary">Salva info</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <h2>Giocatrici</h2>
+      <p class="section-note">Gestisci l'elenco con i pulsanti. Cambiare la lista azzera le statistiche del match.</p>
+      <div class="player-management">
+        <div class="add-player-row">
+          <div class="col">
+            <label for="new-player-name">Nuova giocatrice</label>
+            <div class="add-player-inline">
+              <input id="new-player-name" type="text" placeholder="Es: Martina Rossi" />
+              <button id="btn-add-player">+ Aggiungi</button>
+            </div>
+          </div>
+          <div class="col col-auto">
+            <label class="spacer-label">&nbsp;</label>
+            <button id="btn-clear-players" class="secondary">Svuota elenco</button>
+          </div>
+        </div>
+        <div id="players-list" class="players-list"></div>
+        <div class="team-manage">
+          <label for="saved-teams">Squadre salvate</label>
+          <div class="team-row">
+            <select id="saved-teams">
+              <option value="">Nuova squadra (vuota)</option>
+            </select>
+            <button id="btn-delete-team" class="danger">Elimina</button>
+            <button id="btn-rename-team" class="secondary">Rinomina</button>
+            <button id="btn-save-team">Salva squadra</button>
+          </div>
+          <div class="team-row">
+            <button id="btn-export-team" class="secondary">Esporta su file</button>
+            <button id="btn-import-team" class="secondary">Importa da file</button>
+            <input id="team-file-input" type="file" accept="application/json,text/plain" hidden />
+          </div>
+        </div>
+        <details class="import-panel">
+          <summary>Incolla un elenco (opzionale)</summary>
+          <label for="players-input">Formato: Nome;Numero;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
+          <textarea id="players-input" placeholder="Esempi:
+Rossi;12;L
+Verdi;7
+Bianchi 18"></textarea>
+          <div class="controls-row">
+            <button id="btn-apply-players">Sostituisci elenco (resetta le statistiche)</button>
+          </div>
+        </details>
+        <div class="libero-manage">
+          <label for="libero-tags">Segna i liberi (solo per colore)</label>
+          <div id="libero-tags" class="libero-tags"></div>
+        </div>
+        <details class="import-panel metrics-panel" open>
+          <summary>Regole calcolo efficienza/positività</summary>
+          <p class="section-note">Positività = positivi / totali · Efficienza = (positivi - negativi) / totali · Perfezione = # / totali.</p>
+          <div class="controls-row metrics-actions">
+            <button id="btn-reset-codes" class="secondary">Riattiva tutte le valutazioni</button>
+            <button id="btn-reset-metrics" class="secondary">Ripristina criteri di default</button>
+          </div>
+          <div id="metrics-config" class="metrics-config"></div>
+        </details>
+      </div>
+    </div>
+    <div class="section">
+      <h2>Azioni match</h2>
+      <div class="controls-row">
+        <button id="btn-reset-match" class="danger">Reset match</button>
+        <button id="btn-export-match" class="secondary">Esporta match</button>
+        <button id="btn-import-match" class="secondary">Importa match</button>
+        <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-tab="scout">
+    <div class="section">
+      <h2 class="scout-title">Scout in tempo reale</h2>
+      <div class="set-controls grid-row">
+        <div class="block rotation-block">
+          <div class="rotation-controls">
+            <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+            <div class="rotation-display">
+              <label>Rotazione</label>
+              <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
+              <select id="rotation-select" class="rotation-select">
+                <option value="1">Rotazione 1</option>
+                <option value="2">Rotazione 2</option>
+                <option value="3">Rotazione 3</option>
+                <option value="4">Rotazione 4</option>
+                <option value="5">Rotazione 5</option>
+                <option value="6">Rotazione 6</option>
+              </select>
+            </div>
+            <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
+          </div>
+        </div>
+        <div class="card-inline">
+          <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
+          <div class="undo-last-summary" aria-live="polite">
+            <span>Ultimo codice:</span>
+            <strong id="undo-last-summary">—</strong>
+          </div>
+        </div>
+        <div class="score-card wide">
+          <div class="score-card-head">
+            <div class="score-set-select">
+              <label for="current-set">Set corrente</label>
+              <select id="current-set">
+                <option value="1">Set 1</option>
+                <option value="2">Set 2</option>
+                <option value="3">Set 3</option>
+                <option value="4">Set 4</option>
+                <option value="5">Set 5</option>
+              </select>
+            </div>
+            <div class="score-display">
+              <label>Punteggio set corrente</label>
+              <div id="live-score" class="score-value emph">0 - 0</div>
+            </div>
+          </div>
+          <div class="score-actions">
+            <button id="btn-score-for-plus" class="small">+ Fatti</button>
+            <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
+            <button id="btn-score-against-plus" class="small">+ Subiti</button>
+            <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
+            <button id="btn-score-team-error" class="small danger">Errore/Fallo squadra</button>
+          </div>
+        </div>
+        <div class="mobile-lineup-btn-wrap">
+          <button id="btn-open-lineup-mobile" class="secondary small">Imposta formazione</button>
+        </div>
+        <div class="bench-inline">
+          <label>Riserve (trascina in campo)</label>
+          <div id="bench-chips" class="bench-chips bench-inline-list"></div>
+        </div>
+        <div class="libero-inline">
+          <label>Libero</label>
+          <div id="libero-tags-inline" class="libero-tags"></div>
+        </div>
+      </div>
+      <div class="players-area">
+        <div class="mobile-floating-bar" aria-label="Azioni rapide scout">
+          <div class="floating-rot">
+            <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
+            <div class="rotation-display minimal">
+              <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+            </div>
+            <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
+          </div>
+          <div class="floating-undo-wrap">
+            <span id="floating-log-summary" class="floating-log-summary" aria-live="polite"></span>
+            <button id="btn-undo-floating" class="small danger" aria-label="Annulla ultimo evento">↩</button>
+          </div>
+          <button id="btn-open-lineup-mobile-floating" class="floating-lineup-btn small secondary" aria-label="Imposta formazione">Imposta formazione</button>
+          <button id="btn-open-actions-modal" class="floating-score-btn" aria-haspopup="dialog" aria-label="Apri modifica punteggio e rotazione">
+            <span id="live-score-floating" aria-live="polite">S1 · 0 - 0</span>
+          </button>
+        </div>
+        <h3 class="players-title">Giocatrici e fondamentali</h3>
+        <div id="players-container"></div>
+      </div>
+      <div class="mobile-team-error">
+        <button id="btn-score-team-error-mobile" class="small danger full-width">Errore/Fallo squadra</button>
+      </div>
+    </div>
+    <div class="section log-section" data-log-section>
+      <h2>Log eventi (ultimi)</h2>
+      <button id="toggle-log-mobile" class="mobile-log-toggle" aria-expanded="false" aria-controls="events-log">Apri log eventi</button>
+      <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
+      <div id="events-log"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-tab="aggregated" id="aggregated-panel">
+    <div class="section">
+      <h2>Tabella aggregata</h2>
+      <p class="section-note">Sintesi delle statistiche raccolte: mostriamo solo le colonne gestite dall'app.</p>
+      <div class="controls-row">
+        <button id="btn-export-csv">Esporta CSV</button>
+        <button id="btn-copy-csv" class="secondary">Copia CSV</button>
+        <button id="btn-export-pdf" class="secondary">Esporta PDF</button>
+      </div>
+      <div class="score-summary">
+        <div class="score-card">
+          <label>Punteggio totale</label>
+          <div id="agg-score" class="score-value">0 - 0</div>
+          <div id="agg-set-cards" class="score-sets cards"></div>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="agg-table">
+          <thead>
+            <tr>
+              <th rowspan="2">Atleta</th>
+              <th colspan="4" class="skill-col skill-serve">Battuta</th>
+              <th colspan="4" class="skill-col skill-pass">Ricezione</th>
+              <th colspan="4" class="skill-col skill-attack">Attacco</th>
+              <th colspan="4" class="skill-col skill-defense">Difesa</th>
+              <th colspan="4" class="skill-col skill-block">Muro</th>
+              <th colspan="3" class="skill-col skill-second">Alzata</th>
+            </tr>
+            <tr>
+              <th class="skill-col skill-serve">Tot</th>
+              <th class="skill-col skill-serve">Neg</th>
+              <th class="skill-col skill-serve">Pos</th>
+              <th class="skill-col skill-serve">Eff</th>
+
+              <th class="skill-col skill-pass">Tot</th>
+              <th class="skill-col skill-pass">Neg</th>
+              <th class="skill-col skill-pass">Pos</th>
+              <th class="skill-col skill-pass">Prf</th>
+
+              <th class="skill-col skill-attack">Tot</th>
+              <th class="skill-col skill-attack">Neg</th>
+              <th class="skill-col skill-attack">Pos</th>
+              <th class="skill-col skill-attack">Eff</th>
+
+              <th class="skill-col skill-defense">Tot</th>
+              <th class="skill-col skill-defense">Neg</th>
+              <th class="skill-col skill-defense">Pos</th>
+              <th class="skill-col skill-defense">Eff</th>
+
+              <th class="skill-col skill-block">Tot</th>
+              <th class="skill-col skill-block">Neg</th>
+              <th class="skill-col skill-block">Pos</th>
+              <th class="skill-col skill-block">Eff</th>
+
+              <th class="skill-col skill-second">Tot</th>
+              <th class="skill-col skill-second">Pos</th>
+              <th class="skill-col skill-second">Prf</th>
+            </tr>
+          </thead>
+          <tbody id="agg-table-body">
+            <tr>
+              <td colspan="25">Registra alcuni eventi per vedere le statistiche aggregate.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrapper rotation-wrapper">
+        <table class="rotation-table">
+          <thead>
+            <tr>
+              <th>Rot</th>
+              <th>Punti fatti</th>
+              <th>Punti subiti</th>
+              <th>Δ</th>
+            </tr>
+          </thead>
+          <tbody id="rotation-table-body">
+            <tr>
+              <td colspan="4">Registra eventi per vedere le rotazioni.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="tab-panel" data-tab="video" id="video-panel">
+    <div class="section video-analysis">
+      <div class="video-analysis__head">
+        <div>
+          <h2>Analisi video</h2>
+          <p class="section-note">Carica un video e sincronizza le skill registrate per saltare al momento corretto.</p>
+        </div>
+        <div class="video-analysis__actions">
+          <label class="file-btn" for="video-file-input">Carica video</label>
+          <input id="video-file-input" type="file" accept="video/*" hidden />
+          <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
+        </div>
+      </div>
+      <div class="video-analysis__grid">
+        <div class="video-skills">
+          <div class="video-meta">
+            <div class="video-meta__row">
+              <span>Video:</span>
+              <strong id="video-file-label">Nessun file caricato</strong>
+            </div>
+            <div class="video-meta__row">
+              <span>Allineamento:</span>
+              <strong id="video-sync-label">La prima skill parte da 0:00</strong>
+            </div>
+          </div>
+          <div class="table-wrapper video-table-wrapper">
+            <table class="video-skills-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Giocatrice</th>
+                  <th>Skill</th>
+                  <th>Valut.</th>
+                  <th>Set</th>
+                  <th>Rot</th>
+                  <th>Video</th>
+                </tr>
+              </thead>
+              <tbody id="video-skills-body">
+                <tr>
+                  <td colspan="7">Registra alcune skill per vederle qui.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="video-editor" id="video-editor">
+            <div class="video-editor__head">
+              <h3>Skill selezionata</h3>
+              <button id="btn-video-seek" class="secondary small" type="button">Vai al timestamp</button>
+            </div>
+            <div class="video-editor__grid">
+              <label for="video-player-select">Giocatrice</label>
+              <select id="video-player-select"></select>
+              <label for="video-skill-select">Fondamentale</label>
+              <select id="video-skill-select"></select>
+              <label for="video-code-select">Valutazione</label>
+              <select id="video-code-select"></select>
+              <label for="video-set-input">Set</label>
+              <input id="video-set-input" type="number" min="1" max="5" />
+              <label for="video-rotation-input">Rotazione</label>
+              <input id="video-rotation-input" type="number" min="1" max="6" />
+              <label for="video-time-input">Timestamp video (s)</label>
+              <input id="video-time-input" type="number" min="0" step="0.1" />
+            </div>
+            <div class="video-editor__actions">
+              <span id="video-selected-label" class="video-selected-label">Nessuna skill selezionata</span>
+              <button id="btn-video-save" type="button">Salva modifiche</button>
+            </div>
+          </div>
+        </div>
+        <div class="video-player-wrap">
+          <video id="analysis-video" controls preload="metadata"></video>
+          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <noscript>Questa applicazione richiede JavaScript abilitato.</noscript>
+  <div id="skill-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-skill onclick="window._closeSkillModal && window._closeSkillModal()"></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div id="skill-modal-title" class="skill-modal__title"></div>
+        <button id="skill-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-skill="true" onclick="window._closeSkillModal && window._closeSkillModal()">✕</button>
+      </div>
+      <div id="skill-modal-body" class="skill-modal__body"></div>
+    </div>
+  </div>
+  <div id="floating-actions-modal" class="floating-actions-modal hidden" role="dialog" aria-modal="true" aria-labelledby="floating-actions-title">
+    <div class="floating-actions__backdrop" data-close-actions></div>
+    <div class="floating-actions__content">
+      <div class="floating-actions__head">
+        <h3 id="floating-actions-title">Punteggio e rotazione</h3>
+        <button id="floating-actions-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="floating-actions__body">
+        <div class="floating-actions__row">
+          <div class="floating-actions__block">
+            <div class="rotation-controls">
+              <button id="btn-rotate-ccw-modal" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
+              <div class="rotation-display">
+                <label for="rotation-select-floating">Rotazione</label>
+                <div id="rotation-indicator-modal" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+                <select id="rotation-select-floating" class="rotation-select">
+                  <option value="1">Rotazione 1</option>
+                  <option value="2">Rotazione 2</option>
+                  <option value="3">Rotazione 3</option>
+                  <option value="4">Rotazione 4</option>
+                  <option value="5">Rotazione 5</option>
+                  <option value="6">Rotazione 6</option>
+                </select>
+              </div>
+              <button id="btn-rotate-cw-modal" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="floating-actions__row">
+          <div class="floating-actions__block">
+            <div class="score-card wide">
+              <div class="score-card-head">
+                <div class="score-set-select">
+                  <label for="current-set-floating">Set corrente</label>
+                  <select id="current-set-floating">
+                    <option value="1">Set 1</option>
+                    <option value="2">Set 2</option>
+                    <option value="3">Set 3</option>
+                    <option value="4">Set 4</option>
+                    <option value="5">Set 5</option>
+                  </select>
+                </div>
+                <div class="score-display">
+                  <label>Punteggio set corrente</label>
+                  <div id="live-score-modal" class="score-value emph">0 - 0</div>
+                </div>
+              </div>
+              <div class="score-actions">
+                <button id="btn-score-for-plus-modal" class="small">+ Fatti</button>
+                <button id="btn-score-for-minus-modal" class="small secondary">- Fatti</button>
+                <button id="btn-score-against-plus-modal" class="small">+ Subiti</button>
+                <button id="btn-score-against-minus-modal" class="small secondary">- Subiti</button>
+                <button id="btn-score-team-error-modal" class="small danger">Errore/Fallo squadra</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="mobile-lineup-modal" class="mobile-lineup-modal hidden" role="dialog" aria-modal="true" aria-labelledby="mobile-lineup-title">
+    <div class="mobile-lineup__backdrop" data-close-lineup></div>
+    <div class="mobile-lineup__content">
+      <div class="mobile-lineup__head">
+        <h3 id="mobile-lineup-title">Imposta formazione</h3>
+        <button id="mobile-lineup-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="mobile-lineup__body">
+        <div class="mini-court" id="mini-court"></div>
+        <p class="mini-court-help">Tocca una giocatrice per inserirla in ordine di rotazione. Tocca sul campo per rimuoverla.</p>
+        <div class="mobile-lineup-list" id="mobile-lineup-list"></div>
+      </div>
+      <div class="mobile-lineup__foot">
+        <button id="mobile-lineup-confirm">Conferma formazione</button>
+      </div>
+    </div>
+  </div>
+  <script src="js/globals.js"></script>
+  <script src="js/roster-lineup.js"></script>
+  <script src="js/scout-ui.js"></script>
+</body>
+</html>
