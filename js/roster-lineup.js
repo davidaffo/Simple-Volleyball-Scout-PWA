@@ -62,6 +62,7 @@ let benchTouchListenersAttached = false;
 let touchBenchPointerId = null;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
+let isLoadingMatch = false;
 const elEventsLog = document.getElementById("events-log");
 const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
@@ -74,7 +75,11 @@ const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnExportMatch = document.getElementById("btn-export-match");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
-const elBtnSaveInfo = document.getElementById("btn-save-info");
+const elSavedMatchesSelect = document.getElementById("saved-matches");
+const elBtnDeleteMatch = document.getElementById("btn-delete-match");
+const elBtnExportDb = document.getElementById("btn-export-db");
+const elBtnImportDb = document.getElementById("btn-import-db");
+const elDbFileInput = document.getElementById("db-file-input");
 const elBtnUndo = document.getElementById("btn-undo");
 const elBtnUndoFloating = document.getElementById("btn-undo-floating");
 const elBtnOpenActionsModal = document.getElementById("btn-open-actions-modal");
@@ -113,6 +118,60 @@ const tabDots = document.querySelectorAll(".tab-dot");
 const elToggleLogMobile = document.getElementById("toggle-log-mobile");
 const elLogSection = document.querySelector("[data-log-section]");
 let activeTab = "info";
+function getTodayIso() {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - off * 60000);
+  return local.toISOString().slice(0, 10);
+}
+function formatUsDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { timeZone: "UTC" });
+}
+function ensureMatchDefaults() {
+  state.match = state.match || {};
+  if (!state.match.date) {
+    state.match.date = getTodayIso();
+  }
+  if (!state.match.matchType) {
+    state.match.matchType = "amichevole";
+  }
+  if (typeof state.match.leg !== "string") {
+    state.match.leg = "";
+  }
+}
+function buildMatchDisplayName(matchObj) {
+  const m = matchObj || state.match || {};
+  const dateIso = m.date || getTodayIso();
+  const datePart = formatUsDate(dateIso);
+  const teamName = (state.match && state.match.teamName) || (state.selectedTeam || "").trim();
+  const typeLabels = {
+    amichevole: "Amichevole",
+    campionato: "Campionato",
+    torneo: "Torneo",
+    playoff: "Playoff",
+    playout: "Playout",
+    coppa: "Coppa"
+  };
+  const legLabels = {
+    andata: "Andata",
+    ritorno: "Ritorno",
+    "gara-1": "Gara 1",
+    "gara-2": "Gara 2",
+    "gara-3": "Gara 3"
+  };
+  const parts = [
+    datePart || getTodayIso(),
+    teamName || "Squadra",
+    m.opponent || "Match",
+    m.category || "",
+    typeLabels[m.matchType] || m.matchType || "",
+    legLabels[m.leg] || m.leg || ""
+  ].filter(Boolean);
+  return parts.join(" - ") || "Match";
+}
 
 function applyTheme(theme) {
   const next = theme === "light" ? "light" : "dark";
@@ -150,7 +209,9 @@ function loadState() {
     state.rotation = parsed.rotation || 1;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
+    state.savedMatches = parsed.savedMatches || {};
     state.selectedTeam = parsed.selectedTeam || "";
+    state.selectedMatch = parsed.selectedMatch || "";
     state.metricsConfig = parsed.metricsConfig || {};
     state.video =
       parsed.video ||
@@ -169,21 +230,28 @@ function loadState() {
     state.autoRotate = parsed.autoRotate !== false;
     state.autoRotatePending = false;
     state.pointRules = parsed.pointRules || state.pointRules || {};
+    ensureMatchDefaults();
     syncPlayerNumbers(state.players || []);
     cleanLiberos();
     ensureMetricsConfigDefaults();
     ensurePointRulesDefaults();
     migrateTeamsToPersistent();
+    migrateMatchesToPersistent();
     syncTeamsFromStorage();
+    syncMatchesFromStorage();
   } catch (e) {
     logError("Error loading state", e);
   }
   syncTeamsFromStorage();
+  syncMatchesFromStorage();
 }
 function saveState() {
   try {
     syncTeamsFromStorage();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!isLoadingMatch) {
+      persistCurrentMatch();
+    }
   } catch (e) {
     logError("Error saving state", e);
   }
@@ -509,17 +577,23 @@ function syncCurrentSetUI(value) {
   }
 }
 function applyMatchInfoToUI() {
+  ensureMatchDefaults();
   elOpponent.value = state.match.opponent || "";
   elCategory.value = state.match.category || "";
   elDate.value = state.match.date || "";
-  elNotes.value = state.match.notes || "";
+  if (elMatchType) elMatchType.value = state.match.matchType || "amichevole";
+  if (elLeg) elLeg.value = state.match.leg || "";
   syncCurrentSetUI(state.currentSet || 1);
 }
 function saveMatchInfoFromUI() {
   state.match.opponent = elOpponent.value.trim();
   state.match.category = elCategory.value.trim();
-  state.match.date = elDate.value;
-  state.match.notes = elNotes.value.trim();
+  state.match.date = elDate.value || getTodayIso();
+  if (elDate && !elDate.value) {
+    elDate.value = state.match.date;
+  }
+  state.match.matchType = (elMatchType && elMatchType.value) || "amichevole";
+  state.match.leg = (elLeg && elLeg.value) || "";
   const setValue = (elCurrentSetFloating && elCurrentSetFloating.value) || (elCurrentSet && elCurrentSet.value) || 1;
   setCurrentSet(setValue, { save: false });
   saveState();
@@ -657,6 +731,60 @@ function migrateTeamsToPersistent() {
 function syncTeamsFromStorage() {
   state.savedTeams = loadTeamsMapFromStorage();
 }
+function getMatchStorageKey(name) {
+  return MATCH_PREFIX + name;
+}
+function listMatchesFromStorage() {
+  return Object.keys(localStorage)
+    .filter(k => k.startsWith(MATCH_PREFIX))
+    .map(k => k.replace(MATCH_PREFIX, ""));
+}
+function loadMatchFromStorage(name) {
+  if (!name) return null;
+  try {
+    const raw = localStorage.getItem(getMatchStorageKey(name));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    logError("Error loading match " + name, e);
+    return null;
+  }
+}
+function saveMatchToStorage(name, data) {
+  if (!name) return;
+  try {
+    localStorage.setItem(getMatchStorageKey(name), JSON.stringify(data));
+  } catch (e) {
+    logError("Error saving match " + name, e);
+  }
+}
+function deleteMatchFromStorage(name) {
+  if (!name) return;
+  try {
+    localStorage.removeItem(getMatchStorageKey(name));
+  } catch (e) {
+    logError("Error deleting match " + name, e);
+  }
+}
+function loadMatchesMapFromStorage() {
+  const map = {};
+  listMatchesFromStorage().forEach(name => {
+    const data = loadMatchFromStorage(name);
+    if (data) map[name] = data;
+  });
+  return map;
+}
+function migrateMatchesToPersistent() {
+  if (!state.savedMatches || Object.keys(state.savedMatches).length === 0) return;
+  Object.entries(state.savedMatches).forEach(([name, data]) => {
+    if (!localStorage.getItem(getMatchStorageKey(name))) {
+      saveMatchToStorage(name, data);
+    }
+  });
+}
+function syncMatchesFromStorage() {
+  state.savedMatches = loadMatchesMapFromStorage();
+}
 function renderTeamsSelect() {
   if (!elTeamsSelect) return;
   syncTeamsFromStorage();
@@ -681,6 +809,31 @@ function renderTeamsSelect() {
     state.selectedTeam = "";
   }
   updateTeamButtonsState();
+}
+function renderMatchesSelect() {
+  if (!elSavedMatchesSelect) return;
+  syncMatchesFromStorage();
+  const names = Object.keys(state.savedMatches || {});
+  const prev = elSavedMatchesSelect.value || state.selectedMatch || "";
+  elSavedMatchesSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Nuovo match (vuoto)";
+  elSavedMatchesSelect.appendChild(placeholder);
+  names.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    elSavedMatchesSelect.appendChild(opt);
+  });
+  if (prev && names.includes(prev)) {
+    elSavedMatchesSelect.value = prev;
+    state.selectedMatch = prev;
+  } else {
+    elSavedMatchesSelect.value = "";
+    state.selectedMatch = "";
+  }
+  updateMatchButtonsState();
 }
 function getCurrentTeamPayload(name = "") {
   const safeName = (name || state.selectedTeam || state.match.opponent || "squadra").trim();
@@ -724,6 +877,104 @@ function deleteSelectedTeam() {
   syncTeamsFromStorage();
   state.selectedTeam = "";
   renderTeamsSelect();
+}
+function getCurrentMatchPayload(name = "") {
+  const safeName = (name || state.selectedMatch || state.match.opponent || "match").trim();
+  const payload = buildMatchExportPayload();
+  payload.name = safeName;
+  return payload;
+}
+function saveCurrentMatch() {
+  persistCurrentMatch();
+}
+function applyMatchPayload(payload, opts = {}) {
+  if (!payload || !payload.state) return;
+  applyImportedMatch(payload.state, { silent: opts.silent });
+  state.selectedMatch = opts.selectedName || payload.name || "";
+  saveState();
+  renderMatchesSelect();
+}
+function loadSelectedMatch() {
+  if (!elSavedMatchesSelect) return;
+  const name = elSavedMatchesSelect.value;
+  if (!name) {
+    const ok =
+      !state.events || state.events.length === 0
+        ? true
+        : confirm("Creare un nuovo match? I dati correnti verranno azzerati.");
+    if (!ok) {
+      renderMatchesSelect();
+      return;
+    }
+    state.selectedMatch = generateMatchName();
+    resetMatchState();
+    persistCurrentMatch();
+    return;
+  }
+  const data = loadMatchFromStorage(name);
+  if (!data) {
+    alert("Match non trovato o corrotto.");
+    return;
+  }
+  isLoadingMatch = true;
+  applyMatchPayload(data, { selectedName: name, silent: true });
+  isLoadingMatch = false;
+}
+function deleteSelectedMatch() {
+  if (!elSavedMatchesSelect) return;
+  const name = elSavedMatchesSelect.value;
+  if (!name) return;
+  const ok = confirm('Eliminare il match "' + name + '"?');
+  if (!ok) return;
+  deleteMatchFromStorage(name);
+  syncMatchesFromStorage();
+  state.selectedMatch = "";
+  renderMatchesSelect();
+}
+function renameSelectedMatch() {
+  // intentionally no-op: naming is automatic from match info
+}
+function resetMatchState() {
+  state.match = {
+    opponent: "",
+    category: "",
+    date: getTodayIso(),
+    leg: "",
+    matchType: "amichevole"
+  };
+  state.events = [];
+  state.stats = {};
+  state.court = Array.from({ length: 6 }, () => ({ main: "" }));
+  state.rotation = 1;
+  state.currentSet = 1;
+  state.autoRotatePending = false;
+  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  state.video.offsetSeconds = 0;
+  state.video.youtubeId = "";
+  state.video.youtubeUrl = "";
+  if (typeof clearCachedLocalVideo === "function") {
+    clearCachedLocalVideo();
+  }
+  if (typeof ytPlayer !== "undefined" && ytPlayer && ytPlayer.stopVideo) {
+    ytPlayer.stopVideo();
+  }
+  if (typeof elAnalysisVideo !== "undefined" && elAnalysisVideo) {
+    elAnalysisVideo.pause();
+    elAnalysisVideo.currentTime = 0;
+  }
+  if (typeof elYoutubeFrame !== "undefined" && elYoutubeFrame) {
+    elYoutubeFrame.src = "";
+    elYoutubeFrame.style.display = "none";
+  }
+  initStats();
+  saveState();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  updateRotationDisplay();
+  applyMatchInfoToUI();
+  renderMatchesSelect();
 }
 function renameSelectedTeam() {
   if (!elTeamsSelect) return;
@@ -1017,6 +1268,33 @@ function updateTeamButtonsState() {
     elBtnRenameTeam.disabled = !selected;
   }
 }
+function updateMatchButtonsState() {
+  if (!elSavedMatchesSelect) return;
+  const selected = elSavedMatchesSelect.value || "";
+  if (elBtnDeleteMatch) {
+    elBtnDeleteMatch.disabled = !selected;
+  }
+}
+function generateMatchName(base = "") {
+  if (base) return base;
+  return buildMatchDisplayName(state.match);
+}
+function persistCurrentMatch() {
+  if (typeof buildMatchExportPayload !== "function") return;
+  state.savedMatches = state.savedMatches || {};
+  const desiredName = generateMatchName(state.selectedMatch);
+  const currentName = state.selectedMatch || desiredName;
+  const payload = getCurrentMatchPayload(desiredName);
+  if (currentName && currentName !== desiredName && state.savedMatches[currentName]) {
+    delete state.savedMatches[currentName];
+    deleteMatchFromStorage(currentName);
+  }
+  state.selectedMatch = desiredName;
+  state.savedMatches[desiredName] = payload;
+  saveMatchToStorage(desiredName, payload);
+  updateMatchButtonsState();
+  renderMatchesSelect();
+}
 function buildTemplateNumbers() {
   const numbers = {};
   TEMPLATE_TEAM.players.forEach((name, idx) => {
@@ -1211,7 +1489,20 @@ function renderMetricsConfig() {
   const colRight = document.createElement("div");
   colRight.className = "metric-col";
   const colPoints = document.createElement("div");
-  colPoints.className = "metric-col";
+  colPoints.className = "metric-col metrics-points";
+  const buildMetricToggle = (tone, active, code, onClick) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    let cls = "metric-toggle";
+    if (tone) cls += " code-" + tone;
+    if (active) cls += " active";
+    btn.className = cls;
+    btn.textContent = code;
+    if (typeof onClick === "function") {
+      btn.addEventListener("click", onClick);
+    }
+    return btn;
+  };
   const makeRow = rowMeta => {
     const row = document.createElement("div");
     row.className = "metric-row";
@@ -1230,23 +1521,16 @@ function renderMetricsConfig() {
         row.appendChild(btn);
       } else {
         SETTINGS_RESULT_CODES.forEach(code => {
-          const btn = document.createElement("button");
-          btn.type = "button";
           const active =
             rowMeta.key === "activeCodes"
               ? state.metricsConfig[skill.id].activeCodes.includes(code)
               : state.metricsConfig[skill.id][rowMeta.key].includes(code);
           const tone = getCodeTone(skill.id, code);
-          let cls = "metric-toggle";
-          if (active) cls += " active code-" + tone;
-          btn.className = cls;
-          btn.textContent = code;
-          if (rowMeta.key === "activeCodes") {
-            btn.addEventListener("click", () => toggleActiveCode(skill.id, code));
-          } else {
-            btn.addEventListener("click", () => toggleMetricAssignment(skill.id, rowMeta.key, code));
-          }
-          row.appendChild(btn);
+          const handler =
+            rowMeta.key === "activeCodes"
+              ? () => toggleActiveCode(skill.id, code)
+              : () => toggleMetricAssignment(skill.id, rowMeta.key, code);
+          row.appendChild(buildMetricToggle(tone, active, code, handler));
         });
       }
       return row;
@@ -1276,14 +1560,8 @@ function renderMetricsConfig() {
               ? pointCfg.against.includes(code)
               : !pointCfg.for.includes(code) && !pointCfg.against.includes(code);
         const tone = meta.key === "for" ? "positive" : meta.key === "against" ? "negative" : "neutral";
-        let cls = "metric-toggle code-" + tone;
-        if (active) cls += " active";
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = cls;
-        btn.textContent = code;
-        btn.addEventListener("click", () => togglePointRule(skill.id, meta.key, code));
-        row.appendChild(btn);
+        const handler = () => togglePointRule(skill.id, meta.key, code);
+        row.appendChild(buildMetricToggle(tone, active, code, handler));
       });
       return row;
     };

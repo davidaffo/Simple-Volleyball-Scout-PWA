@@ -40,6 +40,8 @@ const METRIC_DEFAULTS = {
 const PERSISTENT_DB_NAME = "Data";
 const TEAM_STORE_NAME = "Teams";
 const TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + TEAM_STORE_NAME + "/";
+const MATCH_STORE_NAME = "Matches";
+const MATCH_PREFIX = PERSISTENT_DB_NAME + "/" + MATCH_STORE_NAME + "/";
 const TEMPLATE_TEAM = {
   players: [
     "Palleggiatore 1",
@@ -86,7 +88,9 @@ let state = {
   rotation: 1,
   liberos: [],
   savedTeams: {},
+  savedMatches: {},
   selectedTeam: "",
+  selectedMatch: "",
   metricsConfig: {},
   pointRules: {},
   autoRotate: true,
@@ -153,7 +157,6 @@ function logError(context, err) {
 const elOpponent = document.getElementById("match-opponent");
 const elCategory = document.getElementById("match-category");
 const elDate = document.getElementById("match-date");
-const elNotes = document.getElementById("match-notes");
 const elLeg = document.getElementById("match-leg");
 const elMatchType = document.getElementById("match-type");
 const elCurrentSet = document.getElementById("current-set");

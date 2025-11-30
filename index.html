@@ -41,8 +41,27 @@
           <input id="match-date" type="date" />
         </div>
         <div class="col">
-          <label for="match-notes">Note</label>
-          <input id="match-notes" type="text" />
+          <label for="match-type">Tipo partita</label>
+          <select id="match-type">
+            <option value="amichevole">Amichevole</option>
+            <option value="campionato">Campionato</option>
+            <option value="torneo">Torneo</option>
+            <option value="playoff">Playoff</option>
+            <option value="playout">Playout</option>
+            <option value="coppa">Coppa</option>
+            <option value="">Altro</option>
+          </select>
+        </div>
+        <div class="col">
+          <label for="match-leg">Turno</label>
+          <select id="match-leg">
+            <option value="">-</option>
+            <option value="andata">Andata</option>
+            <option value="ritorno">Ritorno</option>
+            <option value="gara-1">Gara 1</option>
+            <option value="gara-2">Gara 2</option>
+            <option value="gara-3">Gara 3</option>
+          </select>
         </div>
         <div class="col">
           <label>Tema</label>
@@ -53,9 +72,6 @@
         </div>
       </div>
       <div class="controls-row info-controls">
-        <div class="col buttons-right">
-          <button id="btn-save-info" class="secondary">Salva info</button>
-        </div>
       </div>
     </div>
     <div class="section">
@@ -112,7 +128,7 @@ Bianchi 18"></textarea>
           <p class="section-note">Positività = positivi / totali · Efficienza = (positivi - negativi) / totali · Perfezione = # / totali.</p>
           <div class="controls-row metrics-actions">
             <button id="btn-reset-codes" class="secondary">Riattiva tutte le valutazioni</button>
-            <button id="btn-reset-metrics" class="secondary">Ripristina criteri di default</button>
+            <button id="btn-reset-metrics" class="secondary">Ripristina criteri calcolo efficienza</button>
             <button id="btn-reset-points" class="secondary">Ripristina punti default</button>
           </div>
           <div id="metrics-config" class="metrics-config"></div>
@@ -126,6 +142,26 @@ Bianchi 18"></textarea>
         <button id="btn-export-match" class="secondary">Esporta match</button>
         <button id="btn-import-match" class="secondary">Importa match</button>
         <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
+      </div>
+      <div class="controls-row">
+        <div class="col">
+          <label for="saved-matches">Match salvati</label>
+          <select id="saved-matches">
+            <option value="">Nuovo match (vuoto)</option>
+          </select>
+        </div>
+        <div class="col col-auto">
+          <label class="spacer-label">&nbsp;</label>
+          <div class="buttons-right">
+            <button id="btn-delete-match" class="danger">Elimina</button>
+          </div>
+        </div>
+      </div>
+      <div class="controls-row">
+        <button id="btn-export-db" class="secondary">Esporta database completo</button>
+        <button id="btn-import-db" class="secondary">Importa database</button>
+        <input id="db-file-input" type="file" accept="application/json,text/plain" hidden />
+        <p class="section-note">Backup di tutte le impostazioni, squadre e match attuale in un unico file.</p>
       </div>
     </div>
   </div>

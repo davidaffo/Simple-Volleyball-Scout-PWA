@@ -2019,13 +2019,17 @@ function buildCsvString() {
   });
   return lines.join("\n");
 }
+function safeMatchSlug() {
+  const datePart = (state.match && state.match.date) || "";
+  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
+  return (datePart ? datePart + "_" : "") + opponentSlug;
+}
 function downloadCsv(csvText) {
   const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
   a.href = url;
-  a.download = "scout_" + opponentSlug + ".csv";
+  a.download = "scout_" + safeMatchSlug() + ".csv";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -2126,8 +2130,7 @@ async function captureAnalysisAsPdf() {
     }
     pdf.addImage(imgData, "PNG", margin, margin, renderWidth, renderHeight);
     const blob = pdf.output("blob");
-    const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
-    const fileName = "analisi_" + opponentSlug + ".pdf";
+    const fileName = "analisi_" + safeMatchSlug() + ".pdf";
     downloadBlob(blob, fileName);
   } finally {
     document.body.classList.remove("pdf-capture");
@@ -2154,18 +2157,29 @@ function buildMatchExportPayload() {
       metricsConfig: state.metricsConfig,
       savedTeams: state.savedTeams,
       selectedTeam: state.selectedTeam,
-      video: state.video
+      video: state.video,
+      pointRules: state.pointRules,
+      autoRotate: state.autoRotate
     }
   };
+}
+function buildDatabaseBackupPayload() {
+  const payload = buildMatchExportPayload();
+  payload.kind = "database-backup";
+  payload.savedAt = payload.exportedAt;
+  payload.state.savedMatches = loadMatchesMapFromStorage();
+  payload.state.selectedMatch = state.selectedMatch || "";
+  return payload;
 }
 async function exportMatchToFile() {
   const payload = buildMatchExportPayload();
   const json = JSON.stringify(payload, null, 2);
-  const opponentSlug = (state.match.opponent || "match").replace(/\s+/g, "_");
+  const opponentSlug = safeMatchSlug();
   const blob = new Blob([json], { type: "application/json" });
   downloadBlob(blob, "match_" + opponentSlug + ".json");
 }
-function applyImportedMatch(nextState) {
+function applyImportedMatch(nextState, options = {}) {
+  const silent = options && options.silent;
   const fallback = () => alert("File match non valido.");
   if (!nextState || !nextState.players || !nextState.events) {
     fallback();
@@ -2202,7 +2216,25 @@ function applyImportedMatch(nextState) {
   recalcAllStatsAndUpdateUI();
   renderEventsLog();
   renderTeamsSelect();
-  alert("Match importato correttamente.");
+  if (!silent) {
+    alert("Match importato correttamente.");
+  }
+}
+function applyImportedDatabase(nextState) {
+  if (!nextState || !nextState.state) {
+    alert("File database non valido.");
+    return;
+  }
+  applyImportedMatch(nextState.state);
+  if (nextState.state.savedMatches && typeof nextState.state.savedMatches === "object") {
+    Object.entries(nextState.state.savedMatches).forEach(([name, data]) => {
+      saveMatchToStorage(name, data);
+    });
+    syncMatchesFromStorage();
+    state.selectedMatch = nextState.state.selectedMatch || "";
+    renderMatchesSelect();
+  }
+  alert("Database importato correttamente.");
 }
 function handleImportMatchFile(file) {
   if (!file) return;
@@ -2218,6 +2250,34 @@ function handleImportMatchFile(file) {
       alert("Errore durante l'import del match.");
     } finally {
       if (elMatchFileInput) elMatchFileInput.value = "";
+    }
+  };
+  reader.readAsText(file);
+}
+function exportDatabaseToFile() {
+  const payload = buildDatabaseBackupPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const name = safeMatchSlug() || "database";
+  const blob = new Blob([json], { type: "application/json" });
+  downloadBlob(blob, "backup_" + name + ".json");
+}
+function handleImportDatabaseFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const txt = (e.target && e.target.result) || "";
+      const parsed = JSON.parse(txt);
+      if (parsed && parsed.app === "simple-volley-scout" && parsed.state) {
+        applyImportedDatabase(parsed);
+      } else {
+        applyImportedDatabase({ state: parsed });
+      }
+    } catch (err) {
+      console.error("Import database error", err);
+      alert("Errore durante l'import del database.");
+    } finally {
+      if (elDbFileInput) elDbFileInput.value = "";
     }
   };
   reader.readAsText(file);
@@ -2697,6 +2757,7 @@ function initSwipeTabs() {
   document.addEventListener("touchend", onEnd, { passive: true });
 }
 function init() {
+  isLoadingMatch = true;
   initTabs();
   initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
@@ -2715,6 +2776,7 @@ function init() {
   renderLiberoTags();
   renderMetricsConfig();
   renderTeamsSelect();
+  renderMatchesSelect();
   renderLiveScore();
   renderPlayers();
   if (!state.players || state.players.length === 0) {
@@ -2739,12 +2801,12 @@ function init() {
     if (!select) return;
     select.addEventListener("change", () => setCurrentSet(select.value));
   });
-  if (elBtnSaveInfo) {
-    elBtnSaveInfo.addEventListener("click", () => {
-      saveMatchInfoFromUI();
-      alert("Info partita salvate.");
-    });
-  }
+  [elOpponent, elCategory, elDate, elLeg, elMatchType].forEach(input => {
+    if (!input) return;
+    const handler = () => saveMatchInfoFromUI();
+    input.addEventListener("change", handler);
+    input.addEventListener("blur", handler);
+  });
   if (elThemeToggleDark && elThemeToggleLight) {
     elThemeToggleDark.addEventListener("click", () => {
       applyTheme("dark");
@@ -2813,8 +2875,31 @@ function init() {
       if (file) importTeamFromFile(file);
     });
   }
+  if (elBtnDeleteMatch) {
+    elBtnDeleteMatch.addEventListener("click", deleteSelectedMatch);
+  }
+  if (elBtnExportDb) {
+    elBtnExportDb.addEventListener("click", exportDatabaseToFile);
+  }
+  if (elBtnImportDb && elDbFileInput) {
+    elBtnImportDb.addEventListener("click", () => {
+      elDbFileInput.value = "";
+      elDbFileInput.click();
+    });
+    elDbFileInput.addEventListener("change", e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (file) handleImportDatabaseFile(file);
+    });
+  }
   if (elTeamsSelect) {
     elTeamsSelect.addEventListener("change", handleTeamSelectChange);
+  }
+  if (elSavedMatchesSelect) {
+    elSavedMatchesSelect.addEventListener("change", () => {
+      updateMatchButtonsState();
+      loadSelectedMatch();
+    });
   }
   if (elBtnRotateCw) {
     elBtnRotateCw.addEventListener("click", () => rotateCourt("cw"));
@@ -3066,5 +3151,6 @@ function init() {
   renderVideoAnalysis();
   attachModalCloseHandlers();
   registerServiceWorker();
+  isLoadingMatch = false;
 }
 document.addEventListener("DOMContentLoaded", init);
