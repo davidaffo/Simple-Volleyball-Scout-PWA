@@ -72,6 +72,7 @@ const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnCopyCsv = document.getElementById("btn-copy-csv");
 const elBtnExportPdf = document.getElementById("btn-export-pdf");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
+const elBtnShareMatchLink = document.getElementById("btn-share-match-link");
 const elBtnExportMatch = document.getElementById("btn-export-match");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");

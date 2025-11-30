@@ -2178,6 +2178,54 @@ async function exportMatchToFile() {
   const blob = new Blob([json], { type: "application/json" });
   downloadBlob(blob, "match_" + opponentSlug + ".json");
 }
+function encodePayloadForLink(payload) {
+  try {
+    const json = JSON.stringify(payload);
+    return btoa(unescape(encodeURIComponent(json)));
+  } catch (err) {
+    logError("encode-match-link", err);
+    return "";
+  }
+}
+function decodePayloadFromLink(encoded) {
+  if (!encoded) return null;
+  try {
+    const json = decodeURIComponent(escape(atob(encoded)));
+    return JSON.parse(json);
+  } catch (err) {
+    logError("decode-match-link", err);
+    return null;
+  }
+}
+function buildMatchShareUrl() {
+  if (typeof window === "undefined") return "";
+  const payload = buildMatchExportPayload();
+  const encoded = encodePayloadForLink(payload);
+  if (!encoded) return "";
+  const url = new URL(window.location.href);
+  url.searchParams.set("match", encoded);
+  url.hash = "";
+  return url.toString();
+}
+async function shareMatchLink() {
+  const url = buildMatchShareUrl();
+  if (!url) {
+    alert("Impossibile generare il link del match.");
+    return;
+  }
+  const shared = await shareText("Link partita Simple Volleyball Scout", url);
+  if (shared) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("Link partita copiato negli appunti.");
+      return;
+    } catch (err) {
+      logError("copy-match-link", err);
+    }
+  }
+  window.prompt("Copia il link seguente", url);
+}
 function applyImportedMatch(nextState, options = {}) {
   const silent = options && options.silent;
   const fallback = () => alert("File match non valido.");
@@ -2253,6 +2301,56 @@ function handleImportMatchFile(file) {
     }
   };
   reader.readAsText(file);
+}
+function readMatchLinkParam() {
+  if (typeof window === "undefined") return "";
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("match")) {
+      return url.searchParams.get("match") || "";
+    }
+    const hash = (url.hash || "").replace(/^#/, "");
+    if (hash.startsWith("match=")) {
+      return hash.slice("match=".length);
+    }
+    const idx = hash.indexOf("match=");
+    if (idx !== -1) {
+      return hash.slice(idx + "match=".length);
+    }
+    return "";
+  } catch (err) {
+    logError("read-match-link", err);
+    return "";
+  }
+}
+function clearMatchLinkParam() {
+  if (typeof window === "undefined" || !window.history || !window.location) return;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("match");
+    if (url.hash && url.hash.includes("match=")) {
+      url.hash = "";
+    }
+    const next = url.pathname + url.search + url.hash;
+    window.history.replaceState({}, document.title, next);
+  } catch (err) {
+    logError("clear-match-link", err);
+  }
+}
+function maybeImportMatchFromUrl() {
+  const encoded = readMatchLinkParam();
+  if (!encoded) return { imported: false };
+  const parsed = decodePayloadFromLink(encoded);
+  if (!parsed) {
+    alert("Link partita non valido o corrotto.");
+    clearMatchLinkParam();
+    return { imported: false };
+  }
+  const nextState = parsed.state || parsed;
+  applyImportedMatch(nextState, { silent: true });
+  state.selectedMatch = buildMatchDisplayName(nextState.match || state.match);
+  clearMatchLinkParam();
+  return { imported: true, name: state.selectedMatch };
 }
 function exportDatabaseToFile() {
   const payload = buildDatabaseBackupPayload();
@@ -2762,6 +2860,7 @@ function init() {
   initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
   loadState();
+  const linkImport = maybeImportMatchFromUrl();
   renderYoutubePlayer();
   restoreCachedLocalVideo();
   restoreYoutubeFromState();
@@ -2978,6 +3077,7 @@ function init() {
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
+  if (elBtnShareMatchLink) elBtnShareMatchLink.addEventListener("click", shareMatchLink);
   if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
   if (elBtnImportMatch && elMatchFileInput) {
     elBtnImportMatch.addEventListener("click", () => elMatchFileInput.click());
@@ -3152,5 +3252,13 @@ function init() {
   attachModalCloseHandlers();
   registerServiceWorker();
   isLoadingMatch = false;
+  if (linkImport && linkImport.imported) {
+    saveState();
+    if (linkImport.name) {
+      alert("Match importato dal link: " + linkImport.name);
+    } else {
+      alert("Match importato dal link.");
+    }
+  }
 }
 document.addEventListener("DOMContentLoaded", init);
