@@ -10,6 +10,7 @@ let ytApiPromise = null;
 let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
+let pendingYoutubeSeek = null;
 function renderSkillChoice(playerIdx, playerName) {
   if (!elSkillModalBody) return;
   modalMode = "skill";
@@ -717,13 +718,14 @@ function parseYoutubeId(url) {
     return "";
   }
 }
-function buildYoutubeEmbedSrc(id, startSeconds = 0, enableApi = false) {
+function buildYoutubeEmbedSrc(id, startSeconds = 0, enableApi = false, autoplay = false) {
   const start = Math.max(0, Math.floor(startSeconds));
   const origin =
     window.location && window.location.origin && window.location.origin.startsWith("http")
       ? "&origin=" + encodeURIComponent(window.location.origin)
       : "";
   const apiParam = enableApi ? "1" : "0";
+  const autoplayParam = autoplay ? "&autoplay=1" : "";
   return (
     "https://www.youtube.com/embed/" +
     id +
@@ -731,7 +733,8 @@ function buildYoutubeEmbedSrc(id, startSeconds = 0, enableApi = false) {
     apiParam +
     "&rel=0&playsinline=1&start=" +
     start +
-    origin
+    origin +
+    autoplayParam
   );
 }
 function loadYoutubeApi() {
@@ -755,6 +758,21 @@ function loadYoutubeApi() {
   });
   return ytApiPromise;
 }
+function applyPendingYoutubeSeek() {
+  if (!pendingYoutubeSeek || !ytPlayerReady || !ytPlayer || typeof ytPlayer.seekTo !== "function") {
+    return;
+  }
+  const { time, autoplay } = pendingYoutubeSeek;
+  ytPlayer.seekTo(Math.max(0, time), true);
+  if (autoplay && typeof ytPlayer.playVideo === "function") {
+    ytPlayer.playVideo();
+  }
+  pendingYoutubeSeek = null;
+}
+function queueYoutubeSeek(time, autoplay = true) {
+  pendingYoutubeSeek = { time, autoplay };
+  applyPendingYoutubeSeek();
+}
 async function renderYoutubePlayer(startSeconds = 0) {
   const id = state.video && state.video.youtubeId;
   const hasYoutube = !!id;
@@ -772,6 +790,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
     elYoutubeFrame.src = "";
     ytPlayerReady = false;
     currentYoutubeId = "";
+    pendingYoutubeSeek = null;
     return;
   }
   const start = Math.max(0, startSeconds || 0);
@@ -786,6 +805,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
     if (ytPlayer) {
       ytPlayer.loadVideoById(id, start);
       ytPlayerReady = true;
+      applyPendingYoutubeSeek();
       return;
     }
     ytPlayer = new YT.Player("youtube-frame", {
@@ -800,12 +820,16 @@ async function renderYoutubePlayer(startSeconds = 0) {
       events: {
         onReady: () => {
           ytPlayerReady = true;
-          if (start) ytPlayer.seekTo(start, true);
+          applyPendingYoutubeSeek();
+          if (start && !pendingYoutubeSeek) {
+            ytPlayer.seekTo(start, true);
+          }
         },
         onError: () => {
           ytPlayerReady = false;
           youtubeFallback = true;
           ytPlayer = null;
+          pendingYoutubeSeek = null;
           if (elYoutubeFrame) {
             elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
           }
@@ -814,6 +838,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
     });
   } catch (_) {
     youtubeFallback = true;
+    pendingYoutubeSeek = null;
     elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
   }
 }
@@ -854,6 +879,7 @@ function clearYoutubeSource() {
   ytPlayer = null;
   ytPlayerReady = false;
   youtubeFallback = false;
+  pendingYoutubeSeek = null;
   if (elYoutubeFrame) {
     elYoutubeFrame.src = "";
     elYoutubeFrame.style.display = "none";
@@ -1102,13 +1128,29 @@ function seekVideoToTime(seconds) {
   if (!isFinite(seconds)) return;
   const target = Math.max(0, seconds);
   if (state.video && state.video.youtubeId) {
-    if (ytPlayer && ytPlayerReady && typeof ytPlayer.seekTo === "function") {
-      ytPlayer.seekTo(target, true);
-      if (typeof ytPlayer.playVideo === "function") {
-        ytPlayer.playVideo();
-      }
+    if (youtubeFallback && elYoutubeFrame) {
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, false, true);
+      return;
+    }
+    if (ytPlayer && typeof ytPlayer.seekTo === "function") {
+      queueYoutubeSeek(target, true);
     } else if (elYoutubeFrame) {
-      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, !youtubeFallback);
+      if (elYoutubeFrame.contentWindow) {
+        try {
+          elYoutubeFrame.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+            "*"
+          );
+          elYoutubeFrame.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+            "*"
+          );
+          return;
+        } catch (_) {
+          // ignore postMessage errors and fall back to src update
+        }
+      }
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, true);
     }
     return;
   }

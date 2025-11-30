@@ -1670,17 +1670,18 @@ body[data-theme="light"] .rotation-table td {
 }
 .video-analysis__grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1.2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(420px, 1.35fr) minmax(360px, 1fr);
   gap: 0.8rem;
-  align-items: start;
+  align-items: stretch;
 }
 .video-skills {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  height: 100%;
 }
 .video-table-wrapper {
-  max-height: 380px;
+  max-height: 70vh;
   overflow: auto;
 }
 .video-skills-table {
@@ -1753,21 +1754,25 @@ body[data-theme="light"] .rotation-table td {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  align-self: stretch;
 }
 .video-player-wrap video {
   width: 100%;
   border-radius: 0.8rem;
-  background: #0b0f1a;
-  border: 1px solid #111827;
-  min-height: 260px;
+  background: #000;
+  border: none;
+  min-height: 320px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
 }
 .youtube-frame {
   display: none;
   width: 100%;
-  min-height: 260px;
+  min-height: 320px;
   border: 0;
   border-radius: 0.8rem;
-  background: #0b0f1a;
+  background: #000;
+  aspect-ratio: 16 / 9;
 }
 body[data-theme="light"] .video-skills-table th,
 body[data-theme="light"] .video-skills-table td {
