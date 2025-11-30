@@ -96,6 +96,7 @@ const elMobileLineupList = document.getElementById("mobile-lineup-list");
 const elMiniCourt = document.getElementById("mini-court");
 const elMobileLineupConfirm = document.getElementById("mobile-lineup-confirm");
 const elAggTableBody = document.getElementById("agg-table-body");
+const elAggSecondBody = document.getElementById("agg-second-body");
 const elRotationTableBody = document.getElementById("rotation-table-body");
 const elLiveScore = document.getElementById("live-score");
 const elLiveScoreFloating = document.getElementById("live-score-floating");
@@ -118,7 +119,10 @@ const tabPanels = document.querySelectorAll(".tab-panel");
 const tabDots = document.querySelectorAll(".tab-dot");
 const elToggleLogMobile = document.getElementById("toggle-log-mobile");
 const elLogSection = document.querySelector("[data-log-section]");
+const elAggTabButtons = document.querySelectorAll("[data-agg-tab-target]");
+const elAggSubPanels = document.querySelectorAll("[data-agg-tab]");
 let activeTab = "info";
+let activeAggTab = "summary";
 function getTodayIso() {
   const d = new Date();
   const off = d.getTimezoneOffset();
@@ -189,12 +193,12 @@ function applyTheme(theme) {
   }
 }
 const SKILL_COLUMN_MAP = {
-  serve: [1, 2, 3, 4],
-  pass: [5, 6, 7, 8],
-  attack: [9, 10, 11, 12],
-  defense: [13, 14, 15, 16],
-  block: [17, 18, 19, 20],
-  second: [21, 22, 23]
+  serve: [4, 5, 6, 7, 8],
+  pass: [9, 10, 11, 12, 13],
+  attack: [14, 15, 16, 17, 18, 19],
+  block: [20, 21],
+  defense: [22, 23, 24],
+  second: []
 };
 function loadState() {
   try {

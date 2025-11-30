@@ -203,6 +203,7 @@ const elBtnSyncFirstSkill = document.getElementById("btn-sync-first-skill");
 const elYoutubeUrlInput = document.getElementById("youtube-url-input");
 const elBtnLoadYoutube = document.getElementById("btn-load-youtube");
 const elYoutubeFrame = document.getElementById("youtube-frame");
+const elSecondDistribution = document.getElementById("second-distribution");
 const elThemeToggleDark = document.getElementById("theme-dark");
 const elThemeToggleLight = document.getElementById("theme-light");
 let modalMode = "skill";

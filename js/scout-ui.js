@@ -464,6 +464,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     rotation: state.rotation || 1,
     playerIdx: playerIdx,
     playerName: state.players[playerIdx],
+    zone: getCurrentZoneForPlayer(playerIdx),
     skillId: skillId,
     code: code
   };
@@ -506,6 +507,34 @@ function computeMetrics(counts, skillId) {
   const eff = ((effPosCount - negativeCount) / total) * 100;
   const prf = ((counts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
+}
+function emptyCounts() {
+  return { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
+}
+function totalFromCounts(counts) {
+  return RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
+}
+function mergeCounts(target, source) {
+  RESULT_CODES.forEach(code => {
+    target[code] = (target[code] || 0) + (source[code] || 0);
+  });
+}
+function getCurrentZoneForPlayer(playerIdx) {
+  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return null;
+  const name = state.players[playerIdx];
+  if (!state.court || !Array.isArray(state.court)) return null;
+  const slotIdx = state.court.findIndex(
+    slot => slot && (slot.main === name || slot.replaced === name)
+  );
+  if (slotIdx === -1) return null;
+  return slotIdx + 1; // zone numbering 1..6
+}
+function normalizeCounts(raw) {
+  return Object.assign(emptyCounts(), raw || {});
+}
+function formatPercentValue(numerator, denominator) {
+  if (!denominator) return "-";
+  return formatPercent((numerator / denominator) * 100);
 }
 function formatPercent(x) {
   if (x === null || x === undefined || isNaN(x)) return "-";
@@ -1076,6 +1105,27 @@ function createRotationInput(ev, onDone) {
   });
   return input;
 }
+function createZoneInput(ev, onDone) {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = "6";
+  input.placeholder = "1-6";
+  const fallback = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
+  input.value = ev.zone || fallback || "";
+  input.addEventListener("change", () => {
+    const val = parseInt(input.value, 10);
+    if (!isNaN(val) && val >= 1 && val <= 6) {
+      ev.zone = val;
+      refreshAfterVideoEdit(false);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return input;
+}
 function createVideoTimeInput(ev, videoTime, onDone) {
   const input = document.createElement("input");
   input.type = "number";
@@ -1129,15 +1179,22 @@ function renderVideoAnalysis() {
   if (!skillEvents.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.textContent = "Registra alcune skill per vederle qui.";
     tr.appendChild(td);
     elVideoSkillsBody.appendChild(tr);
     return;
   }
+  let updatedZones = false;
   skillEvents.forEach(({ ev }, displayIdx) => {
     const tr = document.createElement("tr");
     const videoTime = computeEventVideoTime(ev, baseMs);
+    const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
+    if ((ev.zone === undefined || ev.zone === null || ev.zone === "") && fallbackZone) {
+      ev.zone = fallbackZone;
+      updatedZones = true;
+    }
+    const zoneDisplay = ev.zone || fallbackZone || "";
     const cells = [
       { text: String(displayIdx + 1) },
       {
@@ -1159,6 +1216,10 @@ function renderVideoAnalysis() {
       {
         text: ev.rotation || "-",
         editable: td => makeEditableCell(td, done => createRotationInput(ev, done))
+      },
+      {
+        text: zoneDisplay ? String(zoneDisplay) : "",
+        editable: td => makeEditableCell(td, done => createZoneInput(ev, done))
       },
       {
         text: formatVideoTimestamp(videoTime),
@@ -1186,6 +1247,9 @@ function renderVideoAnalysis() {
     });
     elVideoSkillsBody.appendChild(tr);
   });
+  if (updatedZones) {
+    saveState();
+  }
 }
 function seekVideoToTime(seconds) {
   if (!isFinite(seconds)) return;
@@ -1369,6 +1433,35 @@ function computeSetScores() {
   const totalFor = sets.reduce((sum, s) => sum + s.for, 0);
   const totalAgainst = sets.reduce((sum, s) => sum + s.against, 0);
   return { sets, totalFor: Math.max(0, totalFor), totalAgainst: Math.max(0, totalAgainst) };
+}
+function computePlayerPointsMap() {
+  const map = {};
+  (state.events || []).forEach(ev => {
+    if (typeof ev.playerIdx !== "number") return;
+    const dir = getPointDirection(ev);
+    if (!dir) return;
+    const val = typeof ev.value === "number" ? ev.value : 1;
+    if (!map[ev.playerIdx]) {
+      map[ev.playerIdx] = { for: 0, against: 0 };
+    }
+    if (dir === "for") {
+      map[ev.playerIdx].for += val;
+    } else if (dir === "against") {
+      map[ev.playerIdx].against += val;
+    }
+  });
+  return map;
+}
+function computePlayerErrorsMap() {
+  const map = {};
+  (state.events || []).forEach(ev => {
+    if (typeof ev.playerIdx !== "number") return;
+    const dir = getPointDirection(ev);
+    if (dir !== "against") return;
+    const val = typeof ev.value === "number" ? ev.value : 1;
+    map[ev.playerIdx] = (map[ev.playerIdx] || 0) + Math.max(0, val);
+  });
+  return map;
 }
 function formatDelta(value) {
   if (value === null || value === undefined || isNaN(value)) return "0";
@@ -1722,6 +1815,7 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
     rotation: rot,
     playerIdx: playerIdx,
     playerName: playerName,
+    zone: playerIdx !== null ? getCurrentZoneForPlayer(playerIdx) : null,
     skillId: "manual",
     code: codeLabel || direction,
     pointDirection: direction,
@@ -1815,174 +1909,358 @@ function renderScoreAndRotations(summary) {
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
   elAggTableBody.innerHTML = "";
+  const summaryAll = computePointsSummary();
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 25;
+    td.colSpan = 26;
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(computePointsSummary());
+    renderScoreAndRotations(summaryAll);
+    renderSecondTable();
+    applyAggColumnsVisibility();
     return;
   }
-  const getCounts = (idx, skillId) => {
-    const base =
-      (state.stats[idx] && state.stats[idx][skillId]) || {
-        "#": 0,
-        "+": 0,
-        "!": 0,
-        "-": 0,
-        "=": 0,
-        "/": 0
-      };
-    return Object.assign({ "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 }, base);
-  };
-  const totalFromCounts = counts =>
-    (counts["#"] || 0) +
-    (counts["+"] || 0) +
-    (counts["!"] || 0) +
-    (counts["-"] || 0) +
-    (counts["="] || 0) +
-    (counts["/"] || 0);
-  const addSkillClassesToRow = rowEl => {
-    if (!rowEl) return;
-    const tds = Array.from(rowEl.children);
-    Object.keys(SKILL_COLUMN_MAP).forEach(skillId => {
-      const idxs = SKILL_COLUMN_MAP[skillId] || [];
-      idxs.forEach(i => {
-        if (tds[i]) {
-          tds[i].classList.add("skill-col", "skill-" + skillId);
-        }
-      });
-    });
-  };
-  const emptyCounts = () => ({ "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 });
+  const playerPoints = computePlayerPointsMap();
+  const playerErrors = computePlayerErrorsMap();
   const totalsBySkill = {
     serve: emptyCounts(),
     pass: emptyCounts(),
     attack: emptyCounts(),
-    defense: emptyCounts(),
     block: emptyCounts(),
-    second: emptyCounts()
+    defense: emptyCounts()
   };
-  const addCounts = (target, source) => {
-    RESULT_CODES.forEach(code => {
-      target[code] = (target[code] || 0) + (source[code] || 0);
-    });
-  };
+  let totalErrors = 0;
   state.players.forEach((name, idx) => {
-    const serveCounts = getCounts(idx, "serve");
-    const passCounts = getCounts(idx, "pass");
-    const attackCounts = getCounts(idx, "attack");
-    const defenseCounts = getCounts(idx, "defense");
-    const blockCounts = getCounts(idx, "block");
-    const secondCounts = getCounts(idx, "second");
+    const serveCounts = normalizeCounts(state.stats[idx] && state.stats[idx].serve);
+    const passCounts = normalizeCounts(state.stats[idx] && state.stats[idx].pass);
+    const attackCounts = normalizeCounts(state.stats[idx] && state.stats[idx].attack);
+    const blockCounts = normalizeCounts(state.stats[idx] && state.stats[idx].block);
+    const defenseCounts = normalizeCounts(state.stats[idx] && state.stats[idx].defense);
 
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
     const attackMetrics = computeMetrics(attackCounts, "attack");
     const defenseMetrics = computeMetrics(defenseCounts, "defense");
-    const blockMetrics = computeMetrics(blockCounts, "block");
-    const secondMetrics = computeMetrics(secondCounts, "second");
 
-    addCounts(totalsBySkill.serve, serveCounts);
-    addCounts(totalsBySkill.pass, passCounts);
-    addCounts(totalsBySkill.attack, attackCounts);
-    addCounts(totalsBySkill.defense, defenseCounts);
-    addCounts(totalsBySkill.block, blockCounts);
-    addCounts(totalsBySkill.second, secondCounts);
+    mergeCounts(totalsBySkill.serve, serveCounts);
+    mergeCounts(totalsBySkill.pass, passCounts);
+    mergeCounts(totalsBySkill.attack, attackCounts);
+    mergeCounts(totalsBySkill.block, blockCounts);
+    mergeCounts(totalsBySkill.defense, defenseCounts);
 
-    const tr = document.createElement("tr");
-    const values = [
-      formatNameWithNumber(name),
+    const points = playerPoints[idx] || { for: 0, against: 0 };
+    const personalErrors = playerErrors[idx] || 0;
+    totalErrors += personalErrors;
+    const attackTotal = totalFromCounts(attackCounts);
+    const row = document.createElement("tr");
+    const cells = [
+      { text: formatNameWithNumber(name) },
+      { text: points.for || 0 },
+      { text: points.against || 0 },
+      { text: formatDelta((points.for || 0) - (points.against || 0)) },
+      { text: personalErrors || 0 },
 
-      totalFromCounts(serveCounts),
-      serveMetrics.negativeCount || 0,
-      serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos),
-      serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff),
+      { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
+      { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
+      { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
+      { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
+      { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
 
-      totalFromCounts(passCounts),
-      passMetrics.negativeCount || 0,
-      passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
-      passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf),
+      { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
+      { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+      { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
+      { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
+      { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
 
-      totalFromCounts(attackCounts),
-      attackMetrics.negativeCount || 0,
-      attackMetrics.pos === null ? "-" : formatPercent(attackMetrics.pos),
-      attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff),
+      { text: attackTotal, className: "skill-col skill-attack" },
+      { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
+      { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
+      { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
+      { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
+      { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
 
-      totalFromCounts(defenseCounts),
-      defenseMetrics.negativeCount || 0,
-      defenseMetrics.pos === null ? "-" : formatPercent(defenseMetrics.pos),
-      defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff),
+      { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
+      { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
 
-      totalFromCounts(blockCounts),
-      blockMetrics.negativeCount || 0,
-      blockMetrics.pos === null ? "-" : formatPercent(blockMetrics.pos),
-      blockMetrics.eff === null ? "-" : formatPercent(blockMetrics.eff),
-
-      totalFromCounts(secondCounts),
-      secondMetrics.pos === null ? "-" : formatPercent(secondMetrics.pos),
-      secondMetrics.prf === null ? "-" : formatPercent(secondMetrics.prf)
+      { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
+      { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+      { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
     ];
-    values.forEach(text => {
+    cells.forEach(cell => {
       const td = document.createElement("td");
-      td.textContent = text;
-      tr.appendChild(td);
+      td.textContent = cell.text;
+      if (cell.className) td.className = cell.className;
+      row.appendChild(td);
     });
-    addSkillClassesToRow(tr);
-    elAggTableBody.appendChild(tr);
+    elAggTableBody.appendChild(row);
   });
   const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
   const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
   const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
-  const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
   const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
-  const secondTotalsMetrics = computeMetrics(totalsBySkill.second, "second");
+  const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
+  const teamAttackTotal = totalFromCounts(totalsBySkill.attack);
   const totalsRow = document.createElement("tr");
   totalsRow.className = "rotation-row total";
-  const totalValues = [
-    "Totale squadra",
+  const totalCells = [
+    { text: "Totale squadra" },
+    { text: summaryAll.totalFor || 0 },
+    { text: summaryAll.totalAgainst || 0 },
+    { text: formatDelta((summaryAll.totalFor || 0) - (summaryAll.totalAgainst || 0)) },
+    { text: totalErrors || 0 },
 
-    totalFromCounts(totalsBySkill.serve),
-    serveTotalsMetrics.negativeCount || 0,
-    serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos),
-    serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff),
+    { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
+    { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
+    { text: totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
+    { text: serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff), className: "skill-col skill-serve" },
+    { text: serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos), className: "skill-col skill-serve" },
 
-    totalFromCounts(totalsBySkill.pass),
-    passTotalsMetrics.negativeCount || 0,
-    passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos),
-    passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf),
+    { text: totalFromCounts(totalsBySkill.pass), className: "skill-col skill-pass" },
+    { text: passTotalsMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+    { text: passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos), className: "skill-col skill-pass" },
+    { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
+    { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
 
-    totalFromCounts(totalsBySkill.attack),
-    attackTotalsMetrics.negativeCount || 0,
-    attackTotalsMetrics.pos === null ? "-" : formatPercent(attackTotalsMetrics.pos),
-    attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff),
+    { text: teamAttackTotal, className: "skill-col skill-attack" },
+    { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
+    { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
+    { text: totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
+    { text: formatPercentValue(totalsBySkill.attack["#"] || 0, teamAttackTotal), className: "skill-col skill-attack" },
+    { text: attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff), className: "skill-col skill-attack" },
 
-    totalFromCounts(totalsBySkill.defense),
-    defenseTotalsMetrics.negativeCount || 0,
-    defenseTotalsMetrics.pos === null ? "-" : formatPercent(defenseTotalsMetrics.pos),
-    defenseTotalsMetrics.eff === null ? "-" : formatPercent(defenseTotalsMetrics.eff),
+    { text: totalFromCounts(totalsBySkill.block), className: "skill-col skill-block" },
+    { text: (totalsBySkill.block["#"] || 0) + (totalsBySkill.block["+"] || 0), className: "skill-col skill-block" },
 
-    totalFromCounts(totalsBySkill.block),
-    blockTotalsMetrics.negativeCount || 0,
-    blockTotalsMetrics.pos === null ? "-" : formatPercent(blockTotalsMetrics.pos),
-    blockTotalsMetrics.eff === null ? "-" : formatPercent(blockTotalsMetrics.eff),
-
-    totalFromCounts(totalsBySkill.second),
-    secondTotalsMetrics.pos === null ? "-" : formatPercent(secondTotalsMetrics.pos),
-    secondTotalsMetrics.prf === null ? "-" : formatPercent(secondTotalsMetrics.prf)
+    { text: totalFromCounts(totalsBySkill.defense), className: "skill-col skill-defense" },
+    { text: defenseTotalsMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+    { text: defenseTotalsMetrics.eff === null ? "-" : formatPercent(defenseTotalsMetrics.eff), className: "skill-col skill-defense" }
   ];
-  totalValues.forEach(text => {
+  totalCells.forEach(cell => {
     const td = document.createElement("td");
-    td.textContent = text;
+    td.textContent = cell.text;
+    if (cell.className) td.className = cell.className;
     totalsRow.appendChild(td);
   });
-  addSkillClassesToRow(totalsRow);
   elAggTableBody.appendChild(totalsRow);
-  const summaryAll = computePointsSummary();
   renderScoreAndRotations(summaryAll);
+  renderSecondTable();
   applyAggColumnsVisibility();
+}
+function renderSecondTable() {
+  if (!elAggSecondBody) return;
+  elAggSecondBody.innerHTML = "";
+  if (!state.players || state.players.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
+    tr.appendChild(td);
+    elAggSecondBody.appendChild(tr);
+    renderSecondDistribution();
+    return;
+  }
+  const totals = emptyCounts();
+  const rows = [];
+  const playersWithSecond = new Set(
+    (state.events || [])
+      .filter(ev => ev && ev.skillId === "second" && typeof ev.playerIdx === "number")
+      .map(ev => ev.playerIdx)
+  );
+  state.players.forEach((name, idx) => {
+    const counts = normalizeCounts(state.stats[idx] && state.stats[idx].second);
+    const total = totalFromCounts(counts);
+    if (total <= 0 && !playersWithSecond.has(idx)) return;
+    mergeCounts(totals, counts);
+    const metrics = computeMetrics(counts, "second");
+    rows.push({
+      name: formatNameWithNumber(name),
+      total,
+      counts,
+      metrics
+    });
+  });
+  if (rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Registra alzate per vedere il dettaglio.";
+    tr.appendChild(td);
+    elAggSecondBody.appendChild(tr);
+    renderSecondDistribution();
+    return;
+  }
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    const cells = [
+      { text: row.name },
+      { text: row.total, className: "skill-col skill-second" },
+      { text: row.counts["#"] || 0, className: "skill-col skill-second" },
+      { text: row.counts["+"] || 0, className: "skill-col skill-second" },
+      { text: row.counts["!"] || 0, className: "skill-col skill-second" },
+      { text: row.counts["-"] || 0, className: "skill-col skill-second" },
+      { text: row.counts["="] || 0, className: "skill-col skill-second" },
+      { text: row.counts["/"] || 0, className: "skill-col skill-second" },
+      { text: row.metrics.pos === null ? "-" : formatPercent(row.metrics.pos), className: "skill-col skill-second" },
+      { text: row.metrics.prf === null ? "-" : formatPercent(row.metrics.prf), className: "skill-col skill-second" },
+      { text: row.metrics.eff === null ? "-" : formatPercent(row.metrics.eff), className: "skill-col skill-second" }
+    ];
+    cells.forEach(cell => {
+      const td = document.createElement("td");
+      td.textContent = cell.text;
+      if (cell.className) td.className = cell.className;
+      tr.appendChild(td);
+    });
+    elAggSecondBody.appendChild(tr);
+  });
+  const totalMetrics = computeMetrics(totals, "second");
+  const totalsRow = document.createElement("tr");
+  totalsRow.className = "rotation-row total";
+  const totalCells = [
+    { text: "Totale alzate" },
+    { text: totalFromCounts(totals), className: "skill-col skill-second" },
+    { text: totals["#"] || 0, className: "skill-col skill-second" },
+    { text: totals["+"] || 0, className: "skill-col skill-second" },
+    { text: totals["!"] || 0, className: "skill-col skill-second" },
+    { text: totals["-"] || 0, className: "skill-col skill-second" },
+    { text: totals["="] || 0, className: "skill-col skill-second" },
+    { text: totals["/"] || 0, className: "skill-col skill-second" },
+    { text: totalMetrics.pos === null ? "-" : formatPercent(totalMetrics.pos), className: "skill-col skill-second" },
+    { text: totalMetrics.prf === null ? "-" : formatPercent(totalMetrics.prf), className: "skill-col skill-second" },
+    { text: totalMetrics.eff === null ? "-" : formatPercent(totalMetrics.eff), className: "skill-col skill-second" }
+  ];
+  totalCells.forEach(cell => {
+    const td = document.createElement("td");
+    td.textContent = cell.text;
+    if (cell.className) td.className = cell.className;
+    totalsRow.appendChild(td);
+  });
+  elAggSecondBody.appendChild(totalsRow);
+  renderSecondDistribution();
+}
+function computeAttackDistribution() {
+  const rotations = {};
+  const ensureRot = rot => {
+    if (!rotations[rot]) {
+      rotations[rot] = {
+        zones: {
+          1: emptyCounts(),
+          2: emptyCounts(),
+          3: emptyCounts(),
+          4: emptyCounts(),
+          5: emptyCounts(),
+          6: emptyCounts()
+        },
+        total: 0
+      };
+    }
+  };
+  for (let r = 1; r <= 6; r++) ensureRot(r);
+  ensureRot("all");
+  (state.events || []).forEach(ev => {
+    if (!ev || ev.skillId !== "attack") return;
+    let zone = ev.zone;
+    if (zone === undefined || zone === null) {
+      zone = getCurrentZoneForPlayer(ev.playerIdx);
+    }
+    if (!zone || zone < 1 || zone > 6) return;
+    const rot = ev.rotation && ev.rotation >= 1 && ev.rotation <= 6 ? ev.rotation : 1;
+    ensureRot(rot);
+    ensureRot("all");
+    [rot, "all"].forEach(key => {
+      const bucket = rotations[key];
+      bucket.total += 1;
+      bucket.zones[zone][ev.code] = (bucket.zones[zone][ev.code] || 0) + 1;
+    });
+  });
+  return rotations;
+}
+function renderSecondDistribution() {
+  if (!elSecondDistribution) return;
+  elSecondDistribution.innerHTML = "";
+  const dist = computeAttackDistribution();
+  elSecondDistribution.classList.add("distribution-grid", "distribution-grid-layout");
+  const layout = [
+    { key: 4, area: "r4" },
+    { key: 3, area: "r3" },
+    { key: 2, area: "r2" },
+    { key: 5, area: "r5" },
+    { key: 6, area: "r6" },
+    { key: 1, area: "r1" },
+    { key: "all", area: "all" }
+  ];
+  const zoneOrder = [4, 3, 2, 5, 6, 1]; // layout order
+  layout.forEach(item => {
+    const rot = item.key;
+    const data = dist[rot];
+    const totalAttacks = data ? data.total : 0;
+    const card = document.createElement("div");
+    card.className = "distribution-card";
+    card.style.gridArea = item.area;
+    const title = document.createElement("h4");
+    title.textContent = rot === "all" ? "Tutte le rotazioni" : "Rotazione " + rot;
+    card.appendChild(title);
+    const court = document.createElement("div");
+    court.className = "distribution-court";
+    if (!data || totalAttacks === 0) {
+      const empty = document.createElement("div");
+      empty.className = "distribution-empty";
+      empty.textContent = "Nessun attacco registrato.";
+      card.appendChild(empty);
+      elSecondDistribution.appendChild(card);
+      return;
+    }
+    // find best volume and efficiency
+    let bestVolumeZone = null;
+    let bestVolumeCount = -1;
+    let bestEffZone = null;
+    let bestEffValue = -Infinity;
+    Object.keys(data.zones).forEach(zKey => {
+      const zoneNum = parseInt(zKey, 10);
+      const zoneCounts = data.zones[zoneNum] || emptyCounts();
+      const total = totalFromCounts(zoneCounts);
+      if (total > bestVolumeCount) {
+        bestVolumeCount = total;
+        bestVolumeZone = zoneNum;
+      }
+      const metrics = computeMetrics(zoneCounts, "attack");
+      const eff = metrics.eff;
+      if (eff !== null && eff > bestEffValue) {
+        bestEffValue = eff;
+        bestEffZone = zoneNum;
+      }
+    });
+    zoneOrder.forEach(zoneNum => {
+      const counts = data.zones[zoneNum] || emptyCounts();
+      const zoneTotal = totalFromCounts(counts);
+      const metrics = computeMetrics(counts, "attack");
+      const perc = totalAttacks ? Math.round((zoneTotal / totalAttacks) * 100) : 0;
+      const cell = document.createElement("div");
+      cell.className = "court-cell";
+      if (bestVolumeZone === zoneNum && zoneTotal > 0) {
+        cell.classList.add("best-volume");
+      }
+      if (bestEffZone === zoneNum && zoneTotal > 0) {
+        cell.classList.add("best-eff");
+      }
+      const label = document.createElement("div");
+      label.className = "cell-label";
+      label.textContent = "Z" + zoneNum;
+      const main = document.createElement("div");
+      main.className = "cell-main";
+      main.textContent = perc ? perc + "%" : "0%";
+      const sub = document.createElement("div");
+      sub.className = "cell-sub";
+      sub.textContent = "Eff " + (metrics.eff === null ? "-" : formatPercent(metrics.eff));
+      cell.appendChild(label);
+      cell.appendChild(main);
+      cell.appendChild(sub);
+      court.appendChild(cell);
+    });
+    card.appendChild(court);
+    elSecondDistribution.appendChild(card);
+  });
 }
 function buildCsvString() {
   if (!state.events || state.events.length === 0) return "";
@@ -2095,8 +2373,10 @@ async function captureAnalysisAsPdf() {
     throw new Error("Pannello analisi non trovato");
   }
   const prevTab = activeTab;
+  const prevAggTab = activeAggTab;
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
   setActiveTab("aggregated");
+  setActiveAggTab("summary");
   applyTheme("light");
   document.body.classList.add("pdf-capture");
   try {
@@ -2136,6 +2416,7 @@ async function captureAnalysisAsPdf() {
     document.body.classList.remove("pdf-capture");
     applyTheme(prevTheme);
     if (prevTab) setActiveTab(prevTab);
+    if (prevAggTab) setActiveAggTab(prevAggTab);
   }
 }
 function buildMatchExportPayload() {
@@ -2789,6 +3070,23 @@ function registerServiceWorker() {
       .catch(err => console.error("SW registration failed", err));
   });
 }
+function setActiveAggTab(target) {
+  const desired = target || "summary";
+  activeAggTab = desired;
+  if (document && document.body) {
+    document.body.dataset.aggTab = desired;
+  }
+  if (elAggTabButtons && typeof elAggTabButtons.forEach === "function") {
+    elAggTabButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.aggTabTarget === desired);
+    });
+  }
+  if (elAggSubPanels && typeof elAggSubPanels.forEach === "function") {
+    elAggSubPanels.forEach(panel => {
+      panel.classList.toggle("active", panel.dataset.aggTab === desired);
+    });
+  }
+}
 function setActiveTab(target) {
   if (!target) return;
   activeTab = target;
@@ -2859,6 +3157,7 @@ function init() {
   initTabs();
   initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
+  setActiveAggTab(activeAggTab || "summary");
   loadState();
   const linkImport = maybeImportMatchFromUrl();
   renderYoutubePlayer();
@@ -3101,6 +3400,15 @@ function init() {
   }
   if (elBtnOpenLineupMobileFloating) {
     elBtnOpenLineupMobileFloating.addEventListener("click", () => openMobileLineupModal());
+  }
+  if (elAggTabButtons && typeof elAggTabButtons.forEach === "function") {
+    elAggTabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.aggTabTarget) {
+          setActiveAggTab(btn.dataset.aggTabTarget);
+        }
+      });
+    });
   }
   if (elMobileLineupClose) {
     elMobileLineupClose.addEventListener("click", closeMobileLineupModal);
