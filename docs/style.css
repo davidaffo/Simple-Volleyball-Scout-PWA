@@ -1679,21 +1679,6 @@ body[data-theme="light"] .rotation-table td {
   flex-direction: column;
   gap: 0.6rem;
 }
-.video-meta {
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.55rem;
-  border: 1px dashed #334155;
-  border-radius: 0.55rem;
-  background: rgba(51, 65, 85, 0.16);
-}
-.video-meta__row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.4rem;
-  align-items: center;
-  font-size: 0.92rem;
-}
 .video-table-wrapper {
   max-height: 380px;
   overflow: auto;
@@ -1723,6 +1708,17 @@ body[data-theme="light"] .rotation-table td {
 .video-skills-table td:nth-child(8) {
   width: 70px;
   text-align: center;
+}
+.video-seek-link {
+  cursor: pointer;
+  color: #22c55e;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.video-seek-link:hover {
+  text-decoration: underline;
 }
 .video-skills-table select,
 .video-skills-table input[type="number"] {
@@ -1772,10 +1768,6 @@ body[data-theme="light"] .rotation-table td {
   border: 0;
   border-radius: 0.8rem;
   background: #0b0f1a;
-}
-body[data-theme="light"] .video-meta {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
 }
 body[data-theme="light"] .video-skills-table th,
 body[data-theme="light"] .video-skills-table td {

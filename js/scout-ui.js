@@ -1074,16 +1074,6 @@ function renderVideoAnalysis() {
       {
         text: formatVideoTimestamp(videoTime),
         editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
-      },
-      {
-        render: td => {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "secondary small video-seek-btn";
-          btn.textContent = "▶";
-          btn.addEventListener("click", () => seekVideoToTime(videoTime));
-          td.appendChild(btn);
-        }
       }
     ];
     cells.forEach(cell => {
@@ -1092,12 +1082,16 @@ function renderVideoAnalysis() {
       if (cell.editable) {
         cell.editable(td);
       }
-      if (cell.render) {
-        td.textContent = "";
-        cell.render(td);
-      }
       tr.appendChild(td);
     });
+    const actionTd = document.createElement("td");
+    const link = document.createElement("span");
+    link.className = "video-seek-link";
+    link.textContent = "▶ Vai";
+    link.title = "Apri al timestamp";
+    link.addEventListener("click", () => seekVideoToTime(videoTime));
+    actionTd.appendChild(link);
+    tr.appendChild(actionTd);
     tr.addEventListener("dblclick", () => {
       seekVideoToTime(videoTime);
     });
