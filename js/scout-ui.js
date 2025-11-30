@@ -11,6 +11,8 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
+const LOCAL_VIDEO_CACHE = "volley-video-cache";
+const LOCAL_VIDEO_REQUEST = "/__local-video__";
 function renderSkillChoice(playerIdx, playerName) {
   if (!elSkillModalBody) return;
   modalMode = "skill";
@@ -332,10 +334,11 @@ function renderPlayers() {
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
     card.dataset.posNumber = String(idx + 1);
+    card.dataset.posIndex = String(idx);
+    card.dataset.playerName = activeName || "";
     if (!activeName) {
       card.classList.add("empty");
     }
-    card.dataset.posIndex = String(idx);
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
     header.className = "court-header" + (activeName ? " draggable" : "");
@@ -856,6 +859,7 @@ function handleYoutubeUrlLoad(url) {
     }
     videoObjectUrl = "";
   }
+  clearCachedLocalVideo();
   if (elAnalysisVideo) {
     elAnalysisVideo.pause();
     elAnalysisVideo.removeAttribute("src");
@@ -873,6 +877,9 @@ function clearYoutubeSource() {
   if (!state.video) return;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  if (elYoutubeUrlInput) {
+    elYoutubeUrlInput.value = "";
+  }
   if (ytPlayer && ytPlayer.stopVideo) {
     ytPlayer.stopVideo();
   }
@@ -885,6 +892,62 @@ function clearYoutubeSource() {
     elYoutubeFrame.style.display = "none";
   }
   currentYoutubeId = "";
+}
+async function clearCachedLocalVideo() {
+  try {
+    if (!("caches" in window)) return;
+    const cache = await caches.open(LOCAL_VIDEO_CACHE);
+    await cache.delete(LOCAL_VIDEO_REQUEST);
+  } catch (_) {
+    // ignore cache errors
+  }
+}
+async function persistLocalVideo(file) {
+  if (!file || !("caches" in window)) return;
+  try {
+    const cache = await caches.open(LOCAL_VIDEO_CACHE);
+    await cache.put(
+      LOCAL_VIDEO_REQUEST,
+      new Response(file, { headers: { "Content-Type": file.type || "video/mp4" } })
+    );
+  } catch (_) {
+    // ignore cache errors
+  }
+}
+async function restoreCachedLocalVideo() {
+  if (!elAnalysisVideo || !("caches" in window)) return;
+  if (state.video && state.video.youtubeId) return;
+  try {
+    const cache = await caches.open(LOCAL_VIDEO_CACHE);
+    const match = await cache.match(LOCAL_VIDEO_REQUEST);
+    if (!match) return;
+    const blob = await match.blob();
+    if (videoObjectUrl) {
+      try {
+        URL.revokeObjectURL(videoObjectUrl);
+      } catch (_) {
+        // ignore
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    videoObjectUrl = url;
+    elAnalysisVideo.src = url;
+    elAnalysisVideo.load();
+    if (state.video) {
+      state.video.fileName = state.video.fileName || "Video locale";
+    }
+    renderVideoAnalysis();
+  } catch (_) {
+    // ignore cache errors
+  }
+}
+function restoreYoutubeFromState() {
+  if (!state.video || !state.video.youtubeId) return;
+  if (elYoutubeUrlInput && state.video.youtubeUrl) {
+    elYoutubeUrlInput.value = state.video.youtubeUrl;
+  }
+  renderYoutubePlayer(state.video.offsetSeconds || 0);
+  renderVideoAnalysis();
 }
 function updateVideoSyncLabel() {
   if (!elVideoSyncLabel) return;
@@ -1175,6 +1238,7 @@ function handleVideoFileChange(file) {
   const url = URL.createObjectURL(file);
   videoObjectUrl = url;
   elAnalysisVideo.src = url;
+  persistLocalVideo(file);
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.fileName = file.name || "video";
   state.video.youtubeId = "";
@@ -1347,6 +1411,7 @@ function renderMobileLineupMiniCourt() {
     const overClass = touchDragOverSlot === slotIdx ? " drop-over" : "";
     btn.className = "mini-slot" + (name ? "" : " empty") + selectedClass + overClass;
     btn.dataset.posNumber = String(slotIdx + 1);
+    btn.dataset.playerName = name || "";
     btn.textContent = name ? formatNameWithNumber(name) : "";
     btn.setAttribute("aria-label", name ? formatNameWithNumber(name) : "Slot " + (slotIdx + 1));
     btn.dataset.slotIndex = String(slotIdx);
@@ -1627,11 +1692,13 @@ function handleAutoRotationFromEvent(eventObj) {
     state.autoRotatePending = false;
     return;
   }
+  eventObj.autoRotatePrev = state.autoRotatePending;
   if (typeof ensurePointRulesDefaults === "function") {
     ensurePointRulesDefaults();
   }
   if (eventObj.skillId === "pass") {
     state.autoRotatePending = true;
+    eventObj.autoRotateNext = state.autoRotatePending;
     return;
   }
   const direction = getPointDirection(eventObj);
@@ -1639,11 +1706,13 @@ function handleAutoRotationFromEvent(eventObj) {
     if (state.autoRotatePending && typeof rotateCourt === "function") {
       // Side-out rotation: advance in the same direction as manual CCW button
       rotateCourt("ccw");
+      eventObj.autoRotationDirection = "ccw";
     }
     state.autoRotatePending = false;
   } else if (direction === "against") {
     state.autoRotatePending = false;
   }
+  eventObj.autoRotateNext = state.autoRotatePending;
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
   const rot = state.rotation || 1;
@@ -2480,6 +2549,7 @@ function resetMatch() {
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  clearCachedLocalVideo();
   if (ytPlayer && ytPlayer.stopVideo) {
     ytPlayer.stopVideo();
   }
@@ -2506,6 +2576,19 @@ function undoLastEvent() {
     return;
   }
   const ev = state.events.pop();
+  if (ev && ev.autoRotationDirection && typeof rotateCourt === "function") {
+    const reverseDir = ev.autoRotationDirection === "ccw" ? "cw" : "ccw";
+    rotateCourt(reverseDir);
+  }
+  if (state.autoRotate) {
+    if (ev && typeof ev.autoRotatePrev === "boolean") {
+      state.autoRotatePending = ev.autoRotatePrev;
+    } else {
+      state.autoRotatePending = false;
+    }
+  } else {
+    state.autoRotatePending = false;
+  }
   const idx = ev.playerIdx;
   const skillId = ev.skillId;
   if (
@@ -2619,6 +2702,8 @@ function init() {
   document.body.dataset.activeTab = activeTab;
   loadState();
   renderYoutubePlayer();
+  restoreCachedLocalVideo();
+  restoreYoutubeFromState();
   applyTheme(state.theme || "dark");
   applyMatchInfoToUI();
   updateRotationDisplay();
