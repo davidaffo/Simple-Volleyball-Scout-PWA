@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:web": "rm -rf docs && mkdir -p docs && cp -R index.html style.css js icons manifest.json service-worker.js docs/",
-    "serve": "npm run build:web && npx serve docs --listen ${PORT:-3000}",
+    "serve": "npx serve . --listen ${PORT:-3000}",
     "tunnel": "PORT=${PORT:-3000} bash serve-tunnel.sh"
   }
 }

@@ -10,11 +10,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo ">> Build static assets"
-npm run build:web
-
 echo ">> Starting local server on http://127.0.0.1:${PORT}"
-npx serve docs --listen "$PORT" &
+npx serve . --listen "$PORT" &
 SERVE_PID=$!
 sleep 1
 
