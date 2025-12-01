@@ -3504,6 +3504,57 @@ function init() {
   if (elBtnSaveTeam) {
     elBtnSaveTeam.addEventListener("click", saveCurrentTeam);
   }
+  if (elBtnOpenTeamManager) {
+    elBtnOpenTeamManager.addEventListener("click", openTeamManagerModal);
+  }
+  if (elTeamManagerClose) {
+    elTeamManagerClose.addEventListener("click", closeTeamManagerModal);
+  }
+  if (elTeamManagerCancel) {
+    elTeamManagerCancel.addEventListener("click", closeTeamManagerModal);
+  }
+  if (elTeamManagerAdd) {
+    elTeamManagerAdd.addEventListener("click", () => {
+      if (!teamManagerState) {
+        openTeamManagerModal();
+        return;
+      }
+      teamManagerState.players.push({
+        id: Date.now() + "_" + Math.random(),
+        name: "",
+        number: "",
+        role: "",
+        isCaptain: false,
+        out: false
+      });
+      renderTeamManagerTable();
+    });
+  }
+  if (elTeamManagerSave) {
+    elTeamManagerSave.addEventListener("click", () => {
+      const applyToCurrent = elTeamApplyCurrent ? elTeamApplyCurrent.checked : true;
+      saveTeamManagerPayload(applyToCurrent);
+    });
+  }
+  if (elTeamManagerModal) {
+    elTeamManagerModal.addEventListener("click", e => {
+      const target = e.target;
+      if (target === elTeamManagerModal || (target && target.classList && target.classList.contains("team-modal__backdrop"))) {
+        closeTeamManagerModal();
+      }
+    });
+  }
+  if (elTeamManagerDup) {
+    elTeamManagerDup.addEventListener("click", () => {
+      if (!teamManagerState) {
+        openTeamManagerModal();
+        return;
+      }
+      const clone = JSON.parse(JSON.stringify(teamManagerState.players || []));
+      teamManagerState.players = clone.map(p => Object.assign({}, p, { id: Date.now() + "_" + Math.random(), name: p.name + " (dup)" }));
+      renderTeamManagerTable();
+    });
+  }
   if (elBtnDeleteTeam) {
     elBtnDeleteTeam.addEventListener("click", deleteSelectedTeam);
   }

@@ -78,6 +78,22 @@ const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
 const elSavedMatchesSelect = document.getElementById("saved-matches");
 const elBtnDeleteMatch = document.getElementById("btn-delete-match");
+const elBtnOpenTeamManager = document.getElementById("btn-open-team-manager");
+const elTeamManagerModal = document.getElementById("team-manager-modal");
+const elTeamManagerClose = document.getElementById("team-manager-close");
+const elTeamManagerBody = document.getElementById("team-manager-body");
+const elTeamManagerAdd = document.getElementById("team-manager-add");
+const elTeamManagerSave = document.getElementById("team-manager-save");
+const elTeamManagerCancel = document.getElementById("team-manager-cancel");
+const elTeamApplyCurrent = document.getElementById("team-apply-current");
+const elTeamMetaName = document.getElementById("team-meta-name");
+const elTeamMetaHead = document.getElementById("team-meta-head");
+const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
+const elTeamMetaManager = document.getElementById("team-meta-manager");
+const elTeamManagerDup = document.getElementById("team-manager-duplicate");
+const TEAM_ROLES = ["", "P", "S", "C", "O", "L"];
+const DEFAULT_STAFF = { headCoach: "", assistantCoach: "", manager: "" };
+let teamManagerState = null;
 const elBtnExportDb = document.getElementById("btn-export-db");
 const elBtnImportDb = document.getElementById("btn-import-db");
 const elDbFileInput = document.getElementById("db-file-input");
@@ -701,6 +717,66 @@ function loadTeamFromStorage(name) {
     return null;
   }
 }
+function normalizeTeamPayload(raw, fallbackName = "") {
+  if (!raw) return null;
+  const name = raw.name || fallbackName || "";
+  const staff = raw.staff || Object.assign({}, DEFAULT_STAFF);
+  const makeId = () => {
+    try {
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+      }
+    } catch (e) {
+      /* noop */
+    }
+    return Date.now() + "_" + Math.random();
+  };
+  if (raw.version === 2 && Array.isArray(raw.playersDetailed)) {
+    const playersDetailed = raw.playersDetailed.map(p => ({
+      id: p.id || makeId(),
+      name: p.name || "",
+      number: p.number || "",
+      role: p.role || "",
+      isCaptain: !!p.isCaptain,
+      out: !!p.out
+    }));
+    const numbers = raw.numbers || {};
+    const liberos = raw.liberos || playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+    return {
+      version: 2,
+      name,
+      staff,
+      playersDetailed,
+      liberos,
+      numbers,
+      players: raw.players || playersDetailed.map(p => p.name)
+    };
+  }
+  const legacyPlayers = raw.players || [];
+  const liberos = raw.liberos || [];
+  const numbers = raw.numbers || {};
+  const playersDetailed = legacyPlayers.map((n, idx) => ({
+    id: idx + "_" + n,
+    name: n,
+    number: numbers[n] || "",
+    role: liberos.includes(n) ? "L" : "",
+    isCaptain: false,
+    out: false
+  }));
+  return {
+    version: 2,
+    name,
+    staff,
+    playersDetailed,
+    liberos,
+    numbers,
+    players: legacyPlayers
+  };
+}
+function loadTeamNormalized(name) {
+  const raw = loadTeamFromStorage(name);
+  return normalizeTeamPayload(raw, name);
+}
 function saveTeamToStorage(name, data) {
   if (!name) return;
   try {
@@ -735,6 +811,20 @@ function migrateTeamsToPersistent() {
 }
 function syncTeamsFromStorage() {
   state.savedTeams = loadTeamsMapFromStorage();
+}
+function extractRosterFromTeam(team) {
+  const normalized = normalizeTeamPayload(team);
+  if (!normalized) return { players: [], liberos: [], numbers: {}, staff: DEFAULT_STAFF, playersDetailed: [] };
+  return {
+    players: (normalized.playersDetailed || []).filter(p => !p.out).map(p => p.name),
+    liberos:
+      normalized.liberos && normalized.liberos.length > 0
+        ? normalized.liberos
+        : (normalized.playersDetailed || []).filter(p => p.role === "L" && !p.out).map(p => p.name),
+    numbers: normalized.numbers || {},
+    staff: normalized.staff || DEFAULT_STAFF,
+    playersDetailed: normalized.playersDetailed || []
+  };
 }
 function getMatchStorageKey(name) {
   return MATCH_PREFIX + name;
@@ -842,12 +932,40 @@ function renderMatchesSelect() {
 }
 function getCurrentTeamPayload(name = "") {
   const safeName = (name || state.selectedTeam || state.match.opponent || "squadra").trim();
+  const existing = safeName ? loadTeamNormalized(safeName) : null;
+  const staff = existing?.staff || Object.assign({}, DEFAULT_STAFF);
+  const detailed = existing?.playersDetailed || [];
+  const playersDetailed =
+    detailed.length > 0
+      ? detailed.map(p => {
+          const currentNumber = (state.playerNumbers && state.playerNumbers[p.name]) || p.number || "";
+          const isLib = (state.liberos || []).includes(p.name) || p.role === "L";
+          return Object.assign({}, p, { number: currentNumber, role: isLib ? "L" : p.role, out: !!p.out });
+        })
+      : (state.players || []).map((pName, idx) => ({
+          id: idx + "_" + pName,
+          name: pName,
+          number: (state.playerNumbers && state.playerNumbers[pName]) || "",
+          role: (state.liberos || []).includes(pName) ? "L" : "",
+          isCaptain: false,
+          out: false
+        }));
+  const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+  const numbers = {};
+  playersDetailed.forEach(p => {
+    if (p.number !== undefined && p.number !== null && p.number !== "") {
+      numbers[p.name] = String(p.number);
+    }
+  });
+  const players = playersDetailed.filter(p => !p.out).map(p => p.name);
   return {
-    version: 1,
+    version: 2,
     name: safeName,
-    players: [...(state.players || [])],
-    liberos: [...(state.liberos || [])],
-    numbers: Object.assign({}, state.playerNumbers || {})
+    staff,
+    playersDetailed,
+    players,
+    liberos,
+    numbers
   };
 }
 function saveCurrentTeam() {
@@ -1026,7 +1144,9 @@ async function exportCurrentTeamToFile() {
   downloadBlob(blob, "squadra_" + (opponentSlug || "export") + ".json");
 }
 function applyImportedTeamData(data) {
-  const players = normalizePlayers((data && data.players) || []);
+  const normalizedTeam = normalizeTeamPayload(data || {});
+  const roster = extractRosterFromTeam(normalizedTeam);
+  const players = roster.players || [];
   if (!players || players.length === 0) {
     alert("Il file non contiene giocatrici valide.");
     return;
@@ -1037,31 +1157,22 @@ function applyImportedTeamData(data) {
     );
     if (!ok) return;
   }
-  const liberosRaw = Array.isArray(data && data.liberos) ? data.liberos : [];
-  const liberos = normalizePlayers(liberosRaw).filter(name => players.includes(name));
-  const numbersRaw = data && typeof data.numbers === "object" ? data.numbers : {};
-  const numbers = {};
-  const usedNumbers = new Set();
-  players.forEach(name => {
-    const raw = (numbersRaw && numbersRaw[name]) || "";
-    const clean = String(raw).trim();
-    if (clean && /^[0-9]{1,3}$/.test(clean) && !usedNumbers.has(clean)) {
-      numbers[name] = clean;
-      usedNumbers.add(clean);
-    }
-  });
   updatePlayersList(players, { askReset: false });
-  state.liberos = liberos;
-  state.playerNumbers = numbers;
+  state.liberos = roster.liberos || [];
+  state.playerNumbers = roster.numbers || {};
   syncPlayerNumbers(players);
-  state.selectedTeam = "";
+  state.selectedTeam = normalizedTeam && normalizedTeam.name ? normalizedTeam.name : "";
+  if (state.selectedTeam) {
+    saveTeamToStorage(state.selectedTeam, normalizedTeam);
+    syncTeamsFromStorage();
+    renderTeamsSelect();
+  }
   saveState();
   renderLiberoTags();
   renderLiberoChipsInline();
   renderPlayers();
   renderBenchChips();
   renderLineupChips();
-  renderTeamsSelect();
   alert("Squadra importata dal file.");
 }
 function parseDelimitedTeamText(text) {
@@ -1147,9 +1258,10 @@ function handleTeamSelectChange() {
     renderTeamsSelect();
     return;
   }
-  state.liberos = team.liberos || [];
-  state.playerNumbers = team.numbers || {};
-  updatePlayersList(team.players || [], { askReset: true });
+  const roster = extractRosterFromTeam(team);
+  state.liberos = roster.liberos || [];
+  state.playerNumbers = roster.numbers || {};
+  updatePlayersList(roster.players || [], { askReset: true });
   renderLiberoTags();
   renderTeamsSelect();
   renderLiberoChipsInline();
@@ -1314,6 +1426,182 @@ function applyTemplateTeam(options = {}) {
     liberos: TEMPLATE_TEAM.liberos,
     playerNumbers: buildTemplateNumbers()
   });
+}
+function buildTeamManagerStateFromSource(source) {
+  const normalized = source ? normalizeTeamPayload(source) : null;
+  const playersDetailed =
+    normalized && normalized.playersDetailed && normalized.playersDetailed.length > 0
+      ? normalized.playersDetailed.map(p => Object.assign({}, p))
+      : (state.players || []).map((name, idx) => ({
+          id: idx + "_" + name,
+          name,
+          number: (state.playerNumbers && state.playerNumbers[name]) || "",
+          role: (state.liberos || []).includes(name) ? "L" : "",
+          isCaptain: false,
+          out: false
+        }));
+  return {
+    name: (normalized && normalized.name) || state.selectedTeam || state.match.opponent || "Squadra",
+    staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
+    players: playersDetailed
+  };
+}
+function renderTeamManagerTable() {
+  if (!elTeamManagerBody || !teamManagerState) return;
+  elTeamManagerBody.innerHTML = "";
+  teamManagerState.players.forEach((p, idx) => {
+    const tr = document.createElement("tr");
+    const numberInput = document.createElement("input");
+    numberInput.type = "number";
+    numberInput.min = "0";
+    numberInput.max = "99";
+    numberInput.value = p.number || "";
+    numberInput.addEventListener("change", () => {
+      p.number = numberInput.value;
+    });
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = p.name || "";
+    nameInput.addEventListener("change", () => {
+      p.name = nameInput.value.trim();
+    });
+    const roleSelect = document.createElement("select");
+    TEAM_ROLES.forEach(r => {
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = r === "" ? "—" : r;
+      roleSelect.appendChild(opt);
+    });
+    roleSelect.value = p.role || "";
+    roleSelect.addEventListener("change", () => {
+      p.role = roleSelect.value;
+    });
+    const captainChk = document.createElement("input");
+    captainChk.type = "checkbox";
+    captainChk.checked = !!p.isCaptain;
+    captainChk.addEventListener("change", () => {
+      p.isCaptain = captainChk.checked;
+    });
+    const outChk = document.createElement("input");
+    outChk.type = "checkbox";
+    outChk.checked = !!p.out;
+    outChk.addEventListener("change", () => {
+      p.out = outChk.checked;
+    });
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "small danger";
+    delBtn.textContent = "✕";
+    delBtn.addEventListener("click", () => {
+      teamManagerState.players.splice(idx, 1);
+      renderTeamManagerTable();
+    });
+    [
+      numberInput,
+      nameInput,
+      roleSelect,
+      captainChk,
+      outChk
+    ].forEach(control => control.classList.add("team-manager-input"));
+
+    const tds = [
+      numberInput,
+      nameInput,
+      roleSelect,
+      captainChk,
+      outChk,
+      delBtn
+    ];
+    tds.forEach(el => {
+      const td = document.createElement("td");
+      if (el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "BUTTON")) {
+        td.appendChild(el);
+      } else {
+        td.textContent = el;
+      }
+      tr.appendChild(td);
+    });
+    elTeamManagerBody.appendChild(tr);
+  });
+}
+function openTeamManagerModal() {
+  const selected = state.selectedTeam;
+  const source = selected ? loadTeamFromStorage(selected) : null;
+  teamManagerState = buildTeamManagerStateFromSource(source);
+  if (elTeamMetaName) elTeamMetaName.value = teamManagerState.name || "";
+  if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
+  if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
+  if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
+  if (elTeamApplyCurrent) elTeamApplyCurrent.checked = true;
+  renderTeamManagerTable();
+  if (elTeamManagerModal) {
+    elTeamManagerModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+  }
+}
+function closeTeamManagerModal() {
+  if (elTeamManagerModal) {
+    elTeamManagerModal.classList.add("hidden");
+  }
+  document.body.classList.remove("modal-open");
+}
+function collectTeamManagerPayload() {
+  if (!teamManagerState) return null;
+  const name = elTeamMetaName && elTeamMetaName.value ? elTeamMetaName.value.trim() : teamManagerState.name;
+  const staff = {
+    headCoach: (elTeamMetaHead && elTeamMetaHead.value) || "",
+    assistantCoach: (elTeamMetaAssistant && elTeamMetaAssistant.value) || "",
+    manager: (elTeamMetaManager && elTeamMetaManager.value) || ""
+  };
+  const playersDetailed = teamManagerState.players
+    .filter(p => (p.name || "").trim() !== "")
+    .map((p, idx) => ({
+      id: p.id || idx + "_" + p.name,
+      name: p.name.trim(),
+      number: p.number || "",
+      role: p.role || "",
+      isCaptain: !!p.isCaptain,
+      out: !!p.out
+    }));
+  const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+  const numbers = {};
+  playersDetailed.forEach(p => {
+    if (p.number !== undefined && p.number !== null && p.number !== "") {
+      numbers[p.name] = String(p.number);
+    }
+  });
+  const players = playersDetailed.filter(p => !p.out).map(p => p.name);
+  return {
+    version: 2,
+    name,
+    staff,
+    playersDetailed,
+    players,
+    liberos,
+    numbers
+  };
+}
+function saveTeamManagerPayload(applyToCurrent = true) {
+  const payload = collectTeamManagerPayload();
+  if (!payload || !payload.name) {
+    alert("Inserisci un nome squadra valido.");
+    return;
+  }
+  saveTeamToStorage(payload.name, payload);
+  syncTeamsFromStorage();
+  state.selectedTeam = payload.name;
+  renderTeamsSelect();
+  if (applyToCurrent) {
+    const roster = extractRosterFromTeam(payload);
+    updatePlayersList(roster.players, {
+      askReset: true,
+      liberos: roster.liberos,
+      playerNumbers: roster.numbers
+    });
+  }
+  saveState();
+  closeTeamManagerModal();
+  alert("Squadra salvata: " + payload.name);
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();

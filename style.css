@@ -2102,6 +2102,120 @@ body[data-theme="light"] .skill-modal__head {
 .skill-modal__body .skill-row {
   border: 1px solid #222;
 }
+.team-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.team-modal.hidden {
+  display: none;
+}
+.team-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+.team-modal__dialog {
+  position: relative;
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 1rem;
+  width: min(960px, 95vw);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+.team-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.team-modal__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.team-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.6rem;
+}
+.team-meta-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.team-meta-grid input {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  background: #0b1224;
+  color: #e5e7eb;
+}
+.team-manager-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.team-manager-tablewrap {
+  max-height: 45vh;
+  overflow: auto;
+}
+.team-manager-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.team-manager-table th,
+.team-manager-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #1f2937;
+  text-align: left;
+}
+.team-manager-table th:nth-child(1),
+.team-manager-table td:nth-child(1) {
+  width: 64px;
+}
+.team-manager-table td:nth-child(4),
+.team-manager-table td:nth-child(5) {
+  text-align: center;
+  width: 60px;
+}
+.team-manager-table td:nth-child(6) {
+  width: 88px;
+  text-align: center;
+}
+.team-manager-input {
+  width: 100%;
+  padding: 0.35rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #1f2937;
+  background: #0b1224;
+  color: #e5e7eb;
+}
+.team-manager-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+body[data-theme="light"] .team-modal__dialog {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e5e7eb;
+}
+body[data-theme="light"] .team-manager-input,
+body[data-theme="light"] .team-meta-grid input {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e5e7eb;
+}
 .open-skill-btn {
   width: 100%;
   margin-top: 0.2rem;
@@ -2275,6 +2389,20 @@ body[data-theme="light"] .floating-actions__content {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+.icon-button {
+  background: transparent;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  color: inherit;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+}
+.icon-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+body[data-theme="light"] .icon-button {
+  border-color: #e5e7eb;
 }
 .floating-actions__block {
   background: #111827;

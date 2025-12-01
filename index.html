@@ -101,6 +101,7 @@
             <button id="btn-delete-team" class="danger">Elimina</button>
             <button id="btn-rename-team" class="secondary">Rinomina</button>
             <button id="btn-save-team">Salva squadra</button>
+            <button id="btn-open-team-manager" class="secondary">Gestione avanzata</button>
           </div>
           <div class="team-row">
             <button id="btn-export-team" class="secondary">Esporta su file</button>
@@ -435,6 +436,57 @@ Bianchi 18"></textarea>
     </div>
   </div>
   <noscript>Questa applicazione richiede JavaScript abilitato.</noscript>
+  <div id="team-manager-modal" class="team-modal hidden" role="dialog" aria-modal="true">
+    <div class="team-modal__backdrop"></div>
+    <div class="team-modal__dialog">
+      <div class="team-modal__head">
+        <h3>Gestione squadra</h3>
+        <button id="team-manager-close" aria-label="Chiudi" class="icon-button">✕</button>
+      </div>
+      <div class="team-modal__content">
+        <div class="team-meta-grid">
+          <label>Nome squadra
+            <input type="text" id="team-meta-name" placeholder="Nome squadra" />
+          </label>
+          <label>Head coach
+            <input type="text" id="team-meta-head" placeholder="Allenatore" />
+          </label>
+          <label>Vice
+            <input type="text" id="team-meta-assistant" placeholder="Assistente" />
+          </label>
+          <label>Team manager
+            <input type="text" id="team-meta-manager" placeholder="Manager" />
+          </label>
+          <label class="apply-current">
+            <input type="checkbox" id="team-apply-current" checked /> Applica al match corrente
+          </label>
+        </div>
+        <div class="team-manager-actions">
+          <button id="team-manager-add" class="secondary">Aggiungi giocatrice</button>
+          <button id="team-manager-duplicate" class="secondary">Duplica elenco</button>
+        </div>
+        <div class="table-wrapper team-manager-tablewrap">
+          <table class="team-manager-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Nome</th>
+                <th>Ruolo</th>
+                <th>C</th>
+                <th>Fuori</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="team-manager-body"></tbody>
+          </table>
+        </div>
+        <div class="team-manager-footer">
+          <button id="team-manager-cancel" class="secondary">Annulla</button>
+          <button id="team-manager-save" class="primary">Salva</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="skill-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
     <div class="skill-modal__backdrop" data-close-skill onclick="window._closeSkillModal && window._closeSkillModal()"></div>
     <div class="skill-modal__content">
