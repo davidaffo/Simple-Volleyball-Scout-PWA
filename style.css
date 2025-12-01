@@ -1231,6 +1231,13 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   gap: 0.35rem;
   padding: 0.2rem 0;
 }
+.add-player-row,
+.add-player-inline,
+.players-list,
+details.import-panel:not(.metrics-panel),
+.libero-manage {
+  display: none;
+}
 .player-pill {
   display: inline-flex;
   align-items: center;

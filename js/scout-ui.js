@@ -2681,6 +2681,7 @@ function buildMatchExportPayload() {
       currentSet: state.currentSet,
       rotation: state.rotation,
       players: state.players,
+      captains: (state.captains || []).slice(0, 1),
       playerNumbers: state.playerNumbers,
       liberos: state.liberos,
       court: state.court,
@@ -2768,6 +2769,9 @@ function applyImportedMatch(nextState, options = {}) {
   const merged = Object.assign({}, state, nextState);
   merged.match = nextState.match || state.match || {};
   merged.playerNumbers = nextState.playerNumbers || {};
+  merged.captains = normalizePlayers(Array.isArray(nextState.captains) ? nextState.captains : [])
+    .filter(name => (nextState.players || []).includes(name))
+    .slice(0, 1);
   merged.liberos = nextState.liberos || [];
   merged.court =
     nextState.court ||
@@ -3532,8 +3536,20 @@ function init() {
   }
   if (elTeamManagerSave) {
     elTeamManagerSave.addEventListener("click", () => {
-      const applyToCurrent = elTeamApplyCurrent ? elTeamApplyCurrent.checked : true;
-      saveTeamManagerPayload(applyToCurrent);
+      saveTeamManagerPayload();
+    });
+  }
+  const elTeamManagerLineup = document.getElementById("team-manager-lineup");
+  if (elTeamManagerLineup) {
+    elTeamManagerLineup.addEventListener("click", () => {
+      saveTeamManagerPayload({
+        closeModal: true,
+        openLineupAfter: true,
+        saveToStorage: true,
+        showAlert: false,
+        preserveCourt: true,
+        askReset: false
+      });
     });
   }
   if (elTeamManagerModal) {

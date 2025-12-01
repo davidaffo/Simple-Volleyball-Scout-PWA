@@ -81,6 +81,7 @@ let state = {
   theme: "dark",
   currentSet: 1,
   players: [],
+  captains: [],
   playerNumbers: {},
   events: [],
   stats: {},

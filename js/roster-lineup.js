@@ -85,7 +85,6 @@ const elTeamManagerBody = document.getElementById("team-manager-body");
 const elTeamManagerAdd = document.getElementById("team-manager-add");
 const elTeamManagerSave = document.getElementById("team-manager-save");
 const elTeamManagerCancel = document.getElementById("team-manager-cancel");
-const elTeamApplyCurrent = document.getElementById("team-apply-current");
 const elTeamMetaName = document.getElementById("team-meta-name");
 const elTeamMetaHead = document.getElementById("team-meta-head");
 const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
@@ -225,14 +224,25 @@ function loadState() {
     state = Object.assign(state, parsed);
     state.theme = parsed.theme || "dark";
     state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
+    state.captains = normalizePlayers(Array.isArray(parsed.captains) ? parsed.captains : []).slice(0, 1);
     ensureCourtShape();
     cleanCourtPlayers();
+    state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
     state.rotation = parsed.rotation || 1;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
     state.savedMatches = parsed.savedMatches || {};
     state.selectedTeam = parsed.selectedTeam || "";
     state.selectedMatch = parsed.selectedMatch || "";
+    if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
+      const selectedTeamData = state.savedTeams[state.selectedTeam];
+      if (selectedTeamData) {
+        const roster = extractRosterFromTeam(selectedTeamData);
+        state.captains = normalizePlayers(roster.captains || []).filter(name =>
+          (state.players || []).includes(name)
+        ).slice(0, 1);
+      }
+    }
     state.metricsConfig = parsed.metricsConfig || {};
     state.video =
       parsed.video ||
@@ -291,6 +301,31 @@ function normalizePlayers(list) {
   });
   return names;
 }
+function enforceSingleCaptainFlag(players, preferredName = "") {
+  if (!Array.isArray(players)) return [];
+  let chosenIdx = -1;
+  const preferred = (preferredName || "").toLowerCase();
+  if (preferred) {
+    players.forEach((player, idx) => {
+      if (!player || !player.name) return;
+      if (player.name.toLowerCase() === preferred && chosenIdx === -1) {
+        chosenIdx = idx;
+      }
+    });
+  }
+  if (chosenIdx === -1) {
+    players.forEach((player, idx) => {
+      if (player && player.isCaptain && chosenIdx === -1) {
+        chosenIdx = idx;
+      }
+    });
+  }
+  players.forEach((player, idx) => {
+    if (!player) return;
+    player.isCaptain = idx === chosenIdx && chosenIdx !== -1;
+  });
+  return players;
+}
 function replacePlayerNameEverywhere(oldName, newName, idx) {
   ensureCourtShape();
   state.court = state.court.map(slot => {
@@ -300,6 +335,7 @@ function replacePlayerNameEverywhere(oldName, newName, idx) {
     return updated;
   });
   state.liberos = (state.liberos || []).map(n => (n === oldName ? newName : n));
+  state.captains = (state.captains || []).map(n => (n === oldName ? newName : n));
   (state.events || []).forEach(ev => {
     if (ev.playerIdx === idx || ev.playerName === oldName) {
       ev.playerName = newName;
@@ -347,9 +383,19 @@ function getPlayerNumber(name) {
   if (!name || !state.playerNumbers) return "";
   return state.playerNumbers[name] || "";
 }
-function formatNameWithNumber(name) {
+function isCaptain(name) {
+  if (!name) return false;
+  const caps = state.captains || [];
+  return caps.some(c => c.toLowerCase() === name.toLowerCase());
+}
+function formatNameWithNumber(name, options = {}) {
   const num = getPlayerNumber(name);
-  return num ? num + " - " + name : name;
+  const base = num ? num + " - " + name : name || "";
+  const includeCaptain = options.includeCaptain !== false;
+  if (includeCaptain && isCaptain(name)) {
+    return base + " (C)";
+  }
+  return base;
 }
 const SKILL_SHORT_LABELS = {
   serve: "BA",
@@ -404,6 +450,12 @@ function buildNumbersForNames(names, provided = {}) {
 function syncPlayerNumbers(names) {
   state.playerNumbers = buildNumbersForNames(names, {});
 }
+function applyDefaultLineup(names = []) {
+  ensureCourtShape();
+  const lineup = Array.isArray(names) ? names.filter(Boolean) : [];
+  state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
+  state.rotation = 1;
+}
 function handlePlayerNumberChange(name, value) {
   if (!name) return;
   const clean = (value || "").trim();
@@ -444,6 +496,7 @@ function ensureCourtShape() {
 function cleanCourtPlayers() {
   ensureCourtShape();
   const valid = new Set(state.players || []);
+  state.captains = (state.captains || []).filter(name => valid.has(name)).slice(0, 1);
   state.court = state.court.map(slot => {
     const main = valid.has(slot.main) ? slot.main : "";
     const replaced = slot.replaced && valid.has(slot.replaced) ? slot.replaced : "";
@@ -732,16 +785,20 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     return Date.now() + "_" + Math.random();
   };
   if (raw.version === 2 && Array.isArray(raw.playersDetailed)) {
-    const playersDetailed = raw.playersDetailed.map(p => ({
+    const playersDetailed = enforceSingleCaptainFlag(
+      raw.playersDetailed.map(p => ({
       id: p.id || makeId(),
       name: p.name || "",
       number: p.number || "",
       role: p.role || "",
       isCaptain: !!p.isCaptain,
       out: !!p.out
-    }));
+      })),
+      (raw.captains && raw.captains[0]) || ""
+    );
     const numbers = raw.numbers || {};
     const liberos = raw.liberos || playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+    const captains = playersDetailed.filter(p => p.isCaptain && !p.out).map(p => p.name).slice(0, 1);
     return {
       version: 2,
       name,
@@ -749,7 +806,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
       playersDetailed,
       liberos,
       numbers,
-      players: raw.players || playersDetailed.map(p => p.name)
+      players: raw.players || playersDetailed.map(p => p.name),
+      captains
     };
   }
   const legacyPlayers = raw.players || [];
@@ -763,6 +821,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     isCaptain: false,
     out: false
   }));
+  const captains = [];
   return {
     version: 2,
     name,
@@ -770,7 +829,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     playersDetailed,
     liberos,
     numbers,
-    players: legacyPlayers
+    players: legacyPlayers,
+    captains
   };
 }
 function loadTeamNormalized(name) {
@@ -814,7 +874,18 @@ function syncTeamsFromStorage() {
 }
 function extractRosterFromTeam(team) {
   const normalized = normalizeTeamPayload(team);
-  if (!normalized) return { players: [], liberos: [], numbers: {}, staff: DEFAULT_STAFF, playersDetailed: [] };
+  if (!normalized)
+    return { players: [], liberos: [], numbers: {}, staff: DEFAULT_STAFF, playersDetailed: [], captains: [] };
+  const captainCandidates = []
+    .concat(Array.isArray(normalized.captains) ? normalized.captains : [])
+    .concat(
+      (normalized.playersDetailed || [])
+        .filter(p => p.isCaptain && !p.out)
+        .map(p => p.name)
+    );
+  const captains = normalizePlayers(captainCandidates).filter(name =>
+    (normalized.playersDetailed || []).some(p => p.name === name && !p.out)
+  ).slice(0, 1);
   return {
     players: (normalized.playersDetailed || []).filter(p => !p.out).map(p => p.name),
     liberos:
@@ -823,7 +894,8 @@ function extractRosterFromTeam(team) {
         : (normalized.playersDetailed || []).filter(p => p.role === "L" && !p.out).map(p => p.name),
     numbers: normalized.numbers || {},
     staff: normalized.staff || DEFAULT_STAFF,
-    playersDetailed: normalized.playersDetailed || []
+    playersDetailed: normalized.playersDetailed || [],
+    captains
   };
 }
 function getMatchStorageKey(name) {
@@ -935,21 +1007,28 @@ function getCurrentTeamPayload(name = "") {
   const existing = safeName ? loadTeamNormalized(safeName) : null;
   const staff = existing?.staff || Object.assign({}, DEFAULT_STAFF);
   const detailed = existing?.playersDetailed || [];
+  const captainSet = new Set(state.captains || []);
   const playersDetailed =
     detailed.length > 0
       ? detailed.map(p => {
           const currentNumber = (state.playerNumbers && state.playerNumbers[p.name]) || p.number || "";
           const isLib = (state.liberos || []).includes(p.name) || p.role === "L";
-          return Object.assign({}, p, { number: currentNumber, role: isLib ? "L" : p.role, out: !!p.out });
+          return Object.assign({}, p, {
+            number: currentNumber,
+            role: isLib ? "L" : p.role,
+            isCaptain: captainSet.has(p.name) || !!p.isCaptain,
+            out: !!p.out
+          });
         })
       : (state.players || []).map((pName, idx) => ({
           id: idx + "_" + pName,
           name: pName,
           number: (state.playerNumbers && state.playerNumbers[pName]) || "",
           role: (state.liberos || []).includes(pName) ? "L" : "",
-          isCaptain: false,
+          isCaptain: captainSet.has(pName),
           out: false
         }));
+  enforceSingleCaptainFlag(playersDetailed, state.captains && state.captains[0]);
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
   const numbers = {};
   playersDetailed.forEach(p => {
@@ -958,6 +1037,7 @@ function getCurrentTeamPayload(name = "") {
     }
   });
   const players = playersDetailed.filter(p => !p.out).map(p => p.name);
+  const captains = playersDetailed.filter(p => p.isCaptain && !p.out).map(p => p.name).slice(0, 1);
   return {
     version: 2,
     name: safeName,
@@ -965,7 +1045,8 @@ function getCurrentTeamPayload(name = "") {
     playersDetailed,
     players,
     liberos,
-    numbers
+    numbers,
+    captains
   };
 }
 function saveCurrentTeam() {
@@ -1157,10 +1238,17 @@ function applyImportedTeamData(data) {
     );
     if (!ok) return;
   }
-  updatePlayersList(players, { askReset: false });
-  state.liberos = roster.liberos || [];
-  state.playerNumbers = roster.numbers || {};
-  syncPlayerNumbers(players);
+  updatePlayersList(players, {
+    askReset: false,
+    liberos: roster.liberos || [],
+    playerNumbers: roster.numbers || {},
+    captains: roster.captains || [],
+    setDefaultLineup: true,
+    defaultLineupNames:
+      roster.playersDetailed && roster.playersDetailed.length > 0
+        ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+        : players
+  });
   state.selectedTeam = normalizedTeam && normalizedTeam.name ? normalizedTeam.name : "";
   if (state.selectedTeam) {
     saveTeamToStorage(state.selectedTeam, normalizedTeam);
@@ -1259,9 +1347,17 @@ function handleTeamSelectChange() {
     return;
   }
   const roster = extractRosterFromTeam(team);
-  state.liberos = roster.liberos || [];
-  state.playerNumbers = roster.numbers || {};
-  updatePlayersList(roster.players || [], { askReset: true });
+  updatePlayersList(roster.players || [], {
+    askReset: true,
+    liberos: roster.liberos || [],
+    playerNumbers: roster.numbers || {},
+    captains: roster.captains || [],
+    setDefaultLineup: true,
+    defaultLineupNames:
+      roster.playersDetailed && roster.playersDetailed.length > 0
+        ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+        : roster.players || []
+  });
   renderLiberoTags();
   renderTeamsSelect();
   renderLiberoChipsInline();
@@ -1424,11 +1520,15 @@ function applyTemplateTeam(options = {}) {
   updatePlayersList(TEMPLATE_TEAM.players, {
     askReset,
     liberos: TEMPLATE_TEAM.liberos,
-    playerNumbers: buildTemplateNumbers()
+    playerNumbers: buildTemplateNumbers(),
+    captains: [],
+    setDefaultLineup: true,
+    defaultLineupNames: TEMPLATE_TEAM.players.slice(0, 6)
   });
 }
 function buildTeamManagerStateFromSource(source) {
   const normalized = source ? normalizeTeamPayload(source) : null;
+  const captainSet = new Set(state.captains || []);
   const playersDetailed =
     normalized && normalized.playersDetailed && normalized.playersDetailed.length > 0
       ? normalized.playersDetailed.map(p => Object.assign({}, p))
@@ -1437,9 +1537,10 @@ function buildTeamManagerStateFromSource(source) {
           name,
           number: (state.playerNumbers && state.playerNumbers[name]) || "",
           role: (state.liberos || []).includes(name) ? "L" : "",
-          isCaptain: false,
+          isCaptain: captainSet.has(name),
           out: false
         }));
+  enforceSingleCaptainFlag(playersDetailed, state.captains && state.captains[0]);
   return {
     name: (normalized && normalized.name) || state.selectedTeam || state.match.opponent || "Squadra",
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
@@ -1465,6 +1566,7 @@ function renderTeamManagerTable() {
     nameInput.addEventListener("change", () => {
       p.name = nameInput.value.trim();
     });
+    let liberoChk = null;
     const roleSelect = document.createElement("select");
     TEAM_ROLES.forEach(r => {
       const opt = document.createElement("option");
@@ -1475,12 +1577,27 @@ function renderTeamManagerTable() {
     roleSelect.value = p.role || "";
     roleSelect.addEventListener("change", () => {
       p.role = roleSelect.value;
+      if (liberoChk) liberoChk.checked = p.role === "L";
     });
     const captainChk = document.createElement("input");
     captainChk.type = "checkbox";
     captainChk.checked = !!p.isCaptain;
     captainChk.addEventListener("change", () => {
       p.isCaptain = captainChk.checked;
+      enforceSingleCaptainFlag(teamManagerState.players, p.isCaptain ? p.name : "");
+      renderTeamManagerTable();
+    });
+    liberoChk = document.createElement("input");
+    liberoChk.type = "checkbox";
+    liberoChk.checked = p.role === "L";
+    liberoChk.addEventListener("change", () => {
+      if (liberoChk.checked) {
+        p.role = "L";
+        roleSelect.value = "L";
+      } else if (p.role === "L") {
+        p.role = "";
+        roleSelect.value = "";
+      }
     });
     const outChk = document.createElement("input");
     outChk.type = "checkbox";
@@ -1509,6 +1626,7 @@ function renderTeamManagerTable() {
       nameInput,
       roleSelect,
       captainChk,
+      liberoChk,
       outChk,
       delBtn
     ];
@@ -1532,7 +1650,6 @@ function openTeamManagerModal() {
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
   if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
-  if (elTeamApplyCurrent) elTeamApplyCurrent.checked = true;
   renderTeamManagerTable();
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
@@ -1553,16 +1670,19 @@ function collectTeamManagerPayload() {
     assistantCoach: (elTeamMetaAssistant && elTeamMetaAssistant.value) || "",
     manager: (elTeamMetaManager && elTeamMetaManager.value) || ""
   };
-  const playersDetailed = teamManagerState.players
-    .filter(p => (p.name || "").trim() !== "")
-    .map((p, idx) => ({
-      id: p.id || idx + "_" + p.name,
-      name: p.name.trim(),
-      number: p.number || "",
-      role: p.role || "",
-      isCaptain: !!p.isCaptain,
-      out: !!p.out
-    }));
+  const playersDetailed = enforceSingleCaptainFlag(
+    teamManagerState.players
+      .filter(p => (p.name || "").trim() !== "")
+      .map((p, idx) => ({
+        id: p.id || idx + "_" + p.name,
+        name: p.name.trim(),
+        number: p.number || "",
+        role: p.role || "",
+        isCaptain: !!p.isCaptain,
+        out: !!p.out
+      })),
+    state.captains && state.captains[0]
+  );
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
   const numbers = {};
   playersDetailed.forEach(p => {
@@ -1571,6 +1691,7 @@ function collectTeamManagerPayload() {
     }
   });
   const players = playersDetailed.filter(p => !p.out).map(p => p.name);
+  const captains = playersDetailed.filter(p => p.isCaptain && !p.out).map(p => p.name).slice(0, 1);
   return {
     version: 2,
     name,
@@ -1578,30 +1699,49 @@ function collectTeamManagerPayload() {
     playersDetailed,
     players,
     liberos,
-    numbers
+    numbers,
+    captains
   };
 }
-function saveTeamManagerPayload(applyToCurrent = true) {
+function saveTeamManagerPayload(options = {}) {
+  const {
+    closeModal = true,
+    openLineupAfter = false,
+    saveToStorage = true,
+    showAlert = true,
+    preserveCourt = false
+  } = options;
   const payload = collectTeamManagerPayload();
   if (!payload || !payload.name) {
     alert("Inserisci un nome squadra valido.");
     return;
   }
-  saveTeamToStorage(payload.name, payload);
-  syncTeamsFromStorage();
-  state.selectedTeam = payload.name;
-  renderTeamsSelect();
-  if (applyToCurrent) {
-    const roster = extractRosterFromTeam(payload);
-    updatePlayersList(roster.players, {
-      askReset: true,
-      liberos: roster.liberos,
-      playerNumbers: roster.numbers
-    });
+  if (saveToStorage) {
+    saveTeamToStorage(payload.name, payload);
+    syncTeamsFromStorage();
+    state.selectedTeam = payload.name;
+    renderTeamsSelect();
+  } else {
+    state.selectedTeam = payload.name;
   }
+  const roster = extractRosterFromTeam(payload);
+  updatePlayersList(roster.players, {
+    askReset: !preserveCourt,
+    liberos: roster.liberos,
+    playerNumbers: roster.numbers,
+    captains: roster.captains,
+    setDefaultLineup: !preserveCourt,
+    defaultLineupNames:
+      roster.playersDetailed && roster.playersDetailed.length > 0
+        ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+        : roster.players
+  });
   saveState();
-  closeTeamManagerModal();
-  alert("Squadra salvata: " + payload.name);
+  if (closeModal) closeTeamManagerModal();
+  if (showAlert) alert("Squadra salvata: " + payload.name);
+  if (openLineupAfter && typeof openMobileLineupModal === "function") {
+    openMobileLineupModal();
+  }
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
@@ -1871,38 +2011,72 @@ function renderMetricsConfig() {
   });
 }
 function updatePlayersList(newPlayers, options = {}) {
-  const { askReset = true, liberos = null, playerNumbers = null } = options;
+  const {
+    askReset = true,
+    liberos = null,
+    playerNumbers = null,
+    captains = null,
+    setDefaultLineup = false,
+    defaultLineupNames = null,
+    preserveCourt = false
+  } = options;
   const normalized = normalizePlayers(newPlayers);
+  const providedNumbers = playerNumbers && typeof playerNumbers === "object" ? playerNumbers : null;
+  const providedLiberos = Array.isArray(liberos) ? liberos : null;
+  const candidateCaptains = Array.isArray(captains) ? captains : state.captains || [];
+  const normalizedCaptains = normalizePlayers(candidateCaptains).filter(name => normalized.includes(name));
+  const chosenCaptain = normalizedCaptains[0] || "";
+  const nextCaptains = chosenCaptain ? [chosenCaptain] : [];
   const changed = playersChanged(normalized);
+  const nextNumbers = buildNumbersForNames(normalized, providedNumbers || state.playerNumbers || {});
+  const nextLiberos = (providedLiberos || state.liberos || []).filter(name => normalized.includes(name));
+  const lineupNames =
+    Array.isArray(defaultLineupNames) && defaultLineupNames.length > 0
+      ? normalizePlayers(defaultLineupNames).filter(name => normalized.includes(name))
+      : normalized;
+
   if (!changed) {
-    syncPlayerNumbers(normalized);
+    state.playerNumbers = nextNumbers;
+    state.liberos = nextLiberos;
+    state.captains = nextCaptains;
+    if (setDefaultLineup) {
+      applyDefaultLineup(lineupNames);
+    }
     saveState();
     applyPlayersFromStateToTextarea();
     renderPlayersManagerList();
-    return;
+  } else {
+    if (state.events.length > 0 && askReset) {
+      const ok = confirm(
+        "Cambiare l'elenco di giocatrici azzererà tutte le statistiche del match. Procedere?"
+      );
+      if (!ok) return;
+    }
+    state.players = normalized;
+    state.playerNumbers = nextNumbers;
+    if (!preserveCourt) {
+      state.events = [];
+      ensureCourtShape();
+      state.court = Array.from({ length: 6 }, () => ({ main: "" }));
+      state.rotation = 1;
+    } else {
+      ensureCourtShape();
+      cleanCourtPlayers();
+    }
+    state.liberos = nextLiberos;
+    state.captains = nextCaptains;
+    if (setDefaultLineup) {
+      applyDefaultLineup(lineupNames);
+    }
+    ensureMetricsConfigDefaults();
+    state.savedTeams = state.savedTeams || {};
+    initStats();
+    saveState();
+    applyPlayersFromStateToTextarea();
+    renderPlayersManagerList();
   }
-  if (state.events.length > 0 && askReset) {
-    const ok = confirm(
-      "Cambiare l'elenco di giocatrici azzererà tutte le statistiche del match. Procedere?"
-    );
-    if (!ok) return;
-  }
-  state.players = normalized;
-  const providedNumbers = playerNumbers && typeof playerNumbers === "object" ? playerNumbers : {};
-  state.playerNumbers = buildNumbersForNames(normalized, providedNumbers);
-  state.events = [];
-  ensureCourtShape();
-  state.court = Array.from({ length: 6 }, () => ({ main: "" }));
-  state.rotation = 1;
-  const providedLiberos = Array.isArray(liberos) ? liberos : [];
-  state.liberos = providedLiberos.filter(name => normalized.includes(name));
-  ensureMetricsConfigDefaults();
-  state.savedTeams = state.savedTeams || {};
-  initStats();
-  saveState();
-  applyPlayersFromStateToTextarea();
+
   renderPlayers();
-  renderPlayersManagerList();
   renderBenchChips();
   renderLiberoChipsInline();
   renderLineupChips();
