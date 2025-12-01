@@ -13,6 +13,141 @@ let youtubeFallback = false;
 let pendingYoutubeSeek = null;
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
+function valueToString(val) {
+  if (val === null || val === undefined) return "";
+  if (Array.isArray(val) || typeof val === "object") {
+    try {
+      return JSON.stringify(val);
+    } catch (_) {
+      return String(val);
+    }
+  }
+  return String(val);
+}
+function parseInputValue(raw) {
+  const str = (raw || "").trim();
+  if (str === "") return null;
+  // Try JSON first (for arrays/objects/booleans/null/numbers)
+  try {
+    return JSON.parse(str);
+  } catch (_) {
+    const num = parseFloat(str);
+    if (!Number.isNaN(num)) return num;
+    return str;
+  }
+}
+function createNumberInput(ev, field, min, max, onDone) {
+  const input = document.createElement("input");
+  input.type = "number";
+  if (min !== undefined) input.min = String(min);
+  if (max !== undefined) input.max = String(max);
+  input.value = ev[field] === null || ev[field] === undefined ? "" : String(ev[field]);
+  input.addEventListener("change", () => {
+    const val = parseFloat(input.value);
+    if (!Number.isNaN(val) && (min === undefined || val >= min) && (max === undefined || val <= max)) {
+      ev[field] = val;
+      refreshAfterVideoEdit(true);
+    }
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+    renderEventsLog();
+  });
+  return input;
+}
+function createTextInput(ev, field, onDone) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = valueToString(ev[field]);
+  input.addEventListener("change", () => {
+    ev[field] = parseInputValue(input.value);
+    refreshAfterVideoEdit(false);
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+    renderEventsLog();
+  });
+  return input;
+}
+function createCheckboxInput(ev, field, onDone) {
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = !!ev[field];
+  input.addEventListener("change", () => {
+    ev[field] = input.checked;
+    refreshAfterVideoEdit(false);
+  });
+  input.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+    renderEventsLog();
+  });
+  return input;
+}
+function getNextEventId() {
+  const maxId = (state.events || []).reduce((max, ev) => {
+    const val = typeof ev.eventId === "number" ? ev.eventId : 0;
+    return val > max ? val : max;
+  }, 0);
+  return maxId + 1;
+}
+function computeEventDurationMs(prevIso, nowMs) {
+  if (!prevIso) return null;
+  const prevMs = new Date(prevIso).getTime();
+  if (isNaN(prevMs)) return null;
+  return Math.max(0, nowMs - prevMs);
+}
+function buildBaseEventPayload(base) {
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const rotation = state.rotation || 1;
+  const zone = typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx) : null;
+  const lastEventTime = state.events && state.events.length > 0 ? state.events[state.events.length - 1].t : null;
+  const durationMs = computeEventDurationMs(lastEventTime, now.getTime());
+  return {
+    eventId: getNextEventId(),
+    t: nowIso,
+    durationMs: durationMs,
+    set: state.currentSet,
+    rotation,
+    playerIdx: base.playerIdx,
+    playerName:
+      base.playerName ||
+      (typeof base.playerIdx === "number" ? state.players[base.playerIdx] : base.playerName) ||
+      null,
+    zone,
+    skillId: base.skillId,
+    code: base.code,
+    pointDirection: base.pointDirection || null,
+    value: base.value,
+    autoRotationDirection: null,
+    autoRotateNext: null,
+    setterPosition: rotation,
+    opponentSetterPosition: null,
+    playerPosition: zone,
+    receivePosition: null,
+    base: base.base || null,
+    setType: base.setType || null,
+    combination: base.combination || null,
+    serveStart: null,
+    serveEnd: null,
+    serveType: null,
+    receiveEvaluation: null,
+    attackEvaluation: null,
+    attackBp: null,
+    attackType: null,
+    attackDirection: null,
+    blockNumber: null,
+    playerIn: base.playerIn || null,
+    playerOut: base.playerOut || null,
+    relatedEvents: base.relatedEvents || [],
+    teamName: state.selectedTeam || (state.match && state.match.teamName) || null,
+    homeScore: null,
+    visitorScore: null
+  };
+}
 function renderSkillChoice(playerIdx, playerName) {
   if (!elSkillModalBody) return;
   modalMode = "skill";
@@ -456,18 +591,12 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     playerIdx = state.players.findIndex(p => p === playerName);
   }
   if (playerIdx === -1 || !state.players[playerIdx]) return;
-  const now = new Date();
-  const timeStr = now.toISOString();
-  const event = {
-    t: timeStr,
-    set: state.currentSet,
-    rotation: state.rotation || 1,
-    playerIdx: playerIdx,
+  const event = buildBaseEventPayload({
+    playerIdx,
     playerName: state.players[playerIdx],
-    zone: getCurrentZoneForPlayer(playerIdx),
-    skillId: skillId,
-    code: code
-  };
+    skillId,
+    code
+  });
   state.events.push(event);
   handleAutoRotationFromEvent(event);
   if (!state.stats[playerIdx]) {
@@ -625,9 +754,7 @@ function recalcAllStatsAndUpdateUI() {
   renderVideoAnalysis();
 }
 function renderEventsLog() {
-  if (elEventsLog) {
-    elEventsLog.innerHTML = "";
-  }
+  if (elEventsLog) elEventsLog.innerHTML = "";
   let summaryText = "Nessun evento";
   let compactSummary = "";
   if (!state.events || state.events.length === 0) {
@@ -672,21 +799,9 @@ function renderEventsLog() {
   const latestFmt = formatEv(latest);
   summaryText = latestFmt.leftText;
   compactSummary = latestFmt.compact;
-  recent.forEach(ev => {
-    if (!elEventsLog) return;
-    const div = document.createElement("div");
-    div.className = "event-line";
-    const left = document.createElement("span");
-    left.className = "event-left";
-    const fmt = formatEv(ev);
-    left.textContent = fmt.leftText;
-    const right = document.createElement("span");
-    right.className = "event-right";
-    right.textContent = fmt.timeStr;
-    div.appendChild(left);
-    div.appendChild(right);
-    elEventsLog.appendChild(div);
-  });
+  const skillEvents = getVideoSkillEvents();
+  const baseMs = getVideoBaseTimeMs(skillEvents);
+  renderEventTableRows(elEventsLog, recent, { showSeek: false, showVideoTime: true, baseMs });
   if (elEventsLogSummary) {
     elEventsLogSummary.textContent = summaryText;
   }
@@ -1163,38 +1278,62 @@ function makeEditableCell(td, factory) {
     startEdit();
   });
 }
-function renderVideoAnalysis() {
-  if (!elVideoSkillsBody) return;
-  const skillEvents = getVideoSkillEvents();
-  const baseMs = getVideoBaseTimeMs(skillEvents);
-  updateVideoSyncLabel();
-  if (elVideoFileLabel) {
-    const label =
-      (state.video && state.video.youtubeId && state.video.youtubeUrl) ||
-      (state.video && state.video.fileName) ||
-      "Nessun file caricato";
-    elVideoFileLabel.textContent = label;
+function renderEventTableRows(target, events, options = {}) {
+  if (!target) return;
+  target.innerHTML = "";
+  const showVideoTime = options.showVideoTime;
+  const showSeek = options.showSeek;
+  const baseMs = options.baseMs || null;
+  const targetIsTbody = target.tagName && target.tagName.toLowerCase() === "tbody";
+  const table = targetIsTbody ? null : document.createElement("table");
+  const tbody = targetIsTbody ? target : document.createElement("tbody");
+
+  if (!targetIsTbody) {
+    table.className = options.tableClass || "event-edit-table";
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    const headers = [
+      "#",
+      "Giocatrice",
+      "Fondamentale",
+      "Codice",
+      "Set",
+      "Rot",
+      "Zona",
+      "Pos Palleggio",
+      "Pos Palleggio Avv",
+      "Zona Rice",
+      "Base",
+      "Tipo Alzata",
+      "Combinazione",
+      "Servizio Start",
+      "Servizio End",
+      "Tipo Servizio",
+      "Valut Rice",
+      "Valut Att",
+      "Att BP",
+      "Tipo Att",
+      "Direzione Att",
+      "Muro N",
+      "In",
+      "Out",
+      "Dur (ms)"
+    ];
+    if (showVideoTime) headers.push("Video");
+    if (showSeek) headers.push("Azione");
+    headers.forEach(h => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    table.appendChild(tbody);
   }
-  elVideoSkillsBody.innerHTML = "";
-  if (!skillEvents.length) {
+  events.forEach((ev, displayIdx) => {
     const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 9;
-    td.textContent = "Registra alcune skill per vederle qui.";
-    tr.appendChild(td);
-    elVideoSkillsBody.appendChild(tr);
-    return;
-  }
-  let updatedZones = false;
-  skillEvents.forEach(({ ev }, displayIdx) => {
-    const tr = document.createElement("tr");
-    const videoTime = computeEventVideoTime(ev, baseMs);
-    const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
-    if ((ev.zone === undefined || ev.zone === null || ev.zone === "") && fallbackZone) {
-      ev.zone = fallbackZone;
-      updatedZones = true;
-    }
-    const zoneDisplay = ev.zone || fallbackZone || "";
+    const videoTime = showVideoTime ? computeEventVideoTime(ev, baseMs) : null;
+    const zoneDisplay = ev.zone || ev.playerPosition || "";
     const cells = [
       { text: String(displayIdx + 1) },
       {
@@ -1202,7 +1341,7 @@ function renderVideoAnalysis() {
         editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done))
       },
       {
-        text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId,
+        text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "",
         editable: td => makeEditableCell(td, done => createSkillSelect(ev, done))
       },
       {
@@ -1222,10 +1361,81 @@ function renderVideoAnalysis() {
         editable: td => makeEditableCell(td, done => createZoneInput(ev, done))
       },
       {
+        text: valueToString(ev.setterPosition || ev.rotation || ""),
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "setterPosition", 1, 6, done))
+      },
+      {
+        text: valueToString(ev.opponentSetterPosition),
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "opponentSetterPosition", 1, 6, done))
+      },
+      {
+        text: valueToString(ev.receivePosition),
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "receivePosition", 1, 6, done))
+      },
+      {
+        text: valueToString(ev.base),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "base", done))
+      },
+      {
+        text: valueToString(ev.setType),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "setType", done))
+      },
+      {
+        text: valueToString(ev.combination),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "combination", done))
+      },
+      {
+        text: valueToString(ev.serveStart),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveStart", done))
+      },
+      {
+        text: valueToString(ev.serveEnd),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveEnd", done))
+      },
+      {
+        text: valueToString(ev.serveType),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveType", done))
+      },
+      {
+        text: valueToString(ev.receiveEvaluation),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "receiveEvaluation", done))
+      },
+      {
+        text: valueToString(ev.attackEvaluation),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackEvaluation", done))
+      },
+      {
+        text: valueToString(ev.attackBp),
+        editable: td => makeEditableCell(td, done => createCheckboxInput(ev, "attackBp", done))
+      },
+      {
+        text: valueToString(ev.attackType),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackType", done))
+      },
+      {
+        text: valueToString(ev.attackDirection),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done))
+      },
+      {
+        text: valueToString(ev.blockNumber),
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "blockNumber", 0, undefined, done))
+      },
+      {
+        text: valueToString(ev.playerIn),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerIn", done))
+      },
+      {
+        text: valueToString(ev.playerOut),
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerOut", done))
+      },
+      { text: valueToString(ev.durationMs || "") }
+    ];
+    if (showVideoTime) {
+      cells.push({
         text: formatVideoTimestamp(videoTime),
         editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
-      }
-    ];
+      });
+    }
     cells.forEach(cell => {
       const td = document.createElement("td");
       td.textContent = cell.text || "";
@@ -1234,19 +1444,65 @@ function renderVideoAnalysis() {
       }
       tr.appendChild(td);
     });
-    const actionTd = document.createElement("td");
-    const link = document.createElement("span");
-    link.className = "video-seek-link";
-    link.textContent = "▶ Vai";
-    link.title = "Apri al timestamp";
-    link.addEventListener("click", () => seekVideoToTime(videoTime));
-    actionTd.appendChild(link);
-    tr.appendChild(actionTd);
-    tr.addEventListener("dblclick", () => {
-      seekVideoToTime(videoTime);
-    });
-    elVideoSkillsBody.appendChild(tr);
+    if (showSeek) {
+      const actionTd = document.createElement("td");
+      const link = document.createElement("span");
+      link.className = "video-seek-link";
+      link.textContent = "▶ Vai";
+      link.title = "Apri al timestamp";
+      link.addEventListener("click", () => seekVideoToTime(videoTime));
+      actionTd.appendChild(link);
+      tr.appendChild(actionTd);
+      tr.addEventListener("dblclick", () => {
+        seekVideoToTime(videoTime);
+      });
+    }
+    tbody.appendChild(tr);
   });
+  if (!targetIsTbody) {
+    target.appendChild(table);
+  }
+}
+function renderVideoAnalysis() {
+  if (!elVideoSkillsContainer) return;
+  const skillEvents = getVideoSkillEvents();
+  const baseMs = getVideoBaseTimeMs(skillEvents);
+  updateVideoSyncLabel();
+  if (elVideoFileLabel) {
+    const label =
+      (state.video && state.video.youtubeId && state.video.youtubeUrl) ||
+      (state.video && state.video.fileName) ||
+      "Nessun file caricato";
+    elVideoFileLabel.textContent = label;
+  }
+  if (!skillEvents.length) {
+    elVideoSkillsContainer.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.textContent = "Registra alcune skill per vederle qui.";
+    tr.appendChild(td);
+    const tbl = document.createElement("table");
+    tbl.className = "video-skills-table event-edit-table";
+    const tbody = document.createElement("tbody");
+    tbody.appendChild(tr);
+    tbl.appendChild(tbody);
+    elVideoSkillsContainer.appendChild(tbl);
+    return;
+  }
+  let updatedZones = false;
+  skillEvents.forEach(({ ev }) => {
+    const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
+    if ((ev.zone === undefined || ev.zone === null || ev.zone === "") && fallbackZone) {
+      ev.zone = fallbackZone;
+      updatedZones = true;
+    }
+  });
+  renderEventTableRows(
+    elVideoSkillsContainer,
+    skillEvents.map(item => item.ev),
+    { showSeek: true, showVideoTime: true, baseMs, tableClass: "video-skills-table event-edit-table" }
+  );
   if (updatedZones) {
     saveState();
   }
@@ -1808,19 +2064,14 @@ function handleAutoRotationFromEvent(eventObj) {
   eventObj.autoRotateNext = state.autoRotatePending;
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
-  const rot = state.rotation || 1;
-  const event = {
-    t: new Date().toISOString(),
-    set: state.currentSet,
-    rotation: rot,
-    playerIdx: playerIdx,
+  const event = buildBaseEventPayload({
+    playerIdx,
     playerName: playerName,
-    zone: playerIdx !== null ? getCurrentZoneForPlayer(playerIdx) : null,
     skillId: "manual",
     code: codeLabel || direction,
     pointDirection: direction,
     value: value
-  };
+  });
   state.events.push(event);
   handleAutoRotationFromEvent(event);
   saveState();
