@@ -81,6 +81,8 @@ let state = {
   theme: "dark",
   currentSet: 1,
   players: [],
+  isServing: false,
+  autoRolePositioning: false,
   captains: [],
   playerNumbers: {},
   events: [],

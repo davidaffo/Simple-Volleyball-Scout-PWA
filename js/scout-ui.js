@@ -2047,7 +2047,9 @@ function handleAutoRotationFromEvent(eventObj) {
   }
   if (eventObj.skillId === "pass") {
     state.autoRotatePending = true;
+    state.isServing = false;
     eventObj.autoRotateNext = state.autoRotatePending;
+    saveState();
     return;
   }
   const direction = getPointDirection(eventObj);
@@ -2058,10 +2060,16 @@ function handleAutoRotationFromEvent(eventObj) {
       eventObj.autoRotationDirection = "ccw";
     }
     state.autoRotatePending = false;
+    state.isServing = true;
   } else if (direction === "against") {
     state.autoRotatePending = false;
+    state.isServing = false;
   }
   eventObj.autoRotateNext = state.autoRotatePending;
+  saveState();
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
+  }
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
   const event = buildBaseEventPayload({
@@ -3432,6 +3440,9 @@ function init() {
   renderMatchesSelect();
   renderLiveScore();
   renderPlayers();
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
+  }
   if (!state.players || state.players.length === 0) {
     applyTemplateTeam({ askReset: false });
   } else {
@@ -3653,6 +3664,17 @@ function init() {
     elAutoRotateToggleFloating.addEventListener("change", () =>
       setAutoRotateEnabled(elAutoRotateToggleFloating.checked)
     );
+  }
+  const elAutoRoleToggle = document.getElementById("auto-role-toggle");
+  if (elAutoRoleToggle) {
+    elAutoRoleToggle.checked = !!state.autoRolePositioning;
+    elAutoRoleToggle.addEventListener("change", () => {
+      state.autoRolePositioning = elAutoRoleToggle.checked;
+      saveState();
+      if (typeof applyAutoRolePositioning === "function") {
+        applyAutoRolePositioning();
+      }
+    });
   }
   setAutoRotateEnabled(state.autoRotate !== false);
   if (elRotationIndicator && elRotationSelect) {

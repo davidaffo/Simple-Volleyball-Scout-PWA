@@ -103,6 +103,7 @@ const elActionsModal = document.getElementById("floating-actions-modal");
 const elActionsClose = document.getElementById("floating-actions-close");
 const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
 const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
+const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
 const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
 const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
@@ -136,6 +137,8 @@ const elToggleLogMobile = document.getElementById("toggle-log-mobile");
 const elLogSection = document.querySelector("[data-log-section]");
 const elAggTabButtons = document.querySelectorAll("[data-agg-tab-target]");
 const elAggSubPanels = document.querySelectorAll("[data-agg-tab]");
+let autoRolePhaseApplied = "";
+let autoRoleRotationApplied = null;
 let activeTab = "info";
 let activeAggTab = "summary";
 function getTodayIso() {
@@ -228,6 +231,8 @@ function loadState() {
     ensureCourtShape();
     cleanCourtPlayers();
     state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
+    state.autoRolePositioning = !!parsed.autoRolePositioning;
+    state.isServing = !!parsed.isServing;
     state.rotation = parsed.rotation || 1;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
@@ -456,6 +461,17 @@ function applyDefaultLineup(names = []) {
   state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
   state.rotation = 1;
 }
+function setAutoRolePositioning(enabled) {
+  state.autoRolePositioning = !!enabled;
+  saveState();
+}
+function setIsServing(flag) {
+  state.isServing = !!flag;
+  saveState();
+}
+function getCurrentPhase() {
+  return state.isServing ? "break" : "sideout";
+}
 function handlePlayerNumberChange(name, value) {
   if (!name) return;
   const clean = (value || "").trim();
@@ -551,6 +567,10 @@ function reserveNamesInCourt(name) {
     return cleaned;
   });
 }
+function resetAutoRoleCache() {
+  autoRolePhaseApplied = "";
+  autoRoleRotationApplied = null;
+}
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
   const name = (playerName || "").trim();
@@ -576,6 +596,7 @@ function setCourtPlayer(posIdx, target, playerName) {
   releaseReplaced(name, posIdx);
   state.court[posIdx] = updated;
   cleanCourtPlayers();
+  resetAutoRoleCache();
   saveState();
   renderPlayers();
   renderBenchChips();
@@ -605,6 +626,7 @@ function swapCourtPlayers(fromIdx, toIdx) {
   } else {
     clearCourtAssignment(fromIdx, "main");
   }
+  resetAutoRoleCache();
 }
 function clearCourtAssignment(posIdx, target) {
   ensureCourtShape();
@@ -618,6 +640,7 @@ function clearCourtAssignment(posIdx, target) {
     slot.replaced = "";
   }
   state.court[posIdx] = slot;
+  resetAutoRoleCache();
   saveState();
   renderPlayers();
   renderBenchChips();
@@ -1150,6 +1173,7 @@ function resetMatchState() {
   state.stats = {};
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
+  state.isServing = false;
   state.currentSet = 1;
   state.autoRotatePending = false;
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
@@ -2522,6 +2546,7 @@ function updateRotationDisplay() {
     elRotationIndicatorModal.textContent = String(state.rotation || 1);
   }
   syncAutoRotateToggle();
+  syncAutoRoleToggle();
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
@@ -2543,6 +2568,11 @@ function setAutoRotateEnabled(enabled) {
   }
   saveState();
   syncAutoRotateToggle();
+}
+function syncAutoRoleToggle() {
+  if (elAutoRoleToggle) {
+    elAutoRoleToggle.checked = !!state.autoRolePositioning;
+  }
 }
 function setCurrentSet(value, options = {}) {
   const setNum = Math.min(5, Math.max(1, parseInt(value, 10) || 1));
@@ -2591,6 +2621,127 @@ function animateFlip(prevRects, selector, keyBuilder) {
     });
   });
 }
+function applyPhasePermutation(lineup, rotation, phase) {
+  const arr = lineup.map(slot => Object.assign({}, slot));
+  const swap = (a, b) => {
+    const tmp = arr[a];
+    arr[a] = arr[b];
+    arr[b] = tmp;
+  };
+  const rot = parseInt(rotation, 10) || 1;
+  if (phase === "sideout") {
+    switch (rot) {
+      case 1:
+        swap(0, 1);
+        break;
+      case 2:
+        swap(2, 4);
+        break;
+      case 3: {
+        const old4 = arr[3];
+        const old5 = arr[4];
+        const old6 = arr[5];
+        arr[3] = old6;
+        arr[4] = old4;
+        arr[5] = old5;
+        break;
+      }
+      case 4: {
+        const old1 = arr[0];
+        const old2 = arr[1];
+        const old5 = arr[4];
+        const old6 = arr[5];
+        arr[4] = old2;
+        arr[5] = old5;
+        arr[0] = old6;
+        arr[1] = old1;
+        break;
+      }
+      case 5:
+        swap(2, 4);
+        break;
+      case 6: {
+        const old4 = arr[3];
+        const old5 = arr[4];
+        const old6 = arr[5];
+        arr[3] = old6;
+        arr[4] = old4;
+        arr[5] = old5;
+        break;
+      }
+      default:
+        break;
+    }
+  } else {
+    switch (rot) {
+      case 4: {
+        const old2 = arr[1];
+        const old4 = arr[3];
+        const old5 = arr[4];
+        const old6 = arr[5];
+        arr[4] = old6;
+        arr[5] = old5;
+        arr[1] = old4;
+        arr[3] = old2;
+        break;
+      }
+      case 1:
+        swap(4, 5);
+        break;
+      case 2:
+      case 5: {
+        const old1 = arr[0];
+        const old3 = arr[2];
+        const old4 = arr[3];
+        const old5 = arr[4];
+        arr[3] = old3;
+        arr[2] = old4;
+        arr[4] = old1;
+        arr[0] = old5;
+        break;
+      }
+      case 3:
+      case 6: {
+        const old1 = arr[0];
+        const old2 = arr[1];
+        const old3 = arr[2];
+        const old6 = arr[5];
+        arr[2] = old2;
+        arr[1] = old3;
+        arr[5] = old1;
+        arr[0] = old6;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return arr.map((slot, idx) => {
+    if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
+      if (slot.replaced) {
+        return { main: slot.replaced, replaced: "" };
+      }
+    }
+    return slot;
+  });
+}
+function applyAutoRolePositioning() {
+  if (!state.autoRolePositioning) return;
+  ensureCourtShape();
+  const phase = getCurrentPhase();
+  const rot = state.rotation || 1;
+  if (autoRolePhaseApplied === phase && autoRoleRotationApplied === rot) return;
+  const permuted = applyPhasePermutation(state.court, rot, phase);
+  state.court = permuted;
+  autoRolePhaseApplied = phase;
+  autoRoleRotationApplied = rot;
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
+}
 function rotateCourt(direction) {
   const prevCourtRects = captureRects(".court-card", el => {
     const name = el.dataset.playerName || "";
@@ -2620,6 +2771,10 @@ function rotateCourt(direction) {
     }
     return slot;
   });
+  resetAutoRoleCache();
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
+  }
   saveState();
   renderPlayers();
   renderLineupChips();
