@@ -4,6 +4,49 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
+function getPredictedSkillId() {
+  if (!state.predictiveSkillFlow) return null;
+  const ownEvents = (state.events || []).filter(ev => {
+    if (!ev || !ev.skillId || ev.skillId === "manual") return false;
+    if (!ev.team) return true; // current app only tracks our team
+    return ev.team !== "opponent"; // future-proof: ignore opponent skills
+  });
+  const last = ownEvents.slice(-1)[0] || null;
+  const possessionServe = !!state.isServing;
+  const fallback = possessionServe ? "serve" : "pass";
+  if (!last) return fallback;
+  const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
+  if (dir === "for") return "serve";
+  if (dir === "against") return "pass";
+  switch (last.skillId) {
+    case "serve":
+      return "defense"; // dopo la nostra battuta ci prepariamo a difesa/muro, non a ricevere
+    case "pass":
+      return "second";
+    case "second":
+      return "attack";
+    case "attack":
+      return "defense";
+    case "block":
+      return "defense";
+    case "defense":
+      return "second";
+    default:
+      return fallback;
+  }
+}
+function updateNextSkillIndicator(skillId) {
+  if (!elNextSkillIndicator) return;
+  if (!state.predictiveSkillFlow) {
+    elNextSkillIndicator.textContent = "Prossima skill: —";
+    elNextSkillIndicator.classList.remove("active");
+    return;
+  }
+  const meta = SKILLS.find(s => s.id === skillId);
+  const label = meta ? meta.label : skillId || "—";
+  elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
+  elNextSkillIndicator.classList.toggle("active", !!skillId);
+}
 let videoObjectUrl = "";
 let ytPlayer = null;
 let ytApiPromise = null;
@@ -11,6 +54,7 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
+const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 function valueToString(val) {
@@ -364,7 +408,7 @@ function applyPlayersFromTextarea() {
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
-  const { stacked = false, closeAfterAction = false, columns = 2 } = options;
+  const { stacked = false, closeAfterAction = false, columns = 2, nextSkillId = null } = options;
   const getSkillColors = skillId => {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
@@ -373,7 +417,11 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const cfg = state.metricsConfig[skill.id];
     return !cfg || cfg.enabled !== false;
   });
-  if (enabledSkills.length === 0) {
+  const visibleSkills = nextSkillId
+    ? enabledSkills.filter(skill => skill.id === nextSkillId)
+    : enabledSkills;
+  const skillsToRender = visibleSkills.length > 0 ? visibleSkills : enabledSkills;
+  if (skillsToRender.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
     empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
@@ -381,13 +429,13 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return;
   }
   const chunkSize = stacked ? 1 : columns;
-  for (let i = 0; i < enabledSkills.length; i += chunkSize) {
+  for (let i = 0; i < skillsToRender.length; i += chunkSize) {
     const rowWrap = document.createElement("div");
     rowWrap.className = "skill-row-pair" + (stacked ? " stacked" : "");
-    const subset = enabledSkills.slice(i, i + chunkSize);
+    const subset = skillsToRender.slice(i, i + chunkSize);
     subset.forEach(skill => {
     const row = document.createElement("div");
-    row.className = "skill-row skill-" + skill.id;
+    row.className = "skill-row skill-" + skill.id + (nextSkillId && skill.id === nextSkillId ? " next-skill" : "");
     row.dataset.playerIdx = String(playerIdx);
     row.dataset.playerName = activeName;
     row.dataset.skillId = skill.id;
@@ -456,6 +504,8 @@ function renderPlayers() {
   elPlayersContainer.classList.add("court-layout");
   ensureCourtShape();
   ensureMetricsConfigDefaults();
+  const predictedSkillId = getPredictedSkillId();
+  updateNextSkillIndicator(predictedSkillId);
   const mobileMode = isMobileLayout();
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
@@ -555,7 +605,7 @@ function renderPlayers() {
       elPlayersContainer.appendChild(card);
       return;
     }
-    renderSkillRows(card, playerIdx, activeName);
+    renderSkillRows(card, playerIdx, activeName, { nextSkillId: predictedSkillId });
     elPlayersContainer.appendChild(card);
   });
   recalcAllStatsAndUpdateUI();
@@ -610,11 +660,15 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   animateEventToLog(sourceEl, skillId, code);
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
-  renderLiveScore();
-  renderScoreAndRotations(computePointsSummary());
-  renderEventsLog();
-  renderAggregatedTable();
-  renderVideoAnalysis();
+  if (state.predictiveSkillFlow) {
+    renderPlayers();
+  } else {
+    renderLiveScore();
+    renderScoreAndRotations(computePointsSummary());
+    renderEventsLog();
+    renderAggregatedTable();
+    renderVideoAnalysis();
+  }
 }
 function computeMetrics(counts, skillId) {
   ensureMetricsConfigDefaults();
@@ -3669,11 +3723,37 @@ function init() {
   if (elAutoRoleToggle) {
     elAutoRoleToggle.checked = !!state.autoRolePositioning;
     elAutoRoleToggle.addEventListener("change", () => {
-      state.autoRolePositioning = elAutoRoleToggle.checked;
-      saveState();
-      if (typeof applyAutoRolePositioning === "function") {
+      const enabled = elAutoRoleToggle.checked;
+      if (typeof setAutoRolePositioning === "function") {
+        setAutoRolePositioning(enabled);
+      } else {
+        state.autoRolePositioning = enabled;
+        saveState();
+      }
+      if (enabled && typeof applyAutoRolePositioning === "function") {
         applyAutoRolePositioning();
       }
+    });
+  }
+  const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
+  if (elAutoRoleP1AmericanToggle) {
+    elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;
+    elAutoRoleP1AmericanToggle.addEventListener("change", () => {
+      if (typeof setAutoRoleP1American === "function") {
+        setAutoRoleP1American(elAutoRoleP1AmericanToggle.checked);
+      } else {
+        state.autoRoleP1American = !!elAutoRoleP1AmericanToggle.checked;
+        saveState();
+      }
+    });
+  }
+  const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
+  if (elPredictiveSkillToggle) {
+    elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
+    elPredictiveSkillToggle.addEventListener("change", () => {
+      state.predictiveSkillFlow = !!elPredictiveSkillToggle.checked;
+      saveState();
+      renderPlayers();
     });
   }
   setAutoRotateEnabled(state.autoRotate !== false);

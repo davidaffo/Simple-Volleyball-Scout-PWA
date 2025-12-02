@@ -98,6 +98,8 @@ let state = {
   pointRules: {},
   autoRotate: true,
   autoRotatePending: false,
+  predictiveSkillFlow: false,
+  autoRoleP1American: false,
   video: {
     offsetSeconds: 0,
     fileName: "",

@@ -552,6 +552,19 @@ button.danger:hover {
   width: 16px;
   height: 16px;
 }
+.next-skill-indicator {
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px dashed var(--border-color, #334155);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: var(--text-muted, #cbd5e1);
+}
+.next-skill-indicator.active {
+  border-style: solid;
+  color: var(--text-color, #e2e8f0);
+  font-weight: 600;
+}
 .rotation-number {
   font-size: 1rem;
   font-weight: 700;

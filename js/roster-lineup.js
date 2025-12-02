@@ -104,6 +104,8 @@ const elActionsClose = document.getElementById("floating-actions-close");
 const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
 const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
+const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
+const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
 const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
 const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
@@ -139,6 +141,7 @@ const elAggTabButtons = document.querySelectorAll("[data-agg-tab-target]");
 const elAggSubPanels = document.querySelectorAll("[data-agg-tab]");
 let autoRolePhaseApplied = "";
 let autoRoleRotationApplied = null;
+let autoRoleBaseCourt = null;
 let activeTab = "info";
 let activeAggTab = "summary";
 function getTodayIso() {
@@ -264,6 +267,8 @@ function loadState() {
     state.video.youtubeId = state.video.youtubeId || "";
     state.video.youtubeUrl = state.video.youtubeUrl || "";
     state.autoRotate = parsed.autoRotate !== false;
+    state.autoRoleP1American = !!parsed.autoRoleP1American;
+    state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
     state.autoRotatePending = false;
     state.pointRules = parsed.pointRules || state.pointRules || {};
     ensureMatchDefaults();
@@ -460,10 +465,37 @@ function applyDefaultLineup(names = []) {
   const lineup = Array.isArray(names) ? names.filter(Boolean) : [];
   state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
   state.rotation = 1;
+  autoRoleBaseCourt = null;
 }
 function setAutoRolePositioning(enabled) {
-  state.autoRolePositioning = !!enabled;
+  const next = !!enabled;
+  const prev = !!state.autoRolePositioning;
+  state.autoRolePositioning = next;
+  if (!next && prev) {
+    const restored = restoreAutoRoleBaseCourt();
+    saveState();
+    if (restored) {
+      renderPlayers();
+      renderBenchChips();
+      renderLiberoChipsInline();
+      renderLineupChips();
+      updateRotationDisplay();
+    }
+    return;
+  }
+  if (next && !prev) {
+    cacheAutoRoleBaseCourt();
+    applyAutoRolePositioning();
+  }
   saveState();
+}
+function setAutoRoleP1American(enabled) {
+  state.autoRoleP1American = !!enabled;
+  saveState();
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
+  }
+  syncAutoRoleP1AmericanToggle();
 }
 function setIsServing(flag) {
   state.isServing = !!flag;
@@ -505,21 +537,51 @@ function playersChanged(nextPlayers) {
   return normalizedNext.some((name, idx) => name !== normalizedCurrent[idx]);
 }
 function ensureCourtShape() {
-  if (!Array.isArray(state.court) || state.court.length !== 6) {
-    state.court = Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
-  }
+  state.court = ensureCourtShapeFor(state.court);
 }
-function cleanCourtPlayers() {
+function ensureCourtShapeFor(court) {
+  if (!Array.isArray(court) || court.length !== 6) {
+    return Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
+  }
+  return court.map(slot => ({
+    main: (slot && slot.main) || "",
+    replaced: (slot && slot.replaced) || ""
+  }));
+}
+function cloneCourtLineup(lineup = state.court) {
+  ensureCourtShape();
+  return (lineup || []).map(slot => ({
+    main: (slot && slot.main) || "",
+    replaced: (slot && slot.replaced) || ""
+  }));
+}
+function cacheAutoRoleBaseCourt() {
+  autoRoleBaseCourt = cloneCourtLineup(state.court);
+}
+function restoreAutoRoleBaseCourt() {
+  if (!autoRoleBaseCourt) return false;
+  state.court = cloneCourtLineup(autoRoleBaseCourt);
+  autoRoleBaseCourt = null;
+  resetAutoRoleCache();
+  return true;
+}
+function cleanCourtPlayers(target = state.court) {
   ensureCourtShape();
   const valid = new Set(state.players || []);
   state.captains = (state.captains || []).filter(name => valid.has(name)).slice(0, 1);
-  state.court = state.court.map(slot => {
+  const cleaned = ensureCourtShapeFor(target).map(slot => {
     const main = valid.has(slot.main) ? slot.main : "";
     const replaced = slot.replaced && valid.has(slot.replaced) ? slot.replaced : "";
     return { main, replaced };
   });
+  if (target === state.court) {
+    state.court = cleaned;
+  } else {
+    cleaned.forEach((slot, idx) => (target[idx] = slot));
+  }
   cleanLiberos();
   ensureMetricsConfigDefaults();
+  return cleaned;
 }
 function isLibero(name) {
   if (!name) return false;
@@ -559,8 +621,8 @@ function isTouchInput() {
   // Consider touch-only devices when there's no fine pointer available
   return hasCoarse && !hasFine;
 }
-function reserveNamesInCourt(name) {
-  state.court = state.court.map(slot => {
+function reserveNamesInCourt(name, court = state.court) {
+  return court.map(slot => {
     const cleaned = Object.assign({}, slot);
     if (cleaned.main === name) cleaned.main = "";
     if (cleaned.replaced === name) cleaned.replaced = "";
@@ -573,11 +635,14 @@ function resetAutoRoleCache() {
 }
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
   const name = (playerName || "").trim();
   if (!name) return;
   if (!canPlaceInSlot(name, posIdx, true)) return;
-  reserveNamesInCourt(name);
-  const slot = state.court[posIdx] || { main: "", replaced: "" };
+  const reserved = reserveNamesInCourt(name, baseCourt);
+  reserved.forEach((slot, idx) => (baseCourt[idx] = slot));
+  const slot = baseCourt[posIdx] || { main: "", replaced: "" };
   const prevMain = slot.main;
   const updated = Object.assign({}, slot);
   updated.main = name;
@@ -593,22 +658,30 @@ function setCourtPlayer(posIdx, target, playerName) {
   } else {
     updated.replaced = "";
   }
-  releaseReplaced(name, posIdx);
-  state.court[posIdx] = updated;
-  cleanCourtPlayers();
+  releaseReplaced(name, posIdx, baseCourt);
+  baseCourt[posIdx] = updated;
+  cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
-  saveState();
-  renderPlayers();
-  renderBenchChips();
-  renderLiberoChipsInline();
-  renderLineupChips();
-  updateRotationDisplay();
+  if (state.autoRolePositioning) {
+    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    applyAutoRolePositioning();
+  } else {
+    state.court = baseCourt;
+    saveState();
+    renderPlayers();
+    renderBenchChips();
+    renderLiberoChipsInline();
+    renderLineupChips();
+    updateRotationDisplay();
+  }
 }
 function swapCourtPlayers(fromIdx, toIdx) {
   ensureCourtShape();
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
   if (fromIdx === toIdx) return;
-  const fromSlot = state.court[fromIdx] || { main: "", replaced: "" };
-  const toSlot = state.court[toIdx] || { main: "", replaced: "" };
+  const fromSlot = baseCourt[fromIdx] || { main: "", replaced: "" };
+  const toSlot = baseCourt[toIdx] || { main: "", replaced: "" };
   const fromName = fromSlot.main;
   if (!fromName) return;
   const toName = toSlot.main;
@@ -620,17 +693,28 @@ function swapCourtPlayers(fromIdx, toIdx) {
     alert("Non puoi spostare il libero in prima linea.");
     return;
   }
-  setCourtPlayer(toIdx, "main", fromName);
-  if (toName) {
-    setCourtPlayer(fromIdx, "main", toName);
-  } else {
-    clearCourtAssignment(fromIdx, "main");
-  }
+  baseCourt[toIdx] = fromSlot;
+  baseCourt[fromIdx] = toSlot;
+  cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
+  if (state.autoRolePositioning) {
+    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    applyAutoRolePositioning();
+  } else {
+    state.court = baseCourt;
+    saveState();
+    renderPlayers();
+    renderBenchChips();
+    renderLiberoChipsInline();
+    renderLineupChips();
+    updateRotationDisplay();
+  }
 }
 function clearCourtAssignment(posIdx, target) {
   ensureCourtShape();
-  const slot = state.court[posIdx];
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
+  const slot = baseCourt[posIdx];
   if (!slot) return;
   if ((state.liberos || []).includes(slot.main) && slot.replaced) {
     slot.main = slot.replaced;
@@ -639,14 +723,21 @@ function clearCourtAssignment(posIdx, target) {
     slot.main = "";
     slot.replaced = "";
   }
-  state.court[posIdx] = slot;
+  baseCourt[posIdx] = slot;
+  cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
-  saveState();
-  renderPlayers();
-  renderBenchChips();
-  renderLiberoChipsInline();
-  renderLineupChips();
-  updateRotationDisplay();
+  if (state.autoRolePositioning) {
+    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    applyAutoRolePositioning();
+  } else {
+    state.court = baseCourt;
+    saveState();
+    renderPlayers();
+    renderBenchChips();
+    renderLiberoChipsInline();
+    renderLineupChips();
+    updateRotationDisplay();
+  }
 }
 function initStats() {
   state.stats = {};
@@ -1172,6 +1263,7 @@ function resetMatchState() {
   state.events = [];
   state.stats = {};
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
+  autoRoleBaseCourt = null;
   state.rotation = 1;
   state.isServing = false;
   state.currentSet = 1;
@@ -1539,6 +1631,48 @@ function buildTemplateNumbers() {
   });
   return numbers;
 }
+function buildRoleBasedDefaultLineup(names = []) {
+  const normalized = normalizePlayers(names);
+  const buckets = { P: [], O: [], S: [], C: [], other: [] };
+  normalized.forEach(name => {
+    const lower = name.toLowerCase();
+    if (lower.includes("libero")) {
+      return; // libero non in campo base
+    } else if (lower.includes("palleggi")) {
+      buckets.P.push(name);
+    } else if (lower.includes("oppost")) {
+      buckets.O.push(name);
+    } else if (lower.includes("schiacci")) {
+      buckets.S.push(name);
+    } else if (lower.includes("centr")) {
+      buckets.C.push(name);
+    } else {
+      buckets.other.push(name);
+    }
+  });
+  const used = new Set();
+  const pick = list => {
+    const found = list.find(n => !used.has(n));
+    if (found) used.add(found);
+    return found || "";
+  };
+  const lineup = Array(6).fill("");
+  lineup[0] = pick(buckets.P) || pick(buckets.S) || pick(buckets.other); // P
+  lineup[3] = pick(buckets.O) || pick(buckets.S) || pick(buckets.other); // O
+  lineup[1] = pick(buckets.S) || pick(buckets.other); // S1
+  lineup[4] = pick(buckets.S) || pick(buckets.other); // S2
+  lineup[5] = pick(buckets.C) || pick(buckets.other); // C1
+  lineup[2] = pick(buckets.C) || pick(buckets.other); // C2
+  const leftovers = normalized.filter(n => !used.has(n));
+  lineup.forEach((name, idx) => {
+    if (!name && leftovers.length > 0) {
+      const next = leftovers.shift();
+      used.add(next);
+      lineup[idx] = next;
+    }
+  });
+  return lineup;
+}
 function applyTemplateTeam(options = {}) {
   const { askReset = true } = options;
   updatePlayersList(TEMPLATE_TEAM.players, {
@@ -1547,7 +1681,7 @@ function applyTemplateTeam(options = {}) {
     playerNumbers: buildTemplateNumbers(),
     captains: [],
     setDefaultLineup: true,
-    defaultLineupNames: TEMPLATE_TEAM.players.slice(0, 6)
+    defaultLineupNames: buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players)
   });
 }
 function buildTeamManagerStateFromSource(source) {
@@ -2464,14 +2598,20 @@ function getLockedMap() {
   });
   return map;
 }
-function releaseReplaced(name, keepIdx) {
-  state.court = state.court.map((slot, idx) => {
+function releaseReplaced(name, keepIdx, court = state.court) {
+  const shaped = ensureCourtShapeFor(court);
+  const updated = shaped.map((slot, idx) => {
     if (idx === keepIdx) return slot;
     if (slot.replaced === name) {
       return Object.assign({}, slot, { replaced: "" });
     }
     return slot;
   });
+  if (court === state.court) {
+    state.court = updated;
+  } else {
+    updated.forEach((slot, idx) => (court[idx] = slot));
+  }
 }
 function renderBenchChips() {
   ensureBenchDropZone();
@@ -2547,6 +2687,8 @@ function updateRotationDisplay() {
   }
   syncAutoRotateToggle();
   syncAutoRoleToggle();
+  syncAutoRoleP1AmericanToggle();
+  syncPredictiveSkillToggle();
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
@@ -2574,6 +2716,16 @@ function syncAutoRoleToggle() {
     elAutoRoleToggle.checked = !!state.autoRolePositioning;
   }
 }
+function syncPredictiveSkillToggle() {
+  if (elPredictiveSkillToggle) {
+    elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
+  }
+}
+function syncAutoRoleP1AmericanToggle() {
+  if (elAutoRoleP1AmericanToggle) {
+    elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;
+  }
+}
 function setCurrentSet(value, options = {}) {
   const setNum = Math.min(5, Math.max(1, parseInt(value, 10) || 1));
   state.currentSet = setNum;
@@ -2590,6 +2742,9 @@ function setRotation(value) {
   updateRotationDisplay();
   renderPlayers();
   renderLineupChips();
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
+  }
 }
 function captureRects(selector, keyBuilder) {
   const map = new Map();
@@ -2622,101 +2777,82 @@ function animateFlip(prevRects, selector, keyBuilder) {
   });
 }
 function applyPhasePermutation(lineup, rotation, phase) {
-  const arr = lineup.map(slot => Object.assign({}, slot));
-  const swap = (a, b) => {
-    const tmp = arr[a];
-    arr[a] = arr[b];
-    arr[b] = tmp;
-  };
   const rot = parseInt(rotation, 10) || 1;
-  if (phase === "sideout") {
-    switch (rot) {
-      case 1:
-        swap(0, 1);
-        break;
-      case 2:
-        swap(2, 4);
-        break;
-      case 3: {
-        const old4 = arr[3];
-        const old5 = arr[4];
-        const old6 = arr[5];
-        arr[3] = old6;
-        arr[4] = old4;
-        arr[5] = old5;
-        break;
-      }
-      case 4: {
-        const old1 = arr[0];
-        const old2 = arr[1];
-        const old5 = arr[4];
-        const old6 = arr[5];
-        arr[4] = old2;
-        arr[5] = old5;
-        arr[0] = old6;
-        arr[1] = old1;
-        break;
-      }
-      case 5:
-        swap(2, 4);
-        break;
-      case 6: {
-        const old4 = arr[3];
-        const old5 = arr[4];
-        const old6 = arr[5];
-        arr[3] = old6;
-        arr[4] = old4;
-        arr[5] = old5;
-        break;
-      }
-      default:
-        break;
+  const offset = rot - 1;
+  const mapping = (lineup || []).map((slot, idx) => ({
+    idx,
+    role: BASE_ROLES[(idx - offset + 12) % 6] || "",
+    slot: {
+      main: (slot && slot.main) || "",
+      replaced: (slot && slot.replaced) || ""
     }
+  }));
+  const isFrontRow = idx => FRONT_ROW_INDEXES.has(idx);
+  const findRole = role => mapping.find(item => item.role === role);
+  const filterRoles = roles => mapping.filter(item => roles.includes(item.role));
+  const setter = findRole("P");
+  const opposite = findRole("O");
+  const outsides = filterRoles(["S1", "S2"]);
+  const middles = filterRoles(["C1", "C2"]);
+  const frontOutside = outsides.find(item => isFrontRow(item.idx));
+  const backOutside = outsides.find(item => !isFrontRow(item.idx));
+  const frontMiddle = middles.find(item => isFrontRow(item.idx));
+  const backMiddle = middles.find(item => !isFrontRow(item.idx));
+  const otherOutside = outsides.find(item => item !== frontOutside && item !== backOutside);
+  const otherMiddle = middles.find(item => item !== frontMiddle && item !== backMiddle);
+  const setterFront = setter ? isFrontRow(setter.idx) : false;
+  const result = Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
+  const used = new Set();
+  const placeSlot = (source, targetIdx) => {
+    if (!source || targetIdx === undefined || targetIdx === null) return;
+    if (targetIdx < 0 || targetIdx >= result.length) return;
+    if (result[targetIdx].main || result[targetIdx].replaced) return;
+    const mainName = source.main || "";
+    const replacedName = source.replaced || "";
+    if (mainName && used.has(mainName)) return;
+    result[targetIdx] = { main: mainName, replaced: replacedName };
+    if (mainName) used.add(mainName);
+    if (replacedName) used.add(replacedName);
+  };
+  if (setterFront) {
+    placeSlot(setter && setter.slot, 1); // palleggiatore in pos2
+    placeSlot((frontMiddle && frontMiddle.slot) || (middles[0] && middles[0].slot), 2);
+    placeSlot((frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot), 3);
+    placeSlot(opposite && opposite.slot, 0);
+    placeSlot(
+      (backMiddle && backMiddle.slot) || (otherMiddle && otherMiddle.slot) || (middles[0] && middles[0].slot),
+      4
+    ); // centrale in 5
+    placeSlot(
+      (backOutside && backOutside.slot) || (otherOutside && otherOutside.slot) || (outsides[0] && outsides[0].slot),
+      5
+    ); // schiacciatore in 6
   } else {
-    switch (rot) {
-      case 4: {
-        const old2 = arr[1];
-        const old4 = arr[3];
-        const old5 = arr[4];
-        const old6 = arr[5];
-        arr[4] = old6;
-        arr[5] = old5;
-        arr[1] = old4;
-        arr[3] = old2;
-        break;
-      }
-      case 1:
-        swap(4, 5);
-        break;
-      case 2:
-      case 5: {
-        const old1 = arr[0];
-        const old3 = arr[2];
-        const old4 = arr[3];
-        const old5 = arr[4];
-        arr[3] = old3;
-        arr[2] = old4;
-        arr[4] = old1;
-        arr[0] = old5;
-        break;
-      }
-      case 3:
-      case 6: {
-        const old1 = arr[0];
-        const old2 = arr[1];
-        const old3 = arr[2];
-        const old6 = arr[5];
-        arr[2] = old2;
-        arr[1] = old3;
-        arr[5] = old1;
-        arr[0] = old6;
-        break;
-      }
-      default:
-        break;
-    }
+    placeSlot(setter && setter.slot, 0);
+    placeSlot((frontMiddle && frontMiddle.slot) || (middles[0] && middles[0].slot), 2);
+    placeSlot(
+      (opposite && opposite.slot) || (frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot),
+      1
+    ); // opposto (o ripiego) in zona 2
+    placeSlot((frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot), 3); // schiacciatore in 4
+    placeSlot(
+      (backMiddle && backMiddle.slot) || (otherMiddle && otherMiddle.slot) || (middles[0] && middles[0].slot),
+      4
+    ); // centrale in 5
+    placeSlot(
+      (backOutside && backOutside.slot) || (otherOutside && otherOutside.slot) || (outsides[0] && outsides[0].slot),
+      5
+    ); // schiacciatore in 6
   }
-  return arr.map((slot, idx) => {
+  mapping.forEach(item => {
+    if (!item || !item.slot || !item.slot.main) return;
+    if (used.has(item.slot.main)) return;
+    const freeIdx = result.findIndex(slot => !slot.main && !slot.replaced);
+    if (freeIdx !== -1) {
+      placeSlot(item.slot, freeIdx);
+    }
+  });
+  return result.map((slot, idx) => {
     if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
       if (slot.replaced) {
         return { main: slot.replaced, replaced: "" };
@@ -2731,7 +2867,11 @@ function applyAutoRolePositioning() {
   const phase = getCurrentPhase();
   const rot = state.rotation || 1;
   if (autoRolePhaseApplied === phase && autoRoleRotationApplied === rot) return;
-  const permuted = applyPhasePermutation(state.court, rot, phase);
+  if (!autoRoleBaseCourt) {
+    autoRoleBaseCourt = cloneCourtLineup(state.court);
+  }
+  const baseLineup = autoRoleBaseCourt && autoRoleBaseCourt.length === 6 ? autoRoleBaseCourt : state.court;
+  const permuted = applyPhasePermutation(baseLineup, rot, phase);
   state.court = permuted;
   autoRolePhaseApplied = phase;
   autoRoleRotationApplied = rot;
@@ -2754,7 +2894,8 @@ function rotateCourt(direction) {
     return name || "mini-" + pos;
   });
   ensureCourtShape();
-  const court = state.court;
+  const court =
+    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
   let rotated = [];
   if (direction === "cw") {
     rotated = [court[5], court[0], court[1], court[2], court[3], court[4]];
@@ -2763,7 +2904,13 @@ function rotateCourt(direction) {
     rotated = [court[1], court[2], court[3], court[4], court[5], court[0]];
     state.rotation = state.rotation === 1 ? 6 : state.rotation - 1;
   }
-  state.court = rotated.map(slot => Object.assign({}, slot));
+  const rotatedClean = rotated.map(slot => Object.assign({}, slot));
+  if (state.autoRolePositioning) {
+    autoRoleBaseCourt = cloneCourtLineup(rotatedClean);
+    applyAutoRolePositioning();
+  } else {
+    state.court = rotatedClean;
+  }
   // se un libero finisce in prima linea, rientra la giocatrice sostituita
   state.court = state.court.map((slot, idx) => {
     if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
