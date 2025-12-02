@@ -4,10 +4,21 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
+const selectedSkillPerPlayer = {};
+function setSelectedSkill(playerIdx, skillId) {
+  if (skillId) {
+    selectedSkillPerPlayer[playerIdx] = skillId;
+  } else {
+    delete selectedSkillPerPlayer[playerIdx];
+  }
+}
+function getSelectedSkill(playerIdx) {
+  return selectedSkillPerPlayer.hasOwnProperty(playerIdx) ? selectedSkillPerPlayer[playerIdx] : null;
+}
 function getPredictedSkillId() {
   if (!state.predictiveSkillFlow) return null;
   const ownEvents = (state.events || []).filter(ev => {
-    if (!ev || !ev.skillId || ev.skillId === "manual") return false;
+    if (!ev || !ev.skillId) return false;
     if (!ev.team) return true; // current app only tracks our team
     return ev.team !== "opponent"; // future-proof: ignore opponent skills
   });
@@ -408,7 +419,7 @@ function applyPlayersFromTextarea() {
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
-  const { stacked = false, closeAfterAction = false, columns = 2, nextSkillId = null } = options;
+  const { closeAfterAction = false, nextSkillId = null } = options;
   const getSkillColors = skillId => {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
@@ -417,86 +428,104 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const cfg = state.metricsConfig[skill.id];
     return !cfg || cfg.enabled !== false;
   });
-  const visibleSkills = nextSkillId
-    ? enabledSkills.filter(skill => skill.id === nextSkillId)
-    : enabledSkills;
-  const skillsToRender = visibleSkills.length > 0 ? visibleSkills : enabledSkills;
-  if (skillsToRender.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "players-empty";
-    empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
-    targetEl.appendChild(empty);
+  const pickedSkillId = nextSkillId || getSelectedSkill(playerIdx);
+  if (!pickedSkillId) {
+    if (enabledSkills.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "players-empty";
+      empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
+      targetEl.appendChild(empty);
+      return;
+    }
+    const grid = document.createElement("div");
+    grid.className = "skill-grid";
+    enabledSkills.forEach(skill => {
+      const colors = getSkillColors(skill.id);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "skill-picker-btn skill-" + skill.id;
+      btn.style.backgroundColor = colors.bg;
+      btn.style.color = colors.text;
+      btn.textContent = skill.label;
+      btn.addEventListener("click", () => {
+        setSelectedSkill(playerIdx, skill.id);
+        renderPlayers();
+      });
+      grid.appendChild(btn);
+    });
+    if (activeName) {
+      const errBtn = document.createElement("button");
+      errBtn.type = "button";
+      errBtn.className = "small event-btn danger skill-error-btn";
+      errBtn.textContent = "Errore/Fallo individuale";
+      errBtn.addEventListener("click", () => {
+        addPlayerError(playerIdx, activeName);
+        setSelectedSkill(playerIdx, null);
+        if (closeAfterAction) closeSkillModal();
+        renderPlayers();
+      });
+      grid.appendChild(errBtn);
+    }
+    targetEl.appendChild(grid);
     return;
   }
-  const chunkSize = stacked ? 1 : columns;
-  for (let i = 0; i < skillsToRender.length; i += chunkSize) {
-    const rowWrap = document.createElement("div");
-    rowWrap.className = "skill-row-pair" + (stacked ? " stacked" : "");
-    const subset = skillsToRender.slice(i, i + chunkSize);
-    subset.forEach(skill => {
-    const row = document.createElement("div");
-    row.className = "skill-row skill-" + skill.id + (nextSkillId && skill.id === nextSkillId ? " next-skill" : "");
-    row.dataset.playerIdx = String(playerIdx);
-    row.dataset.playerName = activeName;
-    row.dataset.skillId = skill.id;
-    const header = document.createElement("div");
-    header.className = "skill-header";
-    const title = document.createElement("span");
-    title.className = "skill-title skill-" + skill.id;
-    const colors = getSkillColors(skill.id);
-    title.textContent = skill.label;
-    title.style.backgroundColor = colors.bg;
-    title.style.color = colors.text;
-    header.appendChild(title);
-    const btns = document.createElement("div");
-    btns.className = "skill-buttons";
-      const codes = (state.metricsConfig[skill.id]?.activeCodes || RESULT_CODES).slice();
-      if (!codes.includes("/")) codes.push("/");
-      if (!codes.includes("=")) codes.push("=");
-      const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
-      ordered.forEach(code => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        const tone = typeof getCodeTone === "function" ? getCodeTone(skill.id, code) : "neutral";
-        btn.className = "event-btn code-" + tone;
-        btn.textContent = code;
-        btn.dataset.playerIdx = String(playerIdx);
-        btn.dataset.playerName = activeName;
-        btn.dataset.skillId = skill.id;
-        btn.dataset.code = code;
-        btn.addEventListener("click", e => {
-          handleEventClick(playerIdx, skill.id, code, activeName, e.currentTarget);
-          if (closeAfterAction) closeSkillModal();
-        });
-        btns.appendChild(btn);
-      });
-      row.appendChild(header);
-      row.appendChild(btns);
-      rowWrap.appendChild(row);
-    });
-    targetEl.appendChild(rowWrap);
-  }
-  if (activeName) {
-    const extraRow = document.createElement("div");
-    extraRow.className = "skill-row error-row";
-    const lbl = document.createElement("div");
-    lbl.className = "skill-header";
-    lbl.textContent = "Altri";
-    const buttons = document.createElement("div");
-    buttons.className = "skill-buttons";
+  const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
+  const codes = (state.metricsConfig[pickedSkillId]?.activeCodes || RESULT_CODES).slice();
+  if (!codes.includes("/")) codes.push("/");
+  if (!codes.includes("=")) codes.push("=");
+  const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
+  const grid = document.createElement("div");
+  grid.className = "code-grid";
+  const title = document.createElement("div");
+  title.className = "skill-header";
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "skill-title skill-" + pickedSkillId + (nextSkillId ? " next-skill" : "");
+  const colors = getSkillColors(pickedSkillId);
+  titleSpan.style.backgroundColor = colors.bg;
+  titleSpan.style.color = colors.text;
+  titleSpan.textContent = skillMeta ? skillMeta.label : pickedSkillId;
+  title.appendChild(titleSpan);
+  grid.appendChild(title);
+  ordered.forEach(code => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "small event-btn danger";
-    btn.textContent = "Errore/Fallo";
-    btn.addEventListener("click", () => {
-      addPlayerError(playerIdx, activeName);
+    const tone = typeof getCodeTone === "function" ? getCodeTone(pickedSkillId, code) : "neutral";
+    btn.className = "event-btn code-" + tone;
+    btn.textContent = code;
+    btn.dataset.playerIdx = String(playerIdx);
+    btn.dataset.playerName = activeName;
+    btn.dataset.skillId = pickedSkillId;
+    btn.dataset.code = code;
+    btn.addEventListener("click", e => {
+      handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget);
+      setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();
+      renderPlayers();
     });
-    buttons.appendChild(btn);
-    extraRow.appendChild(lbl);
-    extraRow.appendChild(buttons);
-    targetEl.appendChild(extraRow);
-  }
+    grid.appendChild(btn);
+  });
+  const errBtn = document.createElement("button");
+  errBtn.type = "button";
+  errBtn.className = "small event-btn danger code-error-btn";
+  errBtn.textContent = "Errore/Fallo individuale";
+  errBtn.dataset.playerIdx = String(playerIdx);
+  errBtn.addEventListener("click", () => {
+    addPlayerError(playerIdx, activeName);
+    setSelectedSkill(playerIdx, null);
+    if (closeAfterAction) closeSkillModal();
+    renderPlayers();
+  });
+  grid.appendChild(errBtn);
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.className = "secondary small code-back-btn";
+  backBtn.textContent = "← Scegli un altro fondamentale";
+  backBtn.addEventListener("click", () => {
+    setSelectedSkill(playerIdx, null);
+    renderPlayers();
+  });
+  grid.appendChild(backBtn);
+  targetEl.appendChild(grid);
 }
 function renderPlayers() {
   if (!elPlayersContainer) return;
@@ -506,7 +535,6 @@ function renderPlayers() {
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
   updateNextSkillIndicator(predictedSkillId);
-  const mobileMode = isMobileLayout();
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
@@ -579,28 +607,6 @@ function renderPlayers() {
     card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);
     card.addEventListener("drop", e => handlePositionDrop(e, card), true);
 
-    if (mobileMode) {
-      card.classList.add("mobile-card");
-      const openBtn = document.createElement("button");
-      openBtn.type = "button";
-    const isLib = isLibero(activeName);
-    const replacedText =
-      isLib && slot.replaced ? " (sost. " + formatNameWithNumber(slot.replaced) + ")" : "";
-    const roleText = getRoleLabel(idx);
-    openBtn.className = "open-skill-btn mobile-full-btn" + (isLib ? " libero-btn" : "");
-    openBtn.textContent = activeName
-      ? formatNameWithNumber(activeName) +
-        (roleText ? " · " + roleText : "") +
-        (isLib ? " · Libero" : "") +
-        replacedText
-      : "Pos " + (idx + 1) + " · Nessuna";
-      openBtn.disabled = !activeName;
-      openBtn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
-      card.appendChild(openBtn);
-      elPlayersContainer.appendChild(card);
-      return;
-    }
-
     if (!activeName || playerIdx === -1) {
       elPlayersContainer.appendChild(card);
       return;
@@ -660,9 +666,8 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   animateEventToLog(sourceEl, skillId, code);
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
-  if (state.predictiveSkillFlow) {
-    renderPlayers();
-  } else {
+  renderPlayers();
+  if (!state.predictiveSkillFlow) {
     renderLiveScore();
     renderScoreAndRotations(computePointsSummary());
     renderEventsLog();
@@ -2139,6 +2144,13 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
   saveState();
   renderEventsLog();
   recalcAllStatsAndUpdateUI();
+  renderPlayers();
+  if (!state.predictiveSkillFlow) {
+    renderLiveScore();
+    renderScoreAndRotations(computePointsSummary());
+    renderAggregatedTable();
+    renderVideoAnalysis();
+  }
 }
 function handleManualScore(direction, delta) {
   const summary = computePointsSummary(state.currentSet || 1);

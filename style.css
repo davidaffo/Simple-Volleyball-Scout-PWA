@@ -871,6 +871,38 @@ body[data-theme="light"] .skill-row {
 .skill-row.error-row {
   padding: 0.12rem 0.2rem;
 }
+.skill-grid,
+.code-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 0.35rem;
+}
+.skill-picker-btn {
+  padding: 0.6rem 0.4rem;
+  border-radius: 10px;
+  border: 1px solid #1f2937;
+  font-weight: 600;
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.code-grid .skill-header {
+  grid-column: span 2;
+}
+.skill-picker-btn:hover {
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+.code-error-btn {
+  grid-column: span 2;
+}
+.skill-error-btn {
+  grid-column: span 2;
+}
+.code-back-btn {
+  grid-column: span 2;
+  justify-self: start;
+}
 .skill-header {
   display: flex;
   justify-content: flex-start;
@@ -912,10 +944,9 @@ body[data-theme="light"] .skill-row {
   color: var(--skill-second-text, #ccfbf1);
 }
 .skill-buttons {
-  display: flex;
-  gap: 0.24rem;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(60px, 1fr));
+  gap: 0.35rem;
 }
 .skill-buttons button {
   min-width: 44px;
