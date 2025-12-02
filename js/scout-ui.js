@@ -15,6 +15,9 @@ function setSelectedSkill(playerIdx, skillId) {
 function getSelectedSkill(playerIdx) {
   return selectedSkillPerPlayer.hasOwnProperty(playerIdx) ? selectedSkillPerPlayer[playerIdx] : null;
 }
+function isAnySelectedSkill(skillId) {
+  return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
+}
 function getPredictedSkillId() {
   if (!state.predictiveSkillFlow) return null;
   const ownEvents = (state.events || []).filter(ev => {
@@ -68,6 +71,69 @@ let pendingYoutubeSeek = null;
 const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
+function buildReceiveDisplayMapping(court, rotation) {
+  const base = ensureCourtShapeFor(court);
+  const mapping = base.map((slot, idx) => ({ slot, idx }));
+  const swap = (a, b) => {
+    const tmp = mapping[a];
+    mapping[a] = mapping[b];
+    mapping[b] = tmp;
+  };
+  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
+  switch (rot) {
+    case 1:
+      swap(0, 1);
+      break;
+    case 2:
+      swap(2, 4);
+      break;
+    case 3: {
+      const old4 = mapping[3];
+      const old5 = mapping[4];
+      const old6 = mapping[5];
+      mapping[4] = old4;
+      mapping[5] = old5;
+      mapping[3] = old6;
+      break;
+    }
+    case 4: {
+      const old1 = mapping[0];
+      const old2 = mapping[1];
+      const old5 = mapping[4];
+      const old6 = mapping[5];
+      mapping[4] = old2;
+      mapping[5] = old5;
+      mapping[0] = old6;
+      mapping[1] = old1;
+      break;
+    }
+    case 5:
+      swap(2, 4);
+      break;
+    case 6: {
+      const old4 = mapping[3];
+      const old5 = mapping[4];
+      const old6 = mapping[5];
+      mapping[4] = old4;
+      mapping[5] = old5;
+      mapping[3] = old6;
+      break;
+    }
+    default:
+      break;
+  }
+  return mapping;
+}
+function getAutoRoleDisplayCourt(forSkillId = null) {
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
+  if (forSkillId === "pass") {
+    return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
+  }
+  return ensureCourtShapeFor(baseCourt).map((slot, idx) => ({ slot, idx }));
+}
 function valueToString(val) {
   if (val === null || val === undefined) return "";
   if (Array.isArray(val) || typeof val === "object") {
@@ -534,11 +600,20 @@ function renderPlayers() {
   ensureCourtShape();
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
+  const layoutSkill =
+    state.predictiveSkillFlow && predictedSkillId
+      ? predictedSkillId
+      : isAnySelectedSkill("pass")
+        ? "pass"
+        : null;
+  const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
   updateNextSkillIndicator(predictedSkillId);
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
-    const slot = state.court[idx] || { main: "" };
+    const slotInfo = displayCourt[idx] || { slot: { main: "" }, idx: idx };
+    const slot = slotInfo.slot || { main: "" };
+    const posIdx = slotInfo.idx != null ? slotInfo.idx : idx;
     const activeName = slot.main;
     let playerIdx = -1;
     if (activeName) {
@@ -547,7 +622,7 @@ function renderPlayers() {
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
     card.dataset.posNumber = String(idx + 1);
-    card.dataset.posIndex = String(idx);
+    card.dataset.posIndex = String(posIdx);
     card.dataset.playerName = activeName || "";
     if (!activeName) {
       card.classList.add("empty");
@@ -556,7 +631,7 @@ function renderPlayers() {
     const header = document.createElement("div");
     header.className = "court-header" + (activeName ? " draggable" : "");
     header.draggable = !!activeName;
-    header.addEventListener("dragstart", e => handleCourtDragStart(e, idx));
+    header.addEventListener("dragstart", e => handleCourtDragStart(e, posIdx));
     header.addEventListener("dragend", handleCourtDragEnd);
     const tagBar = document.createElement("div");
     tagBar.className = "court-tagbar";
@@ -582,7 +657,7 @@ function renderPlayers() {
       : "Trascina una giocatrice qui";
     const roleTag = document.createElement("span");
     roleTag.className = "court-role-tag";
-    roleTag.textContent = getRoleLabel(idx);
+    roleTag.textContent = getRoleLabel(posIdx);
     nameBlock.appendChild(nameLabel);
     nameBlock.appendChild(roleTag);
     if (isLibero(slot.main) && slot.replaced) {
@@ -597,7 +672,7 @@ function renderPlayers() {
     clearBtn.className = "pill-remove clear-slot";
     clearBtn.textContent = "✕";
     clearBtn.addEventListener("click", () => {
-      clearCourtAssignment(idx, "main");
+      clearCourtAssignment(posIdx, "main");
     });
     header.appendChild(clearBtn);
     card.appendChild(header);

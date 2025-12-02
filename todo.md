@@ -1,4 +1,4 @@
-spostamento automatico dei giocatori in base al ruolo
+sistema bug ricezione e inserimento
 modalita libero automatico su ruolo
 
 Nuovo TODO (portare le feature di IntelliScout nel PWA):
