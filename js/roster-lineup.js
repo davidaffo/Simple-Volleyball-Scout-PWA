@@ -270,6 +270,12 @@ function loadState() {
     state.autoRoleP1American = !!parsed.autoRoleP1American;
     state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
     state.autoRotatePending = false;
+    state.freeballPending = !!parsed.freeballPending;
+    state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
+    autoRoleBaseCourt =
+      state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6
+        ? cloneCourtLineup(state.autoRoleBaseCourt)
+        : null;
     state.pointRules = parsed.pointRules || state.pointRules || {};
     ensureMatchDefaults();
     syncPlayerNumbers(state.players || []);
@@ -501,8 +507,25 @@ function setIsServing(flag) {
   state.isServing = !!flag;
   saveState();
 }
+function getLastOwnEvent() {
+  const list = (state.events || []).filter(ev => {
+    if (!ev || !ev.skillId || ev.skillId === "manual") return false;
+    if (!ev.team) return true;
+    return ev.team !== "opponent";
+  });
+  return list.length > 0 ? list[list.length - 1] : null;
+}
 function getCurrentPhase() {
-  return state.isServing ? "break" : "sideout";
+  const last = getLastOwnEvent();
+  if (last && last.skillId) {
+    if (["pass", "second", "attack", "block", "defense"].includes(last.skillId)) {
+      return "attack";
+    }
+    const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
+    if (dir === "against") return "receive";
+    if (dir === "for" && state.isServing) return "attack";
+  }
+  return state.isServing ? "attack" : "receive";
 }
 function handlePlayerNumberChange(name, value) {
   if (!name) return;
@@ -556,12 +579,18 @@ function cloneCourtLineup(lineup = state.court) {
   }));
 }
 function cacheAutoRoleBaseCourt() {
-  autoRoleBaseCourt = cloneCourtLineup(state.court);
+  updateAutoRoleBaseCourtCache(state.court);
 }
 function restoreAutoRoleBaseCourt() {
-  if (!autoRoleBaseCourt) return false;
-  state.court = cloneCourtLineup(autoRoleBaseCourt);
-  autoRoleBaseCourt = null;
+  if (!autoRoleBaseCourt || autoRoleBaseCourt.length !== 6) {
+    if (state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6) {
+      autoRoleBaseCourt = cloneCourtLineup(state.autoRoleBaseCourt);
+    }
+  }
+  if (!autoRoleBaseCourt || autoRoleBaseCourt.length !== 6) return false;
+  const restored = cloneCourtLineup(autoRoleBaseCourt);
+  state.court = restored;
+  updateAutoRoleBaseCourtCache(restored);
   resetAutoRoleCache();
   return true;
 }
@@ -633,6 +662,11 @@ function resetAutoRoleCache() {
   autoRolePhaseApplied = "";
   autoRoleRotationApplied = null;
 }
+function updateAutoRoleBaseCourtCache(base) {
+  const shaped = cloneCourtLineup(base);
+  autoRoleBaseCourt = shaped;
+  state.autoRoleBaseCourt = shaped;
+}
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
   const baseCourt =
@@ -663,7 +697,7 @@ function setCourtPlayer(posIdx, target, playerName) {
   cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
   if (state.autoRolePositioning) {
-    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    updateAutoRoleBaseCourtCache(baseCourt);
     applyAutoRolePositioning();
   } else {
     state.court = baseCourt;
@@ -698,7 +732,7 @@ function swapCourtPlayers(fromIdx, toIdx) {
   cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
   if (state.autoRolePositioning) {
-    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    updateAutoRoleBaseCourtCache(baseCourt);
     applyAutoRolePositioning();
   } else {
     state.court = baseCourt;
@@ -727,7 +761,7 @@ function clearCourtAssignment(posIdx, target) {
   cleanCourtPlayers(baseCourt);
   resetAutoRoleCache();
   if (state.autoRolePositioning) {
-    autoRoleBaseCourt = cloneCourtLineup(baseCourt);
+    updateAutoRoleBaseCourtCache(baseCourt);
     applyAutoRolePositioning();
   } else {
     state.court = baseCourt;
@@ -1264,6 +1298,7 @@ function resetMatchState() {
   state.stats = {};
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   autoRoleBaseCourt = null;
+  state.autoRoleBaseCourt = [];
   state.rotation = 1;
   state.isServing = false;
   state.currentSet = 1;
@@ -2776,83 +2811,141 @@ function animateFlip(prevRects, selector, keyBuilder) {
     });
   });
 }
-function applyPhasePermutation(lineup, rotation, phase) {
-  const rot = parseInt(rotation, 10) || 1;
+function applyAssignments(list, pairs) {
+  if (!Array.isArray(list) || !Array.isArray(pairs)) return;
+  const snapshot = list.slice();
+  pairs.forEach(([targetIdx, sourceIdx]) => {
+    if (targetIdx === undefined || sourceIdx === undefined) return;
+    if (targetIdx < 0 || targetIdx >= snapshot.length) return;
+    list[targetIdx] = snapshot[sourceIdx] || list[targetIdx];
+  });
+}
+function buildRoleItems(lineup, rotation) {
+  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
   const offset = rot - 1;
-  const mapping = (lineup || []).map((slot, idx) => ({
+  return (lineup || []).map((item, idx) => ({
     idx,
     role: BASE_ROLES[(idx - offset + 12) % 6] || "",
-    slot: {
-      main: (slot && slot.main) || "",
-      replaced: (slot && slot.replaced) || ""
-    }
+    entry: item
   }));
-  const isFrontRow = idx => FRONT_ROW_INDEXES.has(idx);
-  const findRole = role => mapping.find(item => item.role === role);
-  const filterRoles = roles => mapping.filter(item => roles.includes(item.role));
-  const setter = findRole("P");
-  const opposite = findRole("O");
-  const outsides = filterRoles(["S1", "S2"]);
-  const middles = filterRoles(["C1", "C2"]);
-  const frontOutside = outsides.find(item => isFrontRow(item.idx));
-  const backOutside = outsides.find(item => !isFrontRow(item.idx));
-  const frontMiddle = middles.find(item => isFrontRow(item.idx));
-  const backMiddle = middles.find(item => !isFrontRow(item.idx));
-  const otherOutside = outsides.find(item => item !== frontOutside && item !== backOutside);
-  const otherMiddle = middles.find(item => item !== frontMiddle && item !== backMiddle);
-  const setterFront = setter ? isFrontRow(setter.idx) : false;
-  const result = Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
+}
+function buildP1AmericanReceive(lineup, rotation) {
+  if (rotation !== 1 || !state.autoRoleP1American) return null;
+  const roleItems = buildRoleItems(lineup, rotation);
+  const opposite = roleItems.find(r => r.role === "O");
+  const outsides = roleItems.filter(r => r.role === "S1" || r.role === "S2");
+  if (!opposite || outsides.length === 0) return null;
+  const targetOutside =
+    outsides.find(r => FRONT_ROW_INDEXES.has(r.idx)) ||
+    outsides[0];
   const used = new Set();
-  const placeSlot = (source, targetIdx) => {
-    if (!source || targetIdx === undefined || targetIdx === null) return;
-    if (targetIdx < 0 || targetIdx >= result.length) return;
-    if (result[targetIdx].main || result[targetIdx].replaced) return;
-    const mainName = source.main || "";
-    const replacedName = source.replaced || "";
-    if (mainName && used.has(mainName)) return;
-    result[targetIdx] = { main: mainName, replaced: replacedName };
-    if (mainName) used.add(mainName);
-    if (replacedName) used.add(replacedName);
+  const placeEntry = (targetIdx, entry, acc) => {
+    if (!entry) return;
+    const names = [entry.slot.main, entry.slot.replaced].filter(Boolean);
+    if (names.some(n => used.has(n))) return;
+    acc[targetIdx] = entry;
+    names.forEach(n => used.add(n));
   };
-  if (setterFront) {
-    placeSlot(setter && setter.slot, 1); // palleggiatore in pos2
-    placeSlot((frontMiddle && frontMiddle.slot) || (middles[0] && middles[0].slot), 2);
-    placeSlot((frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot), 3);
-    placeSlot(opposite && opposite.slot, 0);
-    placeSlot(
-      (backMiddle && backMiddle.slot) || (otherMiddle && otherMiddle.slot) || (middles[0] && middles[0].slot),
-      4
-    ); // centrale in 5
-    placeSlot(
-      (backOutside && backOutside.slot) || (otherOutside && otherOutside.slot) || (outsides[0] && outsides[0].slot),
-      5
-    ); // schiacciatore in 6
-  } else {
-    placeSlot(setter && setter.slot, 0);
-    placeSlot((frontMiddle && frontMiddle.slot) || (middles[0] && middles[0].slot), 2);
-    placeSlot(
-      (opposite && opposite.slot) || (frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot),
-      1
-    ); // opposto (o ripiego) in zona 2
-    placeSlot((frontOutside && frontOutside.slot) || (outsides[0] && outsides[0].slot), 3); // schiacciatore in 4
-    placeSlot(
-      (backMiddle && backMiddle.slot) || (otherMiddle && otherMiddle.slot) || (middles[0] && middles[0].slot),
-      4
-    ); // centrale in 5
-    placeSlot(
-      (backOutside && backOutside.slot) || (otherOutside && otherOutside.slot) || (outsides[0] && outsides[0].slot),
-      5
-    ); // schiacciatore in 6
-  }
-  mapping.forEach(item => {
-    if (!item || !item.slot || !item.slot.main) return;
-    if (used.has(item.slot.main)) return;
-    const freeIdx = result.findIndex(slot => !slot.main && !slot.replaced);
-    if (freeIdx !== -1) {
-      placeSlot(item.slot, freeIdx);
+  const base = lineup.slice();
+  const next = Array.from({ length: 6 }, () => ({
+    slot: { main: "", replaced: "" },
+    idx: -1
+  }));
+  placeEntry(1, opposite.entry, next); // OP in pos2
+  placeEntry(3, targetOutside.entry, next); // OH in pos4
+  base.forEach((entry, idx) => {
+    if (!entry || !entry.slot) return;
+    const names = [entry.slot.main, entry.slot.replaced].filter(Boolean);
+    if (names.some(n => used.has(n))) return;
+    if (!next[idx] || (!next[idx].slot.main && !next[idx].slot.replaced)) {
+      next[idx] = entry;
+      names.forEach(n => used.add(n));
+    } else {
+      const freeIdx = next.findIndex(item => item && !item.slot.main && !item.slot.replaced);
+      if (freeIdx !== -1) {
+        next[freeIdx] = entry;
+        names.forEach(n => used.add(n));
+      }
     }
   });
-  return result.map((slot, idx) => {
+  return next.map((entry, idx) => {
+    if (entry && entry.slot) return entry;
+    return { slot: { main: "", replaced: "" }, idx };
+  });
+}
+function applyReceivePattern(lineup, rotation) {
+  const american = buildP1AmericanReceive(lineup, rotation);
+  if (american) return american;
+  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
+  const assignmentsByRot = {
+    1: [
+      [0, 1],
+      [1, 0]
+    ],
+    2: [
+      [2, 4],
+      [4, 2]
+    ],
+    3: [
+      [4, 3],
+      [5, 4],
+      [3, 5]
+    ],
+    4: [
+      [4, 1],
+      [5, 4],
+      [0, 5],
+      [1, 0]
+    ],
+    5: [
+      [2, 4],
+      [4, 2]
+    ],
+    6: [
+      [4, 3],
+      [5, 4],
+      [3, 5]
+    ]
+  };
+  applyAssignments(lineup, assignmentsByRot[rot] || []);
+  return lineup;
+}
+function applySwitchPattern(lineup, rotation, isServing) {
+  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
+  const assignments = [];
+  if (rot === 4) {
+    assignments.push([4, 5], [5, 4], [1, 3], [3, 1]);
+  } else if (rot === 1 && !isServing) {
+    assignments.push([4, 5], [5, 4]);
+  } else if (rot === 1 && isServing) {
+    assignments.push([3, 1], [1, 3], [4, 5], [5, 4]);
+  } else if (rot === 2 || rot === 5) {
+    assignments.push([3, 2], [2, 3], [4, 0], [0, 4]);
+  } else if (rot === 3 || rot === 6) {
+    assignments.push([2, 1], [1, 2], [5, 0], [0, 5]);
+  }
+  applyAssignments(lineup, assignments);
+  return lineup;
+}
+function buildAutoRolePermutation(baseLineup, rotation, phase, isServingFlag = state.isServing) {
+  const base = ensureCourtShapeFor(baseLineup);
+  const working = base.map((slot, idx) => ({
+    slot,
+    idx
+  }));
+  const phaseKey = phase === "receive" ? "receive" : "attack";
+  if (phaseKey === "receive") {
+    return applyReceivePattern(working, rotation);
+  }
+  return applySwitchPattern(working, rotation, !!isServingFlag);
+}
+function applyPhasePermutation(lineup, rotation, phase, isServingFlag = state.isServing) {
+  const permuted = buildAutoRolePermutation(lineup, rotation, phase, isServingFlag);
+  const sanitized = permuted.map(item => ({
+    main: (item && item.slot && item.slot.main) || "",
+    replaced: (item && item.slot && item.slot.replaced) || ""
+  }));
+  return sanitized.map((slot, idx) => {
     if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
       if (slot.replaced) {
         return { main: slot.replaced, replaced: "" };
@@ -2868,10 +2961,14 @@ function applyAutoRolePositioning() {
   const rot = state.rotation || 1;
   if (autoRolePhaseApplied === phase && autoRoleRotationApplied === rot) return;
   if (!autoRoleBaseCourt) {
-    autoRoleBaseCourt = cloneCourtLineup(state.court);
+    if (state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6) {
+      autoRoleBaseCourt = cloneCourtLineup(state.autoRoleBaseCourt);
+    } else {
+      updateAutoRoleBaseCourtCache(state.court);
+    }
   }
   const baseLineup = autoRoleBaseCourt && autoRoleBaseCourt.length === 6 ? autoRoleBaseCourt : state.court;
-  const permuted = applyPhasePermutation(baseLineup, rot, phase);
+  const permuted = applyPhasePermutation(baseLineup, rot, phase, state.isServing);
   state.court = permuted;
   autoRolePhaseApplied = phase;
   autoRoleRotationApplied = rot;
@@ -2906,7 +3003,7 @@ function rotateCourt(direction) {
   }
   const rotatedClean = rotated.map(slot => Object.assign({}, slot));
   if (state.autoRolePositioning) {
-    autoRoleBaseCourt = cloneCourtLineup(rotatedClean);
+    updateAutoRoleBaseCourtCache(rotatedClean);
     applyAutoRolePositioning();
   } else {
     state.court = rotatedClean;

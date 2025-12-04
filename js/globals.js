@@ -100,6 +100,8 @@ let state = {
   autoRotatePending: false,
   predictiveSkillFlow: false,
   autoRoleP1American: false,
+  freeballPending: false,
+  autoRoleBaseCourt: [],
   video: {
     offsetSeconds: 0,
     fileName: "",

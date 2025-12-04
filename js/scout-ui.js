@@ -20,6 +20,7 @@ function isAnySelectedSkill(skillId) {
 }
 function getPredictedSkillId() {
   if (!state.predictiveSkillFlow) return null;
+  if (state.freeballPending) return "second";
   const ownEvents = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId) return false;
     if (!ev.team) return true; // current app only tracks our team
@@ -34,13 +35,13 @@ function getPredictedSkillId() {
   if (dir === "against") return "pass";
   switch (last.skillId) {
     case "serve":
-      return "defense"; // dopo la nostra battuta ci prepariamo a difesa/muro, non a ricevere
+      return "block"; // dopo la nostra battuta ci prepariamo a muro
     case "pass":
       return "second";
     case "second":
       return "attack";
     case "attack":
-      return "defense";
+      return "block";
     case "block":
       return "defense";
     case "defense":
@@ -69,11 +70,22 @@ let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
 const elNextSkillIndicator = document.getElementById("next-skill-indicator");
+const elBtnFreeball = document.getElementById("btn-freeball");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 function buildReceiveDisplayMapping(court, rotation) {
+  if (typeof buildAutoRolePermutation === "function") {
+    const perm = buildAutoRolePermutation(court, rotation, "receive", state.isServing) || [];
+    return perm.map(item => ({
+      slot: (item && item.slot) || { main: "", replaced: "" },
+      idx: typeof item.idx === "number" ? item.idx : 0
+    }));
+  }
   const base = ensureCourtShapeFor(court);
   const mapping = base.map((slot, idx) => ({ slot, idx }));
+  if (typeof applyReceivePattern === "function") {
+    return applyReceivePattern(mapping, rotation);
+  }
   const swap = (a, b) => {
     const tmp = mapping[a];
     mapping[a] = mapping[b];
@@ -131,6 +143,14 @@ function getAutoRoleDisplayCourt(forSkillId = null) {
       : ensureCourtShapeFor(state.court);
   if (forSkillId === "pass") {
     return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
+  }
+  const phase = getCurrentPhase();
+  if (typeof buildAutoRolePermutation === "function") {
+    const perm = buildAutoRolePermutation(baseCourt, state.rotation || 1, phase, state.isServing) || [];
+    return perm.map(item => ({
+      slot: (item && item.slot) || { main: "", replaced: "" },
+      idx: typeof item.idx === "number" ? item.idx : 0
+    }));
   }
   return ensureCourtShapeFor(baseCourt).map((slot, idx) => ({ slot, idx }));
 }
@@ -223,7 +243,7 @@ function computeEventDurationMs(prevIso, nowMs) {
 function buildBaseEventPayload(base) {
   const now = new Date();
   const nowIso = now.toISOString();
-  const rotation = state.rotation || 1;
+  const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
   const zone = typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx) : null;
   const lastEventTime = state.events && state.events.length > 0 ? state.events[state.events.length - 1].t : null;
   const durationMs = computeEventDurationMs(lastEventTime, now.getTime());
@@ -722,6 +742,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     playerIdx = state.players.findIndex(p => p === playerName);
   }
   if (playerIdx === -1 || !state.players[playerIdx]) return;
+  state.freeballPending = false;
   const event = buildBaseEventPayload({
     playerIdx,
     playerName: state.players[playerIdx],
@@ -2205,7 +2226,35 @@ function handleAutoRotationFromEvent(eventObj) {
     applyAutoRolePositioning();
   }
 }
+function recomputeServeFlagsFromHistory() {
+  let serving = !!state.isServing;
+  let pending = false;
+  if (!state || !state.autoRotate) {
+    state.isServing = serving;
+    state.autoRotatePending = false;
+    return;
+  }
+  (state.events || []).forEach(ev => {
+    if (!ev) return;
+    if (ev.skillId === "pass") {
+      pending = true;
+      serving = false;
+      return;
+    }
+    const dir = getPointDirection(ev);
+    if (dir === "for") {
+      pending = false;
+      serving = true;
+    } else if (dir === "against") {
+      pending = false;
+      serving = false;
+    }
+  });
+  state.isServing = serving;
+  state.autoRotatePending = pending;
+}
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
+  state.freeballPending = false;
   const event = buildBaseEventPayload({
     playerIdx,
     playerName: playerName,
@@ -3419,18 +3468,20 @@ function undoLastEvent() {
     return;
   }
   const ev = state.events.pop();
+  if (!ev) {
+    saveState();
+    recalcAllStatsAndUpdateUI();
+    renderEventsLog();
+    renderPlayers();
+    renderBenchChips();
+    renderLiberoChipsInline();
+    renderLineupChips();
+    updateRotationDisplay();
+    return;
+  }
   if (ev && ev.autoRotationDirection && typeof rotateCourt === "function") {
     const reverseDir = ev.autoRotationDirection === "ccw" ? "cw" : "ccw";
     rotateCourt(reverseDir);
-  }
-  if (state.autoRotate) {
-    if (ev && typeof ev.autoRotatePrev === "boolean") {
-      state.autoRotatePending = ev.autoRotatePrev;
-    } else {
-      state.autoRotatePending = false;
-    }
-  } else {
-    state.autoRotatePending = false;
   }
   const idx = ev.playerIdx;
   const skillId = ev.skillId;
@@ -3441,9 +3492,15 @@ function undoLastEvent() {
   ) {
     state.stats[idx][skillId][ev.code]--;
   }
+  recomputeServeFlagsFromHistory();
   saveState();
   recalcAllStatsAndUpdateUI();
   renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
 }
 function applyAggColumnsVisibility() {
   ensureMetricsConfigDefaults();
@@ -3843,6 +3900,14 @@ function init() {
       renderPlayers();
     });
   }
+  if (elBtnFreeball) {
+    elBtnFreeball.addEventListener("click", () => {
+      state.freeballPending = true;
+      saveState();
+      updateNextSkillIndicator("second");
+      renderPlayers();
+    });
+  }
   setAutoRotateEnabled(state.autoRotate !== false);
   if (elRotationIndicator && elRotationSelect) {
     const openSelect = () => {
@@ -3937,15 +4002,26 @@ function init() {
         return;
       }
       ensureCourtShape();
+      const baseCourt =
+        state.autoRolePositioning && autoRoleBaseCourt
+          ? ensureCourtShapeFor(autoRoleBaseCourt)
+          : ensureCourtShapeFor(state.court);
       mobileLineupOrder.slice(0, 6).forEach((name, idx) => {
-        state.court[idx] = { main: name, replaced: "" };
+        baseCourt[idx] = { main: name || "", replaced: "" };
       });
-      saveState();
-      renderPlayers();
-      renderBenchChips();
-      renderLineupChips();
-      renderLiberoChipsInline();
-      updateRotationDisplay();
+      resetAutoRoleCache();
+      updateAutoRoleBaseCourtCache(baseCourt);
+      if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+        applyAutoRolePositioning();
+      } else {
+        state.court = cloneCourtLineup(baseCourt);
+        saveState();
+        renderPlayers();
+        renderBenchChips();
+        renderLineupChips();
+        renderLiberoChipsInline();
+        updateRotationDisplay();
+      }
       closeMobileLineupModal();
     });
   }
