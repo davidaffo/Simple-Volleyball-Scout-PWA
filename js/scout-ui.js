@@ -137,10 +137,12 @@ function buildReceiveDisplayMapping(court, rotation) {
   return mapping;
 }
 function getAutoRoleDisplayCourt(forSkillId = null) {
+  const useAuto = !!state.autoRolePositioning;
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt
-      ? ensureCourtShapeFor(autoRoleBaseCourt)
-      : ensureCourtShapeFor(state.court);
+    useAuto && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : ensureCourtShapeFor(state.court);
+  if (!useAuto) {
+    return baseCourt.map((slot, idx) => ({ slot, idx }));
+  }
   if (forSkillId === "pass") {
     return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
   }
