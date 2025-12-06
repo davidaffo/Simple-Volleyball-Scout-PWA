@@ -457,6 +457,18 @@ body[data-theme="light"] .card-inline {
   gap: 0.3rem;
   align-items: center;
 }
+.log-undo {
+  margin-top: 0.45rem;
+  width: 100%;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+.log-undo button {
+  width: 100%;
+}
+.log-undo .undo-last-summary {
+  justify-content: space-between;
+}
 .score-card {
   background: #191919;
   border: 1px solid #2f2f2f;
