@@ -426,20 +426,21 @@ Bianchi 18"></textarea>
   </div>
   <div class="tab-panel" data-tab="video" id="video-panel">
     <div class="section video-analysis">
-      <div class="video-analysis__head">
-        <div>
-          <h2>Analisi video</h2>
-          <p class="section-note">Carica un video e sincronizza le skill registrate per saltare al momento corretto.</p>
-        </div>
-        <div class="video-analysis__actions">
-          <label class="file-btn" for="video-file-input">Carica video</label>
-          <input id="video-file-input" type="file" accept="video/*" hidden />
-          <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
-          <div class="youtube-input">
-            <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
-            <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
+        <div class="video-analysis__head">
+          <div>
+            <h2>Analisi video</h2>
+            <p class="section-note">Carica un video e sincronizza le skill registrate per saltare al momento corretto.</p>
           </div>
-        </div>
+          <div class="video-analysis__actions">
+            <label class="file-btn" for="video-file-input">Carica video</label>
+            <input id="video-file-input" type="file" accept="video/*" hidden />
+            <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
+            <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
+            <div class="youtube-input">
+              <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
+              <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
+            </div>
+          </div>
       </div>
       <div class="video-analysis__grid">
         <div class="video-skills">

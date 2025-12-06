@@ -5,6 +5,30 @@ function getEnabledSkills() {
   });
 }
 const selectedSkillPerPlayer = {};
+const selectedEventIds = new Set();
+let lastSelectedEventId = null;
+const eventTableContexts = {};
+let lastEventContextKey = null;
+let currentEditControl = null;
+let currentEditCell = null;
+function closeCurrentEdit({ refresh = false } = {}) {
+  if (currentEditControl) {
+    try {
+      currentEditControl.blur();
+    } catch (_) {
+      // ignore
+    }
+  }
+  if (currentEditCell) {
+    currentEditCell.dataset.editing = "false";
+    currentEditCell = null;
+    currentEditControl = null;
+    if (refresh) {
+      renderEventsLog({ suppressScroll: true });
+      renderVideoAnalysis();
+    }
+  }
+}
 function setSelectedSkill(playerIdx, skillId) {
   if (skillId) {
     selectedSkillPerPlayer[playerIdx] = skillId;
@@ -1052,10 +1076,244 @@ function recalcAllStatsAndUpdateUI() {
   renderAggregatedTable();
   renderVideoAnalysis();
 }
-function renderEventsLog() {
+function getEventKey(ev, fallbackIdx = 0) {
+  if (!ev) return "ev-" + fallbackIdx;
+  if (typeof ev.eventId === "number" || typeof ev.eventId === "string") return ev.eventId;
+  if (!ev.__tmpKey) {
+    ev.__tmpKey = "tmp-" + (ev.t || Date.now()) + "-" + fallbackIdx;
+  }
+  return ev.__tmpKey;
+}
+function pruneEventSelection() {
+  const allKeys = new Set();
+  Object.values(eventTableContexts).forEach(ctx => {
+    ctx.rows.forEach(r => allKeys.add(r.key));
+  });
+  Array.from(selectedEventIds).forEach(key => {
+    if (!allKeys.has(key)) selectedEventIds.delete(key);
+  });
+  if (lastSelectedEventId && !allKeys.has(lastSelectedEventId)) {
+    lastSelectedEventId = null;
+  }
+}
+function updateSelectionStyles() {
+  pruneEventSelection();
+  Object.values(eventTableContexts).forEach(ctx => {
+    ctx.rows.forEach(r => {
+      const selected = selectedEventIds.has(r.key);
+      r.tr.dataset.selected = selected ? "true" : "false";
+      r.tr.classList.toggle("selected", selected);
+      if (r.checkbox) {
+        r.checkbox.checked = selected;
+      }
+    });
+  });
+}
+function registerEventTableContext(key, ctx) {
+  if (!key) return;
+  eventTableContexts[key] = ctx;
+  updateSelectionStyles();
+}
+function removeEventTableContext(key) {
+  if (!key) return;
+  delete eventTableContexts[key];
+  updateSelectionStyles();
+}
+function getRowsForContext(contextKey) {
+  const ctx = eventTableContexts[contextKey];
+  return ctx ? ctx.rows : [];
+}
+function getSelectedRows(contextKey = null) {
+  if (contextKey && eventTableContexts[contextKey]) {
+    return eventTableContexts[contextKey].rows.filter(r => selectedEventIds.has(r.key));
+  }
+  const seen = new Set();
+  const rows = [];
+  const ctxOrder = ["video", "log", ...Object.keys(eventTableContexts)];
+  ctxOrder.forEach(key => {
+    const ctx = eventTableContexts[key];
+    if (!ctx) return;
+    ctx.rows.forEach(r => {
+      if (selectedEventIds.has(r.key) && !seen.has(r.key)) {
+        seen.add(r.key);
+        rows.push(r);
+      }
+    });
+  });
+  return rows;
+}
+function setSelectionForContext(contextKey, keysSet, anchorKey = null, opts = {}) {
+  const ctx = contextKey ? eventTableContexts[contextKey] : null;
+  if (!ctx) return;
+  selectedEventIds.clear();
+  keysSet.forEach(k => selectedEventIds.add(k));
+  lastSelectedEventId = anchorKey || Array.from(keysSet)[0] || null;
+  lastEventContextKey = contextKey;
+  updateSelectionStyles();
+  closeCurrentEdit();
+  if (typeof ctx.onSelectionChange === "function") {
+    ctx.onSelectionChange(getSelectedRows(contextKey), contextKey, opts);
+  }
+}
+function toggleSelectionForContext(contextKey, key) {
+  const next = new Set(selectedEventIds);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  setSelectionForContext(contextKey, next, key);
+}
+function selectRangeForContext(contextKey, anchorKey, targetKey) {
+  const rows = getRowsForContext(contextKey);
+  if (!rows.length) return;
+  const anchorIdx = Math.max(0, rows.findIndex(r => r.key === anchorKey));
+  const targetIdx = Math.max(0, rows.findIndex(r => r.key === targetKey));
+  const start = Math.min(anchorIdx, targetIdx);
+  const end = Math.max(anchorIdx, targetIdx);
+  const range = new Set(rows.slice(start, end + 1).map(r => r.key));
+  setSelectionForContext(contextKey, range, anchorKey);
+}
+function getActiveEventContextKey() {
+  if (lastEventContextKey && eventTableContexts[lastEventContextKey]) return lastEventContextKey;
+  if (activeTab === "video" && eventTableContexts.video) return "video";
+  if (eventTableContexts.log) return "log";
+  const keys = Object.keys(eventTableContexts);
+  return keys[0] || null;
+}
+function isEditingField(target) {
+  if (!target) return false;
+  const tag = (target.tagName || "").toLowerCase();
+  if (target.isContentEditable) return true;
+  return ["input", "textarea", "select", "option", "button"].includes(tag);
+}
+function scrollRowIntoView(record) {
+  if (!record || !record.tr || typeof record.tr.scrollIntoView !== "function") return;
+  record.tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function handleSeekForSelection(contextKey) {
+  const rows = getSelectedRows(contextKey);
+  if (!rows.length) return;
+  const target =
+    rows.find(r => r.key === lastSelectedEventId) ||
+    rows[rows.length - 1];
+  if (!target) return;
+  const t = typeof target.videoTime === "number" ? target.videoTime : null;
+  if (isFinite(t)) {
+    seekVideoToTime(t);
+  }
+}
+function moveSelection(contextKey, delta, extendRange = false) {
+  const ctx = eventTableContexts[contextKey];
+  if (!ctx || !ctx.rows.length) return;
+  const rows = ctx.rows;
+  const currentKey =
+    (selectedEventIds.size && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
+      ? lastSelectedEventId
+      : selectedEventIds.values().next().value) || rows[0].key;
+  let anchorKey = extendRange && lastSelectedEventId ? lastSelectedEventId : currentKey;
+  let anchorIdx = rows.findIndex(r => r.key === anchorKey);
+  if (anchorIdx === -1) {
+    anchorIdx = 0;
+    anchorKey = rows[0].key;
+  }
+  let targetIdx = Math.min(rows.length - 1, Math.max(0, anchorIdx + delta));
+  const targetKey = rows[targetIdx].key;
+  if (extendRange) {
+    selectRangeForContext(contextKey, anchorKey, targetKey);
+  } else {
+    setSelectionForContext(contextKey, new Set([targetKey]), targetKey);
+  }
+  const targetRow = rows.find(r => r.key === targetKey);
+  scrollRowIntoView(targetRow);
+  handleSeekForSelection(contextKey);
+}
+function adjustSelectedVideoTimes(deltaSeconds) {
+  const rows = getSelectedRows(getActiveEventContextKey());
+  if (!rows.length) return;
+  rows.forEach(r => {
+    const ev = r.ev;
+    if (!ev) return;
+    const current =
+      typeof ev.videoTime === "number"
+        ? ev.videoTime
+        : typeof r.videoTime === "number"
+          ? r.videoTime
+          : 0;
+    const next = Math.max(0, current + deltaSeconds);
+    ev.videoTime = next;
+  });
+  refreshAfterVideoEdit(false);
+  renderEventsLog();
+  handleSeekForSelection(getActiveEventContextKey());
+}
+function buildSelectedSegments() {
+  const rows = getSelectedRows("video");
+  const baseRows = rows.length ? rows : getSelectedRows(getActiveEventContextKey());
+  if (!baseRows.length) return [];
+  const segments = baseRows
+    .map(r => {
+      const ev = r.ev || {};
+      const start =
+        typeof r.videoTime === "number"
+          ? r.videoTime
+          : typeof ev.videoTime === "number"
+            ? ev.videoTime
+            : computeEventVideoTime(ev, getVideoBaseTimeMs(getVideoSkillEvents()));
+      const duration =
+        typeof ev.durationMs === "number" && isFinite(ev.durationMs) ? ev.durationMs / 1000 : 5;
+      const end = start + duration;
+      return {
+        key: r.key,
+        start,
+        end,
+        duration,
+        label:
+          (ev.playerName ? formatNameWithNumber(ev.playerName) : "Evento") +
+          " " +
+          (ev.skillId || "") +
+          " " +
+          (ev.code || "")
+      };
+    })
+    .filter(seg => isFinite(seg.start) && isFinite(seg.end))
+    .sort((a, b) => a.start - b.start);
+  return segments;
+}
+function buildFfmpegConcatCommand(segments) {
+  if (!segments || !segments.length) return "";
+  const trims = segments
+    .map((seg, idx) => {
+      const start = seg.start.toFixed(2);
+      const end = seg.end.toFixed(2);
+      return `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${idx}];` +
+        `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${idx}]`;
+    })
+    .join(";");
+  const concat = segments.map((_, idx) => `[v${idx}][a${idx}]`).join("") + `concat=n=${segments.length}:v=1:a=1[outv][outa]`;
+  return `ffmpeg -i input.mp4 -filter_complex "${trims};${concat}" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac output.mp4`;
+}
+async function copyFfmpegFromSelection() {
+  const segments = buildSelectedSegments();
+  if (!segments.length) {
+    alert("Seleziona uno o più eventi per generare il comando ffmpeg.");
+    return;
+  }
+  const cmd = buildFfmpegConcatCommand(segments);
+  try {
+    await navigator.clipboard.writeText(cmd);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = cmd;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  alert("Comando ffmpeg copiato negli appunti. Sostituisci input.mp4/output.mp4 a piacere.");
+}
+function renderEventsLog(options = {}) {
   if (elEventsLog) elEventsLog.innerHTML = "";
   let summaryText = "Nessun evento";
   let compactSummary = "";
+  const suppressScroll = !!options.suppressScroll;
   if (!state.events || state.events.length === 0) {
     if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
@@ -1109,9 +1367,13 @@ function renderEventsLog() {
     showSeek: false,
     showVideoTime: true,
     baseMs,
-    showIndex: false
+    showIndex: false,
+    enableSelection: true,
+    showCheckbox: false,
+    contextKey: "log",
+    onSelectionChange: () => handleSeekForSelection("log")
   });
-  if (elEventsLog) {
+  if (elEventsLog && !suppressScroll) {
     requestAnimationFrame(() => {
       elEventsLog.scrollTop = elEventsLog.scrollHeight;
     });
@@ -1424,8 +1686,8 @@ function refreshAfterVideoEdit(shouldRecalcStats) {
   saveState();
   if (shouldRecalcStats) {
     recalcAllStatsAndUpdateUI();
-    renderEventsLog();
-  }
+  renderEventsLog();
+}
   renderVideoAnalysis();
 }
 function createPlayerSelect(ev, onDone) {
@@ -1574,26 +1836,54 @@ function createVideoTimeInput(ev, videoTime, onDone) {
   });
   return input;
 }
-function makeEditableCell(td, factory) {
+function makeEditableCell(td, factory, guard = null) {
   const startEdit = () => {
     if (td.dataset.editing === "true") return;
+    if (currentEditCell && currentEditCell !== td) {
+      closeCurrentEdit({ refresh: false });
+    }
     td.dataset.editing = "true";
     td.innerHTML = "";
-    const control = factory(() => {
+    const endEdit = () => {
       td.dataset.editing = "false";
+      if (currentEditControl === control) currentEditControl = null;
+      if (currentEditCell === td) currentEditCell = null;
+      closeCurrentEdit({ refresh: false });
+    };
+    const control = factory(() => {
+      endEdit();
     });
     td.appendChild(control);
+    currentEditControl = control;
+    currentEditCell = td;
     if (typeof control.focus === "function") {
       control.focus();
     }
+    control.addEventListener("blur", endEdit);
   };
   td.addEventListener("click", e => {
-    e.stopPropagation();
+    const isAllowed =
+      !guard || typeof guard.isRowSelected !== "function" || guard.isRowSelected() === true;
+    if (!isAllowed) {
+      if (guard && typeof guard.requestSelect === "function") {
+        guard.requestSelect();
+        setTimeout(() => {
+          if (guard.isRowSelected && guard.isRowSelected()) {
+            startEdit();
+          }
+        }, 0);
+      }
+      return;
+    }
     startEdit();
   });
 }
 function renderEventTableRows(target, events, options = {}) {
   if (!target) return;
+  const contextKey = options.contextKey || target.id || (target.closest && target.closest("[data-context-key]")?.dataset.contextKey) || "events";
+  const enableSelection = options.enableSelection !== false;
+  const showCheckbox = options.showCheckbox !== false;
+  if (!enableSelection) removeEventTableContext(contextKey);
   target.innerHTML = "";
   const showVideoTime = options.showVideoTime;
   const showSeek = options.showSeek;
@@ -1602,12 +1892,37 @@ function renderEventTableRows(target, events, options = {}) {
   const targetIsTbody = target.tagName && target.tagName.toLowerCase() === "tbody";
   const table = targetIsTbody ? null : document.createElement("table");
   const tbody = targetIsTbody ? target : document.createElement("tbody");
+  const rowRecords = [];
+  let ctxRef = null;
+  if (enableSelection) {
+    ctxRef = { rows: [], onSelectionChange: options.onSelectionChange || null, baseMs };
+    eventTableContexts[contextKey] = ctxRef;
+  }
+
+  const handleRowClick = (record, e, fromCheckbox = false) => {
+    if (!enableSelection) return;
+    const key = record.key;
+    const isMeta = e.metaKey || e.ctrlKey;
+    const isShift = e.shiftKey;
+    if (isShift && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)) {
+      selectRangeForContext(contextKey, lastSelectedEventId, key);
+      scrollRowIntoView(record);
+      return;
+    }
+    if (isMeta) {
+      toggleSelectionForContext(contextKey, key);
+    } else {
+      setSelectionForContext(contextKey, new Set([key]), key);
+    }
+    scrollRowIntoView(record);
+  };
 
   if (!targetIsTbody) {
     table.className = options.tableClass || "event-edit-table";
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     const headers = [
+      ...(enableSelection && showCheckbox ? ["✓"] : []),
       ...(showVideoTime ? ["Tempo"] : []),
       ...(showIndex ? ["#"] : []),
       "Giocatrice",
@@ -1650,118 +1965,142 @@ function renderEventTableRows(target, events, options = {}) {
     const tr = document.createElement("tr");
     const videoTime = showVideoTime ? computeEventVideoTime(ev, baseMs) : null;
     const zoneDisplay = ev.zone || ev.playerPosition || "";
+    const key = getEventKey(ev, displayIdx);
+    let rowCheckbox = null;
+    const editGuard = {
+      isRowSelected: () => selectedEventIds.has(key),
+      requestSelect: () => setSelectionForContext(contextKey, new Set([key]), key)
+    };
+    tr.className = "event-row";
+    tr.dataset.eventKey = key;
+    if (enableSelection && showCheckbox) {
+      const selectTd = document.createElement("td");
+      selectTd.className = "row-select";
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = selectedEventIds.has(key);
+      chk.addEventListener("click", e => {
+        e.stopPropagation();
+        handleRowClick({ key, tr, idx: displayIdx }, e, true);
+      });
+      selectTd.appendChild(chk);
+      tr.appendChild(selectTd);
+      rowCheckbox = chk;
+    }
     const cells = [
       ...(showVideoTime
         ? [
             {
               text: formatVideoTimestamp(videoTime),
-              editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
+              editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done), editGuard)
             }
           ]
         : []),
       ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
-        editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done))
+        editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done), editGuard)
       },
       {
         text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "",
-        editable: td => makeEditableCell(td, done => createSkillSelect(ev, done))
+        editable: td => makeEditableCell(td, done => createSkillSelect(ev, done), editGuard)
       },
       {
         text: ev.code || "",
-        editable: td => makeEditableCell(td, done => createCodeSelect(ev, done))
+        editable: td => makeEditableCell(td, done => createCodeSelect(ev, done), editGuard)
       },
       {
         text: ev.set || "1",
-        editable: td => makeEditableCell(td, done => createSetInput(ev, done))
+        editable: td => makeEditableCell(td, done => createSetInput(ev, done), editGuard)
       },
       {
         text: ev.rotation || "-",
-        editable: td => makeEditableCell(td, done => createRotationInput(ev, done))
+        editable: td => makeEditableCell(td, done => createRotationInput(ev, done), editGuard)
       },
       {
         text: zoneDisplay ? String(zoneDisplay) : "",
-        editable: td => makeEditableCell(td, done => createZoneInput(ev, done))
+        editable: td => makeEditableCell(td, done => createZoneInput(ev, done), editGuard)
       },
       {
         text: valueToString(ev.setterPosition || ev.rotation || ""),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "setterPosition", 1, 6, done))
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "setterPosition", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.opponentSetterPosition),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "opponentSetterPosition", 1, 6, done))
+        editable: td =>
+          makeEditableCell(td, done => createNumberInput(ev, "opponentSetterPosition", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.receivePosition),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "receivePosition", 1, 6, done))
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "receivePosition", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.base),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "base", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "base", done), editGuard)
       },
       {
         text: valueToString(ev.setType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "setType", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "setType", done), editGuard)
       },
       {
         text: valueToString(ev.combination),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "combination", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "combination", done), editGuard)
       },
       {
         text: valueToString(ev.serveStart),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveStart", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveStart", done), editGuard)
       },
       {
         text: valueToString(ev.serveEnd),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveEnd", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveEnd", done), editGuard)
       },
       {
         text: valueToString(ev.serveType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveType", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveType", done), editGuard)
       },
       {
         text: valueToString(ev.receiveEvaluation),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "receiveEvaluation", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "receiveEvaluation", done), editGuard)
       },
       {
         text: valueToString(ev.attackEvaluation),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackEvaluation", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackEvaluation", done), editGuard)
       },
       {
         text: valueToString(ev.attackBp),
-        editable: td => makeEditableCell(td, done => createCheckboxInput(ev, "attackBp", done))
+        editable: td => makeEditableCell(td, done => createCheckboxInput(ev, "attackBp", done), editGuard)
       },
       {
         text: valueToString(ev.attackType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackType", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackType", done), editGuard)
       },
       {
         text: valueToString(ev.attackDirection),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done), editGuard)
       },
       {
         text: valueToString(ev.blockNumber),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "blockNumber", 0, undefined, done))
+        editable: td => makeEditableCell(td, done => createNumberInput(ev, "blockNumber", 0, undefined, done), editGuard)
       },
       {
         text: valueToString(ev.playerIn),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerIn", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerIn", done), editGuard)
       },
       {
         text: valueToString(ev.playerOut),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerOut", done))
+        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerOut", done), editGuard)
       },
       { text: valueToString(ev.durationMs || "") }
     ];
     cells.forEach(cell => {
       const td = document.createElement("td");
-      td.textContent = cell.text || "";
+      td.textContent = cell.text != null ? String(cell.text) : "";
       if (cell.editable) {
         cell.editable(td);
       }
       tr.appendChild(td);
     });
+    rowRecords.push({ key, tr, idx: displayIdx, ev, videoTime, checkbox: rowCheckbox });
     if (showSeek) {
       const actionTd = document.createElement("td");
       const link = document.createElement("span");
@@ -1775,8 +2114,16 @@ function renderEventTableRows(target, events, options = {}) {
         seekVideoToTime(videoTime);
       });
     }
+    if (enableSelection) {
+      tr.addEventListener("click", e => handleRowClick({ key, tr, idx: displayIdx }, e));
+    }
     tbody.appendChild(tr);
   });
+  if (enableSelection && ctxRef) {
+    ctxRef.rows = rowRecords;
+    registerEventTableContext(contextKey, ctxRef);
+    handleSeekForSelection(contextKey);
+  }
   if (!targetIsTbody) {
     target.appendChild(table);
   }
@@ -1819,7 +2166,15 @@ function renderVideoAnalysis() {
   renderEventTableRows(
     elVideoSkillsContainer,
     skillEvents.map(item => item.ev),
-    { showSeek: true, showVideoTime: true, baseMs, tableClass: "video-skills-table event-edit-table" }
+    {
+      showSeek: true,
+      showVideoTime: true,
+      baseMs,
+      tableClass: "video-skills-table event-edit-table",
+      enableSelection: true,
+      contextKey: "video",
+      onSelectionChange: () => handleSeekForSelection("video")
+    }
   );
   if (updatedZones) {
     saveState();
@@ -4513,6 +4868,9 @@ function init() {
   if (elBtnSyncFirstSkill) {
     elBtnSyncFirstSkill.addEventListener("click", syncFirstSkillToVideo);
   }
+  if (elBtnCopyFfmpeg) {
+    elBtnCopyFfmpeg.addEventListener("click", copyFfmpegFromSelection);
+  }
   if (elBtnLoadYoutube) {
     elBtnLoadYoutube.addEventListener("click", () => {
       const url = (elYoutubeUrlInput && elYoutubeUrlInput.value) || "";
@@ -4595,6 +4953,30 @@ function init() {
       closeActionsModal();
       closeSettingsModal();
       closeMobileLineupModal();
+    }
+  });
+  document.addEventListener("mousedown", e => {
+    if (currentEditCell && !currentEditCell.contains(e.target)) {
+      closeCurrentEdit();
+    }
+  });
+  document.addEventListener("keydown", e => {
+    if (isEditingField(e.target)) return;
+    closeCurrentEdit();
+    const ctxKey = getActiveEventContextKey();
+    if (!ctxKey) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSelection(ctxKey, 1, e.shiftKey);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSelection(ctxKey, -1, e.shiftKey);
+    } else if (e.key === "[" || (e.key === "ArrowLeft" && e.altKey)) {
+      e.preventDefault();
+      adjustSelectedVideoTimes(-0.2);
+    } else if (e.key === "]" || (e.key === "ArrowRight" && e.altKey)) {
+      e.preventDefault();
+      adjustSelectedVideoTimes(0.2);
     }
   });
   document.addEventListener("click", e => {

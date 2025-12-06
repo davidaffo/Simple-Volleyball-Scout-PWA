@@ -1937,6 +1937,21 @@ tbody tr:nth-child(odd) {
 tbody tr:hover {
   background: rgba(45, 108, 223, 0.08);
 }
+.event-row {
+  cursor: pointer;
+}
+.event-row.selected {
+  background: rgba(45, 108, 223, 0.22);
+  box-shadow: inset 2px 0 0 0 #3b82f6;
+}
+body[data-theme="light"] .event-row.selected {
+  background: #dbeafe;
+  box-shadow: inset 2px 0 0 0 #2563eb;
+}
+.row-select {
+  width: 36px;
+  text-align: center;
+}
 .agg-table td {
   text-align: center;
   color: inherit;
