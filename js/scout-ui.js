@@ -1063,8 +1063,13 @@ function renderEventsLog() {
     if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
     return;
   }
-  const recent = state.events.slice(-40).reverse();
-  const latest = recent[0];
+  const recent = state.events.slice(-40).sort((a, b) => {
+    const at = new Date(a.t || 0).getTime();
+    const bt = new Date(b.t || 0).getTime();
+    if (isFinite(at) && isFinite(bt) && at !== bt) return at - bt; // oldest first
+    return (a.eventId || 0) - (b.eventId || 0);
+  });
+  const latest = recent[recent.length - 1];
   const formatEv = ev => {
     const dateObj = new Date(ev.t);
     const timeStr = isNaN(dateObj.getTime())
@@ -1100,7 +1105,17 @@ function renderEventsLog() {
   compactSummary = latestFmt.compact;
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
-  renderEventTableRows(elEventsLog, recent, { showSeek: false, showVideoTime: true, baseMs });
+  renderEventTableRows(elEventsLog, recent, {
+    showSeek: false,
+    showVideoTime: true,
+    baseMs,
+    showIndex: false
+  });
+  if (elEventsLog) {
+    requestAnimationFrame(() => {
+      elEventsLog.scrollTop = elEventsLog.scrollHeight;
+    });
+  }
   if (elEventsLogSummary) {
     elEventsLogSummary.textContent = summaryText;
   }
@@ -1582,6 +1597,7 @@ function renderEventTableRows(target, events, options = {}) {
   target.innerHTML = "";
   const showVideoTime = options.showVideoTime;
   const showSeek = options.showSeek;
+  const showIndex = options.showIndex !== false;
   const baseMs = options.baseMs || null;
   const targetIsTbody = target.tagName && target.tagName.toLowerCase() === "tbody";
   const table = targetIsTbody ? null : document.createElement("table");
@@ -1592,7 +1608,8 @@ function renderEventTableRows(target, events, options = {}) {
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     const headers = [
-      "#",
+      ...(showVideoTime ? ["Tempo"] : []),
+      ...(showIndex ? ["#"] : []),
       "Giocatrice",
       "Fondamentale",
       "Codice",
@@ -1634,7 +1651,15 @@ function renderEventTableRows(target, events, options = {}) {
     const videoTime = showVideoTime ? computeEventVideoTime(ev, baseMs) : null;
     const zoneDisplay = ev.zone || ev.playerPosition || "";
     const cells = [
-      { text: String(displayIdx + 1) },
+      ...(showVideoTime
+        ? [
+            {
+              text: formatVideoTimestamp(videoTime),
+              editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
+            }
+          ]
+        : []),
+      ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
         editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done))
@@ -1729,12 +1754,6 @@ function renderEventTableRows(target, events, options = {}) {
       },
       { text: valueToString(ev.durationMs || "") }
     ];
-    if (showVideoTime) {
-      cells.push({
-        text: formatVideoTimestamp(videoTime),
-        editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done))
-      });
-    }
     cells.forEach(cell => {
       const td = document.createElement("td");
       td.textContent = cell.text || "";

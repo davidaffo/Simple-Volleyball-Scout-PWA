@@ -193,20 +193,13 @@ Bianchi 18"></textarea>
                 <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
               </div>
               <div class="score-center">
-                <label>Punteggio set corrente</label>
+                <label>Punteggio</label>
                 <div id="live-score" class="score-value emph">0 - 0</div>
               </div>
               <div class="score-side score-side-against">
                 <button id="btn-score-against-plus" class="small">+ Subiti</button>
                 <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
               </div>
-            </div>
-          </div>
-          <div class="card-inline">
-            <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
-            <div class="undo-last-summary" aria-live="polite">
-              <span>Ultimo codice:</span>
-              <strong id="undo-last-summary">—</strong>
             </div>
           </div>
           <div class="bench-inline">
@@ -297,6 +290,13 @@ Bianchi 18"></textarea>
         <button id="toggle-log-mobile" class="mobile-log-toggle" aria-expanded="false" aria-controls="events-log">Apri log eventi</button>
         <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
         <div id="events-log"></div>
+        <div class="card-inline log-undo">
+          <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
+          <div class="undo-last-summary" aria-live="polite">
+            <span>Ultimo codice:</span>
+            <strong id="undo-last-summary">—</strong>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -578,7 +578,7 @@ Bianchi 18"></textarea>
                       </select>
                     </div>
                     <div class="score-display">
-                      <label>Punteggio set corrente</label>
+                      <label>Punteggio</label>
                       <div id="live-score-modal" class="score-value emph">0 - 0</div>
                     </div>
                   </div>

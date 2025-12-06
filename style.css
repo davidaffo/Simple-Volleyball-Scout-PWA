@@ -492,7 +492,7 @@ body[data-theme="light"] .card-inline {
 }
 .score-top-row {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 .score-layout {
   display: grid;
