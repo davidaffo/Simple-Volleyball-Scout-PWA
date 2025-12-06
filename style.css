@@ -567,18 +567,63 @@ button.danger:hover {
   width: 16px;
   height: 16px;
 }
-.next-skill-indicator {
+.settings-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
   margin-top: 0.35rem;
-  padding: 0.35rem 0.65rem;
-  border: 1px dashed var(--border-color, #334155);
-  border-radius: 6px;
-  font-size: 0.95rem;
-  color: var(--text-muted, #cbd5e1);
 }
-.next-skill-indicator.active {
-  border-style: solid;
-  color: var(--text-color, #e2e8f0);
-  font-weight: 600;
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 60;
+}
+.settings-modal.hidden {
+  display: none;
+}
+.settings-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+}
+.settings-modal__content {
+  position: relative;
+  background: #0b111a;
+  color: #e2e8f0;
+  border: 1px solid var(--border-color, #334155);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  width: min(420px, calc(100% - 1.5rem));
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+body[data-theme="light"] .settings-modal__content {
+  background: #f8fafc;
+  color: #0f172a;
+}
+.settings-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.settings-modal__head h3 {
+  margin: 0;
+}
+.settings-modal__body {
+  display: grid;
+  gap: 0.35rem;
 }
 .manual-page {
   background: #0b111a;

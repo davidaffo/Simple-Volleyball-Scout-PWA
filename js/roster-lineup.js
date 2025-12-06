@@ -101,6 +101,10 @@ const elBtnUndoFloating = document.getElementById("btn-undo-floating");
 const elBtnOpenActionsModal = document.getElementById("btn-open-actions-modal");
 const elActionsModal = document.getElementById("floating-actions-modal");
 const elActionsClose = document.getElementById("floating-actions-close");
+const elBtnOpenSettings = document.getElementById("btn-open-settings");
+const elBtnOpenSettingsFloating = document.getElementById("btn-open-settings-floating");
+const elSettingsModal = document.getElementById("settings-modal");
+const elSettingsClose = document.getElementById("settings-close");
 const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
 const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
@@ -3044,6 +3048,18 @@ function closeActionsModal() {
   if (!elActionsModal) return;
   elActionsModal.classList.add("hidden");
   document.body.style.overflow = "";
+}
+function openSettingsModal() {
+  if (!elSettingsModal) return;
+  elSettingsModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
+}
+function closeSettingsModal() {
+  if (!elSettingsModal) return;
+  elSettingsModal.classList.add("hidden");
+  document.body.style.overflow = "";
+  document.body.classList.remove("modal-open");
 }
 function resetDragState() {
   draggedPlayerName = "";

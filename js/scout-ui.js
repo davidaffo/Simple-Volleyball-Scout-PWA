@@ -50,18 +50,6 @@ function getPredictedSkillId() {
       return fallback;
   }
 }
-function updateNextSkillIndicator(skillId) {
-  if (!elNextSkillIndicator) return;
-  if (!state.predictiveSkillFlow) {
-    elNextSkillIndicator.textContent = "Prossima skill: —";
-    elNextSkillIndicator.classList.remove("active");
-    return;
-  }
-  const meta = SKILLS.find(s => s.id === skillId);
-  const label = meta ? meta.label : skillId || "—";
-  elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
-  elNextSkillIndicator.classList.toggle("active", !!skillId);
-}
 let videoObjectUrl = "";
 let ytPlayer = null;
 let ytApiPromise = null;
@@ -69,7 +57,6 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
-const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const elBtnFreeball = document.getElementById("btn-freeball");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
@@ -604,15 +591,17 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     renderPlayers();
   });
   grid.appendChild(errBtn);
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.className = "secondary small code-back-btn";
-  backBtn.textContent = "← Scegli un altro fondamentale";
-  backBtn.addEventListener("click", () => {
-    setSelectedSkill(playerIdx, null);
-    renderPlayers();
-  });
-  grid.appendChild(backBtn);
+  if (!state.predictiveSkillFlow) {
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "secondary small code-back-btn";
+    backBtn.textContent = "← Scegli un altro fondamentale";
+    backBtn.addEventListener("click", () => {
+      setSelectedSkill(playerIdx, null);
+      renderPlayers();
+    });
+    grid.appendChild(backBtn);
+  }
   targetEl.appendChild(grid);
 }
 function renderPlayers() {
@@ -629,7 +618,6 @@ function renderPlayers() {
         ? "pass"
         : null;
   const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
-  updateNextSkillIndicator(predictedSkillId);
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
@@ -3906,8 +3894,27 @@ function init() {
     elBtnFreeball.addEventListener("click", () => {
       state.freeballPending = true;
       saveState();
-      updateNextSkillIndicator("second");
       renderPlayers();
+    });
+  }
+  [elBtnOpenSettings, elBtnOpenSettingsFloating].forEach(btn => {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      if (typeof openSettingsModal === "function") openSettingsModal();
+    });
+  });
+  if (elSettingsClose) {
+    elSettingsClose.addEventListener("click", () => {
+      if (typeof closeSettingsModal === "function") closeSettingsModal();
+    });
+  }
+  if (elSettingsModal) {
+    elSettingsModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeSettings !== undefined || target.classList.contains("settings-modal__backdrop")) {
+        if (typeof closeSettingsModal === "function") closeSettingsModal();
+      }
     });
   }
   setAutoRotateEnabled(state.autoRotate !== false);
@@ -4129,6 +4136,7 @@ function init() {
     if (e.key === "Escape") {
       closeSkillModal();
       closeActionsModal();
+      closeSettingsModal();
       closeMobileLineupModal();
     }
   });
