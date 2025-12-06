@@ -50,6 +50,20 @@ function getPredictedSkillId() {
       return fallback;
   }
 }
+function updateNextSkillIndicator(skillId) {
+  if (!elNextSkillIndicator) return;
+  if (!state.predictiveSkillFlow) {
+    elNextSkillIndicator.style.display = "none";
+    elNextSkillIndicator.textContent = "Prossima skill: —";
+    elNextSkillIndicator.classList.remove("active");
+    return;
+  }
+  elNextSkillIndicator.style.display = "";
+  const meta = SKILLS.find(s => s.id === skillId);
+  const label = meta ? meta.label : skillId || "—";
+  elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
+  elNextSkillIndicator.classList.toggle("active", !!skillId);
+}
 let videoObjectUrl = "";
 let ytPlayer = null;
 let ytApiPromise = null;
@@ -591,7 +605,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     renderPlayers();
   });
   grid.appendChild(errBtn);
-  if (!state.predictiveSkillFlow) {
+  const showBackBtn = !(state.predictiveSkillFlow && nextSkillId);
+  if (showBackBtn) {
     const backBtn = document.createElement("button");
     backBtn.type = "button";
     backBtn.className = "secondary small code-back-btn";
@@ -663,7 +678,7 @@ function renderPlayers() {
       nameLabel.classList.add("libero-flag");
     }
     nameLabel.textContent = slot.main
-      ? formatNameWithNumber(slot.main)
+      ? formatNameWithNumber(slot.main, { compactCourt: true })
       : "Trascina una giocatrice qui";
     const roleTag = document.createElement("span");
     roleTag.className = "court-role-tag";
@@ -752,11 +767,11 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   animateEventToLog(sourceEl, skillId, code);
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
+  renderEventsLog();
   renderPlayers();
   if (!state.predictiveSkillFlow) {
     renderLiveScore();
     renderScoreAndRotations(computePointsSummary());
-    renderEventsLog();
     renderAggregatedTable();
     renderVideoAnalysis();
   }
