@@ -406,7 +406,16 @@ function isCaptain(name) {
 }
 function formatNameWithNumber(name, options = {}) {
   const num = getPlayerNumber(name);
-  const base = num ? num + " - " + name : name || "";
+  const compactCourt = !!options.compactCourt;
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  let baseName = name || "";
+  if (compactCourt) {
+    const surname = parts.length > 1 ? parts[parts.length - 1] : parts[0] || "";
+    const initial =
+      parts.length > 1 && parts[0] ? parts[0][0].toUpperCase() + "." : parts[0] || "";
+    baseName = [surname, initial && surname ? initial : ""].filter(Boolean).join(" ").trim();
+  }
+  const base = num ? num + " - " + baseName : baseName;
   const includeCaptain = options.includeCaptain !== false;
   if (includeCaptain && isCaptain(name)) {
     return base + " (C)";

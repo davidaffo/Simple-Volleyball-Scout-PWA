@@ -170,123 +170,123 @@ Bianchi 18"></textarea>
   </div>
 
   <div class="tab-panel" data-tab="scout">
-    <div class="section">
-      <h2 class="scout-title">Scout in tempo reale</h2>
-      <div class="set-controls grid-row">
-        <div class="block rotation-block">
-          <div class="rotation-controls">
-            <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
-            <div class="rotation-display">
-              <label>Rotazione</label>
-              <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
-              <select id="rotation-select" class="rotation-select">
-                <option value="1">Rotazione 1</option>
-                <option value="2">Rotazione 2</option>
-                <option value="3">Rotazione 3</option>
-                <option value="4">Rotazione 4</option>
-                <option value="5">Rotazione 5</option>
-                <option value="6">Rotazione 6</option>
-              </select>
+    <div class="scout-grid">
+      <div class="section scout-col-left">
+        <div class="set-controls grid-row">
+          <div class="block rotation-block">
+            <div class="rotation-controls">
+              <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+              <div class="rotation-display">
+                <label>Rotazione</label>
+                <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
+                <select id="rotation-select" class="rotation-select">
+                  <option value="1">Rotazione 1</option>
+                  <option value="2">Rotazione 2</option>
+                  <option value="3">Rotazione 3</option>
+                  <option value="4">Rotazione 4</option>
+                  <option value="5">Rotazione 5</option>
+                  <option value="6">Rotazione 6</option>
+                </select>
+              </div>
+              <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
             </div>
-            <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-rotate-toggle" />
+              Rotazione automatica su cambio palla
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-role-toggle" />
+              Auto posizionamento per ruolo
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-role-p1american-toggle" />
+              P1 americana (OH in 4, OP in 2 su cambio palla)
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="predictive-skill-toggle" />
+              Flusso skill automatico (mostra solo la prossima)
+            </label>
+            <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
           </div>
-          <label class="auto-rotate-toggle">
-            <input type="checkbox" id="auto-rotate-toggle" />
-            Rotazione automatica su cambio palla
-          </label>
-          <label class="auto-rotate-toggle">
-            <input type="checkbox" id="auto-role-toggle" />
-            Auto posizionamento per ruolo
-          </label>
-          <label class="auto-rotate-toggle">
-            <input type="checkbox" id="auto-role-p1american-toggle" />
-            P1 americana (OH in 4, OP in 2 su cambio palla)
-          </label>
-          <label class="auto-rotate-toggle">
-            <input type="checkbox" id="predictive-skill-toggle" />
-            Flusso skill automatico (mostra solo la prossima)
-          </label>
-          <div id="next-skill-indicator" class="next-skill-indicator">Prossima skill: —</div>
-          <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
-        </div>
-        <div class="card-inline">
-          <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
-          <div class="undo-last-summary" aria-live="polite">
-            <span>Ultimo codice:</span>
-            <strong id="undo-last-summary">—</strong>
-          </div>
-        </div>
-        <div class="score-card wide">
-          <div class="score-card-head">
-            <div class="score-set-select">
-              <label for="current-set">Set corrente</label>
-              <select id="current-set">
-                <option value="1">Set 1</option>
-                <option value="2">Set 2</option>
-                <option value="3">Set 3</option>
-                <option value="4">Set 4</option>
-                <option value="5">Set 5</option>
-              </select>
-            </div>
-            <div class="score-display">
-              <label>Punteggio set corrente</label>
-              <div id="live-score" class="score-value emph">0 - 0</div>
+          <div class="card-inline">
+            <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
+            <div class="undo-last-summary" aria-live="polite">
+              <span>Ultimo codice:</span>
+              <strong id="undo-last-summary">—</strong>
             </div>
           </div>
-          <div class="score-actions">
-            <button id="btn-score-for-plus" class="small">+ Fatti</button>
-            <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
-            <button id="btn-score-against-plus" class="small">+ Subiti</button>
-            <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
-            <button id="btn-score-team-error" class="small danger">Errore/Fallo squadra</button>
+          <div class="score-card wide">
+            <div class="score-card-head">
+              <div class="score-set-select">
+                <label for="current-set">Set corrente</label>
+                <select id="current-set">
+                  <option value="1">Set 1</option>
+                  <option value="2">Set 2</option>
+                  <option value="3">Set 3</option>
+                  <option value="4">Set 4</option>
+                  <option value="5">Set 5</option>
+                </select>
+              </div>
+              <div class="score-display">
+                <label>Punteggio set corrente</label>
+                <div id="live-score" class="score-value emph">0 - 0</div>
+              </div>
+            </div>
+            <div class="score-actions">
+              <button id="btn-score-for-plus" class="small">+ Fatti</button>
+              <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
+              <button id="btn-score-against-plus" class="small">+ Subiti</button>
+              <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
+              <button id="btn-score-team-error" class="small danger">Errore/Fallo squadra</button>
+            </div>
+          </div>
+          <div class="mobile-lineup-btn-wrap">
+            <button id="btn-open-lineup-mobile" class="secondary small">Imposta formazione</button>
+          </div>
+          <div class="bench-inline">
+            <label>Riserve (trascina in campo)</label>
+            <div id="bench-chips" class="bench-chips bench-inline-list"></div>
+          </div>
+          <div class="libero-inline">
+            <label>Libero</label>
+            <div id="libero-tags-inline" class="libero-tags"></div>
           </div>
         </div>
-        <div class="mobile-lineup-btn-wrap">
-          <button id="btn-open-lineup-mobile" class="secondary small">Imposta formazione</button>
-        </div>
-        <div class="bench-inline">
-          <label>Riserve (trascina in campo)</label>
-          <div id="bench-chips" class="bench-chips bench-inline-list"></div>
-        </div>
-        <div class="libero-inline">
-          <label>Libero</label>
-          <div id="libero-tags-inline" class="libero-tags"></div>
+        <div class="mobile-team-error">
+          <button id="btn-score-team-error-mobile" class="small danger full-width">Errore/Fallo squadra</button>
         </div>
       </div>
-      <div class="players-area">
-        <div class="mobile-floating-bar" aria-label="Azioni rapide scout">
-          <div class="floating-rot">
-            <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
-            <div class="rotation-display minimal">
-              <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+      <div class="section scout-col-center">
+        <div class="players-area">
+          <div class="mobile-floating-bar" aria-label="Azioni rapide scout">
+            <div class="floating-rot">
+              <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
+              <div class="rotation-display minimal">
+                <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+              </div>
+              <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
             </div>
-            <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
+            <label class="auto-rotate-toggle floating">
+              <input type="checkbox" id="auto-rotate-toggle-floating" />
+              Auto rotazione
+            </label>
+            <div class="floating-undo-wrap">
+              <span id="floating-log-summary" class="floating-log-summary" aria-live="polite"></span>
+              <button id="btn-undo-floating" class="small danger" aria-label="Annulla ultimo evento">↩</button>
+            </div>
+            <button id="btn-open-lineup-mobile-floating" class="floating-lineup-btn small secondary" aria-label="Imposta formazione">Imposta formazione</button>
+            <button id="btn-open-actions-modal" class="floating-score-btn" aria-haspopup="dialog" aria-label="Apri modifica punteggio e rotazione">
+              <span id="live-score-floating" aria-live="polite">S1 · 0 - 0</span>
+            </button>
           </div>
-          <label class="auto-rotate-toggle floating">
-            <input type="checkbox" id="auto-rotate-toggle-floating" />
-            Auto rotazione
-          </label>
-          <div class="floating-undo-wrap">
-            <span id="floating-log-summary" class="floating-log-summary" aria-live="polite"></span>
-            <button id="btn-undo-floating" class="small danger" aria-label="Annulla ultimo evento">↩</button>
-          </div>
-          <button id="btn-open-lineup-mobile-floating" class="floating-lineup-btn small secondary" aria-label="Imposta formazione">Imposta formazione</button>
-          <button id="btn-open-actions-modal" class="floating-score-btn" aria-haspopup="dialog" aria-label="Apri modifica punteggio e rotazione">
-            <span id="live-score-floating" aria-live="polite">S1 · 0 - 0</span>
-          </button>
+          <div id="players-container"></div>
         </div>
-        <h3 class="players-title">Giocatrici e fondamentali</h3>
-        <div id="players-container"></div>
       </div>
-      <div class="mobile-team-error">
-        <button id="btn-score-team-error-mobile" class="small danger full-width">Errore/Fallo squadra</button>
+      <div class="section log-section scout-col-right" data-log-section>
+        <button id="toggle-log-mobile" class="mobile-log-toggle" aria-expanded="false" aria-controls="events-log">Apri log eventi</button>
+        <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
+        <div id="events-log"></div>
       </div>
-    </div>
-    <div class="section log-section" data-log-section>
-      <h2>Log eventi (ultimi)</h2>
-      <button id="toggle-log-mobile" class="mobile-log-toggle" aria-expanded="false" aria-controls="events-log">Apri log eventi</button>
-      <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
-      <div id="events-log"></div>
     </div>
   </div>
 
