@@ -29,6 +29,23 @@ body.modal-open {
   width: 100%;
   height: 100%;
 }
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .score-layout,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .score-top-row,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .card-inline,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .bench-inline,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .libero-inline,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .court-actions-bar,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .players-area,
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .log-section {
+  filter: grayscale(1);
+}
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] * {
+  pointer-events: none;
+}
+body[data-match-finished="true"] .tab-panel[data-tab="scout"] .resume-btn {
+  pointer-events: auto;
+  filter: none;
+}
 body[data-theme="light"] {
   background: #f7f7f8;
   color: var(--text-color, #0f172a);
@@ -360,7 +377,7 @@ button.small {
 }
 .set-controls.grid-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: 1fr;
   align-items: start;
 }
 .rotation-block {
@@ -368,6 +385,38 @@ button.small {
   gap: 0.35rem;
   align-items: center;
   flex-wrap: wrap;
+}
+.court-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.85rem;
+  background: #0f172a;
+  border: 1px solid #1f2937;
+}
+body[data-theme="light"] .court-actions-bar {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.court-rotation-block {
+  flex: 1 1 260px;
+  min-width: 240px;
+  gap: 0.4rem;
+}
+.court-rotation-block .rotation-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  margin-top: 0.1rem;
+}
+.court-game-actions {
+  flex: 1 1 320px;
+  align-items: stretch;
+}
+.court-game-actions button {
+  flex: 1 1 150px;
 }
 .rotation-display {
   position: relative;
@@ -424,6 +473,32 @@ body[data-theme="light"] .card-inline {
   align-items: center;
   gap: 0.1rem;
 }
+.score-panel .score-card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.score-top-row {
+  display: flex;
+  justify-content: flex-end;
+}
+.score-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  align-items: center;
+  gap: 0.5rem;
+}
+.score-side {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.35rem;
+}
+.score-center {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
 body[data-theme="light"] .score-card {
   background: #ffffff;
   border-color: #dfe3eb;
@@ -442,11 +517,58 @@ body[data-theme="light"] .score-card.wide {
 }
 .score-set-select {
   min-width: 110px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .score-display {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+.set-display {
+  padding: 0.25rem 0.65rem;
+  border: 1px solid #2f2f2f;
+  border-radius: 999px;
+  font-weight: 700;
+  background: #0f172a;
+}
+body[data-theme="light"] .set-display {
+  border-color: #dfe3eb;
+  background: #f8fafc;
+}
+.hidden-select {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.score-actions-set {
+  margin-top: 0.35rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.35rem;
+  width: 100%;
+}
+.set-bottom-actions {
+  margin-top: 0.45rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.4rem;
+}
+.set-bottom-actions button {
+  width: 100%;
+}
+.resume-btn {
+  background: #166534;
+  border-color: #22c55e;
+  color: #ecfdf3;
+}
+body[data-theme="light"] .resume-btn {
+  background: #16a34a;
+  border-color: #22c55e;
+  color: #0f172a;
 }
 .score-actions {
   display: flex;
@@ -462,15 +584,13 @@ body[data-theme="light"] .score-card.wide {
   font-size: 0.76rem;
 }
 .score-actions button#btn-score-team-point,
-.score-actions button#btn-score-team-point-modal,
-.score-actions button#btn-score-team-point-mobile {
+.score-actions button#btn-score-team-point-modal {
   background: #166534;
   border-color: #22c55e;
   color: #ecfdf3;
 }
 body[data-theme="light"] .score-actions button#btn-score-team-point,
-body[data-theme="light"] .score-actions button#btn-score-team-point-modal,
-body[data-theme="light"] .score-actions button#btn-score-team-point-mobile {
+body[data-theme="light"] .score-actions button#btn-score-team-point-modal {
   background: #16a34a;
   border-color: #22c55e;
   color: #0f172a;
@@ -752,7 +872,7 @@ body[data-theme="light"] .rotation-number {
 }
 .scout-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.15fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(300px, 0.9fr) minmax(460px, 1.6fr) minmax(260px, 0.9fr);
   gap: 0.65rem;
   align-items: start;
   width: 100%;
@@ -795,18 +915,6 @@ body[data-theme="light"] .rotation-number {
 }
 .floating-score-btn:hover {
   background: #1d2f52;
-}
-.mobile-team-error {
-  display: none;
-  margin-top: 0.4rem;
-}
-.mobile-team-error .full-width {
-  width: 100%;
-}
-@media (max-width: 900px), (pointer: coarse) {
-  .mobile-team-error {
-    display: block;
-  }
 }
 .floating-lineup-btn {
   white-space: nowrap;
@@ -2331,6 +2439,35 @@ body[data-theme="light"] .skill-modal__head {
 .skill-modal__body .skill-row {
   border: 1px solid #222;
 }
+.error-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+.error-choice-btn {
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.65rem;
+  border: 1px solid #1f2937;
+  background: #1a1f2a;
+  color: #e5e7eb;
+  text-align: center;
+}
+.error-choice-btn.danger {
+  background: #7f1d1d;
+  border-color: #b91c1c;
+  color: #fee2e2;
+}
+body[data-theme="light"] .error-choice-btn {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+body[data-theme="light"] .error-choice-btn.danger {
+  background: #fecdd3;
+  border-color: #fda4af;
+  color: #7f1d1d;
+}
 .team-modal {
   position: fixed;
   inset: 0;
@@ -3100,10 +3237,11 @@ body[data-theme="light"] .mobile-floating-bar {
   .agg-table th {
     font-size: 0.65rem;
   }
-  .score-card,
-  .score-card.wide {
-    min-width: 0;
-  }
+.score-card,
+.score-card.wide {
+  min-width: 0;
+  width: 100%;
+}
   .tabs-nav.floating {
     display: none;
   }
@@ -3197,6 +3335,28 @@ body[data-theme="light"] .mobile-floating-bar {
     grid-template-areas:
       "pos4 pos3 pos2"
       "pos5 pos6 pos1";
+  }
+  .court-actions-bar {
+    flex-direction: column;
+    padding: 0.45rem 0.55rem;
+  }
+  .court-rotation-block {
+    width: 100%;
+  }
+  .court-game-actions {
+    width: 100%;
+  }
+  .court-game-actions button {
+    flex: 1 1 45%;
+  }
+  .score-layout {
+    grid-template-columns: 1fr;
+  }
+  .score-side {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
+  .score-side button {
+    width: 100%;
   }
   #players-container {
     grid-template-columns: repeat(3, minmax(140px, 1fr));

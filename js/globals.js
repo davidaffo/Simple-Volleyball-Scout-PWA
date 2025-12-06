@@ -101,6 +101,9 @@ let state = {
   predictiveSkillFlow: false,
   autoRoleP1American: false,
   freeballPending: false,
+  matchFinished: false,
+  skillClock: { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null },
+  scoreOverrides: {},
   autoRoleBaseCourt: [],
   video: {
     offsetSeconds: 0,
@@ -168,6 +171,8 @@ const elLeg = document.getElementById("match-leg");
 const elMatchType = document.getElementById("match-type");
 const elCurrentSet = document.getElementById("current-set");
 const elCurrentSetFloating = document.getElementById("current-set-floating");
+const elCurrentSetDisplay = document.getElementById("current-set-display");
+const elCurrentSetFloatingDisplay = document.getElementById("current-set-floating-display");
 const elPlayersInput = document.getElementById("players-input");
 const elPlayersContainer = document.getElementById("players-container");
 const elPlayersList = document.getElementById("players-list");
@@ -197,10 +202,14 @@ const elBtnRotateCcwModal = document.getElementById("btn-rotate-ccw-modal");
 const elLiberoTags = document.getElementById("libero-tags");
 const elLiberoTagsInline = document.getElementById("libero-tags-inline");
 const elSkillModal = document.getElementById("skill-modal");
-const elSkillModalBackdrop = document.querySelector(".skill-modal__backdrop");
+const elSkillModalBackdrop = document.querySelector("#skill-modal .skill-modal__backdrop");
 const elSkillModalBody = document.getElementById("skill-modal-body");
 const elSkillModalTitle = document.getElementById("skill-modal-title");
 const elSkillModalClose = document.getElementById("skill-modal-close");
+const elErrorModal = document.getElementById("error-modal");
+const elErrorModalBody = document.getElementById("error-modal-body");
+const elErrorModalClose = document.getElementById("error-modal-close");
+const elErrorModalBackdrop = document.querySelector("#error-modal .skill-modal__backdrop");
 const elVideoFileInput = document.getElementById("video-file-input");
 const elAnalysisVideo = document.getElementById("analysis-video");
 const elVideoSkillsContainer = document.getElementById("video-skills-container");

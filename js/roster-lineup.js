@@ -130,12 +130,17 @@ const elBtnScoreForMinus = document.getElementById("btn-score-for-minus");
 const elBtnScoreAgainstPlus = document.getElementById("btn-score-against-plus");
 const elBtnScoreAgainstMinus = document.getElementById("btn-score-against-minus");
 const elBtnScoreTeamError = document.getElementById("btn-score-team-error");
-const elBtnScoreTeamErrorMobile = document.getElementById("btn-score-team-error-mobile");
+const elBtnScoreTeamPoint = document.getElementById("btn-score-team-point");
+const elBtnNextSet = document.getElementById("btn-next-set");
+const elBtnEndMatch = document.getElementById("btn-end-match");
 const elBtnScoreForPlusModal = document.getElementById("btn-score-for-plus-modal");
 const elBtnScoreForMinusModal = document.getElementById("btn-score-for-minus-modal");
 const elBtnScoreAgainstPlusModal = document.getElementById("btn-score-against-plus-modal");
 const elBtnScoreAgainstMinusModal = document.getElementById("btn-score-against-minus-modal");
 const elBtnScoreTeamErrorModal = document.getElementById("btn-score-team-error-modal");
+const elBtnScoreTeamPointModal = document.getElementById("btn-score-team-point-modal");
+const elBtnNextSetModal = document.getElementById("btn-next-set-modal");
+const elBtnEndMatchModal = document.getElementById("btn-end-match-modal");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
 const tabDots = document.querySelectorAll(".tab-dot");
@@ -241,9 +246,11 @@ function loadState() {
     state.autoRolePositioning = !!parsed.autoRolePositioning;
     state.isServing = !!parsed.isServing;
     state.rotation = parsed.rotation || 1;
+    state.matchFinished = !!parsed.matchFinished;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
     state.savedMatches = parsed.savedMatches || {};
+    state.scoreOverrides = normalizeScoreOverrides(parsed.scoreOverrides);
     state.selectedTeam = parsed.selectedTeam || "";
     state.selectedMatch = parsed.selectedMatch || "";
     if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
@@ -276,6 +283,7 @@ function loadState() {
     state.autoRotatePending = false;
     state.freeballPending = !!parsed.freeballPending;
     state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
+    state.skillClock = parsed.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
     autoRoleBaseCourt =
       state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6
         ? cloneCourtLineup(state.autoRoleBaseCourt)
@@ -320,6 +328,18 @@ function normalizePlayers(list) {
     }
   });
   return names;
+}
+function splitNameParts(fullName = "") {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return { lastName: "", firstName: "" };
+  }
+  const lastName = parts[0] || "";
+  const firstName = parts.slice(1).join(" ");
+  return { lastName, firstName };
+}
+function buildFullName(lastName = "", firstName = "") {
+  return [lastName, firstName].map(s => (s || "").trim()).filter(Boolean).join(" ").trim();
 }
 function enforceSingleCaptainFlag(players, preferredName = "") {
   if (!Array.isArray(players)) return [];
@@ -411,13 +431,18 @@ function isCaptain(name) {
 function formatNameWithNumber(name, options = {}) {
   const num = getPlayerNumber(name);
   const compactCourt = !!options.compactCourt;
-  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  const nameParts = splitNameParts(name);
+  const surname = nameParts.lastName || "";
+  const given = nameParts.firstName || "";
+  const initial = given ? given.trim()[0]?.toUpperCase() + "." : "";
   let baseName = name || "";
+  if (surname && initial) {
+    baseName = `${surname} ${initial}`.trim();
+  } else if (surname) {
+    baseName = surname;
+  }
   if (compactCourt) {
-    const surname = parts.length > 1 ? parts[parts.length - 1] : parts[0] || "";
-    const initial =
-      parts.length > 1 && parts[0] ? parts[0][0].toUpperCase() + "." : parts[0] || "";
-    baseName = [surname, initial && surname ? initial : ""].filter(Boolean).join(" ").trim();
+    baseName = baseName || name || "";
   }
   const base = num ? num + " - " + baseName : baseName;
   const includeCaptain = options.includeCaptain !== false;
@@ -636,10 +661,10 @@ function canPlaceInSlot(name, posIdx, showAlert = true) {
     return false;
   }
   if (isLibero(name)) {
-    const anotherLibero = (state.court || []).find(
+    const anotherLiberoIdx = (state.court || []).findIndex(
       slot => slot.main && slot.main !== name && isLibero(slot.main)
     );
-    if (anotherLibero) {
+    if (anotherLiberoIdx !== -1 && anotherLiberoIdx !== posIdx) {
       if (showAlert) alert("Puoi avere solo un libero in campo alla volta.");
       return false;
     }
@@ -810,6 +835,13 @@ function syncCurrentSetUI(value) {
   if (elCurrentSetFloating) {
     elCurrentSetFloating.value = setValue;
   }
+  if (typeof document !== "undefined") {
+    const label = "Set " + setValue;
+    const display = document.getElementById("current-set-display");
+    const displayFloating = document.getElementById("current-set-floating-display");
+    if (display) display.textContent = label;
+    if (displayFloating) displayFloating.textContent = label;
+  }
 }
 function applyMatchInfoToUI() {
   ensureMatchDefaults();
@@ -945,16 +977,21 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     }
     return Date.now() + "_" + Math.random();
   };
-  if (raw.version === 2 && Array.isArray(raw.playersDetailed)) {
+  if ((raw.version === 2 || raw.version === 3) && Array.isArray(raw.playersDetailed)) {
     const playersDetailed = enforceSingleCaptainFlag(
-      raw.playersDetailed.map(p => ({
-      id: p.id || makeId(),
-      name: p.name || "",
-      number: p.number || "",
-      role: p.role || "",
-      isCaptain: !!p.isCaptain,
-      out: !!p.out
-      })),
+      raw.playersDetailed.map(p => {
+        const parts = splitNameParts(p.name || "");
+        return {
+          id: p.id || makeId(),
+          name: p.name || buildFullName(p.lastName, p.firstName),
+          firstName: p.firstName || parts.firstName || "",
+          lastName: p.lastName || parts.lastName || "",
+          number: p.number || "",
+          role: p.role || "",
+          isCaptain: !!p.isCaptain,
+          out: !!p.out
+        };
+      }),
       (raw.captains && raw.captains[0]) || ""
     );
     const numbers = raw.numbers || {};
@@ -977,6 +1014,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
   const playersDetailed = legacyPlayers.map((n, idx) => ({
     id: idx + "_" + n,
     name: n,
+    ...splitNameParts(n),
     number: numbers[n] || "",
     role: liberos.includes(n) ? "L" : "",
     isCaptain: false,
@@ -1315,7 +1353,10 @@ function resetMatchState() {
   state.rotation = 1;
   state.isServing = false;
   state.currentSet = 1;
+  state.matchFinished = false;
+  state.scoreOverrides = {};
   state.autoRotatePending = false;
+  state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
@@ -1613,6 +1654,22 @@ function normalizePointRule(skillId, cfg) {
   const conceded = uniq((cfg && cfg.against) || def.against || []);
   return { for: made, against: conceded };
 }
+function normalizeScoreOverrides(raw) {
+  const cleaned = {};
+  if (!raw || typeof raw !== "object") return cleaned;
+  Object.keys(raw).forEach(key => {
+    const setNum = parseInt(key, 10);
+    if (!setNum || setNum < 1 || setNum > 5) return;
+    const entry = raw[key] || {};
+    const forVal = Number(entry.for);
+    const againstVal = Number(entry.against);
+    cleaned[setNum] = {
+      for: Number.isFinite(forVal) ? forVal : 0,
+      against: Number.isFinite(againstVal) ? againstVal : 0
+    };
+  });
+  return cleaned;
+}
 function ensurePointRulesDefaults() {
   state.pointRules = state.pointRules || {};
   SKILLS.forEach(skill => {
@@ -1737,10 +1794,22 @@ function buildTeamManagerStateFromSource(source) {
   const captainSet = new Set(state.captains || []);
   const playersDetailed =
     normalized && normalized.playersDetailed && normalized.playersDetailed.length > 0
-      ? normalized.playersDetailed.map(p => Object.assign({}, p))
+      ? normalized.playersDetailed.map(p => {
+          const parts = splitNameParts(p.name || buildFullName(p.lastName, p.firstName));
+          return Object.assign(
+            {},
+            p,
+            {
+              firstName: p.firstName || parts.firstName || "",
+              lastName: p.lastName || parts.lastName || "",
+              name: p.name || buildFullName(p.lastName, p.firstName)
+            }
+          );
+        })
       : (state.players || []).map((name, idx) => ({
           id: idx + "_" + name,
           name,
+          ...splitNameParts(name),
           number: (state.playerNumbers && state.playerNumbers[name]) || "",
           role: (state.liberos || []).includes(name) ? "L" : "",
           isCaptain: captainSet.has(name),
@@ -1766,11 +1835,25 @@ function renderTeamManagerTable() {
     numberInput.addEventListener("change", () => {
       p.number = numberInput.value;
     });
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = p.name || "";
-    nameInput.addEventListener("change", () => {
-      p.name = nameInput.value.trim();
+    const lastNameInput = document.createElement("input");
+    lastNameInput.type = "text";
+    lastNameInput.placeholder = "Cognome";
+    lastNameInput.value = p.lastName || splitNameParts(p.name).lastName || "";
+    const firstNameInput = document.createElement("input");
+    firstNameInput.type = "text";
+    firstNameInput.placeholder = "Nome";
+    firstNameInput.value = p.firstName || splitNameParts(p.name).firstName || "";
+    const syncFullName = () => {
+      p.lastName = lastNameInput.value.trim();
+      p.firstName = firstNameInput.value.trim();
+      p.name = buildFullName(p.lastName, p.firstName);
+    };
+    syncFullName();
+    lastNameInput.addEventListener("change", () => {
+      syncFullName();
+    });
+    firstNameInput.addEventListener("change", () => {
+      syncFullName();
     });
     let liberoChk = null;
     const roleSelect = document.createElement("select");
@@ -1821,7 +1904,8 @@ function renderTeamManagerTable() {
     });
     [
       numberInput,
-      nameInput,
+      lastNameInput,
+      firstNameInput,
       roleSelect,
       captainChk,
       outChk
@@ -1829,7 +1913,8 @@ function renderTeamManagerTable() {
 
     const tds = [
       numberInput,
-      nameInput,
+      lastNameInput,
+      firstNameInput,
       roleSelect,
       captainChk,
       liberoChk,
@@ -1881,7 +1966,9 @@ function collectTeamManagerPayload() {
       .filter(p => (p.name || "").trim() !== "")
       .map((p, idx) => ({
         id: p.id || idx + "_" + p.name,
-        name: p.name.trim(),
+        name: buildFullName(p.lastName, p.firstName) || p.name.trim(),
+        firstName: p.firstName || splitNameParts(p.name).firstName || "",
+        lastName: p.lastName || splitNameParts(p.name).lastName || "",
         number: p.number || "",
         role: p.role || "",
         isCaptain: !!p.isCaptain,
@@ -1899,7 +1986,7 @@ function collectTeamManagerPayload() {
   const players = playersDetailed.filter(p => !p.out).map(p => p.name);
   const captains = playersDetailed.filter(p => p.isCaptain && !p.out).map(p => p.name).slice(0, 1);
   return {
-    version: 2,
+    version: 3,
     name,
     staff,
     playersDetailed,
@@ -2961,7 +3048,8 @@ function applyPhasePermutation(lineup, rotation, phase, isServingFlag = state.is
   return sanitized.map((slot, idx) => {
     if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
       if (slot.replaced) {
-        return { main: slot.replaced, replaced: "" };
+        // libero esce in prima linea ma manteniamo il legame col libero per poterlo reinserire
+        return { main: slot.replaced, replaced: slot.main };
       }
     }
     return slot;

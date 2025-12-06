@@ -237,23 +237,93 @@ function getNextEventId() {
   }, 0);
   return maxId + 1;
 }
-function computeEventDurationMs(prevIso, nowMs) {
-  if (!prevIso) return null;
-  const prevMs = new Date(prevIso).getTime();
-  if (isNaN(prevMs)) return null;
-  return Math.max(0, nowMs - prevMs);
+function ensureSkillClock() {
+  state.skillClock = state.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  if (typeof state.skillClock.paused !== "boolean") state.skillClock.paused = false;
+  if (typeof state.skillClock.pausedAccumMs !== "number") state.skillClock.pausedAccumMs = 0;
+  return state.skillClock;
+}
+function getSkillClockMs() {
+  ensureSkillClock();
+  if (state.skillClock.paused) {
+    return state.skillClock.lastEffectiveMs || 0;
+  }
+  return Date.now() - (state.skillClock.pausedAccumMs || 0);
+}
+function pauseSkillClock() {
+  ensureSkillClock();
+  if (state.skillClock.paused) return;
+  state.skillClock.lastEffectiveMs = getSkillClockMs();
+  state.skillClock.pausedAtMs = Date.now();
+  state.skillClock.paused = true;
+}
+function resumeSkillClock() {
+  ensureSkillClock();
+  if (!state.skillClock.paused) return;
+  const now = Date.now();
+  const pausedAt = state.skillClock.pausedAtMs || now;
+  state.skillClock.pausedAccumMs = (state.skillClock.pausedAccumMs || 0) + Math.max(0, now - pausedAt);
+  state.skillClock.paused = false;
+  state.skillClock.pausedAtMs = null;
+  state.skillClock.lastEffectiveMs = null;
+}
+function ensureVideoClock() {
+  const offset = state.video && typeof state.video.offsetSeconds === "number" ? state.video.offsetSeconds : 0;
+  state.videoClock = state.videoClock || {
+    startMs: Date.now(),
+    paused: false,
+    pausedAtMs: null,
+    pausedAccumMs: 0,
+    currentSeconds: offset
+  };
+  if (typeof state.videoClock.paused !== "boolean") state.videoClock.paused = false;
+  if (typeof state.videoClock.pausedAccumMs !== "number") state.videoClock.pausedAccumMs = 0;
+  if (typeof state.videoClock.startMs !== "number") state.videoClock.startMs = Date.now();
+  if (typeof state.videoClock.currentSeconds !== "number") state.videoClock.currentSeconds = offset;
+  return state.videoClock;
+}
+function getVideoClockSeconds() {
+  ensureVideoClock();
+  const offset = state.video && typeof state.video.offsetSeconds === "number" ? state.video.offsetSeconds : 0;
+  if (state.videoClock.paused) {
+    return state.videoClock.currentSeconds || offset;
+  }
+  const elapsed = Date.now() - (state.videoClock.startMs || Date.now()) - (state.videoClock.pausedAccumMs || 0);
+  const seconds = Math.max(0, offset + elapsed / 1000);
+  state.videoClock.currentSeconds = seconds;
+  return seconds;
+}
+function pauseVideoClock() {
+  ensureVideoClock();
+  if (state.videoClock.paused) return;
+  state.videoClock.currentSeconds = getVideoClockSeconds();
+  state.videoClock.pausedAtMs = Date.now();
+  state.videoClock.paused = true;
+}
+function resumeVideoClock() {
+  ensureVideoClock();
+  if (!state.videoClock.paused) return;
+  const now = Date.now();
+  const pausedAt = state.videoClock.pausedAtMs || now;
+  state.videoClock.pausedAccumMs = (state.videoClock.pausedAccumMs || 0) + Math.max(0, now - pausedAt);
+  state.videoClock.paused = false;
+  state.videoClock.pausedAtMs = null;
 }
 function buildBaseEventPayload(base) {
   const now = new Date();
   const nowIso = now.toISOString();
+  const clockMs = getSkillClockMs();
+  const videoSeconds = getVideoClockSeconds();
   const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
   const zone = typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx) : null;
-  const lastEventTime = state.events && state.events.length > 0 ? state.events[state.events.length - 1].t : null;
-  const durationMs = computeEventDurationMs(lastEventTime, now.getTime());
+  const lastEvent = state.events && state.events.length > 0 ? state.events[state.events.length - 1] : null;
+  const lastEventTime = lastEvent ? lastEvent.t : null;
+  const durationMs = 5000;
   return {
     eventId: getNextEventId(),
     t: nowIso,
     durationMs: durationMs,
+    clockMs,
     set: state.currentSet,
     rotation,
     playerIdx: base.playerIdx,
@@ -289,10 +359,24 @@ function buildBaseEventPayload(base) {
     relatedEvents: base.relatedEvents || [],
     teamName: state.selectedTeam || (state.match && state.match.teamName) || null,
     homeScore: null,
-    visitorScore: null
+    visitorScore: null,
+    actionType: base.actionType || null,
+    prevSet: base.prevSet || null,
+    nextSet: base.nextSet || null,
+    prevMatchFinished: base.prevMatchFinished || null,
+    nextMatchFinished: base.nextMatchFinished || null,
+    prevClock: base.prevClock || null,
+    nextClock: base.nextClock || null,
+    prevVideoClock: base.prevVideoClock || null,
+    nextVideoClock: base.nextVideoClock || null,
+    videoTime: videoSeconds
   };
 }
 function renderSkillChoice(playerIdx, playerName) {
+  if (state.matchFinished) {
+    alert("Partita in pausa. Riprendi per continuare lo scout.");
+    return;
+  }
   if (!elSkillModalBody) return;
   modalMode = "skill";
   modalSubPosIdx = -1;
@@ -322,18 +406,6 @@ function renderSkillChoice(playerIdx, playerName) {
     grid.appendChild(btn);
   });
   elSkillModalBody.appendChild(grid);
-  const extraRow = document.createElement("div");
-  extraRow.className = "modal-skill-extra";
-  const errorBtn = document.createElement("button");
-  errorBtn.type = "button";
-  errorBtn.className = "small event-btn danger full-width";
-  errorBtn.textContent = "Errore/Fallo";
-  errorBtn.addEventListener("click", () => {
-    addPlayerError(playerIdx, playerName || state.players[playerIdx]);
-    closeSkillModal();
-  });
-  extraRow.appendChild(errorBtn);
-  elSkillModalBody.appendChild(extraRow);
 }
 function renderSkillCodes(playerIdx, playerName, skillId) {
   if (!elSkillModalBody) return;
@@ -452,6 +524,61 @@ function closeSkillModal() {
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
+function renderErrorModal() {
+  if (!elErrorModalBody) return;
+  elErrorModalBody.innerHTML = "";
+  const note = document.createElement("p");
+  note.className = "section-note";
+  note.textContent = "Seleziona la giocatrice a cui assegnare l'errore/fallo oppure applicalo alla squadra.";
+  elErrorModalBody.appendChild(note);
+  const grid = document.createElement("div");
+  grid.className = "error-choice-grid";
+  const teamBtn = document.createElement("button");
+  teamBtn.type = "button";
+  teamBtn.className = "error-choice-btn danger";
+  teamBtn.textContent = "Assegna alla squadra";
+  teamBtn.addEventListener("click", () => {
+    handleTeamError();
+    closeErrorModal();
+  });
+  grid.appendChild(teamBtn);
+  if (!state.players || state.players.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Aggiungi giocatrici per assegnare l'errore.";
+    elErrorModalBody.appendChild(empty);
+    elErrorModalBody.appendChild(grid);
+    return;
+  }
+  state.players.forEach((name, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "error-choice-btn";
+    btn.textContent = formatNameWithNumber(name);
+    btn.addEventListener("click", () => {
+      addPlayerError(idx, name);
+      closeErrorModal();
+    });
+    grid.appendChild(btn);
+  });
+  elErrorModalBody.appendChild(grid);
+}
+function openErrorModal() {
+  if (!elErrorModal) return;
+  if (typeof closeActionsModal === "function") {
+    closeActionsModal();
+  }
+  renderErrorModal();
+  elErrorModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
+}
+function closeErrorModal() {
+  if (!elErrorModal) return;
+  elErrorModal.classList.add("hidden");
+  document.body.style.overflow = "";
+  document.body.classList.remove("modal-open");
+}
 function attachModalCloseHandlers() {
   const closeHandler = e => {
     if (e) {
@@ -474,6 +601,26 @@ function attachModalCloseHandlers() {
       elSkillModalBackdrop.addEventListener(evt, closeHandler, { passive: false })
     );
   }
+  const closeErrorHandler = e => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closeErrorModal();
+  };
+  const errorCloseButtons = [elErrorModalClose];
+  errorCloseButtons.forEach(btn => {
+    if (!btn) return;
+    events.forEach(evt => {
+      btn.addEventListener(evt, closeErrorHandler, { passive: false, capture: true });
+    });
+    btn.onclick = closeErrorHandler;
+  });
+  if (elErrorModalBackdrop) {
+    events.forEach(evt =>
+      elErrorModalBackdrop.addEventListener(evt, closeErrorHandler, { passive: false })
+    );
+  }
   if (elSkillModal) {
     elSkillModal.addEventListener(
       "click",
@@ -482,6 +629,19 @@ function attachModalCloseHandlers() {
         if (!(target instanceof HTMLElement)) return;
         if (target.closest("[data-close-skill]")) {
           closeHandler(e);
+        }
+      },
+      true
+    );
+  }
+  if (elErrorModal) {
+    elErrorModal.addEventListener(
+      "click",
+      e => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("[data-close-error]")) {
+          closeErrorHandler(e);
         }
       },
       true
@@ -542,19 +702,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       });
       grid.appendChild(btn);
     });
-    if (activeName) {
-      const errBtn = document.createElement("button");
-      errBtn.type = "button";
-      errBtn.className = "small event-btn danger skill-error-btn";
-      errBtn.textContent = "Errore/Fallo individuale";
-      errBtn.addEventListener("click", () => {
-        addPlayerError(playerIdx, activeName);
-        setSelectedSkill(playerIdx, null);
-        if (closeAfterAction) closeSkillModal();
-        renderPlayers();
-      });
-      grid.appendChild(errBtn);
-    }
     targetEl.appendChild(grid);
     return;
   }
@@ -593,18 +740,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     });
     grid.appendChild(btn);
   });
-  const errBtn = document.createElement("button");
-  errBtn.type = "button";
-  errBtn.className = "small event-btn danger code-error-btn";
-  errBtn.textContent = "Errore/Fallo individuale";
-  errBtn.dataset.playerIdx = String(playerIdx);
-  errBtn.addEventListener("click", () => {
-    addPlayerError(playerIdx, activeName);
-    setSelectedSkill(playerIdx, null);
-    if (closeAfterAction) closeSkillModal();
-    renderPlayers();
-  });
-  grid.appendChild(errBtn);
   const showBackBtn = !(state.predictiveSkillFlow && nextSkillId);
   if (showBackBtn) {
     const backBtn = document.createElement("button");
@@ -742,6 +877,10 @@ function animateEventToLog(sourceEl, skillId, code) {
   });
 }
 function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
+  if (state.matchFinished) {
+    alert("Partita in pausa. Riprendi per continuare lo scout.");
+    return;
+  }
   let playerIdx = parseInt(playerIdxStr, 10);
   if (isNaN(playerIdx) || !state.players[playerIdx]) {
     playerIdx = state.players.findIndex(p => p === playerName);
@@ -1757,6 +1896,39 @@ function syncFirstSkillToVideo() {
   saveState();
   renderVideoAnalysis();
 }
+function ensureScoreOverrides() {
+  const normalized = normalizeScoreOverrides(state.scoreOverrides || {});
+  state.scoreOverrides = normalized;
+  return state.scoreOverrides;
+}
+function getScoreOverrideForSet(setNum) {
+  const overrides = ensureScoreOverrides();
+  const entry = overrides[setNum] || { for: 0, against: 0 };
+  const forVal = Number(entry.for);
+  const againstVal = Number(entry.against);
+  return {
+    for: Number.isFinite(forVal) ? forVal : 0,
+    against: Number.isFinite(againstVal) ? againstVal : 0
+  };
+}
+function getScoreOverrideTotals(targetSet = null) {
+  if (targetSet !== null && targetSet !== undefined) {
+    const setNum = Math.min(5, Math.max(1, parseInt(targetSet, 10) || 1));
+    return getScoreOverrideForSet(setNum);
+  }
+  const overrides = ensureScoreOverrides();
+  return Object.keys(overrides || {}).reduce(
+    (acc, key) => {
+      const setNum = parseInt(key, 10);
+      if (!setNum) return acc;
+      const entry = getScoreOverrideForSet(setNum);
+      acc.for += entry.for;
+      acc.against += entry.against;
+      return acc;
+    },
+    { for: 0, against: 0 }
+  );
+}
 function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
     return ev.pointDirection;
@@ -1769,7 +1941,8 @@ function getPointDirection(ev) {
   if (cfg.against.includes(code)) return "against";
   return null;
 }
-function computePointsSummary(targetSet) {
+function computePointsSummary(targetSet, options = {}) {
+  const includeOverrides = options.includeOverrides !== false;
   const target = targetSet ? parseInt(targetSet, 10) : null;
   const rotations = {};
   for (let r = 1; r <= 6; r++) {
@@ -1804,21 +1977,26 @@ function computePointsSummary(targetSet) {
     const againstVal = Math.max(0, obj.against);
     return { rotation: rotNum, for: forVal, against: againstVal, delta: forVal - againstVal };
   });
-  const totalForClean = Math.max(0, totalFor);
-  const totalAgainstClean = Math.max(0, totalAgainst);
-  const hasEvents = totalForClean + totalAgainstClean > 0;
+  const overrideTotals = includeOverrides ? getScoreOverrideTotals(target) : { for: 0, against: 0 };
+  const totalForClean = Math.max(0, totalFor + overrideTotals.for);
+  const totalAgainstClean = Math.max(0, totalAgainst + overrideTotals.against);
+  const hasRotationEvents = rotationList.some(r => r.for || r.against);
+  const hasEvents = hasRotationEvents || overrideTotals.for !== 0 || overrideTotals.against !== 0;
   const maxDelta = rotationList.reduce((acc, r) => Math.max(acc, r.delta), -Infinity);
   const minDelta = rotationList.reduce((acc, r) => Math.min(acc, r.delta), Infinity);
-  const best = hasEvents ? rotationList.find(r => r.delta === maxDelta) : null;
-  const worst = hasEvents ? rotationList.find(r => r.delta === minDelta) : null;
+  const best = hasRotationEvents ? rotationList.find(r => r.delta === maxDelta) : null;
+  const worst = hasRotationEvents ? rotationList.find(r => r.delta === minDelta) : null;
   return {
     totalFor: totalForClean,
     totalAgainst: totalAgainstClean,
     rotations: rotationList,
-    bestRotation: hasEvents && best ? best.rotation : null,
-    worstRotation: hasEvents && worst ? worst.rotation : null,
-    bestDelta: hasEvents && best ? best.delta : null,
-    worstDelta: hasEvents && worst ? worst.delta : null
+    bestRotation: hasRotationEvents && best ? best.rotation : null,
+    worstRotation: hasRotationEvents && worst ? worst.rotation : null,
+    bestDelta: hasRotationEvents && best ? best.delta : null,
+    worstDelta: hasRotationEvents && worst ? worst.delta : null,
+    hasRotationEvents,
+    overrideFor: overrideTotals.for,
+    overrideAgainst: overrideTotals.against
   };
 }
 function computeSetScores() {
@@ -1836,6 +2014,17 @@ function computeSetScores() {
     } else if (direction === "against") {
       setMap[setNum].against += value;
     }
+  });
+  const overrideMap = ensureScoreOverrides();
+  Object.keys(overrideMap || {}).forEach(key => {
+    const setNum = parseInt(key, 10);
+    if (!setNum) return;
+    const entry = getScoreOverrideForSet(setNum);
+    if (!setMap[setNum]) {
+      setMap[setNum] = { for: 0, against: 0 };
+    }
+    setMap[setNum].for += entry.for;
+    setMap[setNum].against += entry.against;
   });
   const sets = Object.keys(setMap)
     .map(k => parseInt(k, 10))
@@ -1901,6 +2090,7 @@ function renderLiveScore() {
   if (elBtnOpenActionsModal) {
     elBtnOpenActionsModal.textContent = "S" + (state.currentSet || 1) + " · " + totalLabel;
   }
+  updateMatchStatusUI();
 }
 function renderMobileLineupMiniCourt() {
   if (!elMiniCourt) return;
@@ -2259,6 +2449,10 @@ function recomputeServeFlagsFromHistory() {
   state.autoRotatePending = pending;
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
+  if (state.matchFinished) {
+    alert("Partita in pausa. Riprendi per continuare lo scout.");
+    return;
+  }
   state.freeballPending = false;
   const event = buildBaseEventPayload({
     playerIdx,
@@ -2282,19 +2476,180 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
   }
 }
 function handleManualScore(direction, delta) {
-  const summary = computePointsSummary(state.currentSet || 1);
-  if (delta < 0) {
-    if (direction === "for" && summary.totalFor <= 0) return;
-    if (direction === "against" && summary.totalAgainst <= 0) return;
+  const setNum = state.currentSet || 1;
+  ensureScoreOverrides();
+  const baseSummary = computePointsSummary(setNum, { includeOverrides: false });
+  const currentOverride = getScoreOverrideForSet(setNum);
+  const key = direction === "against" ? "against" : "for";
+  const next = Object.assign({}, currentOverride);
+  next[key] = (next[key] || 0) + delta;
+  if (key === "for") {
+    next.for = Math.max(next.for, -(baseSummary.totalFor || 0));
+  } else {
+    next.against = Math.max(next.against, -(baseSummary.totalAgainst || 0));
   }
-  const value = delta > 0 ? 1 : -1;
-  addManualPoint(direction, value, direction, null, "Squadra");
+  state.scoreOverrides[setNum] = next;
+  saveState();
+  renderLiveScore();
+  renderScoreAndRotations(computePointsSummary());
+  renderAggregatedTable();
+  renderVideoAnalysis();
+}
+function handleTeamPoint() {
+  addManualPoint("for", 1, "for", null, "Squadra");
 }
 function addPlayerError(playerIdx, playerName) {
+  if (state.matchFinished) {
+    alert("Partita in pausa. Riprendi per continuare lo scout.");
+    return;
+  }
   addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice");
 }
 function handleTeamError() {
   addManualPoint("against", 1, "team-error", null, "Squadra");
+}
+function snapshotSkillClock() {
+  ensureSkillClock();
+  return {
+    paused: !!state.skillClock.paused,
+    pausedAtMs: state.skillClock.pausedAtMs || null,
+    pausedAccumMs: state.skillClock.pausedAccumMs || 0,
+    lastEffectiveMs: state.skillClock.lastEffectiveMs || null
+  };
+}
+function restoreSkillClock(snapshot) {
+  ensureSkillClock();
+  if (!snapshot) return;
+  state.skillClock.paused = !!snapshot.paused;
+  state.skillClock.pausedAtMs = snapshot.pausedAtMs || null;
+  state.skillClock.pausedAccumMs = snapshot.pausedAccumMs || 0;
+  state.skillClock.lastEffectiveMs = snapshot.lastEffectiveMs || null;
+}
+function snapshotVideoClock() {
+  ensureVideoClock();
+  return {
+    paused: !!state.videoClock.paused,
+    pausedAtMs: state.videoClock.pausedAtMs || null,
+    pausedAccumMs: state.videoClock.pausedAccumMs || 0,
+    startMs: state.videoClock.startMs || Date.now(),
+    currentSeconds: state.videoClock.currentSeconds || 0
+  };
+}
+function restoreVideoClock(snapshot) {
+  ensureVideoClock();
+  if (!snapshot) return;
+  state.videoClock.paused = !!snapshot.paused;
+  state.videoClock.pausedAtMs = snapshot.pausedAtMs || null;
+  state.videoClock.pausedAccumMs = snapshot.pausedAccumMs || 0;
+  state.videoClock.startMs = snapshot.startMs || Date.now();
+  state.videoClock.currentSeconds = snapshot.currentSeconds || 0;
+}
+function updateMatchStatusUI() {
+  const finished = !!state.matchFinished;
+  const label = finished ? "Riprendi partita" : "Pausa/Termina";
+  const mainBtns = [elBtnEndMatch, elBtnEndMatchModal].filter(Boolean);
+  mainBtns.forEach(btn => {
+    btn.textContent = label;
+    btn.classList.toggle("danger", !finished);
+    btn.classList.toggle("resume-btn", finished);
+    btn.classList.toggle("primary", finished);
+  });
+  setScoutControlsDisabled(finished);
+  document.body.dataset.matchFinished = finished ? "true" : "false";
+}
+function setScoutControlsDisabled(disabled) {
+  const allowIds = new Set(["btn-end-match", "btn-end-match-modal"]);
+  const scope = document.querySelector('[data-tab="scout"]');
+  if (!scope) return;
+  scope.querySelectorAll("button").forEach(btn => {
+    if (!btn || allowIds.has(btn.id)) return;
+    btn.disabled = !!disabled;
+  });
+}
+function recordSetAction(actionType, payload) {
+  const event = buildBaseEventPayload(
+    Object.assign({}, payload, {
+      skillId: "manual",
+      code: actionType,
+      actionType
+    })
+  );
+  state.events.push(event);
+}
+function applySetChange(nextSet, options = {}) {
+  const {
+    prevSet = state.currentSet || 1,
+    prevFinished = !!state.matchFinished,
+    nextFinished = false,
+    actionType = "set-change",
+    prevClock = snapshotSkillClock(),
+    prevVideoClock = snapshotVideoClock()
+  } = options;
+  if (actionType === "match-end") {
+    pauseSkillClock();
+    pauseVideoClock();
+    state.matchFinished = true;
+    setCurrentSet(nextSet);
+    saveState();
+    renderEventsLog();
+    renderLiveScore();
+    updateMatchStatusUI();
+    return;
+  }
+  if (nextFinished) {
+    pauseSkillClock();
+    pauseVideoClock();
+  }
+  if (!nextFinished && prevFinished) {
+    resumeSkillClock();
+    resumeVideoClock();
+  }
+  state.matchFinished = nextFinished;
+  setCurrentSet(nextSet);
+  recordSetAction(actionType, {
+    prevSet,
+    nextSet,
+    prevMatchFinished: prevFinished,
+    nextMatchFinished: nextFinished,
+    prevClock,
+    nextClock: snapshotSkillClock(),
+    prevVideoClock,
+    nextVideoClock: snapshotVideoClock()
+  });
+  saveState();
+  renderEventsLog();
+  renderLiveScore();
+  updateMatchStatusUI();
+}
+function goToNextSet() {
+  const current = state.currentSet || 1;
+  const next = Math.min(5, current + 1);
+  if (current === next && !state.matchFinished) return;
+  applySetChange(next, {
+    prevSet: current,
+    nextSet: next,
+    prevFinished: !!state.matchFinished,
+    nextFinished: false,
+    actionType: "set-change"
+  });
+}
+function endMatch() {
+  if (state.matchFinished) {
+    resumeSkillClock();
+    resumeVideoClock();
+    state.matchFinished = false;
+    saveState();
+    updateMatchStatusUI();
+    return;
+  }
+  const current = state.currentSet || 1;
+  applySetChange(current, {
+    prevSet: current,
+    nextSet: current,
+    prevFinished: !!state.matchFinished,
+    nextFinished: true,
+    actionType: "match-end"
+  });
 }
 function renderScoreAndRotations(summary) {
   const effectiveSummary = summary || computePointsSummary();
@@ -2319,10 +2674,13 @@ function renderScoreAndRotations(summary) {
       });
     }
   }
-  const hasEvents = effectiveSummary.totalFor + effectiveSummary.totalAgainst > 0;
+  const hasRotationEvents =
+    effectiveSummary.hasRotationEvents !== undefined
+      ? effectiveSummary.hasRotationEvents
+      : effectiveSummary.rotations.some(r => r.for || r.against);
   if (!elRotationTableBody) return;
   elRotationTableBody.innerHTML = "";
-  if (!hasEvents) {
+  if (!hasRotationEvents) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 4;
@@ -2883,6 +3241,7 @@ function buildMatchExportPayload() {
       theme: state.theme,
       currentSet: state.currentSet,
       rotation: state.rotation,
+      skillClock: state.skillClock,
       players: state.players,
       captains: (state.captains || []).slice(0, 1),
       playerNumbers: state.playerNumbers,
@@ -2891,6 +3250,8 @@ function buildMatchExportPayload() {
       events: state.events,
       stats: state.stats,
       metricsConfig: state.metricsConfig,
+      scoreOverrides: state.scoreOverrides,
+      matchFinished: state.matchFinished,
       savedTeams: state.savedTeams,
       selectedTeam: state.selectedTeam,
       video: state.video,
@@ -2984,6 +3345,9 @@ function applyImportedMatch(nextState, options = {}) {
   merged.selectedTeam = nextState.selectedTeam || state.selectedTeam || "";
   merged.rotation = nextState.rotation || 1;
   merged.currentSet = nextState.currentSet || 1;
+  merged.matchFinished = !!nextState.matchFinished;
+  merged.skillClock = nextState.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  merged.scoreOverrides = normalizeScoreOverrides(nextState.scoreOverrides || {});
   merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "" };
   state = merged;
   saveState();
@@ -3441,7 +3805,10 @@ function resetMatch() {
   state.court = Array.from({ length: 6 }, () => ({ main: "" }));
   state.rotation = 1;
   state.currentSet = 1;
+  state.scoreOverrides = {};
+  state.matchFinished = false;
   state.autoRotatePending = false;
+  state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
@@ -3484,9 +3851,37 @@ function undoLastEvent() {
     updateRotationDisplay();
     return;
   }
+  if (ev.actionType === "set-change" || ev.actionType === "match-end") {
+    const prevSet = ev.prevSet || 1;
+    const prevFinished = !!ev.prevMatchFinished;
+    state.matchFinished = prevFinished;
+    setCurrentSet(prevSet, { save: false });
+    saveState();
+    recalcAllStatsAndUpdateUI();
+    renderEventsLog();
+    renderPlayers();
+    renderBenchChips();
+    renderLiberoChipsInline();
+    renderLineupChips();
+    updateRotationDisplay();
+    return;
+  }
   if (ev && ev.autoRotationDirection && typeof rotateCourt === "function") {
     const reverseDir = ev.autoRotationDirection === "ccw" ? "cw" : "ccw";
     rotateCourt(reverseDir);
+  }
+  if (ev.actionType === "match-end") {
+    restoreSkillClock(ev.prevClock || null);
+    restoreVideoClock(ev.prevVideoClock || null);
+    state.matchFinished = !!ev.prevMatchFinished;
+    updateMatchStatusUI();
+    setScoutControlsDisabled(!!state.matchFinished);
+  } else if (ev.actionType === "set-change") {
+    restoreSkillClock(ev.prevClock || null);
+    restoreVideoClock(ev.prevVideoClock || null);
+    state.matchFinished = !!ev.prevMatchFinished;
+    updateMatchStatusUI();
+    setScoutControlsDisabled(!!state.matchFinished);
   }
   const idx = ev.playerIdx;
   const skillId = ev.skillId;
@@ -3663,6 +4058,10 @@ function init() {
     renderMetricsConfig();
     renderTeamsSelect();
   }
+  ensureSkillClock();
+  ensureVideoClock();
+  updateMatchStatusUI();
+  setScoutControlsDisabled(!!state.matchFinished);
 
   [elCurrentSet, elCurrentSetFloating].forEach(select => {
     if (!select) return;
@@ -3740,6 +4139,8 @@ function init() {
       teamManagerState.players.push({
         id: Date.now() + "_" + Math.random(),
         name: "",
+        firstName: "",
+        lastName: "",
         number: "",
         role: "",
         isCaptain: false,
@@ -3781,7 +4182,14 @@ function init() {
         return;
       }
       const clone = JSON.parse(JSON.stringify(teamManagerState.players || []));
-      teamManagerState.players = clone.map(p => Object.assign({}, p, { id: Date.now() + "_" + Math.random(), name: p.name + " (dup)" }));
+      teamManagerState.players = clone.map(p =>
+        Object.assign({}, p, {
+          id: Date.now() + "_" + Math.random(),
+          name: (p.name || "").trim() + " (dup)",
+          firstName: p.firstName || splitNameParts(p.name || "").firstName || "",
+          lastName: p.lastName || splitNameParts(p.name || "").lastName || ""
+        })
+      );
       renderTeamManagerTable();
     });
   }
@@ -4068,6 +4476,9 @@ function init() {
   if (elBtnScoreForMinusModal) elBtnScoreForMinusModal.addEventListener("click", () => handleManualScore("for", -1));
   if (elBtnScoreAgainstPlusModal) elBtnScoreAgainstPlusModal.addEventListener("click", () => handleManualScore("against", 1));
   if (elBtnScoreAgainstMinusModal) elBtnScoreAgainstMinusModal.addEventListener("click", () => handleManualScore("against", -1));
+  if (elBtnScoreTeamPointModal) {
+    elBtnScoreTeamPointModal.addEventListener("click", handleTeamPoint);
+  }
   if (elVideoFileInput) {
     elVideoFileInput.addEventListener("change", e => {
       const input = e.target;
@@ -4118,14 +4529,26 @@ function init() {
   if (elBtnScoreAgainstMinus) {
     elBtnScoreAgainstMinus.addEventListener("click", () => handleManualScore("against", -1));
   }
-  if (elBtnScoreTeamError) {
-    elBtnScoreTeamError.addEventListener("click", handleTeamError);
+  if (elBtnScoreTeamPoint) {
+    elBtnScoreTeamPoint.addEventListener("click", handleTeamPoint);
   }
-  if (elBtnScoreTeamErrorMobile) {
-    elBtnScoreTeamErrorMobile.addEventListener("click", handleTeamError);
+  if (elBtnScoreTeamError) {
+    elBtnScoreTeamError.addEventListener("click", openErrorModal);
+  }
+  if (elBtnNextSet) {
+    elBtnNextSet.addEventListener("click", goToNextSet);
+  }
+  if (elBtnEndMatch) {
+    elBtnEndMatch.addEventListener("click", endMatch);
   }
   if (elBtnScoreTeamErrorModal) {
-    elBtnScoreTeamErrorModal.addEventListener("click", handleTeamError);
+    elBtnScoreTeamErrorModal.addEventListener("click", openErrorModal);
+  }
+  if (elBtnNextSetModal) {
+    elBtnNextSetModal.addEventListener("click", goToNextSet);
+  }
+  if (elBtnEndMatchModal) {
+    elBtnEndMatchModal.addEventListener("click", endMatch);
   }
   if (elSkillModalClose) {
     elSkillModalClose.addEventListener("click", closeSkillModal);

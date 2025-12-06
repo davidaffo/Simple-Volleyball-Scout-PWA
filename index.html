@@ -173,53 +173,12 @@ Bianchi 18"></textarea>
     <div class="scout-grid">
       <div class="section scout-col-left">
         <div class="set-controls grid-row">
-          <div class="block rotation-block">
-            <div class="rotation-controls">
-              <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
-              <div class="rotation-display">
-                <label>Rotazione</label>
-                <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
-                <select id="rotation-select" class="rotation-select">
-                  <option value="1">Rotazione 1</option>
-                  <option value="2">Rotazione 2</option>
-                  <option value="3">Rotazione 3</option>
-                  <option value="4">Rotazione 4</option>
-                  <option value="5">Rotazione 5</option>
-                  <option value="6">Rotazione 6</option>
-                </select>
-              </div>
-              <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
-            </div>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="auto-rotate-toggle" />
-              Rotazione automatica su cambio palla
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="auto-role-toggle" />
-              Auto posizionamento per ruolo
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="auto-role-p1american-toggle" />
-              P1 americana (OH in 4, OP in 2 su cambio palla)
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="predictive-skill-toggle" />
-              Flusso skill automatico (mostra solo la prossima)
-            </label>
-            <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
-          </div>
-          <div class="card-inline">
-            <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
-            <div class="undo-last-summary" aria-live="polite">
-              <span>Ultimo codice:</span>
-              <strong id="undo-last-summary">—</strong>
-            </div>
-          </div>
-          <div class="score-card wide">
-            <div class="score-card-head">
+          <div class="score-card score-card-top">
+            <div class="score-top-row">
               <div class="score-set-select">
                 <label for="current-set">Set corrente</label>
-                <select id="current-set">
+                <div class="set-display" id="current-set-display" aria-live="polite">Set 1</div>
+                <select id="current-set" class="hidden-select" tabindex="-1" aria-hidden="true">
                   <option value="1">Set 1</option>
                   <option value="2">Set 2</option>
                   <option value="3">Set 3</option>
@@ -227,21 +186,28 @@ Bianchi 18"></textarea>
                   <option value="5">Set 5</option>
                 </select>
               </div>
-              <div class="score-display">
+            </div>
+            <div class="score-layout">
+              <div class="score-side score-side-for">
+                <button id="btn-score-for-plus" class="small">+ Fatti</button>
+                <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
+              </div>
+              <div class="score-center">
                 <label>Punteggio set corrente</label>
                 <div id="live-score" class="score-value emph">0 - 0</div>
               </div>
-            </div>
-            <div class="score-actions">
-              <button id="btn-score-for-plus" class="small">+ Fatti</button>
-              <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
-              <button id="btn-score-against-plus" class="small">+ Subiti</button>
-              <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
-              <button id="btn-score-team-error" class="small danger">Errore/Fallo squadra</button>
+              <div class="score-side score-side-against">
+                <button id="btn-score-against-plus" class="small">+ Subiti</button>
+                <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
+              </div>
             </div>
           </div>
-          <div class="mobile-lineup-btn-wrap">
-            <button id="btn-open-lineup-mobile" class="secondary small">Imposta formazione</button>
+          <div class="card-inline">
+            <button id="btn-undo" class="small danger undo-inline">↩ Annulla ultimo</button>
+            <div class="undo-last-summary" aria-live="polite">
+              <span>Ultimo codice:</span>
+              <strong id="undo-last-summary">—</strong>
+            </div>
           </div>
           <div class="bench-inline">
             <label>Riserve (trascina in campo)</label>
@@ -251,9 +217,10 @@ Bianchi 18"></textarea>
             <label>Libero</label>
             <div id="libero-tags-inline" class="libero-tags"></div>
           </div>
-        </div>
-        <div class="mobile-team-error">
-          <button id="btn-score-team-error-mobile" class="small danger full-width">Errore/Fallo squadra</button>
+          <div class="set-bottom-actions">
+            <button id="btn-next-set" class="small secondary">Set successivo</button>
+            <button id="btn-end-match" class="small danger">Pausa/Termina</button>
+          </div>
         </div>
       </div>
       <div class="section scout-col-center">
@@ -280,6 +247,50 @@ Bianchi 18"></textarea>
             </button>
           </div>
           <div id="players-container"></div>
+          <div class="court-actions-bar">
+            <div class="rotation-block court-rotation-block">
+              <div class="rotation-controls">
+                <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+                <div class="rotation-display">
+                  <label>Rotazione</label>
+                  <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
+                  <select id="rotation-select" class="rotation-select">
+                    <option value="1">Rotazione 1</option>
+                    <option value="2">Rotazione 2</option>
+                    <option value="3">Rotazione 3</option>
+                    <option value="4">Rotazione 4</option>
+                    <option value="5">Rotazione 5</option>
+                    <option value="6">Rotazione 6</option>
+                  </select>
+                </div>
+                <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
+              </div>
+              <div class="rotation-toggles">
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-rotate-toggle" />
+                  Rotazione automatica su cambio palla
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-role-toggle" />
+                  Auto posizionamento per ruolo
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-role-p1american-toggle" />
+                  P1 americana (OH in 4, OP in 2 su cambio palla)
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="predictive-skill-toggle" />
+                  Flusso skill automatico (mostra solo la prossima)
+                </label>
+              </div>
+            </div>
+            <div class="score-actions court-game-actions">
+              <button id="btn-score-team-point" class="small">Punto fatto</button>
+              <button id="btn-score-team-error" class="small danger">Errore/Fallo</button>
+              <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
+              <button id="btn-open-lineup-mobile" class="secondary small">Imposta formazione</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="section log-section scout-col-right" data-log-section>
@@ -484,6 +495,7 @@ Bianchi 18"></textarea>
             <thead>
               <tr>
                 <th>#</th>
+                <th>Cognome</th>
                 <th>Nome</th>
                 <th>Ruolo</th>
                 <th>Capitano</th>
@@ -510,6 +522,16 @@ Bianchi 18"></textarea>
         <button id="skill-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-skill="true" onclick="window._closeSkillModal && window._closeSkillModal()">✕</button>
       </div>
       <div id="skill-modal-body" class="skill-modal__body"></div>
+    </div>
+  </div>
+  <div id="error-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-modal-title">
+    <div class="skill-modal__backdrop" data-close-error></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div id="error-modal-title" class="skill-modal__title">Assegna errore/fallo</div>
+        <button id="error-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
+      </div>
+      <div id="error-modal-body" class="skill-modal__body"></div>
     </div>
   </div>
   <div id="floating-actions-modal" class="floating-actions-modal hidden" role="dialog" aria-modal="true" aria-labelledby="floating-actions-title">
@@ -540,38 +562,44 @@ Bianchi 18"></textarea>
             </div>
           </div>
         </div>
-        <div class="floating-actions__row">
-          <div class="floating-actions__block">
-            <div class="score-card wide">
-              <div class="score-card-head">
-                <div class="score-set-select">
-                  <label for="current-set-floating">Set corrente</label>
-                  <select id="current-set-floating">
-                    <option value="1">Set 1</option>
-                    <option value="2">Set 2</option>
-                    <option value="3">Set 3</option>
-                    <option value="4">Set 4</option>
-                    <option value="5">Set 5</option>
-                  </select>
-                </div>
-                <div class="score-display">
-                  <label>Punteggio set corrente</label>
-                  <div id="live-score-modal" class="score-value emph">0 - 0</div>
+            <div class="floating-actions__row">
+              <div class="floating-actions__block">
+                <div class="score-card wide">
+                  <div class="score-card-head">
+                    <div class="score-set-select">
+                      <label for="current-set-floating">Set corrente</label>
+                      <div class="set-display" id="current-set-floating-display" aria-live="polite">Set 1</div>
+                      <select id="current-set-floating" class="hidden-select" tabindex="-1" aria-hidden="true">
+                        <option value="1">Set 1</option>
+                        <option value="2">Set 2</option>
+                        <option value="3">Set 3</option>
+                        <option value="4">Set 4</option>
+                        <option value="5">Set 5</option>
+                      </select>
+                    </div>
+                    <div class="score-display">
+                      <label>Punteggio set corrente</label>
+                      <div id="live-score-modal" class="score-value emph">0 - 0</div>
+                    </div>
+                  </div>
+                  <div class="score-actions">
+                    <button id="btn-score-for-plus-modal" class="small">+ Fatti</button>
+                    <button id="btn-score-for-minus-modal" class="small secondary">- Fatti</button>
+                    <button id="btn-score-against-plus-modal" class="small">+ Subiti</button>
+                    <button id="btn-score-against-minus-modal" class="small secondary">- Subiti</button>
+                    <button id="btn-score-team-point-modal" class="small">Punto fatto</button>
+                    <button id="btn-score-team-error-modal" class="small danger">Errore/Fallo</button>
+                  </div>
                 </div>
               </div>
-              <div class="score-actions">
-                <button id="btn-score-for-plus-modal" class="small">+ Fatti</button>
-                <button id="btn-score-for-minus-modal" class="small secondary">- Fatti</button>
-                <button id="btn-score-against-plus-modal" class="small">+ Subiti</button>
-                <button id="btn-score-against-minus-modal" class="small secondary">- Subiti</button>
-                <button id="btn-score-team-error-modal" class="small danger">Errore/Fallo squadra</button>
-              </div>
+            </div>
+            <div class="score-actions-set modal-set-actions">
+              <button id="btn-next-set-modal" class="small secondary">Set successivo</button>
+              <button id="btn-end-match-modal" class="small danger">Pausa/Termina</button>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
   <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
     <div class="settings-modal__backdrop" data-close-settings></div>
     <div class="settings-modal__content">
