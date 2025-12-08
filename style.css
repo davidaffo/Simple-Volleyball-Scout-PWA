@@ -1420,6 +1420,29 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   border-color: #dc2626;
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
+.player-management.feature-disabled {
+  position: relative;
+  opacity: 0.55;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+.player-management.feature-disabled::after {
+  content: "Funzionalità non ancora implementata";
+  position: absolute;
+  inset: 0.65rem;
+  border: 1px dashed #f87171;
+  color: #fecdd3;
+  background: rgba(17, 17, 17, 0.8);
+  border-radius: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.01em;
+  padding: 0.75rem;
+  pointer-events: none;
+}
 body[data-theme="light"] .player-management {
   border-color: #e2e8f0;
   background: #f8fafc;
@@ -1431,6 +1454,14 @@ body[data-theme="light"] .player-management.our-team {
 body[data-theme="light"] .player-management.opponent-team {
   border-color: #dc2626;
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+body[data-theme="light"] .player-management.feature-disabled::after {
+  background: rgba(255, 255, 255, 0.9);
+  color: #b91c1c;
+  border-color: #ef4444;
+}
+.feature-disabled-note {
+  color: #fca5a5;
 }
 .add-player-row {
   display: flex;
