@@ -2014,6 +2014,12 @@ body[data-theme="light"] .event-row.selected {
 .agg-table td {
   text-align: center;
   color: inherit;
+  white-space: nowrap !important;
+  padding: 0.2rem 0.12rem !important;
+}
+.agg-table td:not(:first-child),
+.agg-table th:not(:first-child) {
+  padding: 0.14rem 0.08rem !important;
 }
 /* Analisi skill: temi separati */
 .agg-table th.skill-col.skill-serve,
@@ -2402,11 +2408,26 @@ body[data-theme="light"] .rotation-table td {
 }
 .agg-table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto !important;
   border-collapse: collapse;
+  border: 1px solid #303030;
 }
 .agg-table th {
   text-transform: none;
+  padding: 0.22rem 0.12rem !important;
+  border: 1px solid #303030;
+}
+.agg-table td {
+  border: 1px solid #303030;
+}
+.agg-table th:first-child,
+.agg-table td:first-child {
+  border-left: 1px solid #303030;
+  min-width: max-content;
+}
+.agg-table th:last-child,
+.agg-table td:last-child {
+  border-right: 1px solid #303030;
 }
 .agg-table th.skill-col.skill-serve,
 .agg-table th.skill-col.skill-pass,
@@ -2432,6 +2453,11 @@ body[data-theme="light"] .agg-table thead tr:nth-child(2) th {
 body[data-theme="light"] .agg-table td {
   background: #ffffff;
   color: #0f172a;
+}
+body[data-theme="light"] .agg-table,
+body[data-theme="light"] .agg-table th,
+body[data-theme="light"] .agg-table td {
+  border-color: #d6d6d6;
 }
 .skill-modal {
   position: fixed;
@@ -3314,7 +3340,7 @@ body[data-theme="light"] .mobile-floating-bar {
   .agg-table {
     min-width: 0;
     width: 100%;
-    table-layout: fixed;
+    table-layout: auto;
   }
   th,
   td {

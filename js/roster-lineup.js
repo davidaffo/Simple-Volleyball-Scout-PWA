@@ -63,6 +63,7 @@ let touchBenchPointerId = null;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 let isLoadingMatch = false;
+const lineupCore = (typeof window !== "undefined" && window.LineupCore) || null;
 const elEventsLog = document.getElementById("events-log");
 const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
@@ -644,6 +645,9 @@ function ensureCourtShape() {
   state.court = ensureCourtShapeFor(state.court);
 }
 function ensureCourtShapeFor(court) {
+  if (lineupCore && typeof lineupCore.ensureCourtShapeFor === "function") {
+    return lineupCore.ensureCourtShapeFor(court);
+  }
   if (!Array.isArray(court) || court.length !== 6) {
     return Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
   }
@@ -653,6 +657,9 @@ function ensureCourtShapeFor(court) {
   }));
 }
 function cloneCourtLineup(lineup = state.court) {
+  if (lineupCore && typeof lineupCore.cloneCourtLineup === "function") {
+    return lineupCore.cloneCourtLineup(lineup);
+  }
   ensureCourtShape();
   return (lineup || []).map(slot => ({
     main: (slot && slot.main) || "",
@@ -732,6 +739,15 @@ function isTouchInput() {
   return hasCoarse && !hasFine;
 }
 function reserveNamesInCourt(name, court = state.court) {
+  if (lineupCore && typeof lineupCore.reserveNamesInCourt === "function") {
+    const next = lineupCore.reserveNamesInCourt(name, court);
+    if (court === state.court) {
+      state.court = next;
+    } else {
+      next.forEach((slot, idx) => (court[idx] = slot));
+    }
+    return next;
+  }
   return court.map(slot => {
     const cleaned = Object.assign({}, slot);
     if (cleaned.main === name) cleaned.main = "";
@@ -768,36 +784,51 @@ function commitCourtChange(baseCourt, options = {}) {
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
   const name = (playerName || "").trim();
   if (!name) return;
   if (!canPlaceInSlot(name, posIdx, true)) return;
-  const reserved = reserveNamesInCourt(name, baseCourt);
-  reserved.forEach((slot, idx) => (baseCourt[idx] = slot));
-  const slot = baseCourt[posIdx] || { main: "", replaced: "" };
-  const prevMain = slot.main;
-  const updated = Object.assign({}, slot);
-  updated.main = name;
-  const isIncomingLibero = (state.liberos || []).includes(name);
-  const prevWasLibero = (state.liberos || []).includes(prevMain);
-  if (isIncomingLibero) {
-    if (prevWasLibero) {
-      // mantieni l'aggancio alla titolare originale se stai sostituendo un libero con un altro libero
-      updated.replaced = slot.replaced || "";
-    } else {
-      updated.replaced = prevMain || slot.replaced || "";
-    }
+  let nextCourt = null;
+  if (lineupCore && typeof lineupCore.setPlayerOnCourt === "function") {
+    nextCourt = lineupCore.setPlayerOnCourt({
+      court: baseCourt,
+      posIdx,
+      playerName: name,
+      liberos: state.liberos || []
+    });
   } else {
-    updated.replaced = "";
+    const reserved = reserveNamesInCourt(name, baseCourt);
+    reserved.forEach((slot, idx) => (baseCourt[idx] = slot));
+    const slot = baseCourt[posIdx] || { main: "", replaced: "" };
+    const prevMain = slot.main;
+    const updated = Object.assign({}, slot);
+    updated.main = name;
+    const isIncomingLibero = (state.liberos || []).includes(name);
+    const prevWasLibero = (state.liberos || []).includes(prevMain);
+    if (isIncomingLibero) {
+      if (prevWasLibero) {
+        // mantieni l'aggancio alla titolare originale se stai sostituendo un libero con un altro libero
+        updated.replaced = slot.replaced || "";
+      } else {
+        updated.replaced = prevMain || slot.replaced || "";
+      }
+    } else {
+      updated.replaced = "";
+    }
+    releaseReplaced(name, posIdx, baseCourt);
+    baseCourt[posIdx] = updated;
+    nextCourt = baseCourt;
   }
-  releaseReplaced(name, posIdx, baseCourt);
-  baseCourt[posIdx] = updated;
-  commitCourtChange(baseCourt);
+  commitCourtChange(nextCourt);
 }
 function swapCourtPlayers(fromIdx, toIdx) {
   ensureCourtShape();
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
   if (fromIdx === toIdx) return;
   const fromSlot = baseCourt[fromIdx] || { main: "", replaced: "" };
   const toSlot = baseCourt[toIdx] || { main: "", replaced: "" };
@@ -812,25 +843,42 @@ function swapCourtPlayers(fromIdx, toIdx) {
     alert("Non puoi spostare il libero in prima linea.");
     return;
   }
-  baseCourt[toIdx] = fromSlot;
-  baseCourt[fromIdx] = toSlot;
-  commitCourtChange(baseCourt);
+  let nextCourt = null;
+  if (lineupCore && typeof lineupCore.swapCourtSlots === "function") {
+    nextCourt = lineupCore.swapCourtSlots({ court: baseCourt, fromIdx, toIdx });
+  } else {
+    const cloned = cloneCourtLineup(baseCourt);
+    cloned[toIdx] = fromSlot;
+    cloned[fromIdx] = toSlot;
+    nextCourt = cloned;
+  }
+  commitCourtChange(nextCourt);
 }
 function clearCourtAssignment(posIdx, target) {
   ensureCourtShape();
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
   const slot = baseCourt[posIdx];
   if (!slot) return;
-  if ((state.liberos || []).includes(slot.main) && slot.replaced) {
-    slot.main = slot.replaced;
-    slot.replaced = "";
+  let nextCourt = null;
+  if (lineupCore && typeof lineupCore.clearCourtSlot === "function") {
+    nextCourt = lineupCore.clearCourtSlot({ court: baseCourt, posIdx, liberos: state.liberos || [] });
   } else {
-    slot.main = "";
-    slot.replaced = "";
+    const updated = Object.assign({}, slot);
+    if ((state.liberos || []).includes(slot.main) && slot.replaced) {
+      updated.main = slot.replaced;
+      updated.replaced = "";
+    } else {
+      updated.main = "";
+      updated.replaced = "";
+    }
+    const cloned = cloneCourtLineup(baseCourt);
+    cloned[posIdx] = updated;
+    nextCourt = cloned;
   }
-  baseCourt[posIdx] = slot;
-  commitCourtChange(baseCourt);
+  commitCourtChange(nextCourt);
 }
 function initStats() {
   state.stats = {};
@@ -3264,6 +3312,15 @@ function getLockedMap() {
   return map;
 }
 function releaseReplaced(name, keepIdx, court = state.court) {
+  if (lineupCore && typeof lineupCore.releaseReplacedFromCourt === "function") {
+    const updated = lineupCore.releaseReplacedFromCourt(court, name, keepIdx);
+    if (court === state.court) {
+      state.court = updated;
+    } else {
+      updated.forEach((slot, idx) => (court[idx] = slot));
+    }
+    return;
+  }
   const shaped = ensureCourtShapeFor(court);
   const updated = shaped.map((slot, idx) => {
     if (idx === keepIdx) return slot;

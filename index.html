@@ -75,58 +75,7 @@
       <div class="controls-row info-controls">
       </div>
     </div>
-    <div class="section">
-      <h2>Squadra avversaria</h2>
-      <p class="section-note feature-disabled-note">Funzionalità non ancora implementata: la gestione avversaria è disattivata per ora.</p>
-      <div class="player-management opponent-team feature-disabled" aria-disabled="true">
-        <div class="add-player-row">
-          <div class="col">
-            <label for="new-opponent-player-name">Nuova giocatrice avversaria</label>
-            <div class="add-player-inline">
-              <input id="new-opponent-player-name" type="text" placeholder="Es: Rossi #12" />
-              <button id="btn-add-opponent-player">+ Aggiungi</button>
-            </div>
-          </div>
-          <div class="col col-auto">
-            <label class="spacer-label">&nbsp;</label>
-            <button id="btn-clear-opponent-players" class="secondary">Svuota elenco</button>
-          </div>
-        </div>
-        <div id="opponent-players-list" class="players-list"></div>
-        <div class="team-manage">
-          <label for="saved-opponent-teams">Avversarie salvate</label>
-          <div class="team-row">
-            <select id="saved-opponent-teams">
-              <option value="">Nuova avversaria (vuota)</option>
-            </select>
-            <button id="btn-delete-opponent-team" class="danger">Elimina</button>
-            <button id="btn-rename-opponent-team" class="secondary">Rinomina</button>
-            <button id="btn-save-opponent-team">Salva avversaria</button>
-            <button id="btn-open-opponent-team-manager" class="secondary">Gestione avversaria</button>
-          </div>
-          <div class="team-row">
-            <button id="btn-export-opponent-team" class="secondary">Esporta su file</button>
-            <button id="btn-import-opponent-team" class="secondary">Importa da file</button>
-            <input id="opponent-team-file-input" type="file" accept="application/json,text/plain" hidden />
-          </div>
-        </div>
-        <details class="import-panel">
-          <summary>Incolla un elenco (opzionale)</summary>
-          <label for="opponent-players-input">Formato: Nome;Numero;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
-          <textarea id="opponent-players-input" placeholder="Esempi:
-Smith;12;L
-Taylor;7
-Jones 18"></textarea>
-          <div class="controls-row">
-            <button id="btn-apply-opponent-players">Sostituisci elenco avversarie</button>
-          </div>
-        </details>
-        <div class="libero-manage">
-          <label for="opponent-libero-tags">Segna i liberi avversari</label>
-          <div id="opponent-libero-tags" class="libero-tags"></div>
-        </div>
-      </div>
-    </div>
+  <div class="section opponent-hidden" aria-hidden="true"></div>
     <div class="section">
       <h2>Giocatrici</h2>
       <p class="section-note">Gestisci l'elenco con i pulsanti. Cambiare la lista azzera le statistiche del match.</p>
@@ -268,6 +217,20 @@ Bianchi 18"></textarea>
             <button id="btn-next-set" class="small secondary">Set successivo</button>
             <button id="btn-end-match" class="small danger">Pausa/Termina</button>
           </div>
+          <div class="rotation-toggles">
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-rotate-toggle" />
+              Rotazione automatica su cambio palla
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-role-toggle" />
+              Auto posizionamento per ruolo
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="predictive-skill-toggle" />
+              Flusso skill automatico (mostra solo la prossima)
+            </label>
+          </div>
         </div>
       </div>
       <div class="section scout-col-center">
@@ -307,27 +270,15 @@ Bianchi 18"></textarea>
                     <option value="3">Rotazione 3</option>
                     <option value="4">Rotazione 4</option>
                     <option value="5">Rotazione 5</option>
-                    <option value="6">Rotazione 6</option>
-                  </select>
-                </div>
+                  <option value="6">Rotazione 6</option>
+                </select>
+              </div>
                 <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
               </div>
               <div class="rotation-toggles">
                 <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="auto-rotate-toggle" />
-                  Rotazione automatica su cambio palla
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="auto-role-toggle" />
-                  Auto posizionamento per ruolo
-                </label>
-                <label class="auto-rotate-toggle">
                   <input type="checkbox" id="auto-role-p1american-toggle" />
                   P1 americana (OH in 4, OP in 2 su cambio palla)
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="predictive-skill-toggle" />
-                  Flusso skill automatico (mostra solo la prossima)
                 </label>
               </div>
             </div>
@@ -702,6 +653,7 @@ Bianchi 18"></textarea>
   </div>
   <script src="js/globals.js"></script>
   <script src="js/shared/team-ui.js"></script>
+  <script src="js/shared/lineup-core.js"></script>
   <script src="js/roster-lineup.js"></script>
   <script src="js/scout-ui.js"></script>
 </body>

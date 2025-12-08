@@ -1,10 +1,11 @@
-const CACHE_VERSION = "v7";
+const CACHE_VERSION = "v8";
 const CACHE_NAME = `volley-scout-cache-${CACHE_VERSION}`;
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./js/globals.js",
+  "./js/shared/lineup-core.js",
   "./js/roster-lineup.js",
   "./js/scout-ui.js",
   "./manifest.json",
