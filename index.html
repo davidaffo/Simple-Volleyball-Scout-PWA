@@ -328,6 +328,7 @@ Bianchi 18"></textarea>
       <div class="agg-subnav">
         <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
         <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
+        <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Traiettorie</button>
       </div>
       <div class="agg-subpanel active" data-agg-tab="summary">
         <div class="score-summary">
@@ -405,6 +406,61 @@ Bianchi 18"></textarea>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+      <div class="agg-subpanel" data-agg-tab="trajectory">
+        <div class="trajectory-filters">
+          <div class="trajectory-filter">
+            <div class="trajectory-filter__label">Giocatrici</div>
+            <div id="traj-filter-players" class="trajectory-filter__options"></div>
+          </div>
+          <div class="trajectory-filter">
+            <div class="trajectory-filter__label">Set</div>
+            <div id="traj-filter-sets" class="trajectory-filter__options"></div>
+          </div>
+          <div class="trajectory-filter">
+            <div class="trajectory-filter__label">Valutazione</div>
+            <div id="traj-filter-codes" class="trajectory-filter__options"></div>
+          </div>
+          <div class="trajectory-filter">
+            <div class="trajectory-filter__label">Zona partenza</div>
+            <div id="traj-filter-zones" class="trajectory-filter__options"></div>
+          </div>
+          <div class="trajectory-filter trajectory-filter--actions">
+            <button id="traj-filter-reset" class="secondary small" type="button">Reset filtri</button>
+          </div>
+        </div>
+        <div id="trajectory-grid" class="trajectory-grid">
+          <div class="trajectory-card" data-zone="4">
+            <div class="trajectory-card__title">Zona 4</div>
+            <canvas data-traj-canvas="4"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
+          <div class="trajectory-card" data-zone="3">
+            <div class="trajectory-card__title">Zona 3</div>
+            <canvas data-traj-canvas="3"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
+          <div class="trajectory-card" data-zone="2">
+            <div class="trajectory-card__title">Zona 2</div>
+            <canvas data-traj-canvas="2"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
+          <div class="trajectory-card" data-zone="5">
+            <div class="trajectory-card__title">Zona 5</div>
+            <canvas data-traj-canvas="5"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
+          <div class="trajectory-card" data-zone="6">
+            <div class="trajectory-card__title">Zona 6</div>
+            <canvas data-traj-canvas="6"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
+          <div class="trajectory-card" data-zone="1">
+            <div class="trajectory-card__title">Zona 1</div>
+            <canvas data-traj-canvas="1"></canvas>
+            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+          </div>
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="second">

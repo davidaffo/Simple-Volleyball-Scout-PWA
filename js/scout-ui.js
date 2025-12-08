@@ -1203,6 +1203,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
         saveState();
         renderEventsLog({ suppressScroll: true });
         renderVideoAnalysis();
+        renderTrajectoryAnalysis();
       }
     });
   }
@@ -1211,6 +1212,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     renderScoreAndRotations(computePointsSummary());
     renderAggregatedTable();
     renderVideoAnalysis();
+    renderTrajectoryAnalysis();
   }
 }
 function computeMetrics(counts, skillId) {
@@ -2405,6 +2407,7 @@ function renderEventTableRows(target, events, options = {}) {
             saveState();
             renderEventsLog({ suppressScroll: true });
             renderVideoAnalysis();
+            renderTrajectoryAnalysis();
           });
         },
         editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done), editGuard)
@@ -3430,6 +3433,200 @@ function renderScoreAndRotations(summary) {
     elRotationTableBody.appendChild(tr);
   });
 }
+const trajectoryFilterState = {
+  players: new Set(),
+  sets: new Set(),
+  codes: new Set(),
+  zones: new Set()
+};
+const TRAJECTORY_BG_BY_ZONE = {
+  1: "images/trajectory/attack_2_near.png",
+  2: "images/trajectory/attack_2_near.png",
+  3: "images/trajectory/attack_3_near.png",
+  4: "images/trajectory/attack_4_near.png",
+  5: "images/trajectory/attack_4_near.png",
+  6: "images/trajectory/attack_3_near.png"
+};
+const TRAJECTORY_LINE_COLORS = {
+  "#": "#16a34a",
+  "+": "#22c55e",
+  "=": "#eab308",
+  "!": "#f97316",
+  "-": "#dc2626",
+  "/": "#a1a1aa"
+};
+const trajectoryBgCache = {};
+function clamp01Val(n) {
+  if (n == null || isNaN(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+function buildTrajectoryFilterOptions(container, options, selectedSet, { asNumber = false } = {}) {
+  if (!container) return;
+  container.innerHTML = "";
+  options.forEach(opt => {
+    const val = asNumber ? Number(opt.value) : opt.value;
+    const id = `${container.id}-${opt.value}`;
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = opt.value;
+    input.id = id;
+    input.checked = selectedSet.has(val);
+    input.addEventListener("change", handleTrajectoryFilterChange);
+    label.appendChild(input);
+    const span = document.createElement("span");
+    span.textContent = opt.label;
+    label.appendChild(span);
+    container.appendChild(label);
+  });
+}
+function syncTrajectoryFilterState() {
+  const getCheckedValues = (container, { asNumber = false } = {}) => {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map(inp =>
+      asNumber ? Number(inp.value) : inp.value
+    );
+  };
+  trajectoryFilterState.players = new Set(getCheckedValues(elTrajFilterPlayers, { asNumber: true }));
+  trajectoryFilterState.sets = new Set(getCheckedValues(elTrajFilterSets, { asNumber: true }));
+  trajectoryFilterState.codes = new Set(getCheckedValues(elTrajFilterCodes));
+  trajectoryFilterState.zones = new Set(getCheckedValues(elTrajFilterZones, { asNumber: true }));
+}
+function handleTrajectoryFilterChange() {
+  syncTrajectoryFilterState();
+  renderTrajectoryAnalysis();
+}
+function resetTrajectoryFilters() {
+  trajectoryFilterState.players.clear();
+  trajectoryFilterState.sets.clear();
+  trajectoryFilterState.codes.clear();
+  trajectoryFilterState.zones.clear();
+  renderTrajectoryFilters();
+  renderTrajectoryAnalysis();
+}
+function renderTrajectoryFilters() {
+  if (!elTrajectoryGrid) return;
+  const maxSetFromEvents = Math.max(
+    1,
+    state.currentSet || 1,
+    ...(state.events || []).map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
+  );
+  const playersOpts = (state.players || []).map((name, idx) => ({
+    value: idx,
+    label: formatNameWithNumber(name) || name || "—"
+  }));
+  const setsOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
+  const codesOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
+  const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
+
+  trajectoryFilterState.players = new Set(
+    [...trajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
+  );
+  trajectoryFilterState.sets = new Set(
+    [...trajectoryFilterState.sets].filter(setNum => setNum >= 1 && setNum <= maxSetFromEvents)
+  );
+  trajectoryFilterState.codes = new Set(
+    [...trajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  trajectoryFilterState.zones = new Set(
+    [...trajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
+  );
+
+  buildTrajectoryFilterOptions(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
+    asNumber: true
+  });
+  buildTrajectoryFilterOptions(elTrajFilterSets, setsOpts, trajectoryFilterState.sets, { asNumber: true });
+  buildTrajectoryFilterOptions(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes);
+  buildTrajectoryFilterOptions(elTrajFilterZones, zonesOpts, trajectoryFilterState.zones, { asNumber: true });
+  if (elTrajFilterReset && !elTrajFilterReset._trajResetBound) {
+    elTrajFilterReset.addEventListener("click", resetTrajectoryFilters);
+    elTrajFilterReset._trajResetBound = true;
+  }
+}
+function getTrajectoryBg(zone, cb) {
+  const key = String(zone);
+  if (trajectoryBgCache[key] && trajectoryBgCache[key].complete) {
+    return trajectoryBgCache[key];
+  }
+  const img = new Image();
+  img.src = TRAJECTORY_BG_BY_ZONE[zone] || TRAJECTORY_BG_BY_ZONE[4];
+  if (cb) {
+    img.onload = cb;
+  }
+  trajectoryBgCache[key] = img;
+  return img;
+}
+function getTrajectoryColorForCode(code) {
+  return TRAJECTORY_LINE_COLORS[code] || "#38bdf8";
+}
+function getFilteredTrajectoryEvents() {
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    const dir = ev.attackDirection || ev.attackTrajectory;
+    return dir && dir.start && dir.end;
+  });
+  return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory;
+    const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
+    if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
+    if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
+    if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
+    if (trajectoryFilterState.zones.size && !trajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
+function renderTrajectoryAnalysis() {
+  if (!elTrajectoryGrid) return;
+  renderTrajectoryFilters();
+  const canvases = elTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
+  if (!canvases || canvases.length === 0) return;
+  const events = getFilteredTrajectoryEvents();
+  const grouped = {};
+  events.forEach(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const zone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    if (!zone) return;
+    if (!grouped[zone]) grouped[zone] = [];
+    grouped[zone].push(ev);
+  });
+  canvases.forEach(canvas => {
+    const zone = parseInt(canvas.dataset.trajCanvas, 10);
+    const card = canvas.closest(".trajectory-card");
+    const list = grouped[zone] || [];
+    const img = getTrajectoryBg(zone, () => renderTrajectoryAnalysis());
+    const ratio = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.65;
+    const width = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 320;
+    const height = Math.max(120, Math.round(width * ratio || width * 0.65));
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+    if (img && img.complete && img.naturalWidth) {
+      ctx.drawImage(img, 0, 0, width, height);
+    }
+    if (!list.length) {
+      if (card) card.classList.add("empty");
+      return;
+    }
+    if (card) card.classList.remove("empty");
+    list.forEach(ev => {
+      const traj = ev.attackDirection || ev.attackTrajectory || {};
+      const start = traj.start || ev.attackStart;
+      const end = traj.end || ev.attackEnd;
+      if (!start || !end) return;
+      const sx = clamp01Val(start.x) * width;
+      const sy = clamp01Val(start.y) * height;
+      const ex = clamp01Val(end.x) * width;
+      const ey = clamp01Val(end.y) * height;
+      ctx.strokeStyle = getTrajectoryColorForCode(ev.code);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    });
+  });
+}
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
   elAggTableBody.innerHTML = "";
@@ -3570,6 +3767,7 @@ function renderAggregatedTable() {
   elAggTableBody.appendChild(totalsRow);
   renderScoreAndRotations(summaryAll);
   renderSecondTable();
+  renderTrajectoryAnalysis();
   applyAggColumnsVisibility();
 }
 function renderSecondTable() {

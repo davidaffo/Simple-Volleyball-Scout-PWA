@@ -2143,6 +2143,82 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
   padding: 0.5rem;
   background: rgba(255, 255, 255, 0.02);
 }
+.trajectory-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+  margin: 0.4rem 0 0.8rem;
+  align-items: flex-start;
+}
+.trajectory-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.trajectory-filter__label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.trajectory-filter__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+}
+.trajectory-filter__options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.trajectory-filter__options input {
+  accent-color: #2563eb;
+}
+.trajectory-filter--actions {
+  align-self: end;
+}
+.trajectory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.trajectory-card {
+  position: relative;
+  border: 1px solid var(--border-color, #2f2f2f);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  min-height: 200px;
+}
+.trajectory-card__title {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.trajectory-card canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 0.5rem;
+}
+.trajectory-card__empty {
+  position: absolute;
+  inset: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.trajectory-card.empty .trajectory-card__empty {
+  opacity: 1;
+}
+.trajectory-card.empty canvas {
+  opacity: 0.35;
+}
 .distribution-card h4 {
   margin: 0 0 0.4rem;
   font-size: 0.95rem;
@@ -2212,6 +2288,10 @@ body[data-theme="light"] .court-cell.best-eff {
 .rotation-table td {
   padding: 0.4rem 0.35rem;
   text-align: center;
+}
+.clickable-cell {
+  cursor: pointer;
+  text-decoration: underline dotted;
 }
 .rotation-table th {
   background: #1f1f1f;
