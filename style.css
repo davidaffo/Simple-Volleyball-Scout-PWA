@@ -411,6 +411,29 @@ body[data-theme="light"] .court-actions-bar {
   gap: 0.3rem 0.8rem;
   margin-top: 0.1rem;
 }
+.skill-flow-panel {
+  margin-top: 0.5rem;
+}
+.skill-flow-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.3rem;
+}
+.skill-flow-btn {
+  width: 100%;
+  border: none;
+  padding: 0.7rem 0.65rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  min-height: 48px;
+  cursor: pointer;
+}
+.skill-flow-btn.badge {
+  padding: 0.7rem 0.65rem;
+  font-size: 1rem;
+}
 .court-game-actions {
   flex: 1 1 320px;
   align-items: stretch;

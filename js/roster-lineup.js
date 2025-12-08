@@ -145,6 +145,7 @@ const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-f
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
 const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
+const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
 const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
 const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
@@ -2828,6 +2829,13 @@ function renderMetricsConfig() {
     block.appendChild(colsWrap);
     elMetricsConfig.appendChild(block);
   });
+  try {
+    syncSkillFlowButtons();
+  } catch (e) {
+    if (typeof console !== "undefined" && console.error) {
+      console.error("Skill flow buttons sync failed", e);
+    }
+  }
 }
 function updatePlayersList(newPlayers, options = {}) {
   const {
@@ -3389,6 +3397,30 @@ function syncAutoRoleToggle() {
 function syncPredictiveSkillToggle() {
   if (elPredictiveSkillToggle) {
     elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
+  }
+}
+function syncSkillFlowButtons() {
+  if (!elSkillFlowButtons) return;
+  if (typeof normalizeMetricConfig !== "function") return;
+  ensureMetricsConfigDefaults();
+  Array.from(elSkillFlowButtons.querySelectorAll("[data-force-skill]")).forEach(btn => {
+    const skillId = btn.dataset.forceSkill;
+    if (!skillId) return;
+    const cfg =
+      (state.metricsConfig && normalizeMetricConfig(skillId, state.metricsConfig[skillId])) || null;
+    const enabled = cfg ? cfg.enabled !== false : true;
+    btn.style.display = enabled ? "" : "none";
+  });
+}
+function forceNextSkill(skillId) {
+  if (!skillId) return;
+  state.predictiveSkillFlow = true;
+  state.skillFlowOverride = skillId;
+  syncPredictiveSkillToggle();
+  saveState();
+  renderPlayers();
+  if (typeof updateNextSkillIndicator === "function") {
+    updateNextSkillIndicator(skillId);
   }
 }
 function syncAutoRoleP1AmericanToggle() {

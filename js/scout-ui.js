@@ -43,6 +43,7 @@ function isAnySelectedSkill(skillId) {
   return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
 }
 function getPredictedSkillId() {
+  if (state.skillFlowOverride) return state.skillFlowOverride;
   if (!state.predictiveSkillFlow) return null;
   if (state.freeballPending) return "second";
   const ownEvents = (state.events || []).filter(ev => {
@@ -87,6 +88,16 @@ function updateNextSkillIndicator(skillId) {
   const label = meta ? meta.label : skillId || "—";
   elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
   elNextSkillIndicator.classList.toggle("active", !!skillId);
+}
+function forceNextSkill(skillId) {
+  if (!skillId) return;
+  state.predictiveSkillFlow = true;
+  state.skillFlowOverride = skillId;
+  saveState();
+  renderPlayers();
+  updateNextSkillIndicator(skillId);
+  const toggle = document.getElementById("predictive-skill-toggle");
+  if (toggle) toggle.checked = true;
 }
 let videoObjectUrl = "";
 let ytPlayer = null;
@@ -932,6 +943,7 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   }
   if (playerIdx === -1 || !state.players[playerIdx]) return;
   state.freeballPending = false;
+  state.skillFlowOverride = null;
   const event = buildBaseEventPayload({
     playerIdx,
     playerName: state.players[playerIdx],
@@ -4813,8 +4825,19 @@ function init() {
     elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
     elPredictiveSkillToggle.addEventListener("change", () => {
       state.predictiveSkillFlow = !!elPredictiveSkillToggle.checked;
+      if (!state.predictiveSkillFlow) state.skillFlowOverride = null;
       saveState();
       renderPlayers();
+    });
+  }
+  const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
+  if (elSkillFlowButtons) {
+    elSkillFlowButtons.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const skillId = target.dataset.forceSkill;
+      if (!skillId) return;
+      forceNextSkill(skillId);
     });
   }
   if (elBtnFreeball) {
