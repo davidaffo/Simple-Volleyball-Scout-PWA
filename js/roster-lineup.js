@@ -68,6 +68,21 @@ const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
 const elFloatingLogSummary = document.getElementById("floating-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
+const elBtnApplyOpponentPlayers = document.getElementById("btn-apply-opponent-players");
+const elOpponentPlayersInput = document.getElementById("opponent-players-input");
+const elOpponentPlayersList = document.getElementById("opponent-players-list");
+const elNewOpponentPlayerInput = document.getElementById("new-opponent-player-name");
+const elBtnAddOpponentPlayer = document.getElementById("btn-add-opponent-player");
+const elBtnClearOpponentPlayers = document.getElementById("btn-clear-opponent-players");
+const elOpponentTeamsSelect = document.getElementById("saved-opponent-teams");
+const elBtnSaveOpponentTeam = document.getElementById("btn-save-opponent-team");
+const elBtnDeleteOpponentTeam = document.getElementById("btn-delete-opponent-team");
+const elBtnRenameOpponentTeam = document.getElementById("btn-rename-opponent-team");
+const elBtnExportOpponentTeam = document.getElementById("btn-export-opponent-team");
+const elBtnImportOpponentTeam = document.getElementById("btn-import-opponent-team");
+const elOpponentTeamFileInput = document.getElementById("opponent-team-file-input");
+const elBtnOpenOpponentTeamManager = document.getElementById("btn-open-opponent-team-manager");
+const elOpponentLiberoTags = document.getElementById("opponent-libero-tags");
 const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnCopyCsv = document.getElementById("btn-copy-csv");
 const elBtnExportPdf = document.getElementById("btn-export-pdf");
@@ -90,9 +105,11 @@ const elTeamMetaHead = document.getElementById("team-meta-head");
 const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
 const elTeamMetaManager = document.getElementById("team-meta-manager");
 const elTeamManagerDup = document.getElementById("team-manager-duplicate");
+const elTeamManagerTemplate = document.getElementById("team-manager-template");
 const TEAM_ROLES = ["", "P", "S", "C", "O", "L"];
 const DEFAULT_STAFF = { headCoach: "", assistantCoach: "", manager: "" };
 let teamManagerState = null;
+let teamManagerScope = "our";
 const elBtnExportDb = document.getElementById("btn-export-db");
 const elBtnImportDb = document.getElementById("btn-import-db");
 const elDbFileInput = document.getElementById("db-file-input");
@@ -249,9 +266,17 @@ function loadState() {
     state.matchFinished = !!parsed.matchFinished;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
+    state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
     state.savedMatches = parsed.savedMatches || {};
     state.scoreOverrides = normalizeScoreOverrides(parsed.scoreOverrides);
     state.selectedTeam = parsed.selectedTeam || "";
+    state.selectedOpponentTeam = parsed.selectedOpponentTeam || "";
+    state.opponentPlayers = normalizePlayers(parsed.opponentPlayers || state.opponentPlayers || []);
+    state.opponentPlayerNumbers = parsed.opponentPlayerNumbers || {};
+    state.opponentLiberos = Array.isArray(parsed.opponentLiberos) ? normalizePlayers(parsed.opponentLiberos) : [];
+    state.opponentCaptains = normalizePlayers(
+      Array.isArray(parsed.opponentCaptains) ? parsed.opponentCaptains : []
+    ).slice(0, 1);
     state.selectedMatch = parsed.selectedMatch || "";
     if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
       const selectedTeamData = state.savedTeams[state.selectedTeam];
@@ -262,6 +287,9 @@ function loadState() {
         ).slice(0, 1);
       }
     }
+    state.opponentCaptains = (state.opponentCaptains || [])
+      .filter(name => (state.opponentPlayers || []).includes(name))
+      .slice(0, 1);
     state.metricsConfig = parsed.metricsConfig || {};
     state.video =
       parsed.video ||
@@ -291,22 +319,28 @@ function loadState() {
     state.pointRules = parsed.pointRules || state.pointRules || {};
     ensureMatchDefaults();
     syncPlayerNumbers(state.players || []);
+    syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
+    cleanOpponentLiberos();
     cleanLiberos();
     ensureMetricsConfigDefaults();
     ensurePointRulesDefaults();
     migrateTeamsToPersistent();
+    migrateOpponentTeamsToPersistent();
     migrateMatchesToPersistent();
     syncTeamsFromStorage();
+    syncOpponentTeamsFromStorage();
     syncMatchesFromStorage();
   } catch (e) {
     logError("Error loading state", e);
   }
   syncTeamsFromStorage();
+  syncOpponentTeamsFromStorage();
   syncMatchesFromStorage();
 }
 function saveState() {
   try {
     syncTeamsFromStorage();
+    syncOpponentTeamsFromStorage();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if (!isLoadingMatch) {
       persistCurrentMatch();
@@ -474,12 +508,12 @@ function getInitials(name) {
     .map(part => part[0].toUpperCase())
     .join("");
 }
-function buildNumbersForNames(names, provided = {}) {
+function buildNumbersForNames(names, provided = {}, previous = state.playerNumbers || {}) {
   const valid = value => {
     const clean = (value || "").trim();
     return clean && /^[0-9]{1,3}$/.test(clean) ? clean : "";
   };
-  const prev = state.playerNumbers || {};
+  const prev = previous || {};
   const used = new Set();
   const numbers = {};
   names.forEach(name => {
@@ -503,6 +537,15 @@ function buildNumbersForNames(names, provided = {}) {
 }
 function syncPlayerNumbers(names) {
   state.playerNumbers = buildNumbersForNames(names, {});
+}
+function syncOpponentPlayerNumbers(names, provided = {}) {
+  const numbers = buildNumbersForNames(names, provided, state.opponentPlayerNumbers || {});
+  state.opponentPlayerNumbers = numbers;
+  return numbers;
+}
+function cleanOpponentLiberos() {
+  const set = new Set(state.opponentPlayers || []);
+  state.opponentLiberos = normalizePlayers(state.opponentLiberos || []).filter(name => set.has(name));
 }
 function applyDefaultLineup(names = []) {
   ensureCourtShape();
@@ -870,6 +913,11 @@ function applyPlayersFromStateToTextarea() {
     elPlayersInput.value = (state.players || []).join("\n");
   }
 }
+function applyOpponentPlayersFromStateToTextarea() {
+  if (elOpponentPlayersInput) {
+    elOpponentPlayersInput.value = (state.opponentPlayers || []).join("\n");
+  }
+}
 function renderPlayersManagerList() {
   if (!elPlayersList) return;
   elPlayersList.innerHTML = "";
@@ -934,6 +982,206 @@ function renderPlayersManagerList() {
     elPlayersList.appendChild(pill);
   });
   renderLiberoTags();
+}
+function renderOpponentPlayersList() {
+  if (!elOpponentPlayersList) return;
+  elOpponentPlayersList.innerHTML = "";
+  if (!state.opponentPlayers || state.opponentPlayers.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessuna giocatrice avversaria aggiunta.";
+    elOpponentPlayersList.appendChild(empty);
+    return;
+  }
+  state.opponentPlayers.forEach((name, idx) => {
+    const pill = document.createElement("div");
+    pill.className = "player-pill";
+    const view = document.createElement("div");
+    view.className = "pill-view";
+    const number = document.createElement("span");
+    number.className = "pill-index";
+    const numVal = (state.opponentPlayerNumbers && state.opponentPlayerNumbers[name]) || idx + 1;
+    number.textContent = "#" + numVal;
+    const label = document.createElement("span");
+    label.className = "pill-name";
+    label.textContent = name;
+    view.appendChild(number);
+    view.appendChild(label);
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "pill-edit-btn";
+    editBtn.textContent = "✎";
+    const nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.value = name;
+    nameInput.className = "pill-name-input";
+    nameInput.addEventListener("change", () => renameOpponentPlayerAtIndex(idx, nameInput.value));
+    const numInput = document.createElement("input");
+    numInput.type = "number";
+    numInput.min = "0";
+    numInput.max = "999";
+    numInput.className = "pill-number-input";
+    numInput.value = (state.opponentPlayerNumbers && state.opponentPlayerNumbers[name]) || "";
+    numInput.addEventListener("change", () => {
+      handleOpponentNumberChange(name, numInput.value);
+    });
+    editBtn.addEventListener("click", () => {
+      pill.classList.toggle("editing");
+      if (pill.classList.contains("editing")) {
+        nameInput.focus();
+      }
+    });
+    const toggles = document.createElement("div");
+    toggles.className = "pill-toggles";
+    const liberoLabel = document.createElement("label");
+    const liberoChk = document.createElement("input");
+    liberoChk.type = "checkbox";
+    liberoChk.checked = (state.opponentLiberos || []).includes(name);
+    liberoChk.addEventListener("change", () => toggleOpponentLibero(name, liberoChk.checked));
+    liberoLabel.appendChild(liberoChk);
+    liberoLabel.appendChild(document.createTextNode("L"));
+    const captainLabel = document.createElement("label");
+    const captainChk = document.createElement("input");
+    captainChk.type = "checkbox";
+    captainChk.checked = (state.opponentCaptains || []).includes(name);
+    captainChk.addEventListener("change", () =>
+      setOpponentCaptain(captainChk.checked ? name : "")
+    );
+    captainLabel.appendChild(captainChk);
+    captainLabel.appendChild(document.createTextNode("C"));
+    toggles.appendChild(liberoLabel);
+    toggles.appendChild(captainLabel);
+    const editFields = document.createElement("div");
+    editFields.className = "pill-edit-fields";
+    editFields.appendChild(nameInput);
+    editFields.appendChild(numInput);
+    editFields.appendChild(toggles);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "pill-remove";
+    removeBtn.dataset.playerIdx = String(idx);
+    removeBtn.textContent = "✕";
+    removeBtn.addEventListener("click", () => removeOpponentPlayerAtIndex(idx));
+    pill.appendChild(view);
+    pill.appendChild(editBtn);
+    pill.appendChild(editFields);
+    pill.appendChild(removeBtn);
+    elOpponentPlayersList.appendChild(pill);
+  });
+  renderOpponentLiberoTags();
+}
+function updateOpponentPlayersList(players, options = {}) {
+  const {
+    liberos = state.opponentLiberos || [],
+    playerNumbers = state.opponentPlayerNumbers || {},
+    captains = state.opponentCaptains || []
+  } = options;
+  const normalized = normalizePlayers(players || []);
+  state.opponentPlayers = normalized;
+  state.opponentPlayerNumbers = buildNumbersForNames(
+    normalized,
+    playerNumbers,
+    state.opponentPlayerNumbers || {}
+  );
+  const libSet = new Set(normalizePlayers(liberos));
+  state.opponentLiberos = normalized.filter(name => libSet.has(name));
+  state.opponentCaptains = normalizePlayers(captains).filter(name => normalized.includes(name)).slice(0, 1);
+  saveState();
+  applyOpponentPlayersFromStateToTextarea();
+  renderOpponentPlayersList();
+  renderOpponentLiberoTags();
+}
+function addOpponentPlayer(name) {
+  const clean = (name || "").trim();
+  if (!clean) return;
+  const existing = normalizePlayers(state.opponentPlayers || []);
+  if (existing.includes(clean)) return;
+  updateOpponentPlayersList(existing.concat(clean));
+}
+function addOpponentPlayerFromInput() {
+  if (!elNewOpponentPlayerInput) return;
+  addOpponentPlayer(elNewOpponentPlayerInput.value);
+  elNewOpponentPlayerInput.value = "";
+  elNewOpponentPlayerInput.focus();
+}
+function removeOpponentPlayerAtIndex(idx) {
+  if (!state.opponentPlayers || idx < 0 || idx >= state.opponentPlayers.length) return;
+  const updated = state.opponentPlayers.slice();
+  const removed = updated.splice(idx, 1)[0];
+  const numbers = Object.assign({}, state.opponentPlayerNumbers || {});
+  delete numbers[removed];
+  const liberos = (state.opponentLiberos || []).filter(n => n !== removed);
+  const captains = (state.opponentCaptains || []).filter(n => n !== removed);
+  updateOpponentPlayersList(updated, { liberos, playerNumbers: numbers, captains });
+}
+function renameOpponentPlayerAtIndex(idx, newName) {
+  if (!state.opponentPlayers || idx < 0 || idx >= state.opponentPlayers.length) return;
+  const clean = (newName || "").trim();
+  if (!clean) return;
+  const players = state.opponentPlayers.slice();
+  const oldName = players[idx];
+  if (players.some((p, i) => i !== idx && p.toLowerCase() === clean.toLowerCase())) {
+    alert("Nome già presente nel roster avversario.");
+    return;
+  }
+  players[idx] = clean;
+  const numbers = Object.assign({}, state.opponentPlayerNumbers || {});
+  if (numbers[oldName]) {
+    numbers[clean] = numbers[oldName];
+    delete numbers[oldName];
+  }
+  const liberos = (state.opponentLiberos || []).map(n => (n === oldName ? clean : n));
+  const captains = (state.opponentCaptains || []).map(n => (n === oldName ? clean : n));
+  updateOpponentPlayersList(players, { liberos, playerNumbers: numbers, captains });
+}
+function handleOpponentNumberChange(name, rawNumber) {
+  const provided = Object.assign({}, state.opponentPlayerNumbers || {});
+  provided[name] = rawNumber;
+  const numbers = syncOpponentPlayerNumbers(state.opponentPlayers || [], provided);
+  state.opponentPlayerNumbers = numbers;
+  saveState();
+  renderOpponentPlayersList();
+}
+function toggleOpponentLibero(name, active) {
+  const set = new Set(state.opponentLiberos || []);
+  if (active) {
+    set.add(name);
+  } else {
+    set.delete(name);
+  }
+  state.opponentLiberos = Array.from(set).filter(n => (state.opponentPlayers || []).includes(n));
+  saveState();
+  renderOpponentPlayersList();
+  renderOpponentLiberoTags();
+}
+function setOpponentCaptain(name) {
+  if (!name) {
+    state.opponentCaptains = [];
+  } else {
+    const clean = normalizePlayers([name])[0];
+    state.opponentCaptains =
+      clean && (state.opponentPlayers || []).includes(clean) ? [clean] : [];
+  }
+  saveState();
+  renderOpponentPlayersList();
+}
+function clearOpponentPlayers() {
+  if (!state.opponentPlayers || state.opponentPlayers.length === 0) return;
+  const ok = confirm("Svuotare il roster avversario?");
+  if (!ok) return;
+  updateOpponentPlayersList([], { liberos: [], playerNumbers: {}, captains: [] });
+}
+function applyOpponentPlayersFromTextarea() {
+  if (!elOpponentPlayersInput) return;
+  const parsed = parseDelimitedTeamText(elOpponentPlayersInput.value || "");
+  if (!parsed || !parsed.players || parsed.players.length === 0) {
+    alert("Nessuna giocatrice avversaria valida trovata.");
+    return;
+  }
+  updateOpponentPlayersList(parsed.players, {
+    liberos: parsed.liberos || [],
+    playerNumbers: parsed.numbers || {}
+  });
 }
 function getTeamStorageKey(name) {
   return TEAM_PREFIX + name;
@@ -1036,10 +1284,36 @@ function loadTeamNormalized(name) {
   const raw = loadTeamFromStorage(name);
   return normalizeTeamPayload(raw, name);
 }
+function compactTeamPayload(data, fallbackName = "") {
+  const normalized = normalizeTeamPayload(data, fallbackName);
+  if (!normalized) return null;
+  const playersDetailed =
+    normalized.playersDetailed && normalized.playersDetailed.length > 0
+      ? normalized.playersDetailed.map(p => {
+          const parts = splitNameParts(p.name || buildFullName(p.lastName, p.firstName));
+          return {
+            id: p.id || parts.id || Date.now() + "_" + Math.random(),
+            firstName: p.firstName || parts.firstName || "",
+            lastName: p.lastName || parts.lastName || "",
+            number: p.number || "",
+            role: p.role || "",
+            isCaptain: !!p.isCaptain,
+            out: !!p.out
+          };
+        })
+      : [];
+  return {
+    version: 3,
+    name: normalized.name || fallbackName,
+    staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
+    playersDetailed
+  };
+}
 function saveTeamToStorage(name, data) {
   if (!name) return;
   try {
-    localStorage.setItem(getTeamStorageKey(name), JSON.stringify(data));
+    const compact = compactTeamPayload(data, name);
+    localStorage.setItem(getTeamStorageKey(name), JSON.stringify(compact));
   } catch (e) {
     logError("Error saving team " + name, e);
   }
@@ -1060,6 +1334,16 @@ function loadTeamsMapFromStorage() {
   });
   return map;
 }
+function compactTeamPayload(data, fallbackName = "") {
+  const normalized = normalizeTeamPayload(data, fallbackName);
+  if (!normalized) return null;
+  return {
+    version: 3,
+    name: normalized.name || fallbackName,
+    staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
+    playersDetailed: normalized.playersDetailed || []
+  };
+}
 function migrateTeamsToPersistent() {
   if (!state.savedTeams || Object.keys(state.savedTeams).length === 0) return;
   Object.entries(state.savedTeams).forEach(([name, data]) => {
@@ -1070,6 +1354,16 @@ function migrateTeamsToPersistent() {
 }
 function syncTeamsFromStorage() {
   state.savedTeams = loadTeamsMapFromStorage();
+  state.savedOpponentTeams = state.savedTeams;
+}
+function migrateOpponentTeamsIntoTeams() {
+  const opponentNames = listOpponentTeamsFromStorage();
+  opponentNames.forEach(name => {
+    const data = loadOpponentTeamFromStorage(name);
+    if (data && !localStorage.getItem(getTeamStorageKey(name))) {
+      saveTeamToStorage(name, data);
+    }
+  });
 }
 function extractRosterFromTeam(team) {
   const normalized = normalizeTeamPayload(team);
@@ -1096,6 +1390,40 @@ function extractRosterFromTeam(team) {
     playersDetailed: normalized.playersDetailed || [],
     captains
   };
+}
+function getOpponentTeamStorageKey(name) {
+  return OPPONENT_TEAM_PREFIX + name;
+}
+function listOpponentTeamsFromStorage() {
+  // use the same pool as main teams
+  return listTeamsFromStorage();
+}
+function loadOpponentTeamFromStorage(name) {
+  return loadTeamFromStorage(name);
+}
+function saveOpponentTeamToStorage(name, data) {
+  return saveTeamToStorage(name, data);
+}
+function deleteOpponentTeamFromStorage(name) {
+  if (!name) return;
+  try {
+    localStorage.removeItem(getTeamStorageKey(name));
+  } catch (e) {
+    logError("Error deleting opponent team " + name, e);
+  }
+}
+function loadOpponentTeamsMapFromStorage() {
+  return loadTeamsMapFromStorage();
+}
+function migrateOpponentTeamsToPersistent() {
+  // legacy: copy opponent-prefixed teams into main pool
+  migrateOpponentTeamsIntoTeams();
+  state.savedOpponentTeams = state.savedTeams;
+}
+function syncOpponentTeamsFromStorage() {
+  state.savedOpponentTeams = loadOpponentTeamsMapFromStorage();
+  // mantieni sincronizzati i due riferimenti
+  state.savedTeams = state.savedOpponentTeams;
 }
 function getMatchStorageKey(name) {
   return MATCH_PREFIX + name;
@@ -1176,6 +1504,37 @@ function renderTeamsSelect() {
   }
   updateTeamButtonsState();
 }
+function renderOpponentTeamsSelect() {
+  if (!elOpponentTeamsSelect) return;
+  syncOpponentTeamsFromStorage();
+  const names = Object.keys(state.savedTeams || {});
+  const prev = elOpponentTeamsSelect.value || state.selectedOpponentTeam || "";
+  elOpponentTeamsSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Nuova avversaria (vuota)";
+  elOpponentTeamsSelect.appendChild(placeholder);
+  names
+    .filter(name => name !== state.selectedTeam) // non mostrare la stessa squadra
+    .forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      elOpponentTeamsSelect.appendChild(opt);
+    });
+  if (prev && names.includes(prev) && prev !== state.selectedTeam) {
+    elOpponentTeamsSelect.value = prev;
+    state.selectedOpponentTeam = prev;
+  } else {
+    elOpponentTeamsSelect.value = "";
+    state.selectedOpponentTeam = "";
+  }
+  // se non ci sono squadre disponibili, proponi roster di default
+  if (names.length === 0) {
+    applyTemplateRoster("opponent", { askReset: false });
+  }
+  updateOpponentTeamButtonsState();
+}
 function renderMatchesSelect() {
   if (!elSavedMatchesSelect) return;
   syncMatchesFromStorage();
@@ -1248,6 +1607,42 @@ function getCurrentTeamPayload(name = "") {
     captains
   };
 }
+function getCurrentOpponentPayload(name = "") {
+  const safeName = (name || state.selectedOpponentTeam || state.match.opponent || "avversaria").trim();
+  const players = normalizePlayers(state.opponentPlayers || []);
+  const numbers = {};
+  players.forEach(p => {
+    const num = state.opponentPlayerNumbers && state.opponentPlayerNumbers[p];
+    if (num !== undefined && num !== null && num !== "") {
+      numbers[p] = String(num);
+    }
+  });
+  const liberos = normalizePlayers(state.opponentLiberos || []).filter(n => players.includes(n));
+  const captains = normalizePlayers(state.opponentCaptains || []).filter(n => players.includes(n)).slice(0, 1);
+  const playersDetailed =
+    players.length > 0
+      ? players.map((p, idx) => ({
+          id: idx + "_" + p,
+          name: p,
+          ...splitNameParts(p),
+          number: numbers[p] || "",
+          role: liberos.includes(p) ? "L" : "",
+          isCaptain: captains.includes(p),
+          out: false
+        }))
+      : [];
+  enforceSingleCaptainFlag(playersDetailed, captains[0] || "");
+  return {
+    version: 2,
+    name: safeName,
+    staff: DEFAULT_STAFF,
+    playersDetailed,
+    players,
+    liberos,
+    numbers,
+    captains
+  };
+}
 function saveCurrentTeam() {
   if (!state.players || state.players.length === 0) {
     alert("Aggiungi almeno una giocatrice prima di salvare.");
@@ -1262,13 +1657,45 @@ function saveCurrentTeam() {
   }
   if (!name) return;
   const payload = getCurrentTeamPayload(name);
+  const compact = compactTeamPayload(payload, name);
   state.savedTeams = state.savedTeams || {};
-  state.savedTeams[name] = payload;
+  state.savedTeams[name] = compact;
   state.selectedTeam = name;
-  saveTeamToStorage(name, payload);
+  saveTeamToStorage(name, compact);
   saveState();
   renderTeamsSelect();
   alert((existing ? "Squadra sovrascritta: " : "Squadra salvata: ") + name);
+}
+function saveCurrentOpponentTeam() {
+  if (!state.opponentPlayers || state.opponentPlayers.length === 0) {
+    alert("Aggiungi almeno una giocatrice avversaria prima di salvare.");
+    return;
+  }
+  const existing = state.selectedOpponentTeam;
+  let name = existing;
+  if (!name) {
+    name = prompt("Nome della squadra avversaria da salvare:", state.match.opponent || "");
+    if (!name) return;
+    name = name.trim();
+  }
+  if (!name) return;
+  if (name === state.selectedTeam) {
+    alert("Non puoi impostare come avversaria la stessa squadra selezionata.");
+    return;
+  }
+  const payload = getCurrentOpponentPayload(name);
+  const compact = compactTeamPayload(payload, name);
+  state.savedOpponentTeams = state.savedOpponentTeams || {};
+  state.savedOpponentTeams[name] = compact;
+  state.selectedOpponentTeam = name;
+  if (!state.match.opponent) {
+    state.match.opponent = name;
+    applyMatchInfoToUI();
+  }
+  saveOpponentTeamToStorage(name, compact);
+  saveState();
+  renderOpponentTeamsSelect();
+  alert((existing ? "Avversaria sovrascritta: " : "Avversaria salvata: ") + name);
 }
 function deleteSelectedTeam() {
   if (!elTeamsSelect) return;
@@ -1280,6 +1707,17 @@ function deleteSelectedTeam() {
   syncTeamsFromStorage();
   state.selectedTeam = "";
   renderTeamsSelect();
+}
+function deleteSelectedOpponentTeam() {
+  if (!elOpponentTeamsSelect) return;
+  const name = elOpponentTeamsSelect.value;
+  if (!name) return;
+  const ok = confirm("Eliminare l'avversaria \"" + name + "\"?");
+  if (!ok) return;
+  deleteOpponentTeamFromStorage(name);
+  syncOpponentTeamsFromStorage();
+  state.selectedOpponentTeam = "";
+  renderOpponentTeamsSelect();
 }
 function getCurrentMatchPayload(name = "") {
   const safeName = (name || state.selectedMatch || state.match.opponent || "match").trim();
@@ -1416,18 +1854,60 @@ function renameSelectedTeam() {
   renderTeamsSelect();
   alert("Squadra rinominata in \"" + newName + "\".");
 }
+function renameSelectedOpponentTeam() {
+  if (!elOpponentTeamsSelect) return;
+  const oldName = elOpponentTeamsSelect.value;
+  if (!oldName) {
+    alert("Seleziona una squadra avversaria da rinominare.");
+    return;
+  }
+  const currentData = loadOpponentTeamFromStorage(oldName);
+  if (!currentData) {
+    alert("Squadra avversaria non trovata o corrotta.");
+    return;
+  }
+  let newName = prompt("Nuovo nome per l'avversaria:", oldName) || "";
+  newName = newName.trim();
+  if (!newName) return;
+  if (newName === oldName) return;
+  const names = listOpponentTeamsFromStorage();
+  const exists = names.includes(newName);
+  if (exists) {
+    const overwrite = confirm(
+      "Esiste già una squadra avversaria con questo nome. Sovrascrivere con il roster corrente?"
+    );
+    if (!overwrite) return;
+  }
+  saveOpponentTeamToStorage(newName, currentData);
+  deleteOpponentTeamFromStorage(oldName);
+  syncOpponentTeamsFromStorage();
+  state.selectedOpponentTeam = newName;
+  renderOpponentTeamsSelect();
+  alert("Avversaria rinominata in \"" + newName + "\".");
+}
 async function exportCurrentTeamToFile() {
   if (!state.players || state.players.length === 0) {
     alert("Aggiungi almeno una giocatrice prima di esportare.");
     return;
   }
-  const payload = getCurrentTeamPayload();
+  const payload = compactTeamPayload(getCurrentTeamPayload());
   const opponentSlug = (payload.name || "squadra").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
   const json = JSON.stringify(payload, null, 2);
   const blob = new Blob([json], {
     type: "application/json;charset=utf-8;"
   });
   downloadBlob(blob, "squadra_" + (opponentSlug || "export") + ".json");
+}
+async function exportCurrentOpponentTeamToFile() {
+  if (!state.opponentPlayers || state.opponentPlayers.length === 0) {
+    alert("Aggiungi almeno una giocatrice avversaria prima di esportare.");
+    return;
+  }
+  const payload = compactTeamPayload(getCurrentOpponentPayload());
+  const slug = (payload.name || "avversaria").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+  downloadBlob(blob, "avversaria_" + (slug || "export") + ".json");
 }
 function applyImportedTeamData(data) {
   const normalizedTeam = normalizeTeamPayload(data || {});
@@ -1462,11 +1942,40 @@ function applyImportedTeamData(data) {
   }
   saveState();
   renderLiberoTags();
+  renderOpponentLiberoTags();
   renderLiberoChipsInline();
   renderPlayers();
   renderBenchChips();
   renderLineupChips();
   alert("Squadra importata dal file.");
+}
+function applyImportedOpponentTeamData(data) {
+  const normalizedTeam = normalizeTeamPayload(data || {});
+  const roster = extractRosterFromTeam(normalizedTeam);
+  const players = roster.players || [];
+  if (!players || players.length === 0) {
+    alert("Il file non contiene giocatrici valide.");
+    return;
+  }
+  updateOpponentPlayersList(players, {
+    liberos: roster.liberos || [],
+    playerNumbers: roster.numbers || {},
+    captains: roster.captains || []
+  });
+  state.selectedOpponentTeam = (normalizedTeam && normalizedTeam.name) || "";
+  if (state.selectedOpponentTeam) {
+    saveOpponentTeamToStorage(state.selectedOpponentTeam, normalizedTeam);
+    syncOpponentTeamsFromStorage();
+    renderOpponentTeamsSelect();
+    if (!state.match.opponent) {
+      state.match.opponent = state.selectedOpponentTeam;
+      applyMatchInfoToUI();
+    }
+  }
+  saveState();
+  renderOpponentPlayersList();
+  renderOpponentLiberoTags();
+  alert("Squadra avversaria importata dal file.");
 }
 function parseDelimitedTeamText(text) {
   if (!text || typeof text !== "string") return null;
@@ -1505,6 +2014,29 @@ function parseDelimitedTeamText(text) {
   if (players.length === 0) return null;
   return { players, numbers, liberos };
 }
+function importOpponentTeamFromFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = (e.target && e.target.result) || "";
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        data = parseDelimitedTeamText(text);
+      }
+      applyImportedOpponentTeamData(data);
+    } catch (err) {
+      logError("Errore importazione avversaria", err);
+      alert("File squadra avversaria non valido.");
+    }
+    if (elOpponentTeamFileInput) {
+      elOpponentTeamFileInput.value = "";
+    }
+  };
+  reader.readAsText(file);
+}
 function importTeamFromFile(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -1541,7 +2073,7 @@ function handleTeamSelectChange() {
       renderTeamsSelect();
       return;
     }
-    applyTemplateTeam({ askReset: false });
+    applyTemplateRoster("our", { askReset: false });
     renderTeamsSelect();
     return;
   }
@@ -1566,6 +2098,45 @@ function handleTeamSelectChange() {
   renderLiberoTags();
   renderTeamsSelect();
   renderLiberoChipsInline();
+}
+function handleOpponentTeamSelectChange() {
+  if (!elOpponentTeamsSelect) return;
+  const selected = elOpponentTeamsSelect.value;
+  if (selected && selected === state.selectedTeam) {
+    alert("Non puoi selezionare la stessa squadra come avversaria.");
+    elOpponentTeamsSelect.value = "";
+    state.selectedOpponentTeam = "";
+    return;
+  }
+  state.selectedOpponentTeam = selected;
+  updateOpponentTeamButtonsState();
+  if (!selected) {
+    const ok = confirm(
+      "Caricare una nuova squadra avversaria precompilata (14 giocatrici e 2 liberi)?"
+    );
+    if (ok) {
+      applyTemplateRoster("opponent", { askReset: false });
+    }
+    renderOpponentTeamsSelect();
+    return;
+  }
+  const team = loadOpponentTeamFromStorage(selected);
+  if (!team) {
+    alert("Squadra avversaria non trovata o corrotta.");
+    renderOpponentTeamsSelect();
+    return;
+  }
+  const roster = extractRosterFromTeam(team);
+  updateOpponentPlayersList(roster.players || [], {
+    liberos: roster.liberos || [],
+    playerNumbers: roster.numbers || {},
+    captains: roster.captains || []
+  });
+  if (!state.match.opponent) {
+    state.match.opponent = selected;
+    applyMatchInfoToUI();
+  }
+  renderOpponentTeamsSelect();
 }
 function renderLiberoTags() {
   const mainContainers = [elLiberoTags].filter(Boolean);
@@ -1630,6 +2201,27 @@ function renderLiberoTags() {
       }
       container.appendChild(chip);
     });
+  });
+}
+function renderOpponentLiberoTags() {
+  if (!elOpponentLiberoTags) return;
+  elOpponentLiberoTags.innerHTML = "";
+  if (!state.opponentPlayers || state.opponentPlayers.length === 0) {
+    const span = document.createElement("div");
+    span.className = "players-empty";
+    span.textContent = "Aggiungi giocatrici avversarie per segnare i liberi.";
+    elOpponentLiberoTags.appendChild(span);
+    return;
+  }
+  const libSet = new Set(state.opponentLiberos || []);
+  state.opponentPlayers.forEach(name => {
+    const btn = document.createElement("button");
+    const active = libSet.has(name);
+    btn.type = "button";
+    btn.className = "libero-tag" + (active ? " active" : "");
+    btn.textContent = formatNameWithNumber(name);
+    btn.addEventListener("click", () => toggleOpponentLibero(name, !active));
+    elOpponentLiberoTags.appendChild(btn);
   });
 }
 const allowedMetricCodes = new Set(RESULT_CODES);
@@ -1700,6 +2292,19 @@ function updateTeamButtonsState() {
   }
   if (elBtnRenameTeam) {
     elBtnRenameTeam.disabled = !selected;
+  }
+}
+function updateOpponentTeamButtonsState() {
+  if (!elOpponentTeamsSelect) return;
+  const selected = elOpponentTeamsSelect.value || "";
+  if (elBtnSaveOpponentTeam) {
+    elBtnSaveOpponentTeam.textContent = selected ? "Sovrascrivi" : "Salva avversaria";
+  }
+  if (elBtnDeleteOpponentTeam) {
+    elBtnDeleteOpponentTeam.disabled = !selected;
+  }
+  if (elBtnRenameOpponentTeam) {
+    elBtnRenameOpponentTeam.disabled = !selected;
   }
 }
 function updateMatchButtonsState() {
@@ -1789,9 +2394,24 @@ function applyTemplateTeam(options = {}) {
     defaultLineupNames: buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players)
   });
 }
-function buildTeamManagerStateFromSource(source) {
+function applyTemplateRoster(scope = "our", options = {}) {
+  if (scope === "opponent") {
+    updateOpponentPlayersList(TEMPLATE_TEAM.players, {
+      liberos: TEMPLATE_TEAM.liberos,
+      playerNumbers: buildTemplateNumbers(),
+      captains: []
+    });
+    return;
+  }
+  applyTemplateTeam(options);
+}
+function buildTeamManagerStateFromSource(source, scope = "our") {
+  const isOpponent = scope === "opponent";
   const normalized = source ? normalizeTeamPayload(source) : null;
-  const captainSet = new Set(state.captains || []);
+  const captainSet = new Set(isOpponent ? state.opponentCaptains || [] : state.captains || []);
+  const basePlayers = isOpponent ? state.opponentPlayers || [] : state.players || [];
+  const baseNumbers = isOpponent ? state.opponentPlayerNumbers || {} : state.playerNumbers || {};
+  const baseLiberos = isOpponent ? state.opponentLiberos || [] : state.liberos || [];
   const playersDetailed =
     normalized && normalized.playersDetailed && normalized.playersDetailed.length > 0
       ? normalized.playersDetailed.map(p => {
@@ -1806,18 +2426,26 @@ function buildTeamManagerStateFromSource(source) {
             }
           );
         })
-      : (state.players || []).map((name, idx) => ({
+      : basePlayers.map((name, idx) => ({
           id: idx + "_" + name,
           name,
           ...splitNameParts(name),
-          number: (state.playerNumbers && state.playerNumbers[name]) || "",
-          role: (state.liberos || []).includes(name) ? "L" : "",
+          number: baseNumbers[name] || "",
+          role: baseLiberos.includes(name) ? "L" : "",
           isCaptain: captainSet.has(name),
           out: false
         }));
-  enforceSingleCaptainFlag(playersDetailed, state.captains && state.captains[0]);
+  enforceSingleCaptainFlag(
+    playersDetailed,
+    (isOpponent ? state.opponentCaptains : state.captains) &&
+      (isOpponent ? state.opponentCaptains : state.captains)[0]
+  );
   return {
-    name: (normalized && normalized.name) || state.selectedTeam || state.match.opponent || "Squadra",
+    name:
+      (normalized && normalized.name) ||
+      (isOpponent ? state.selectedOpponentTeam : state.selectedTeam) ||
+      state.match.opponent ||
+      (isOpponent ? "Avversaria" : "Squadra"),
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
     players: playersDetailed
   };
@@ -1825,6 +2453,10 @@ function buildTeamManagerStateFromSource(source) {
 function renderTeamManagerTable() {
   if (!elTeamManagerBody || !teamManagerState) return;
   elTeamManagerBody.innerHTML = "";
+  const isEmpty = !teamManagerState.players || teamManagerState.players.length === 0;
+  if (elTeamManagerTemplate) {
+    elTeamManagerTemplate.classList.toggle("hidden", !isEmpty);
+  }
   teamManagerState.players.forEach((p, idx) => {
     const tr = document.createElement("tr");
     const numberInput = document.createElement("input");
@@ -1933,10 +2565,16 @@ function renderTeamManagerTable() {
     elTeamManagerBody.appendChild(tr);
   });
 }
-function openTeamManagerModal() {
-  const selected = state.selectedTeam;
-  const source = selected ? loadTeamFromStorage(selected) : null;
-  teamManagerState = buildTeamManagerStateFromSource(source);
+function openTeamManagerModal(scope = "our") {
+  teamManagerScope = scope;
+  const isOpponent = scope === "opponent";
+  const selected = isOpponent ? state.selectedOpponentTeam : state.selectedTeam;
+  const source = selected
+    ? isOpponent
+      ? loadOpponentTeamFromStorage(selected)
+      : loadTeamFromStorage(selected)
+    : null;
+  teamManagerState = buildTeamManagerStateFromSource(source, scope);
   if (elTeamMetaName) elTeamMetaName.value = teamManagerState.name || "";
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
@@ -1945,6 +2583,10 @@ function openTeamManagerModal() {
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
     document.body.classList.add("modal-open");
+  }
+  const title = document.querySelector("#team-manager-modal h3");
+  if (title) {
+    title.textContent = isOpponent ? "Gestione squadra avversaria" : "Gestione squadra";
   }
 }
 function closeTeamManagerModal() {
@@ -1974,7 +2616,8 @@ function collectTeamManagerPayload() {
         isCaptain: !!p.isCaptain,
         out: !!p.out
       })),
-    state.captains && state.captains[0]
+    (teamManagerScope === "opponent" ? state.opponentCaptains : state.captains) &&
+      (teamManagerScope === "opponent" ? state.opponentCaptains : state.captains)[0]
   );
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
   const numbers = {};
@@ -2009,30 +2652,56 @@ function saveTeamManagerPayload(options = {}) {
     alert("Inserisci un nome squadra valido.");
     return;
   }
+  const isOpponent = teamManagerScope === "opponent";
   if (saveToStorage) {
-    saveTeamToStorage(payload.name, payload);
-    syncTeamsFromStorage();
-    state.selectedTeam = payload.name;
-    renderTeamsSelect();
+    if (isOpponent) {
+      const compact = compactTeamPayload(payload, payload.name);
+      saveOpponentTeamToStorage(payload.name, compact);
+      syncOpponentTeamsFromStorage();
+      state.selectedOpponentTeam = payload.name;
+      renderOpponentTeamsSelect();
+      if (!state.match.opponent) {
+        state.match.opponent = payload.name;
+        applyMatchInfoToUI();
+      }
+    } else {
+      const compact = compactTeamPayload(payload, payload.name);
+      saveTeamToStorage(payload.name, compact);
+      syncTeamsFromStorage();
+      state.selectedTeam = payload.name;
+      renderTeamsSelect();
+    }
   } else {
-    state.selectedTeam = payload.name;
+    if (isOpponent) {
+      state.selectedOpponentTeam = payload.name;
+    } else {
+      state.selectedTeam = payload.name;
+    }
   }
   const roster = extractRosterFromTeam(payload);
-  updatePlayersList(roster.players, {
-    askReset: !preserveCourt,
-    liberos: roster.liberos,
-    playerNumbers: roster.numbers,
-    captains: roster.captains,
-    setDefaultLineup: !preserveCourt,
-    defaultLineupNames:
-      roster.playersDetailed && roster.playersDetailed.length > 0
-        ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
-        : roster.players
-  });
+  if (isOpponent) {
+    updateOpponentPlayersList(roster.players, {
+      liberos: roster.liberos,
+      playerNumbers: roster.numbers,
+      captains: roster.captains
+    });
+  } else {
+    updatePlayersList(roster.players, {
+      askReset: !preserveCourt,
+      liberos: roster.liberos,
+      playerNumbers: roster.numbers,
+      captains: roster.captains,
+      setDefaultLineup: !preserveCourt,
+      defaultLineupNames:
+        roster.playersDetailed && roster.playersDetailed.length > 0
+          ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+          : roster.players
+    });
+  }
   saveState();
   if (closeModal) closeTeamManagerModal();
-  if (showAlert) alert("Squadra salvata: " + payload.name);
-  if (openLineupAfter && typeof openMobileLineupModal === "function") {
+  if (showAlert) alert((isOpponent ? "Avversaria salvata: " : "Squadra salvata: ") + payload.name);
+  if (!isOpponent && openLineupAfter && typeof openMobileLineupModal === "function") {
     openMobileLineupModal();
   }
 }

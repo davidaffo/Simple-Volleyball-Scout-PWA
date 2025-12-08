@@ -1407,6 +1407,30 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #1f2937;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.3);
+}
+.player-management.our-team {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.player-management.opponent-team {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+body[data-theme="light"] .player-management {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+body[data-theme="light"] .player-management.our-team {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+body[data-theme="light"] .player-management.opponent-team {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
 }
 .add-player-row {
   display: flex;
@@ -1573,13 +1597,6 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   gap: 0.35rem;
   padding: 0.2rem 0;
 }
-.add-player-row,
-.add-player-inline,
-.players-list,
-details.import-panel:not(.metrics-panel),
-.libero-manage {
-  display: none;
-}
 .player-pill {
   display: inline-flex;
   align-items: center;
@@ -1620,6 +1637,17 @@ body[data-theme="light"] .player-pill {
   display: none;
   align-items: center;
   gap: 0.25rem;
+}
+.pill-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pill-toggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.85rem;
 }
 .player-pill.editing .pill-view {
   display: none;
@@ -2557,6 +2585,9 @@ body[data-theme="light"] .error-choice-btn.danger {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+.team-manager-actions .hidden {
+  display: none;
 }
 .team-manager-tablewrap {
   max-height: 45vh;
