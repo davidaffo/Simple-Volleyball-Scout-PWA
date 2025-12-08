@@ -1,5 +1,10 @@
 sistema bug ricezione e inserimento
 modalita libero automatico su ruolo
+popup per modifiche su tutti i dati
+inserimento traiettorie e tipo battute
+analisi su traiettorie con filtri
+aggiungi filtri anche alla schermata delle alzate
+aggiungi analisi traiettorie battuta
 
 Nuovo TODO (portare le feature di IntelliScout nel PWA):
 

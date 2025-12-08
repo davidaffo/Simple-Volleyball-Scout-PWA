@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v12";
+const CACHE_VERSION = "v13";
 const CACHE_NAME = `volley-scout-cache-${CACHE_VERSION}`;
 const ASSETS = [
   "./",
@@ -12,6 +12,14 @@ const ASSETS = [
   "./js/opponent-settings.js",
   "./js/roster-lineup.js",
   "./js/scout-ui.js",
+  "./images/trajectory/attack_empty_near.png",
+  "./images/trajectory/attack_empty_far.png",
+  "./images/trajectory/attack_2_near.png",
+  "./images/trajectory/attack_3_near.png",
+  "./images/trajectory/attack_4_near.png",
+  "./images/trajectory/attack_2_far.png",
+  "./images/trajectory/attack_3_far.png",
+  "./images/trajectory/attack_4_far.png",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

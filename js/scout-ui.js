@@ -9,8 +9,48 @@ const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
 let lastEventContextKey = null;
+const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
+const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
+const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
+const elAttackTrajectoryClose = document.getElementById("attack-trajectory-close");
+const elAttackTrajectoryCloseBtn = document.getElementById("attack-trajectory-close-btn");
+const TRAJECTORY_IMG_NEAR = "images/trajectory/attack_empty_near.png";
+const TRAJECTORY_IMG_FAR = "images/trajectory/attack_empty_far.png";
+let trajectoryBaseZone = null;
+function getTrajectoryImageForZone(zone, isFarSide) {
+  if (!zone) return isFarSide ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR;
+  if (!isFarSide) {
+    if (zone === 4 || zone === 3 || zone === 2) {
+      return `images/trajectory/attack_${zone}_near.png`;
+    }
+    return TRAJECTORY_IMG_NEAR;
+  }
+  switch (zone) {
+    case 5:
+      return "images/trajectory/attack_4_far.png";
+    case 6:
+      return "images/trajectory/attack_3_far.png";
+    case 1:
+      return "images/trajectory/attack_2_far.png";
+    default:
+      return TRAJECTORY_IMG_FAR;
+  }
+}
+let trajectoryStart = null;
+let trajectoryEnd = null;
+let trajectoryResolver = null;
+let trajectoryDragging = false;
 let currentEditControl = null;
 let currentEditCell = null;
+function isBackRowZone(z) {
+  return z === 5 || z === 6 || z === 1;
+}
+function clamp01(n) {
+  if (n == null || isNaN(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
 function closeCurrentEdit({ refresh = false } = {}) {
   if (currentEditControl) {
     try {
@@ -88,6 +128,171 @@ function updateNextSkillIndicator(skillId) {
   const label = meta ? meta.label : skillId || "—";
   elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
   elNextSkillIndicator.classList.toggle("active", !!skillId);
+}
+function resetTrajectoryState() {
+  trajectoryStart = null;
+  trajectoryEnd = null;
+  trajectoryDragging = false;
+  if (elAttackTrajectoryCanvas) {
+    const ctx = elAttackTrajectoryCanvas.getContext("2d");
+    ctx && ctx.clearRect(0, 0, elAttackTrajectoryCanvas.width, elAttackTrajectoryCanvas.height);
+  }
+}
+function resizeTrajectoryCanvas() {
+  if (!elAttackTrajectoryCanvas || !elAttackTrajectoryImage) return;
+  const rect = elAttackTrajectoryImage.getBoundingClientRect();
+  const canvas = elAttackTrajectoryCanvas;
+  const height = rect.height;
+  canvas.width = rect.width;
+  canvas.height = height;
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = height + "px";
+  if (canvas.parentElement) {
+    canvas.parentElement.style.height = height + "px";
+  }
+  drawTrajectory();
+}
+function drawTrajectory(tempEnd = null) {
+  if (!elAttackTrajectoryCanvas) return;
+  const ctx = elAttackTrajectoryCanvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, elAttackTrajectoryCanvas.width, elAttackTrajectoryCanvas.height);
+  const start = trajectoryStart;
+  const end = tempEnd || trajectoryEnd;
+  if (start) {
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.arc(start.x, start.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (start && end) {
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function getTrajectoryDisplayBox() {
+  if (!elAttackTrajectoryCanvas || !elAttackTrajectoryImage) return null;
+  const stageW = elAttackTrajectoryCanvas.clientWidth || elAttackTrajectoryCanvas.width || 1;
+  const stageH = elAttackTrajectoryCanvas.clientHeight || elAttackTrajectoryCanvas.height || 1;
+  const natW = elAttackTrajectoryImage.naturalWidth || stageW;
+  const natH = elAttackTrajectoryImage.naturalHeight || stageH;
+  if (!natW || !natH) return { offsetX: 0, offsetY: 0, width: stageW, height: stageH };
+  const scale = Math.min(stageW / natW, stageH / natH);
+  const dispW = natW * scale;
+  const dispH = natH * scale;
+  const offsetX = (stageW - dispW) / 2;
+  const offsetY = (stageH - dispH) / 2;
+  return { offsetX, offsetY, width: dispW, height: dispH };
+}
+function denormalizeTrajectoryPoint(norm) {
+  const box = getTrajectoryDisplayBox();
+  if (!box || !norm) return null;
+  return {
+    x: box.offsetX + clamp01(norm.x || 0) * box.width,
+    y: box.offsetY + clamp01(norm.y || 0) * box.height
+  };
+}
+function normalizeTrajectoryPoint(pt) {
+  if (!elAttackTrajectoryCanvas || !pt) return null;
+  const box = getTrajectoryDisplayBox();
+  if (!box) return { x: 0, y: 0 };
+  const relX = (pt.x - box.offsetX) / (box.width || 1);
+  const relY = (pt.y - box.offsetY) / (box.height || 1);
+  return {
+    x: clamp01(relX),
+    y: clamp01(relY)
+  };
+}
+function computeAttackDirectionDeg(start, end) {
+  if (!start || !end) return null;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  return Math.round(((angle + 360) % 360) * 10) / 10; // 0-360, 1 decimal
+}
+function getAttackZone(normalizedPoint, isFarSide = false) {
+  if (!normalizedPoint) return null;
+  const x = clamp01(normalizedPoint.x);
+  const third = x < 1 / 3 ? 0 : x < 2 / 3 ? 1 : 2;
+  if (!isFarSide) {
+    return third === 0 ? 4 : third === 1 ? 3 : 2;
+  }
+  return third === 0 ? 5 : third === 1 ? 6 : 1;
+}
+function mapBackRowZone(zone, baseZone) {
+  if (!zone) return zone;
+  const isBackRow = baseZone === 5 || baseZone === 6 || baseZone === 1;
+  if (isBackRow) {
+    if (zone === 4) return 5;
+    if (zone === 3) return 6;
+    if (zone === 2) return 1;
+  }
+  return zone;
+}
+function openAttackTrajectoryModal(prefill = null) {
+  return new Promise(resolve => {
+    if (!elAttackTrajectoryModal || !elAttackTrajectoryCanvas || !elAttackTrajectoryImage) {
+      resolve(null);
+      return;
+    }
+    trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
+    trajectoryResolver = resolve;
+    resetTrajectoryState();
+    elAttackTrajectoryImage.dataset.activeSrc = TRAJECTORY_IMG_NEAR;
+    elAttackTrajectoryImage.src = TRAJECTORY_IMG_NEAR;
+    elAttackTrajectoryModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    const applyPrefill = () => {
+      if (
+        !prefill ||
+        !prefill.start ||
+        !prefill.end ||
+        !elAttackTrajectoryCanvas ||
+        elAttackTrajectoryCanvas.width === 0 ||
+        elAttackTrajectoryCanvas.height === 0
+      )
+        return;
+      const startPx = denormalizeTrajectoryPoint(prefill.start);
+      const endPx = denormalizeTrajectoryPoint(prefill.end);
+      if (!startPx || !endPx) return;
+      trajectoryStart = startPx;
+      trajectoryEnd = endPx;
+      const isFar = false;
+      const startZoneRaw = getAttackZone(prefill.start, isFar);
+      const startZoneMapped = mapBackRowZone(startZoneRaw, trajectoryBaseZone);
+      const imgSrc = getTrajectoryImageForZone(startZoneRaw, isFar); // mostra il campo della zona di prima linea
+      if (elAttackTrajectoryImage && elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
+        elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
+        elAttackTrajectoryImage.src = imgSrc;
+      }
+      drawTrajectory();
+    };
+    requestAnimationFrame(() => {
+      resizeTrajectoryCanvas();
+      setTimeout(() => {
+        resizeTrajectoryCanvas();
+        applyPrefill();
+      }, 50);
+    });
+  });
+}
+function closeAttackTrajectoryModal(result = null) {
+  if (!elAttackTrajectoryModal) return;
+  elAttackTrajectoryModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  trajectoryBaseZone = null;
+  if (trajectoryResolver) {
+    trajectoryResolver(result);
+    trajectoryResolver = null;
+  }
 }
 function forceNextSkill(skillId) {
   if (!skillId) return;
@@ -385,6 +590,7 @@ function buildBaseEventPayload(base) {
       (typeof base.playerIdx === "number" ? state.players[base.playerIdx] : base.playerName) ||
       null,
     zone,
+    originZone: zone,
     skillId: base.skillId,
     code: base.code,
     pointDirection: base.pointDirection || null,
@@ -405,6 +611,10 @@ function buildBaseEventPayload(base) {
     attackEvaluation: null,
     attackBp: null,
     attackType: null,
+    attackStartZone: null,
+    attackEndZone: null,
+    attackStart: null,
+    attackEnd: null,
     attackDirection: null,
     blockNumber: null,
     playerIn: base.playerIn || null,
@@ -965,6 +1175,37 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   updateSkillStatsUI(playerIdx, skillId);
   renderEventsLog();
   renderPlayers();
+  if (state.attackTrajectoryEnabled && skillId === "attack") {
+    const baseZoneForMapping = event.originZone || event.zone || event.playerPosition || null;
+    openAttackTrajectoryModal({ baseZone: baseZoneForMapping }).then(coords => {
+      if (coords && coords.start && coords.end) {
+        const mapZone = z => mapBackRowZone(z, baseZoneForMapping);
+        const trajectoryPayload = {
+          start: coords.start,
+          end: coords.end,
+          startZone: mapZone(coords.startZone || null),
+          endZone: mapZone(coords.endZone || null),
+          directionDeg: null
+        };
+        event.attackStart = coords.start;
+        event.attackEnd = coords.end;
+        event.attackStartZone = trajectoryPayload.startZone;
+        event.attackEndZone = trajectoryPayload.endZone;
+        event.attackDirection = trajectoryPayload; // richiesta: tutto dentro direzione attacco
+        event.attackTrajectory = trajectoryPayload;
+        if (!event.originZone) {
+          event.originZone = baseZoneForMapping;
+        }
+        if (trajectoryPayload.startZone) {
+          event.zone = trajectoryPayload.startZone;
+          event.playerPosition = trajectoryPayload.startZone;
+        }
+        saveState();
+        renderEventsLog({ suppressScroll: true });
+        renderVideoAnalysis();
+      }
+    });
+  }
   if (!state.predictiveSkillFlow) {
     renderLiveScore();
     renderScoreAndRotations(computePointsSummary());
@@ -2006,6 +2247,24 @@ function renderEventTableRows(target, events, options = {}) {
     };
     tr.className = "event-row";
     tr.dataset.eventKey = key;
+    const formatTrajPoint = pt =>
+      pt && typeof pt.x === "number" && typeof pt.y === "number"
+        ? `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`
+        : "";
+    const traj = ev.attackTrajectory || {};
+    const trajStartPt = traj.start || ev.attackStart || null;
+    const trajEndPt = traj.end || ev.attackEnd || null;
+    const formatAttackDir = () => {
+      const dir = ev.attackDirection || traj || null;
+      if (dir && typeof dir === "object") {
+        const s = dir.start || trajStartPt;
+        const e = dir.end || trajEndPt;
+        const sStr = formatTrajPoint(s);
+        const eStr = formatTrajPoint(e);
+        return sStr && eStr ? `${sStr}→${eStr}` : sStr || eStr || "";
+      }
+      return valueToString(dir);
+    };
     if (enableSelection && showCheckbox) {
       const selectTd = document.createElement("td");
       selectTd.className = "row-select";
@@ -2108,7 +2367,46 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, done => createTextInput(ev, "attackType", done), editGuard)
       },
       {
-        text: valueToString(ev.attackDirection),
+        text: formatAttackDir(),
+        classes: ["traj-cell"],
+        onClick: e => {
+          e.stopPropagation();
+          const dir = ev.attackDirection || traj || null;
+          const baseZonePrefill = ev.originZone || ev.zone || ev.playerPosition || null;
+          const prefill =
+            dir && typeof dir === "object" && dir.start && dir.end
+              ? { start: dir.start, end: dir.end, startZone: dir.startZone, endZone: dir.endZone, baseZone: baseZonePrefill }
+              : traj && traj.start && traj.end
+              ? { start: traj.start, end: traj.end, startZone: traj.startZone, endZone: traj.endZone, baseZone: baseZonePrefill }
+              : null;
+          openAttackTrajectoryModal(prefill).then(coords => {
+            if (!coords || !coords.start || !coords.end) return;
+            const mapZone = z => mapBackRowZone(z, baseZonePrefill);
+            const trajectoryPayload = {
+              start: coords.start,
+              end: coords.end,
+              startZone: mapZone(coords.startZone || null),
+              endZone: mapZone(coords.endZone || null),
+              directionDeg: null
+            };
+            ev.attackStart = coords.start;
+            ev.attackEnd = coords.end;
+            ev.attackStartZone = trajectoryPayload.startZone;
+            ev.attackEndZone = trajectoryPayload.endZone;
+            ev.attackDirection = trajectoryPayload;
+            ev.attackTrajectory = trajectoryPayload;
+            if (!ev.originZone) {
+              ev.originZone = baseZonePrefill;
+            }
+            if (trajectoryPayload.startZone) {
+              ev.zone = trajectoryPayload.startZone;
+              ev.playerPosition = trajectoryPayload.startZone;
+            }
+            saveState();
+            renderEventsLog({ suppressScroll: true });
+            renderVideoAnalysis();
+          });
+        },
         editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done), editGuard)
       },
       {
@@ -2130,6 +2428,13 @@ function renderEventTableRows(target, events, options = {}) {
       td.textContent = cell.text != null ? String(cell.text) : "";
       if (cell.editable) {
         cell.editable(td);
+      }
+      if (cell.classes && Array.isArray(cell.classes)) {
+        cell.classes.forEach(cls => td.classList.add(cls));
+      }
+      if (typeof cell.onClick === "function") {
+        td.classList.add("clickable-cell");
+        td.addEventListener("click", e => cell.onClick(e, td));
       }
       tr.appendChild(td);
     });
@@ -4830,6 +5135,14 @@ function init() {
       renderPlayers();
     });
   }
+  const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
+  if (elAttackTrajectoryToggle) {
+    elAttackTrajectoryToggle.checked = !!state.attackTrajectoryEnabled;
+    elAttackTrajectoryToggle.addEventListener("change", () => {
+      state.attackTrajectoryEnabled = !!elAttackTrajectoryToggle.checked;
+      saveState();
+    });
+  }
   const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
   if (elSkillFlowButtons) {
     elSkillFlowButtons.addEventListener("click", e => {
@@ -4864,6 +5177,93 @@ function init() {
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.closeSettings !== undefined || target.classList.contains("settings-modal__backdrop")) {
         if (typeof closeSettingsModal === "function") closeSettingsModal();
+      }
+    });
+  }
+  if (elAttackTrajectoryModal) {
+    const handleCloseTrajectory = () => closeAttackTrajectoryModal(null);
+    const getPos = e => {
+      if (!elAttackTrajectoryCanvas) return null;
+      const rect = elAttackTrajectoryCanvas.getBoundingClientRect();
+      const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY);
+      if (clientX == null || clientY == null) return null;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+    const onPointerDown = e => {
+      const pos = getPos(e);
+      if (!pos || !elAttackTrajectoryCanvas) return;
+      if (!trajectoryStart || trajectoryEnd) {
+        const box = getTrajectoryDisplayBox();
+        const w = box ? box.width : elAttackTrajectoryCanvas.clientWidth || elAttackTrajectoryCanvas.width || 1;
+        const fixedY = elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
+        trajectoryStart = { x: pos.x, y: fixedY };
+        trajectoryEnd = null;
+        const xWithinStage = box ? pos.x - box.offsetX : pos.x;
+        const third = xWithinStage < w / 3 ? 0 : xWithinStage < (2 * w) / 3 ? 1 : 2;
+        const zoneFromClickRaw = third === 0 ? 4 : third === 1 ? 3 : 2;
+        const zoneFromClick = mapBackRowZone(zoneFromClickRaw, trajectoryBaseZone);
+        const imgSrc = getTrajectoryImageForZone(zoneFromClickRaw, false); // mostra il campo della zona front-row
+        if (elAttackTrajectoryImage && elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
+          elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
+          elAttackTrajectoryImage.src = imgSrc;
+        }
+      }
+      trajectoryDragging = true;
+      drawTrajectory();
+      e.preventDefault();
+    };
+    const onPointerMove = e => {
+      if (!trajectoryDragging || !trajectoryStart) return;
+      const pos = getPos(e);
+      if (!pos) return;
+      drawTrajectory(pos);
+      e.preventDefault();
+    };
+    const onPointerUp = e => {
+      if (!trajectoryDragging || !trajectoryStart) return;
+      const pos = getPos(e);
+      trajectoryDragging = false;
+      if (!pos) return;
+      trajectoryEnd = pos;
+      drawTrajectory();
+      e.preventDefault();
+    };
+    if (elAttackTrajectoryCanvas) {
+      elAttackTrajectoryCanvas.addEventListener("pointerdown", onPointerDown);
+      elAttackTrajectoryCanvas.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    }
+    const confirmCurrentTrajectory = () => {
+      if (!trajectoryStart || !trajectoryEnd) return;
+      const start = normalizeTrajectoryPoint(trajectoryStart);
+      const end = normalizeTrajectoryPoint(trajectoryEnd);
+      const isFar = false;
+      const startZone = mapBackRowZone(getAttackZone(start, isFar), trajectoryBaseZone);
+      const endZone = mapBackRowZone(getAttackZone(end, isFar), trajectoryBaseZone);
+      const directionDeg = computeAttackDirectionDeg(start, end);
+      closeAttackTrajectoryModal({
+        start,
+        end,
+        startZone,
+        endZone,
+        directionDeg
+      });
+    };
+    if (elAttackTrajectoryImage) {
+      elAttackTrajectoryImage.addEventListener("load", resizeTrajectoryCanvas);
+    }
+    window.addEventListener("resize", resizeTrajectoryCanvas);
+    [elAttackTrajectoryClose, elAttackTrajectoryModal.querySelector("[data-close-trajectory]")].forEach(btn => {
+      if (btn) btn.addEventListener("click", handleCloseTrajectory);
+    });
+    if (elAttackTrajectoryCloseBtn) {
+      elAttackTrajectoryCloseBtn.addEventListener("click", handleCloseTrajectory);
+    }
+    // Conferma automatica a rilascio se abbiamo entrambi i punti
+    window.addEventListener("pointerup", () => {
+      if (trajectoryStart && trajectoryEnd) {
+        confirmCurrentTrajectory();
       }
     });
   }

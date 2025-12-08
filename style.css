@@ -2553,6 +2553,47 @@ body[data-theme="light"] .agg-table td {
   padding-bottom: 0.8rem;
   padding-right: 0.2rem;
 }
+.attack-trajectory-content {
+  max-width: min(1100px, 98vw);
+  width: 100%;
+  height: min(90vh, 900px);
+}
+.attack-trajectory-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.attack-trajectory-instructions {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+.attack-trajectory-stage {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 0.6rem;
+  border: 1px solid #2f2f2f;
+  min-height: 420px;
+}
+.attack-trajectory-stage img {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.attack-trajectory-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+.attack-trajectory-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 body[data-theme="light"] .skill-modal__content {
   background: #f8fafc;
   border-color: #d5dbe5;

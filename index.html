@@ -291,6 +291,10 @@ Bianchi 18"></textarea>
                   <input type="checkbox" id="auto-role-p1american-toggle" />
                   P1 americana (OH in 4, OP in 2 su cambio palla)
                 </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="attack-trajectory-toggle" />
+                  Disegna traiettoria attacco
+                </label>
               </div>
             </div>
             <div class="score-actions court-game-actions">
@@ -552,6 +556,25 @@ Bianchi 18"></textarea>
       <div id="error-modal-body" class="skill-modal__body"></div>
     </div>
   </div>
+  <div id="attack-trajectory-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="attack-trajectory-title">
+    <div class="skill-modal__backdrop" data-close-trajectory></div>
+    <div class="skill-modal__content attack-trajectory-content">
+      <div class="skill-modal__head">
+        <div id="attack-trajectory-title" class="skill-modal__title">Seleziona traiettoria attacco</div>
+        <button id="attack-trajectory-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
+      </div>
+      <div class="attack-trajectory-body">
+        <div class="attack-trajectory-instructions">Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.</div>
+        <div class="attack-trajectory-stage">
+          <img id="attack-trajectory-image" alt="Campo per traiettoria" />
+          <canvas id="attack-trajectory-canvas"></canvas>
+        </div>
+      </div>
+      <div class="attack-trajectory-actions">
+        <button id="attack-trajectory-close-btn" class="secondary small" type="button">Chiudi</button>
+      </div>
+    </div>
+  </div>
   <div id="floating-actions-modal" class="floating-actions-modal hidden" role="dialog" aria-modal="true" aria-labelledby="floating-actions-title">
     <div class="floating-actions__backdrop" data-close-actions></div>
     <div class="floating-actions__content">
@@ -634,14 +657,18 @@ Bianchi 18"></textarea>
           <input type="checkbox" id="auto-role-toggle" />
           Auto posizionamento per ruolo
         </label>
-        <label class="auto-rotate-toggle">
-          <input type="checkbox" id="auto-role-p1american-toggle" />
-          P1 americana (OH in 4, OP in 2 su cambio palla)
-        </label>
-        <label class="auto-rotate-toggle">
-          <input type="checkbox" id="predictive-skill-toggle" />
-          Flusso skill automatico (mostra solo la prossima)
-        </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-role-p1american-toggle" />
+                  P1 americana (OH in 4, OP in 2 su cambio palla)
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="attack-trajectory-toggle" />
+                  Disegna traiettoria attacco
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="predictive-skill-toggle" />
+                  Flusso skill automatico (mostra solo la prossima)
+                </label>
       </div>
     </div>
   </div>

@@ -144,6 +144,7 @@ const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
 const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
+const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
 const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
 const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
@@ -283,6 +284,7 @@ function loadState() {
     state.isServing = !!parsed.isServing;
     state.rotation = parsed.rotation || 1;
     state.matchFinished = !!parsed.matchFinished;
+    state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
     state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
@@ -3367,6 +3369,9 @@ function updateRotationDisplay() {
   syncAutoRoleToggle();
   syncAutoRoleP1AmericanToggle();
   syncPredictiveSkillToggle();
+  if (typeof syncAttackTrajectoryToggle === "function") {
+    syncAttackTrajectoryToggle();
+  }
 }
 function getRoleLabel(index) {
   const offset = (state.rotation || 1) - 1;
@@ -3397,6 +3402,11 @@ function syncAutoRoleToggle() {
 function syncPredictiveSkillToggle() {
   if (elPredictiveSkillToggle) {
     elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
+  }
+}
+function syncAttackTrajectoryToggle() {
+  if (elAttackTrajectoryToggle) {
+    elAttackTrajectoryToggle.checked = !!state.attackTrajectoryEnabled;
   }
 }
 function syncSkillFlowButtons() {
