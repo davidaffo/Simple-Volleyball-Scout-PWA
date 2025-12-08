@@ -748,6 +748,23 @@ function updateAutoRoleBaseCourtCache(base) {
   autoRoleBaseCourt = shaped;
   state.autoRoleBaseCourt = shaped;
 }
+function commitCourtChange(baseCourt, options = {}) {
+  const { clean = true } = options;
+  if (clean) cleanCourtPlayers(baseCourt);
+  resetAutoRoleCache();
+  if (state.autoRolePositioning) {
+    updateAutoRoleBaseCourtCache(baseCourt);
+    applyAutoRolePositioning();
+    return;
+  }
+  state.court = ensureCourtShapeFor(baseCourt);
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
+}
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
   const baseCourt =
@@ -775,20 +792,7 @@ function setCourtPlayer(posIdx, target, playerName) {
   }
   releaseReplaced(name, posIdx, baseCourt);
   baseCourt[posIdx] = updated;
-  cleanCourtPlayers(baseCourt);
-  resetAutoRoleCache();
-  if (state.autoRolePositioning) {
-    updateAutoRoleBaseCourtCache(baseCourt);
-    applyAutoRolePositioning();
-  } else {
-    state.court = baseCourt;
-    saveState();
-    renderPlayers();
-    renderBenchChips();
-    renderLiberoChipsInline();
-    renderLineupChips();
-    updateRotationDisplay();
-  }
+  commitCourtChange(baseCourt);
 }
 function swapCourtPlayers(fromIdx, toIdx) {
   ensureCourtShape();
@@ -810,20 +814,7 @@ function swapCourtPlayers(fromIdx, toIdx) {
   }
   baseCourt[toIdx] = fromSlot;
   baseCourt[fromIdx] = toSlot;
-  cleanCourtPlayers(baseCourt);
-  resetAutoRoleCache();
-  if (state.autoRolePositioning) {
-    updateAutoRoleBaseCourtCache(baseCourt);
-    applyAutoRolePositioning();
-  } else {
-    state.court = baseCourt;
-    saveState();
-    renderPlayers();
-    renderBenchChips();
-    renderLiberoChipsInline();
-    renderLineupChips();
-    updateRotationDisplay();
-  }
+  commitCourtChange(baseCourt);
 }
 function clearCourtAssignment(posIdx, target) {
   ensureCourtShape();
@@ -839,20 +830,7 @@ function clearCourtAssignment(posIdx, target) {
     slot.replaced = "";
   }
   baseCourt[posIdx] = slot;
-  cleanCourtPlayers(baseCourt);
-  resetAutoRoleCache();
-  if (state.autoRolePositioning) {
-    updateAutoRoleBaseCourtCache(baseCourt);
-    applyAutoRolePositioning();
-  } else {
-    state.court = baseCourt;
-    saveState();
-    renderPlayers();
-    renderBenchChips();
-    renderLiberoChipsInline();
-    renderLineupChips();
-    updateRotationDisplay();
-  }
+  commitCourtChange(baseCourt);
 }
 function initStats() {
   state.stats = {};
@@ -919,154 +897,37 @@ function applyOpponentPlayersFromStateToTextarea() {
   }
 }
 function renderPlayersManagerList() {
-  if (!elPlayersList) return;
-  elPlayersList.innerHTML = "";
-  if (!state.players || state.players.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "players-empty";
-    empty.textContent = "Nessuna giocatrice aggiunta.";
-    elPlayersList.appendChild(empty);
-    return;
-  }
-  state.players.forEach((name, idx) => {
-    const pill = document.createElement("div");
-    pill.className = "player-pill";
-    const view = document.createElement("div");
-    view.className = "pill-view";
-    const number = document.createElement("span");
-    number.className = "pill-index";
-    const numVal = getPlayerNumber(name) || idx + 1;
-    number.textContent = "#" + numVal;
-    const label = document.createElement("span");
-    label.className = "pill-name";
-    label.textContent = name;
-    view.appendChild(number);
-    view.appendChild(label);
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "pill-edit-btn";
-    editBtn.textContent = "✎";
-    editBtn.addEventListener("click", () => {
-      pill.classList.toggle("editing");
-      if (pill.classList.contains("editing")) {
-        nameInput.focus();
-      }
-    });
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = name;
-    nameInput.className = "pill-name-input";
-    nameInput.addEventListener("change", () => renamePlayerAtIndex(idx, nameInput.value));
-    const numInput = document.createElement("input");
-    numInput.type = "number";
-    numInput.min = "0";
-    numInput.max = "999";
-    numInput.className = "pill-number-input";
-    numInput.value = getPlayerNumber(name);
-    numInput.addEventListener("change", e => {
-      handlePlayerNumberChange(name, numInput.value);
-    });
-    const editFields = document.createElement("div");
-    editFields.className = "pill-edit-fields";
-    editFields.appendChild(nameInput);
-    editFields.appendChild(numInput);
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "pill-remove";
-    removeBtn.dataset.playerIdx = String(idx);
-    removeBtn.textContent = "✕";
-    pill.appendChild(view);
-    pill.appendChild(editBtn);
-    pill.appendChild(editFields);
-    pill.appendChild(removeBtn);
-    elPlayersList.appendChild(pill);
+  if (!elPlayersList || !window.TeamUI) return;
+  window.TeamUI.renderTeamPills({
+    container: elPlayersList,
+    players: state.players || [],
+    numbers: state.playerNumbers || {},
+    emptyMessage: "Nessuna giocatrice aggiunta.",
+    fallbackNumber: (idx, name) => getPlayerNumber(name) || idx + 1,
+    onRename: renamePlayerAtIndex,
+    onNumberChange: handlePlayerNumberChange,
+    onRemove: removePlayerAtIndex
   });
   renderLiberoTags();
 }
 function renderOpponentPlayersList() {
-  if (!elOpponentPlayersList) return;
-  elOpponentPlayersList.innerHTML = "";
-  if (!state.opponentPlayers || state.opponentPlayers.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "players-empty";
-    empty.textContent = "Nessuna giocatrice avversaria aggiunta.";
-    elOpponentPlayersList.appendChild(empty);
-    return;
-  }
-  state.opponentPlayers.forEach((name, idx) => {
-    const pill = document.createElement("div");
-    pill.className = "player-pill";
-    const view = document.createElement("div");
-    view.className = "pill-view";
-    const number = document.createElement("span");
-    number.className = "pill-index";
-    const numVal = (state.opponentPlayerNumbers && state.opponentPlayerNumbers[name]) || idx + 1;
-    number.textContent = "#" + numVal;
-    const label = document.createElement("span");
-    label.className = "pill-name";
-    label.textContent = name;
-    view.appendChild(number);
-    view.appendChild(label);
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "pill-edit-btn";
-    editBtn.textContent = "✎";
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.value = name;
-    nameInput.className = "pill-name-input";
-    nameInput.addEventListener("change", () => renameOpponentPlayerAtIndex(idx, nameInput.value));
-    const numInput = document.createElement("input");
-    numInput.type = "number";
-    numInput.min = "0";
-    numInput.max = "999";
-    numInput.className = "pill-number-input";
-    numInput.value = (state.opponentPlayerNumbers && state.opponentPlayerNumbers[name]) || "";
-    numInput.addEventListener("change", () => {
-      handleOpponentNumberChange(name, numInput.value);
-    });
-    editBtn.addEventListener("click", () => {
-      pill.classList.toggle("editing");
-      if (pill.classList.contains("editing")) {
-        nameInput.focus();
-      }
-    });
-    const toggles = document.createElement("div");
-    toggles.className = "pill-toggles";
-    const liberoLabel = document.createElement("label");
-    const liberoChk = document.createElement("input");
-    liberoChk.type = "checkbox";
-    liberoChk.checked = (state.opponentLiberos || []).includes(name);
-    liberoChk.addEventListener("change", () => toggleOpponentLibero(name, liberoChk.checked));
-    liberoLabel.appendChild(liberoChk);
-    liberoLabel.appendChild(document.createTextNode("L"));
-    const captainLabel = document.createElement("label");
-    const captainChk = document.createElement("input");
-    captainChk.type = "checkbox";
-    captainChk.checked = (state.opponentCaptains || []).includes(name);
-    captainChk.addEventListener("change", () =>
-      setOpponentCaptain(captainChk.checked ? name : "")
-    );
-    captainLabel.appendChild(captainChk);
-    captainLabel.appendChild(document.createTextNode("C"));
-    toggles.appendChild(liberoLabel);
-    toggles.appendChild(captainLabel);
-    const editFields = document.createElement("div");
-    editFields.className = "pill-edit-fields";
-    editFields.appendChild(nameInput);
-    editFields.appendChild(numInput);
-    editFields.appendChild(toggles);
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "pill-remove";
-    removeBtn.dataset.playerIdx = String(idx);
-    removeBtn.textContent = "✕";
-    removeBtn.addEventListener("click", () => removeOpponentPlayerAtIndex(idx));
-    pill.appendChild(view);
-    pill.appendChild(editBtn);
-    pill.appendChild(editFields);
-    pill.appendChild(removeBtn);
-    elOpponentPlayersList.appendChild(pill);
+  if (!elOpponentPlayersList || !window.TeamUI) return;
+  window.TeamUI.renderTeamPills({
+    container: elOpponentPlayersList,
+    players: state.opponentPlayers || [],
+    numbers: state.opponentPlayerNumbers || {},
+    emptyMessage: "Nessuna giocatrice avversaria aggiunta.",
+    fallbackNumber: (idx, name) =>
+      (state.opponentPlayerNumbers && state.opponentPlayerNumbers[name]) || idx + 1,
+    showLiberoToggle: true,
+    showCaptainToggle: true,
+    liberoSet: new Set(state.opponentLiberos || []),
+    captainSet: new Set(state.opponentCaptains || []),
+    onRename: renameOpponentPlayerAtIndex,
+    onNumberChange: handleOpponentNumberChange,
+    onRemove: removeOpponentPlayerAtIndex,
+    onToggleLibero: toggleOpponentLibero,
+    onToggleCaptain: (name, active) => setOpponentCaptain(active ? name : "")
   });
   renderOpponentLiberoTags();
 }

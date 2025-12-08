@@ -171,6 +171,10 @@ function getAutoRoleDisplayCourt(forSkillId = null) {
   if (forSkillId === "pass") {
     return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
   }
+  if (forSkillId === "serve") {
+    // For the serve we want to display the actual rotation before any auto-role permutation
+    return baseCourt.map((slot, idx) => ({ slot, idx }));
+  }
   const phase = getCurrentPhase();
   if (typeof buildAutoRolePermutation === "function") {
     const perm = buildAutoRolePermutation(baseCourt, state.rotation || 1, phase, state.isServing) || [];
@@ -785,12 +789,15 @@ function renderPlayers() {
   ensureCourtShape();
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
+  const hasSelectedServe = isAnySelectedSkill("serve");
   const layoutSkill =
     state.predictiveSkillFlow && predictedSkillId
       ? predictedSkillId
       : isAnySelectedSkill("pass")
         ? "pass"
-        : null;
+        : hasSelectedServe
+          ? "serve"
+          : null;
   const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
   const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
   renderOrder.forEach(idx => {
