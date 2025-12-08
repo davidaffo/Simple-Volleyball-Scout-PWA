@@ -64,6 +64,23 @@ const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 let isLoadingMatch = false;
 const lineupCore = (typeof window !== "undefined" && window.LineupCore) || null;
+const autoRoleCore =
+  (typeof window !== "undefined" &&
+    window.AutoRole &&
+    typeof window.AutoRole.createAutoRole === "function" &&
+    window.AutoRole.createAutoRole({
+      ensureCourtShapeFor,
+      frontRowIndexes: FRONT_ROW_INDEXES,
+      baseRoles: BASE_ROLES
+    })) ||
+  null;
+const buildAutoRolePermutation =
+  (autoRoleCore && autoRoleCore.buildAutoRolePermutation) || (() => []);
+const applyPhasePermutation =
+  (autoRoleCore && autoRoleCore.applyPhasePermutation) || (() => []);
+// Export per moduli legacy (es. scout-ui) che si aspettano funzioni globali
+window.buildAutoRolePermutation = buildAutoRolePermutation;
+window.applyPhasePermutation = applyPhasePermutation;
 const elEventsLog = document.getElementById("events-log");
 const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
@@ -912,38 +929,82 @@ function syncCurrentSetUI(value) {
     if (displayFloating) displayFloating.textContent = label;
   }
 }
-function applyMatchInfoToUI() {
-  ensureMatchDefaults();
-  elOpponent.value = state.match.opponent || "";
-  elCategory.value = state.match.category || "";
-  elDate.value = state.match.date || "";
-  if (elMatchType) elMatchType.value = state.match.matchType || "amichevole";
-  if (elLeg) elLeg.value = state.match.leg || "";
-  syncCurrentSetUI(state.currentSet || 1);
-}
-function saveMatchInfoFromUI() {
-  state.match.opponent = elOpponent.value.trim();
-  state.match.category = elCategory.value.trim();
-  state.match.date = elDate.value || getTodayIso();
-  if (elDate && !elDate.value) {
-    elDate.value = state.match.date;
-  }
-  state.match.matchType = (elMatchType && elMatchType.value) || "amichevole";
-  state.match.leg = (elLeg && elLeg.value) || "";
-  const setValue = (elCurrentSetFloating && elCurrentSetFloating.value) || (elCurrentSet && elCurrentSet.value) || 1;
-  setCurrentSet(setValue, { save: false });
-  saveState();
-}
-function applyPlayersFromStateToTextarea() {
-  if (elPlayersInput) {
-    elPlayersInput.value = (state.players || []).join("\n");
-  }
-}
-function applyOpponentPlayersFromStateToTextarea() {
-  if (elOpponentPlayersInput) {
-    elOpponentPlayersInput.value = (state.opponentPlayers || []).join("\n");
-  }
-}
+const matchSettings = (typeof window !== "undefined" &&
+  typeof window.createMatchSettings === "function" &&
+  window.createMatchSettings({
+    state,
+    getTodayIso,
+    ensureMatchDefaults,
+    setCurrentSet,
+    syncCurrentSetUI,
+    saveState,
+    elOpponent,
+    elCategory,
+    elDate,
+    elMatchType,
+    elLeg,
+    elCurrentSet,
+    elCurrentSetFloating,
+    elPlayersInput,
+    elOpponentPlayersInput
+  })) || {
+  applyMatchInfoToUI: () => {},
+  saveMatchInfoFromUI: () => {},
+  applyPlayersFromStateToTextarea: () => {},
+  applyOpponentPlayersFromStateToTextarea: () => {}
+};
+const {
+  applyMatchInfoToUI,
+  saveMatchInfoFromUI,
+  applyPlayersFromStateToTextarea,
+  applyOpponentPlayersFromStateToTextarea
+} = matchSettings;
+// Esporta su window per i moduli che usano ancora i nomi globali (es. scout-ui).
+window.applyMatchInfoToUI = applyMatchInfoToUI;
+window.saveMatchInfoFromUI = saveMatchInfoFromUI;
+window.applyPlayersFromStateToTextarea = applyPlayersFromStateToTextarea;
+window.applyOpponentPlayersFromStateToTextarea = applyOpponentPlayersFromStateToTextarea;
+
+const opponentSettings =
+  (typeof window !== "undefined" &&
+    window.OpponentSettings &&
+    typeof window.OpponentSettings.createOpponentSettings === "function" &&
+    window.OpponentSettings.createOpponentSettings({
+      state,
+      saveState,
+      normalizePlayers,
+      parseDelimitedTeamText,
+      buildNumbersForNames,
+      syncOpponentPlayerNumbers,
+      renderOpponentPlayersList,
+      renderOpponentLiberoTags,
+      applyOpponentPlayersFromStateToTextarea,
+      elNewOpponentPlayerInput,
+      elOpponentPlayersInput
+    })) || {
+    updateOpponentPlayersList: () => {},
+    addOpponentPlayer: () => {},
+    addOpponentPlayerFromInput: () => {},
+    applyOpponentPlayersFromTextarea: () => {},
+    clearOpponentPlayers: () => {},
+    handleOpponentNumberChange: () => {},
+    renameOpponentPlayerAtIndex: () => {},
+    removeOpponentPlayerAtIndex: () => {},
+    toggleOpponentLibero: () => {},
+    setOpponentCaptain: () => {}
+  };
+const {
+  updateOpponentPlayersList,
+  addOpponentPlayer,
+  addOpponentPlayerFromInput,
+  applyOpponentPlayersFromTextarea,
+  clearOpponentPlayers,
+  handleOpponentNumberChange,
+  renameOpponentPlayerAtIndex,
+  removeOpponentPlayerAtIndex,
+  toggleOpponentLibero,
+  setOpponentCaptain
+} = opponentSettings;
 function renderPlayersManagerList() {
   if (!elPlayersList || !window.TeamUI) return;
   window.TeamUI.renderTeamPills({
@@ -978,119 +1039,6 @@ function renderOpponentPlayersList() {
     onToggleCaptain: (name, active) => setOpponentCaptain(active ? name : "")
   });
   renderOpponentLiberoTags();
-}
-function updateOpponentPlayersList(players, options = {}) {
-  const {
-    liberos = state.opponentLiberos || [],
-    playerNumbers = state.opponentPlayerNumbers || {},
-    captains = state.opponentCaptains || []
-  } = options;
-  const normalized = normalizePlayers(players || []);
-  state.opponentPlayers = normalized;
-  state.opponentPlayerNumbers = buildNumbersForNames(
-    normalized,
-    playerNumbers,
-    state.opponentPlayerNumbers || {}
-  );
-  const libSet = new Set(normalizePlayers(liberos));
-  state.opponentLiberos = normalized.filter(name => libSet.has(name));
-  state.opponentCaptains = normalizePlayers(captains).filter(name => normalized.includes(name)).slice(0, 1);
-  saveState();
-  applyOpponentPlayersFromStateToTextarea();
-  renderOpponentPlayersList();
-  renderOpponentLiberoTags();
-}
-function addOpponentPlayer(name) {
-  const clean = (name || "").trim();
-  if (!clean) return;
-  const existing = normalizePlayers(state.opponentPlayers || []);
-  if (existing.includes(clean)) return;
-  updateOpponentPlayersList(existing.concat(clean));
-}
-function addOpponentPlayerFromInput() {
-  if (!elNewOpponentPlayerInput) return;
-  addOpponentPlayer(elNewOpponentPlayerInput.value);
-  elNewOpponentPlayerInput.value = "";
-  elNewOpponentPlayerInput.focus();
-}
-function removeOpponentPlayerAtIndex(idx) {
-  if (!state.opponentPlayers || idx < 0 || idx >= state.opponentPlayers.length) return;
-  const updated = state.opponentPlayers.slice();
-  const removed = updated.splice(idx, 1)[0];
-  const numbers = Object.assign({}, state.opponentPlayerNumbers || {});
-  delete numbers[removed];
-  const liberos = (state.opponentLiberos || []).filter(n => n !== removed);
-  const captains = (state.opponentCaptains || []).filter(n => n !== removed);
-  updateOpponentPlayersList(updated, { liberos, playerNumbers: numbers, captains });
-}
-function renameOpponentPlayerAtIndex(idx, newName) {
-  if (!state.opponentPlayers || idx < 0 || idx >= state.opponentPlayers.length) return;
-  const clean = (newName || "").trim();
-  if (!clean) return;
-  const players = state.opponentPlayers.slice();
-  const oldName = players[idx];
-  if (players.some((p, i) => i !== idx && p.toLowerCase() === clean.toLowerCase())) {
-    alert("Nome già presente nel roster avversario.");
-    return;
-  }
-  players[idx] = clean;
-  const numbers = Object.assign({}, state.opponentPlayerNumbers || {});
-  if (numbers[oldName]) {
-    numbers[clean] = numbers[oldName];
-    delete numbers[oldName];
-  }
-  const liberos = (state.opponentLiberos || []).map(n => (n === oldName ? clean : n));
-  const captains = (state.opponentCaptains || []).map(n => (n === oldName ? clean : n));
-  updateOpponentPlayersList(players, { liberos, playerNumbers: numbers, captains });
-}
-function handleOpponentNumberChange(name, rawNumber) {
-  const provided = Object.assign({}, state.opponentPlayerNumbers || {});
-  provided[name] = rawNumber;
-  const numbers = syncOpponentPlayerNumbers(state.opponentPlayers || [], provided);
-  state.opponentPlayerNumbers = numbers;
-  saveState();
-  renderOpponentPlayersList();
-}
-function toggleOpponentLibero(name, active) {
-  const set = new Set(state.opponentLiberos || []);
-  if (active) {
-    set.add(name);
-  } else {
-    set.delete(name);
-  }
-  state.opponentLiberos = Array.from(set).filter(n => (state.opponentPlayers || []).includes(n));
-  saveState();
-  renderOpponentPlayersList();
-  renderOpponentLiberoTags();
-}
-function setOpponentCaptain(name) {
-  if (!name) {
-    state.opponentCaptains = [];
-  } else {
-    const clean = normalizePlayers([name])[0];
-    state.opponentCaptains =
-      clean && (state.opponentPlayers || []).includes(clean) ? [clean] : [];
-  }
-  saveState();
-  renderOpponentPlayersList();
-}
-function clearOpponentPlayers() {
-  if (!state.opponentPlayers || state.opponentPlayers.length === 0) return;
-  const ok = confirm("Svuotare il roster avversario?");
-  if (!ok) return;
-  updateOpponentPlayersList([], { liberos: [], playerNumbers: {}, captains: [] });
-}
-function applyOpponentPlayersFromTextarea() {
-  if (!elOpponentPlayersInput) return;
-  const parsed = parseDelimitedTeamText(elOpponentPlayersInput.value || "");
-  if (!parsed || !parsed.players || parsed.players.length === 0) {
-    alert("Nessuna giocatrice avversaria valida trovata.");
-    return;
-  }
-  updateOpponentPlayersList(parsed.players, {
-    liberos: parsed.liberos || [],
-    playerNumbers: parsed.numbers || {}
-  });
 }
 function getTeamStorageKey(name) {
   return TEAM_PREFIX + name;
@@ -3498,150 +3446,6 @@ function animateFlip(prevRects, selector, keyBuilder) {
     });
   });
 }
-function applyAssignments(list, pairs) {
-  if (!Array.isArray(list) || !Array.isArray(pairs)) return;
-  const snapshot = list.slice();
-  pairs.forEach(([targetIdx, sourceIdx]) => {
-    if (targetIdx === undefined || sourceIdx === undefined) return;
-    if (targetIdx < 0 || targetIdx >= snapshot.length) return;
-    list[targetIdx] = snapshot[sourceIdx] || list[targetIdx];
-  });
-}
-function buildRoleItems(lineup, rotation) {
-  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
-  const offset = rot - 1;
-  return (lineup || []).map((item, idx) => ({
-    idx,
-    role: BASE_ROLES[(idx - offset + 12) % 6] || "",
-    entry: item
-  }));
-}
-function buildP1AmericanReceive(lineup, rotation) {
-  if (rotation !== 1 || !state.autoRoleP1American) return null;
-  const roleItems = buildRoleItems(lineup, rotation);
-  const opposite = roleItems.find(r => r.role === "O");
-  const outsides = roleItems.filter(r => r.role === "S1" || r.role === "S2");
-  if (!opposite || outsides.length === 0) return null;
-  const targetOutside =
-    outsides.find(r => FRONT_ROW_INDEXES.has(r.idx)) ||
-    outsides[0];
-  const used = new Set();
-  const placeEntry = (targetIdx, entry, acc) => {
-    if (!entry) return;
-    const names = [entry.slot.main, entry.slot.replaced].filter(Boolean);
-    if (names.some(n => used.has(n))) return;
-    acc[targetIdx] = entry;
-    names.forEach(n => used.add(n));
-  };
-  const base = lineup.slice();
-  const next = Array.from({ length: 6 }, () => ({
-    slot: { main: "", replaced: "" },
-    idx: -1
-  }));
-  placeEntry(1, opposite.entry, next); // OP in pos2
-  placeEntry(3, targetOutside.entry, next); // OH in pos4
-  base.forEach((entry, idx) => {
-    if (!entry || !entry.slot) return;
-    const names = [entry.slot.main, entry.slot.replaced].filter(Boolean);
-    if (names.some(n => used.has(n))) return;
-    if (!next[idx] || (!next[idx].slot.main && !next[idx].slot.replaced)) {
-      next[idx] = entry;
-      names.forEach(n => used.add(n));
-    } else {
-      const freeIdx = next.findIndex(item => item && !item.slot.main && !item.slot.replaced);
-      if (freeIdx !== -1) {
-        next[freeIdx] = entry;
-        names.forEach(n => used.add(n));
-      }
-    }
-  });
-  return next.map((entry, idx) => {
-    if (entry && entry.slot) return entry;
-    return { slot: { main: "", replaced: "" }, idx };
-  });
-}
-function applyReceivePattern(lineup, rotation) {
-  const american = buildP1AmericanReceive(lineup, rotation);
-  if (american) return american;
-  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
-  const assignmentsByRot = {
-    1: [
-      [0, 1],
-      [1, 0]
-    ],
-    2: [
-      [2, 4],
-      [4, 2]
-    ],
-    3: [
-      [4, 3],
-      [5, 4],
-      [3, 5]
-    ],
-    4: [
-      [4, 1],
-      [5, 4],
-      [0, 5],
-      [1, 0]
-    ],
-    5: [
-      [2, 4],
-      [4, 2]
-    ],
-    6: [
-      [4, 3],
-      [5, 4],
-      [3, 5]
-    ]
-  };
-  applyAssignments(lineup, assignmentsByRot[rot] || []);
-  return lineup;
-}
-function applySwitchPattern(lineup, rotation, isServing) {
-  const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
-  const assignments = [];
-  if (rot === 4) {
-    assignments.push([4, 5], [5, 4], [1, 3], [3, 1]);
-  } else if (rot === 1 && !isServing) {
-    assignments.push([4, 5], [5, 4]);
-  } else if (rot === 1 && isServing) {
-    assignments.push([3, 1], [1, 3], [4, 5], [5, 4]);
-  } else if (rot === 2 || rot === 5) {
-    assignments.push([3, 2], [2, 3], [4, 0], [0, 4]);
-  } else if (rot === 3 || rot === 6) {
-    assignments.push([2, 1], [1, 2], [5, 0], [0, 5]);
-  }
-  applyAssignments(lineup, assignments);
-  return lineup;
-}
-function buildAutoRolePermutation(baseLineup, rotation, phase, isServingFlag = state.isServing) {
-  const base = ensureCourtShapeFor(baseLineup);
-  const working = base.map((slot, idx) => ({
-    slot,
-    idx
-  }));
-  const phaseKey = phase === "receive" ? "receive" : "attack";
-  if (phaseKey === "receive") {
-    return applyReceivePattern(working, rotation);
-  }
-  return applySwitchPattern(working, rotation, !!isServingFlag);
-}
-function applyPhasePermutation(lineup, rotation, phase, isServingFlag = state.isServing) {
-  const permuted = buildAutoRolePermutation(lineup, rotation, phase, isServingFlag);
-  const sanitized = permuted.map(item => ({
-    main: (item && item.slot && item.slot.main) || "",
-    replaced: (item && item.slot && item.slot.replaced) || ""
-  }));
-  return sanitized.map((slot, idx) => {
-    if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
-      if (slot.replaced) {
-        // libero esce in prima linea ma manteniamo il legame col libero per poterlo reinserire
-        return { main: slot.replaced, replaced: slot.main };
-      }
-    }
-    return slot;
-  });
-}
 function applyAutoRolePositioning() {
   if (!state.autoRolePositioning) return;
   ensureCourtShape();
@@ -3656,7 +3460,14 @@ function applyAutoRolePositioning() {
     }
   }
   const baseLineup = autoRoleBaseCourt && autoRoleBaseCourt.length === 6 ? autoRoleBaseCourt : state.court;
-  const permuted = applyPhasePermutation(baseLineup, rot, phase, state.isServing);
+  const permuted = applyPhasePermutation({
+    lineup: baseLineup,
+    rotation: rot,
+    phase,
+    isServing: state.isServing,
+    liberos: state.liberos || [],
+    autoRoleP1American: !!state.autoRoleP1American
+  });
   state.court = permuted;
   autoRolePhaseApplied = phase;
   autoRoleRotationApplied = rot;

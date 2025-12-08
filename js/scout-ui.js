@@ -100,7 +100,14 @@ const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 function buildReceiveDisplayMapping(court, rotation) {
   if (typeof buildAutoRolePermutation === "function") {
-    const perm = buildAutoRolePermutation(court, rotation, "receive", state.isServing) || [];
+    const perm =
+      buildAutoRolePermutation({
+        baseLineup: court,
+        rotation,
+        phase: "receive",
+        isServing: state.isServing,
+        autoRoleP1American: !!state.autoRoleP1American
+      }) || [];
     return perm.map(item => ({
       slot: (item && item.slot) || { main: "", replaced: "" },
       idx: typeof item.idx === "number" ? item.idx : 0
@@ -177,7 +184,14 @@ function getAutoRoleDisplayCourt(forSkillId = null) {
   }
   const phase = getCurrentPhase();
   if (typeof buildAutoRolePermutation === "function") {
-    const perm = buildAutoRolePermutation(baseCourt, state.rotation || 1, phase, state.isServing) || [];
+    const perm =
+      buildAutoRolePermutation({
+        baseLineup: baseCourt,
+        rotation: state.rotation || 1,
+        phase,
+        isServing: state.isServing,
+        autoRoleP1American: !!state.autoRoleP1American
+      }) || [];
     return perm.map(item => ({
       slot: (item && item.slot) || { main: "", replaced: "" },
       idx: typeof item.idx === "number" ? item.idx : 0
