@@ -14,6 +14,7 @@ const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
 let lastEventContextKey = null;
+let lastReceiveContext = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -457,6 +458,12 @@ function parseInputValue(raw) {
     if (!Number.isNaN(num)) return num;
     return str;
   }
+}
+function formatAttackPhaseLabel(val) {
+  const phase = normalizePhaseValue(val);
+  if (phase === "bp") return "BP";
+  if (phase === "so") return "SO";
+  return "";
 }
 function createNumberInput(ev, field, min, max, onDone) {
   const input = document.createElement("input");
@@ -1164,11 +1171,53 @@ function animateEventToLog(sourceEl, skillId, code) {
     setTimeout(() => elEventsLog.classList.remove("log-pulse"), 320);
   });
 }
+function clearReceiveContext() {
+  lastReceiveContext = null;
+}
+function rememberReceiveContext(ev) {
+  if (!ev) return;
+  const zone = ev.zone || ev.playerPosition || null;
+  lastReceiveContext = {
+    zone,
+    evaluation: ev.code || ev.receiveEvaluation || null,
+    set: ev.set || null,
+    eventId: ev.eventId || null
+  };
+}
+function applyReceiveContextToEvent(ev) {
+  if (!ev) return;
+  // Un servizio segna l'inizio di un nuovo scambio
+  if (ev.skillId === "serve") {
+    clearReceiveContext();
+    return;
+  }
+  // Registra la ricezione e salva i dati utili per le azioni successive
+  if (ev.skillId === "pass") {
+    const zone = ev.zone || ev.playerPosition || null;
+    if (ev.receivePosition == null) ev.receivePosition = zone;
+    ev.attackBp = false; // non è BP, siamo in cambio palla
+    rememberReceiveContext(ev);
+    return;
+  }
+  const ctx = lastReceiveContext;
+  const sameSet = ctx && (ctx.set === null || ctx.set === ev.set);
+  const fromReceive = !!ctx && sameSet;
+  if ((ev.skillId === "second" || ev.skillId === "attack") && fromReceive) {
+    if (ctx.zone != null && ev.receivePosition == null) ev.receivePosition = ctx.zone;
+    if (ctx.evaluation && !ev.receiveEvaluation) ev.receiveEvaluation = ctx.evaluation;
+  }
+  if (ev.skillId === "attack") {
+    // Default BP, salvo attacco immediato dopo ricezione (solo il primo)
+    ev.attackBp = !fromReceive;
+    clearReceiveContext();
+  }
+}
 function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
+  const wasFreeball = !!state.freeballPending;
   let playerIdx = parseInt(playerIdxStr, 10);
   if (isNaN(playerIdx) || !state.players[playerIdx]) {
     playerIdx = state.players.findIndex(p => p === playerName);
@@ -1182,6 +1231,10 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
     skillId,
     code
   });
+  // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
+  event.attackBp = true;
+  event.fromFreeball = wasFreeball;
+  applyReceiveContextToEvent(event);
   state.events.push(event);
   handleAutoRotationFromEvent(event);
   if (!state.stats[playerIdx]) {
@@ -2278,6 +2331,9 @@ function renderEventTableRows(target, events, options = {}) {
     const traj = ev.attackTrajectory || {};
     const trajStartPt = traj.start || ev.attackStart || null;
     const trajEndPt = traj.end || ev.attackEnd || null;
+    const receiveEvalDisplay =
+      ev.fromFreeball && !ev.receiveEvaluation ? "FB" : valueToString(ev.receiveEvaluation);
+    const attackPhaseDisplay = formatAttackPhaseLabel(ev.attackBp);
     const formatAttackDir = () => {
       const dir = ev.attackDirection || traj || null;
       if (dir && typeof dir === "object") {
@@ -2375,7 +2431,7 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, done => createTextInput(ev, "serveType", done), editGuard)
       },
       {
-        text: valueToString(ev.receiveEvaluation),
+        text: receiveEvalDisplay,
         editable: td => makeEditableCell(td, done => createTextInput(ev, "receiveEvaluation", done), editGuard)
       },
       {
@@ -2383,7 +2439,7 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, done => createTextInput(ev, "attackEvaluation", done), editGuard)
       },
       {
-        text: valueToString(ev.attackBp),
+        text: attackPhaseDisplay,
         editable: td => makeEditableCell(td, done => createCheckboxInput(ev, "attackBp", done), editGuard)
       },
       {
@@ -3199,6 +3255,7 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
     pointDirection: direction,
     value: value
   });
+  clearReceiveContext();
   state.events.push(event);
   handleAutoRotationFromEvent(event);
   saveState();
@@ -3311,6 +3368,7 @@ function recordSetAction(actionType, payload) {
       actionType
     })
   );
+  clearReceiveContext();
   state.events.push(event);
 }
 function applySetChange(nextSet, options = {}) {
@@ -3456,11 +3514,234 @@ function renderScoreAndRotations(summary) {
     elRotationTableBody.appendChild(tr);
   });
 }
+const DEFAULT_SET_TYPE_OPTIONS = [
+  { value: "Third Tempo", label: "3° tempo (TT)" },
+  { value: "Second Tempo", label: "2° tempo (ST)" },
+  { value: "First Tempo", label: "1° tempo (FT)" },
+  { value: "Shot", label: "Shot" },
+  { value: "Slide", label: "Slide" },
+  { value: "Other", label: "Altro" }
+];
+const DEFAULT_BASE_OPTIONS = [
+  { value: "K1", label: "K1" },
+  { value: "K2", label: "K2" },
+  { value: "KC", label: "KC" },
+  { value: "KB", label: "KB" },
+  { value: "K7", label: "K7" },
+  { value: "KF", label: "KF" }
+];
+const DEFAULT_PHASE_OPTIONS = [
+  { value: "so", label: "Side-out (SO)" },
+  { value: "bp", label: "Break point (BP)" }
+];
+const PREVIOUS_SKILL_OPTIONS = [
+  { value: "any", label: "Tutte" },
+  { value: "freeball-positive", label: "Freeball o ricezione positiva" },
+  { value: "defense-negative", label: "Difesa + ricezione negativa" },
+  { value: "freeball-only", label: "Solo freeball" },
+  { value: "dig-only", label: "Solo difesa" }
+];
+function normalizeSetTypeValue(val) {
+  if (!val) return null;
+  if (typeof val === "string") return val.trim();
+  if (typeof val === "object") {
+    if (val.set_type) return String(val.set_type).trim();
+    if (val.setType) return String(val.setType).trim();
+    if (val.type) return String(val.type).trim();
+  }
+  return String(val).trim();
+}
+function normalizeBaseValue(val) {
+  if (!val) return null;
+  return String(val).trim().toUpperCase();
+}
+function normalizePhaseValue(val) {
+  if (val === true || val === "true" || val === 1 || val === "1") return "bp";
+  if (val === false || val === "false" || val === 0 || val === "0") return "so";
+  if (typeof val === "string") {
+    const upper = val.toUpperCase();
+    if (upper.includes("BP") || upper.includes("BREAK")) return "bp";
+    if (upper.includes("SO") || upper.includes("SIDE")) return "so";
+  }
+  return null;
+}
+function normalizeEvalCode(val) {
+  if (!val) return null;
+  const str = String(val).trim();
+  return RESULT_CODES.includes(str) ? str : null;
+}
+function normalizeReceiveZone(val) {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return null;
+  return num;
+}
+function normalizeSetNumber(val) {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return null;
+  return num;
+}
+function findEventById(id) {
+  if (!state.events || !Array.isArray(state.events)) return null;
+  return state.events.find(e => e && e.eventId === id) || null;
+}
+function findPreviousEvent(ev) {
+  if (!ev) return null;
+  if (Array.isArray(ev.relatedEvents)) {
+    for (let i = 0; i < ev.relatedEvents.length; i++) {
+      const related = findEventById(ev.relatedEvents[i]);
+      if (related) return related;
+    }
+  }
+  const idx = state.events ? state.events.indexOf(ev) : -1;
+  if (idx > 0) return state.events[idx - 1];
+  return null;
+}
+function findRelatedSetEvent(ev) {
+  if (!ev || !Array.isArray(ev.relatedEvents)) return null;
+  for (let i = 0; i < ev.relatedEvents.length; i++) {
+    const related = findEventById(ev.relatedEvents[i]);
+    if (related && related.skillId === "second") return related;
+  }
+  return null;
+}
+function getSetterFromEvent(ev) {
+  if (!ev) return null;
+  if (typeof ev.playerIdx === "number" && ev.skillId === "second") return ev.playerIdx;
+  if (typeof ev.setterIdx === "number") return ev.setterIdx;
+  if (typeof ev.setterId === "number") return ev.setterId;
+  const relatedSet = findRelatedSetEvent(ev);
+  if (relatedSet && typeof relatedSet.playerIdx === "number") return relatedSet.playerIdx;
+  return null;
+}
+function mergeFilterOptions(defaultOptions, extraValues, normalizeFn, labelBuilder) {
+  const opts = [];
+  const seen = new Set();
+  defaultOptions.forEach(opt => {
+    const norm = normalizeFn ? normalizeFn(opt.value) : opt.value;
+    if (norm === null || norm === undefined || seen.has(norm)) return;
+    seen.add(norm);
+    opts.push({ value: norm, label: opt.label || String(opt.value) });
+  });
+  extraValues.forEach(val => {
+    const norm = normalizeFn ? normalizeFn(val) : val;
+    if (norm === null || norm === undefined || seen.has(norm)) return;
+    seen.add(norm);
+    opts.push({ value: norm, label: (labelBuilder && labelBuilder(val, norm)) || String(norm) });
+  });
+  return opts;
+}
+function buildFilterOptions(container, options, selectedSet, { asNumber = false, onChange } = {}) {
+  if (!container) return;
+  container.innerHTML = "";
+  options.forEach(opt => {
+    const val = asNumber ? Number(opt.value) : opt.value;
+    const id = `${container.id}-${opt.value}`;
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = opt.value;
+    input.id = id;
+    input.checked = selectedSet.has(val);
+    input.addEventListener("change", onChange || handleTrajectoryFilterChange);
+    label.appendChild(input);
+    const span = document.createElement("span");
+    span.textContent = opt.label;
+    label.appendChild(span);
+    container.appendChild(label);
+  });
+}
+function getCheckedValues(container, { asNumber = false } = {}) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map(inp =>
+    asNumber ? Number(inp.value) : inp.value
+  );
+}
+function matchesPreviousSkill(ev, filterVal) {
+  if (!filterVal || filterVal === "any") return true;
+  const normalizedVal = filterVal === "dig-negative" ? "defense-negative" : filterVal;
+  const prev = findPreviousEvent(ev);
+  const explicitFreeball = !!(ev && ev.fromFreeball);
+  const prevFreeball =
+    explicitFreeball ||
+    (prev && (prev.fromFreeball || prev.actionType === "freeball" || prev.skillId === "freeball"));
+  const prevIsReceive = prev && prev.skillId === "pass";
+  const prevIsDefense = prev && prev.skillId === "defense";
+  const prevReceiveCode = prevIsReceive ? prev.code || prev.receiveEvaluation : null;
+  const isPositiveReceive = prevIsReceive && (prevReceiveCode === "#" || prevReceiveCode === "+");
+  const isNegativeReceive = prevIsReceive && (prevReceiveCode === "!" || prevReceiveCode === "-");
+  // Se non abbiamo receive/freeball esplicita, assumiamo difesa di default
+  const fallbackDefense = !prevIsReceive && !prevFreeball;
+  switch (normalizedVal) {
+    case "freeball-positive":
+      return prevFreeball || isPositiveReceive;
+    case "defense-negative":
+      return isNegativeReceive || prevIsDefense || fallbackDefense;
+    case "freeball-only":
+      return prevFreeball;
+    case "dig-only":
+      return prevIsDefense || fallbackDefense;
+    default:
+      return true;
+  }
+}
+function matchesAdvancedFilters(ev, filters, { includeSetter = false } = {}) {
+  if (!ev || !filters) return true;
+  if (includeSetter && filters.setters && filters.setters.size) {
+    const setterIdx = getSetterFromEvent(ev);
+    if (setterIdx === null || !filters.setters.has(setterIdx)) return false;
+  }
+  if (filters.setTypes && filters.setTypes.size) {
+    const setType = normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType));
+    if (!setType || !filters.setTypes.has(setType)) return false;
+  }
+  if (filters.bases && filters.bases.size) {
+    const base = normalizeBaseValue(ev.base);
+    if (!base || !filters.bases.has(base)) return false;
+  }
+  if (filters.phases && filters.phases.size) {
+    let rawPhase = ev.attackBp;
+    if (rawPhase === undefined || rawPhase === null) {
+      rawPhase = ev.phase !== undefined ? ev.phase : ev.attackPhase !== undefined ? ev.attackPhase : true; // default BP
+    }
+    const phase = normalizePhaseValue(rawPhase);
+    if (phase === null || !filters.phases.has(phase)) return false;
+  }
+  if (filters.receiveEvaluations && filters.receiveEvaluations.size) {
+    const recvEval = normalizeEvalCode(ev.receiveEvaluation);
+    if (!recvEval || !filters.receiveEvaluations.has(recvEval)) return false;
+  }
+  if (filters.receiveZones && filters.receiveZones.size) {
+    const recvZone = normalizeReceiveZone(ev.receivePosition || ev.receiveZone);
+    if (recvZone === null || !filters.receiveZones.has(recvZone)) return false;
+  }
+  if (filters.sets && filters.sets.size) {
+    const setNum = normalizeSetNumber(ev.set);
+    if (setNum === null || !filters.sets.has(setNum)) return false;
+  }
+  if (filters.prevSkill && !matchesPreviousSkill(ev, filters.prevSkill)) return false;
+  return true;
+}
 const trajectoryFilterState = {
   players: new Set(),
   sets: new Set(),
   codes: new Set(),
-  zones: new Set()
+  zones: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  prevSkill: "any"
+};
+const secondFilterState = {
+  setters: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  sets: new Set(),
+  prevSkill: "any"
 };
 const TRAJECTORY_BG_BY_ZONE = {
   1: "images/trajectory/attack_2_near.png",
@@ -3483,37 +3764,17 @@ function clamp01Val(n) {
   if (n == null || isNaN(n)) return 0;
   return Math.min(1, Math.max(0, n));
 }
-function buildTrajectoryFilterOptions(container, options, selectedSet, { asNumber = false } = {}) {
-  if (!container) return;
-  container.innerHTML = "";
-  options.forEach(opt => {
-    const val = asNumber ? Number(opt.value) : opt.value;
-    const id = `${container.id}-${opt.value}`;
-    const label = document.createElement("label");
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.value = opt.value;
-    input.id = id;
-    input.checked = selectedSet.has(val);
-    input.addEventListener("change", handleTrajectoryFilterChange);
-    label.appendChild(input);
-    const span = document.createElement("span");
-    span.textContent = opt.label;
-    label.appendChild(span);
-    container.appendChild(label);
-  });
-}
 function syncTrajectoryFilterState() {
-  const getCheckedValues = (container, { asNumber = false } = {}) => {
-    if (!container) return [];
-    return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map(inp =>
-      asNumber ? Number(inp.value) : inp.value
-    );
-  };
   trajectoryFilterState.players = new Set(getCheckedValues(elTrajFilterPlayers, { asNumber: true }));
   trajectoryFilterState.sets = new Set(getCheckedValues(elTrajFilterSets, { asNumber: true }));
   trajectoryFilterState.codes = new Set(getCheckedValues(elTrajFilterCodes));
   trajectoryFilterState.zones = new Set(getCheckedValues(elTrajFilterZones, { asNumber: true }));
+  trajectoryFilterState.setTypes = new Set(getCheckedValues(elTrajFilterSetTypes));
+  trajectoryFilterState.bases = new Set(getCheckedValues(elTrajFilterBases));
+  trajectoryFilterState.phases = new Set(getCheckedValues(elTrajFilterPhases));
+  trajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elTrajFilterReceiveEvals));
+  trajectoryFilterState.receiveZones = new Set(getCheckedValues(elTrajFilterReceiveZones, { asNumber: true }));
+  trajectoryFilterState.prevSkill = (elTrajFilterPrev && elTrajFilterPrev.value) || "any";
 }
 function handleTrajectoryFilterChange() {
   syncTrajectoryFilterState();
@@ -3524,15 +3785,24 @@ function resetTrajectoryFilters() {
   trajectoryFilterState.sets.clear();
   trajectoryFilterState.codes.clear();
   trajectoryFilterState.zones.clear();
+  trajectoryFilterState.setTypes.clear();
+  trajectoryFilterState.bases.clear();
+  trajectoryFilterState.phases.clear();
+  trajectoryFilterState.receiveEvaluations.clear();
+  trajectoryFilterState.receiveZones.clear();
+  trajectoryFilterState.prevSkill = "any";
+  if (elTrajFilterPrev) elTrajFilterPrev.value = "any";
   renderTrajectoryFilters();
   renderTrajectoryAnalysis();
 }
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
+  const events = state.events || [];
+  const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const maxSetFromEvents = Math.max(
     1,
     state.currentSet || 1,
-    ...(state.events || []).map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
+    ...attackEvents.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
   );
   const playersOpts = (state.players || []).map((name, idx) => ({
     value: idx,
@@ -3541,6 +3811,34 @@ function renderTrajectoryFilters() {
   const setsOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
   const codesOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
   const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
+  const setTypeOpts = mergeFilterOptions(
+    DEFAULT_SET_TYPE_OPTIONS,
+    attackEvents.map(ev => normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))),
+    normalizeSetTypeValue
+  );
+  const baseOpts = mergeFilterOptions(
+    DEFAULT_BASE_OPTIONS,
+    attackEvents.map(ev => normalizeBaseValue(ev.base)),
+    normalizeBaseValue
+  );
+  const phaseOpts = mergeFilterOptions(
+    DEFAULT_PHASE_OPTIONS,
+    attackEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
+    v => v
+  );
+  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
+  const recvEvalOpts = mergeFilterOptions(
+    defaultEvalOpts,
+    attackEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    normalizeEvalCode
+  );
+  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
+  const recvZoneOpts = mergeFilterOptions(
+    defaultZoneOpts,
+    attackEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
+    normalizeReceiveZone,
+    val => "Z" + val
+  );
 
   trajectoryFilterState.players = new Set(
     [...trajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
@@ -3554,13 +3852,63 @@ function renderTrajectoryFilters() {
   trajectoryFilterState.zones = new Set(
     [...trajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
   );
+  trajectoryFilterState.setTypes = new Set(
+    [...trajectoryFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  trajectoryFilterState.bases = new Set(
+    [...trajectoryFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  trajectoryFilterState.phases = new Set(
+    [...trajectoryFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  trajectoryFilterState.receiveEvaluations = new Set(
+    [...trajectoryFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  trajectoryFilterState.receiveZones = new Set(
+    [...trajectoryFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === trajectoryFilterState.prevSkill)) {
+    trajectoryFilterState.prevSkill = "any";
+  }
 
-  buildTrajectoryFilterOptions(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
-    asNumber: true
+  buildFilterOptions(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
+    asNumber: true,
+    onChange: handleTrajectoryFilterChange
   });
-  buildTrajectoryFilterOptions(elTrajFilterSets, setsOpts, trajectoryFilterState.sets, { asNumber: true });
-  buildTrajectoryFilterOptions(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes);
-  buildTrajectoryFilterOptions(elTrajFilterZones, zonesOpts, trajectoryFilterState.zones, { asNumber: true });
+  buildFilterOptions(elTrajFilterSets, setsOpts, trajectoryFilterState.sets, {
+    asNumber: true,
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterSetTypes, setTypeOpts, trajectoryFilterState.setTypes, {
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterBases, baseOpts, trajectoryFilterState.bases, {
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterPhases, phaseOpts, trajectoryFilterState.phases, {
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterReceiveEvals, recvEvalOpts, trajectoryFilterState.receiveEvaluations, {
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterReceiveZones, recvZoneOpts, trajectoryFilterState.receiveZones, {
+    asNumber: true,
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes, {
+    onChange: handleTrajectoryFilterChange
+  });
+  buildFilterOptions(elTrajFilterZones, zonesOpts, trajectoryFilterState.zones, {
+    asNumber: true,
+    onChange: handleTrajectoryFilterChange
+  });
+  if (elTrajFilterPrev) {
+    elTrajFilterPrev.value = trajectoryFilterState.prevSkill || "any";
+    if (!elTrajFilterPrev._trajPrevBound) {
+      elTrajFilterPrev.addEventListener("change", handleTrajectoryFilterChange);
+      elTrajFilterPrev._trajPrevBound = true;
+    }
+  }
   if (elTrajFilterReset && !elTrajFilterReset._trajResetBound) {
     elTrajFilterReset.addEventListener("click", resetTrajectoryFilters);
     elTrajFilterReset._trajResetBound = true;
@@ -3591,6 +3939,7 @@ function getFilteredTrajectoryEvents() {
   return events.filter(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory;
     const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
+    if (!matchesAdvancedFilters(ev, trajectoryFilterState)) return false;
     if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
     if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
@@ -3793,9 +4142,144 @@ function renderAggregatedTable() {
   renderTrajectoryAnalysis();
   applyAggColumnsVisibility();
 }
+function syncSecondFilterState() {
+  secondFilterState.setters = new Set(getCheckedValues(elSecondFilterSetters, { asNumber: true }));
+  secondFilterState.setTypes = new Set(getCheckedValues(elSecondFilterSetTypes));
+  secondFilterState.bases = new Set(getCheckedValues(elSecondFilterBases));
+  secondFilterState.phases = new Set(getCheckedValues(elSecondFilterPhases));
+  secondFilterState.receiveEvaluations = new Set(getCheckedValues(elSecondFilterReceiveEvals));
+  secondFilterState.receiveZones = new Set(getCheckedValues(elSecondFilterReceiveZones, { asNumber: true }));
+  secondFilterState.sets = new Set(getCheckedValues(elSecondFilterSets, { asNumber: true }));
+  secondFilterState.prevSkill = (elSecondFilterPrev && elSecondFilterPrev.value) || "any";
+}
+function handleSecondFilterChange() {
+  syncSecondFilterState();
+  renderSecondTable();
+}
+function resetSecondFilters() {
+  secondFilterState.setters.clear();
+  secondFilterState.setTypes.clear();
+  secondFilterState.bases.clear();
+  secondFilterState.phases.clear();
+  secondFilterState.receiveEvaluations.clear();
+  secondFilterState.receiveZones.clear();
+  secondFilterState.sets.clear();
+  secondFilterState.prevSkill = "any";
+  if (elSecondFilterPrev) elSecondFilterPrev.value = "any";
+  renderSecondFilters();
+  renderSecondTable();
+}
+function renderSecondFilters() {
+  if (!elSecondFilterSetters) return;
+  const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
+  const maxSetFromEvents = Math.max(
+    1,
+    state.currentSet || 1,
+    ...events.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
+  );
+  const playersOpts = (state.players || []).map((name, idx) => ({
+    value: idx,
+    label: formatNameWithNumber(name) || name || "—"
+  }));
+  events.forEach(ev => {
+    if (typeof ev.playerIdx === "number" && !playersOpts.some(p => Number(p.value) === ev.playerIdx)) {
+      playersOpts.push({
+        value: ev.playerIdx,
+        label: formatNameWithNumber(ev.playerName || "Alzatrice " + (ev.playerIdx + 1))
+      });
+    }
+  });
+  const setTypeOpts = mergeFilterOptions(
+    DEFAULT_SET_TYPE_OPTIONS,
+    events.map(ev => normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))),
+    normalizeSetTypeValue
+  );
+  const baseOpts = mergeFilterOptions(
+    DEFAULT_BASE_OPTIONS,
+    events.map(ev => normalizeBaseValue(ev.base)),
+    normalizeBaseValue
+  );
+  const phaseOpts = mergeFilterOptions(
+    DEFAULT_PHASE_OPTIONS,
+    events.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
+    v => v
+  );
+  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
+  const recvEvalOpts = mergeFilterOptions(
+    defaultEvalOpts,
+    events.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    normalizeEvalCode
+  );
+  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
+  const recvZoneOpts = mergeFilterOptions(
+    defaultZoneOpts,
+    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
+    normalizeReceiveZone,
+    val => "Z" + val
+  );
+  const setOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
+
+  secondFilterState.setters = new Set(
+    [...secondFilterState.setters].filter(idx => playersOpts.some(p => Number(p.value) === idx))
+  );
+  secondFilterState.setTypes = new Set(
+    [...secondFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  secondFilterState.bases = new Set([...secondFilterState.bases].filter(val => baseOpts.some(o => o.value === val)));
+  secondFilterState.phases = new Set([...secondFilterState.phases].filter(val => phaseOpts.some(o => o.value === val)));
+  secondFilterState.receiveEvaluations = new Set(
+    [...secondFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  secondFilterState.receiveZones = new Set(
+    [...secondFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  secondFilterState.sets = new Set([...secondFilterState.sets].filter(val => setOpts.some(o => Number(o.value) === val)));
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === secondFilterState.prevSkill)) {
+    secondFilterState.prevSkill = "any";
+  }
+
+  buildFilterOptions(elSecondFilterSetters, playersOpts, secondFilterState.setters, {
+    asNumber: true,
+    onChange: handleSecondFilterChange
+  });
+  buildFilterOptions(elSecondFilterSetTypes, setTypeOpts, secondFilterState.setTypes, { onChange: handleSecondFilterChange });
+  buildFilterOptions(elSecondFilterBases, baseOpts, secondFilterState.bases, { onChange: handleSecondFilterChange });
+  buildFilterOptions(elSecondFilterPhases, phaseOpts, secondFilterState.phases, { onChange: handleSecondFilterChange });
+  buildFilterOptions(elSecondFilterReceiveEvals, recvEvalOpts, secondFilterState.receiveEvaluations, {
+    onChange: handleSecondFilterChange
+  });
+  buildFilterOptions(elSecondFilterReceiveZones, recvZoneOpts, secondFilterState.receiveZones, {
+    asNumber: true,
+    onChange: handleSecondFilterChange
+  });
+  buildFilterOptions(elSecondFilterSets, setOpts, secondFilterState.sets, {
+    asNumber: true,
+    onChange: handleSecondFilterChange
+  });
+  if (elSecondFilterPrev) {
+    elSecondFilterPrev.value = secondFilterState.prevSkill || "any";
+    if (!elSecondFilterPrev._secondPrevBound) {
+      elSecondFilterPrev.addEventListener("change", handleSecondFilterChange);
+      elSecondFilterPrev._secondPrevBound = true;
+    }
+  }
+  if (elSecondFilterReset && !elSecondFilterReset._secondResetBound) {
+    elSecondFilterReset.addEventListener("click", resetSecondFilters);
+    elSecondFilterReset._secondResetBound = true;
+  }
+}
+function getFilteredSecondEvents() {
+  const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
+  return events.filter(ev => matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true }));
+}
+function getFilteredAttacksForSecondDistribution() {
+  const attacks = (state.events || []).filter(ev => ev && ev.skillId === "attack");
+  return attacks.filter(ev => matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true }));
+}
 function renderSecondTable() {
   if (!elAggSecondBody) return;
   elAggSecondBody.innerHTML = "";
+  renderSecondFilters();
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -3808,22 +4292,28 @@ function renderSecondTable() {
   }
   const totals = emptyCounts();
   const rows = [];
-  const playersWithSecond = new Set(
-    (state.events || [])
-      .filter(ev => ev && ev.skillId === "second" && typeof ev.playerIdx === "number")
-      .map(ev => ev.playerIdx)
-  );
-  state.players.forEach((name, idx) => {
-    const counts = normalizeCounts(state.stats[idx] && state.stats[idx].second);
-    const total = totalFromCounts(counts);
-    if (total <= 0 && !playersWithSecond.has(idx)) return;
-    mergeCounts(totals, counts);
-    const metrics = computeMetrics(counts, "second");
+  const countsByPlayer = new Map();
+  getFilteredSecondEvents().forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    const playerIdx = typeof ev.playerIdx === "number" ? ev.playerIdx : null;
+    const key = playerIdx !== null ? "idx-" + playerIdx : ev.playerName || String(ev.playerIdx || "");
+    if (!countsByPlayer.has(key)) {
+      const name = playerIdx !== null && state.players[playerIdx]
+        ? formatNameWithNumber(state.players[playerIdx])
+        : ev.playerName || "Alzatrice";
+      countsByPlayer.set(key, { name, counts: emptyCounts() });
+    }
+    const bucket = countsByPlayer.get(key);
+    bucket.counts[code] = (bucket.counts[code] || 0) + 1;
+  });
+  countsByPlayer.forEach(bucket => {
+    mergeCounts(totals, bucket.counts);
     rows.push({
-      name: formatNameWithNumber(name),
-      total,
-      counts,
-      metrics
+      name: bucket.name,
+      counts: bucket.counts,
+      total: totalFromCounts(bucket.counts),
+      metrics: computeMetrics(bucket.counts, "second")
     });
   });
   if (rows.length === 0) {
@@ -3836,6 +4326,7 @@ function renderSecondTable() {
     renderSecondDistribution();
     return;
   }
+  rows.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   rows.forEach(row => {
     const tr = document.createElement("tr");
     const cells = [
@@ -3884,7 +4375,7 @@ function renderSecondTable() {
   elAggSecondBody.appendChild(totalsRow);
   renderSecondDistribution();
 }
-function computeAttackDistribution() {
+function computeAttackDistribution(events = state.events || []) {
   const rotations = {};
   const ensureRot = rot => {
     if (!rotations[rot]) {
@@ -3903,7 +4394,7 @@ function computeAttackDistribution() {
   };
   for (let r = 1; r <= 6; r++) ensureRot(r);
   ensureRot("all");
-  (state.events || []).forEach(ev => {
+  (events || []).forEach(ev => {
     if (!ev || ev.skillId !== "attack") return;
     let zone = ev.zone;
     if (zone === undefined || zone === null) {
@@ -3924,7 +4415,7 @@ function computeAttackDistribution() {
 function renderSecondDistribution() {
   if (!elSecondDistribution) return;
   elSecondDistribution.innerHTML = "";
-  const dist = computeAttackDistribution();
+  const dist = computeAttackDistribution(getFilteredAttacksForSecondDistribution());
   elSecondDistribution.classList.add("distribution-grid", "distribution-grid-layout");
   const layout = [
     { key: 4, area: "r4" },
@@ -3938,8 +4429,13 @@ function renderSecondDistribution() {
   const zoneOrder = [4, 3, 2, 5, 6, 1]; // layout order
   layout.forEach(item => {
     const rot = item.key;
-    const data = dist[rot];
-    const totalAttacks = data ? data.total : 0;
+    const data =
+      dist[rot] ||
+      {
+        zones: { 1: emptyCounts(), 2: emptyCounts(), 3: emptyCounts(), 4: emptyCounts(), 5: emptyCounts(), 6: emptyCounts() },
+        total: 0
+      };
+    const totalAttacks = data.total || 0;
     const card = document.createElement("div");
     card.className = "distribution-card";
     card.style.gridArea = item.area;
@@ -3948,14 +4444,6 @@ function renderSecondDistribution() {
     card.appendChild(title);
     const court = document.createElement("div");
     court.className = "distribution-court";
-    if (!data || totalAttacks === 0) {
-      const empty = document.createElement("div");
-      empty.className = "distribution-empty";
-      empty.textContent = "Nessun attacco registrato.";
-      card.appendChild(empty);
-      elSecondDistribution.appendChild(card);
-      return;
-    }
     // find best volume and efficiency
     let bestVolumeZone = null;
     let bestVolumeCount = -1;
@@ -3983,10 +4471,10 @@ function renderSecondDistribution() {
       const perc = totalAttacks ? Math.round((zoneTotal / totalAttacks) * 100) : 0;
       const cell = document.createElement("div");
       cell.className = "court-cell";
-      if (bestVolumeZone === zoneNum && zoneTotal > 0) {
+      if (bestVolumeZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
         cell.classList.add("best-volume");
       }
-      if (bestEffZone === zoneNum && zoneTotal > 0) {
+      if (bestEffZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
         cell.classList.add("best-eff");
       }
       const label = document.createElement("div");

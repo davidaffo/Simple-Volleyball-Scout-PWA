@@ -323,8 +323,6 @@ Bianchi 18"></textarea>
 
   <div class="tab-panel" data-tab="aggregated" id="aggregated-panel">
     <div class="section">
-      <h2>Analisi</h2>
-      <p class="section-note">Dividi la lettura tra tabellino generale e dettaglio alzate.</p>
       <div class="agg-subnav">
         <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
         <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
@@ -409,33 +407,64 @@ Bianchi 18"></textarea>
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="trajectory">
-        <div class="trajectory-filters">
-          <div class="trajectory-filter">
-            <div class="trajectory-filter__label">Giocatrici</div>
-            <div id="traj-filter-players" class="trajectory-filter__options"></div>
+        <div class="trajectory-layout">
+          <div class="analysis-filters trajectory-filters">
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Giocatrici</div>
+              <div id="traj-filter-players" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Set</div>
+              <div id="traj-filter-sets" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Tipo alzata</div>
+              <div id="traj-filter-set-types" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Base</div>
+              <div id="traj-filter-bases" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Fase (SO/BP)</div>
+              <div id="traj-filter-phases" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Valutazione rice</div>
+              <div id="traj-filter-receive-evals" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Zona ricezione</div>
+              <div id="traj-filter-receive-zones" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Valutazione attacco</div>
+              <div id="traj-filter-codes" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Zona partenza</div>
+              <div id="traj-filter-zones" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Skill precedente</div>
+              <select id="traj-filter-prev">
+                <option value="any">Tutte</option>
+                <option value="freeball-positive">Freeball o ricezione positiva</option>
+                <option value="defense-negative">Difesa + ricezione negativa</option>
+                <option value="freeball-only">Solo freeball</option>
+                <option value="dig-only">Solo difesa</option>
+              </select>
+            </div>
+            <div class="analysis-filter filter-actions">
+              <button id="traj-filter-reset" class="secondary small" type="button">Reset filtri</button>
+            </div>
           </div>
-          <div class="trajectory-filter">
-            <div class="trajectory-filter__label">Set</div>
-            <div id="traj-filter-sets" class="trajectory-filter__options"></div>
-          </div>
-          <div class="trajectory-filter">
-            <div class="trajectory-filter__label">Valutazione</div>
-            <div id="traj-filter-codes" class="trajectory-filter__options"></div>
-          </div>
-          <div class="trajectory-filter">
-            <div class="trajectory-filter__label">Zona partenza</div>
-            <div id="traj-filter-zones" class="trajectory-filter__options"></div>
-          </div>
-          <div class="trajectory-filter trajectory-filter--actions">
-            <button id="traj-filter-reset" class="secondary small" type="button">Reset filtri</button>
-          </div>
-        </div>
-        <div id="trajectory-grid" class="trajectory-grid">
-          <div class="trajectory-card traj-area-z4" data-zone="4">
-            <div class="trajectory-card__title">Zona 4</div>
-            <canvas data-traj-canvas="4"></canvas>
-            <div class="trajectory-card__empty">Nessuna traiettoria</div>
-          </div>
+          <div id="trajectory-grid" class="trajectory-grid">
+            <div class="trajectory-card traj-area-z4" data-zone="4">
+              <div class="trajectory-card__title">Zona 4</div>
+              <canvas data-traj-canvas="4"></canvas>
+              <div class="trajectory-card__empty">Nessuna traiettoria</div>
+            </div>
           <div class="trajectory-card traj-area-z3" data-zone="3">
             <div class="trajectory-card__title">Zona 3</div>
             <canvas data-traj-canvas="3"></canvas>
@@ -456,14 +485,64 @@ Bianchi 18"></textarea>
             <canvas data-traj-canvas="6"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card traj-area-z1" data-zone="1">
-            <div class="trajectory-card__title">Zona 1</div>
-            <canvas data-traj-canvas="1"></canvas>
-            <div class="trajectory-card__empty">Nessuna traiettoria</div>
+            <div class="trajectory-card traj-area-z1" data-zone="1">
+              <div class="trajectory-card__title">Zona 1</div>
+              <canvas data-traj-canvas="1"></canvas>
+              <div class="trajectory-card__empty">Nessuna traiettoria</div>
+            </div>
           </div>
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="second">
+        <div class="second-layout">
+          <div class="analysis-filters" id="second-filters">
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Alzatrice</div>
+              <div id="second-filter-setters" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Tipo alzata</div>
+              <div id="second-filter-set-types" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Base</div>
+              <div id="second-filter-bases" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Fase (SO/BP)</div>
+              <div id="second-filter-phases" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Valutazione rice</div>
+              <div id="second-filter-receive-evals" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Zona ricezione</div>
+              <div id="second-filter-receive-zones" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Set</div>
+              <div id="second-filter-sets" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Skill precedente</div>
+              <select id="second-filter-prev">
+                <option value="any">Tutte</option>
+                <option value="freeball-positive">Freeball o ricezione positiva</option>
+                <option value="defense-negative">Difesa + ricezione negativa</option>
+                <option value="freeball-only">Solo freeball</option>
+                <option value="dig-only">Solo difesa</option>
+              </select>
+            </div>
+            <div class="analysis-filter filter-actions">
+              <button id="second-filter-reset" class="secondary small" type="button">Reset filtri</button>
+            </div>
+          </div>
+          <div class="distribution-section">
+            <h3>Distribuzione alzate per rotazione</h3>
+            <div id="second-distribution" class="distribution-grid"></div>
+          </div>
+        </div>
         <div class="table-wrapper">
           <table class="agg-table">
             <thead>
@@ -487,10 +566,6 @@ Bianchi 18"></textarea>
               </tr>
             </tbody>
           </table>
-        </div>
-        <div class="distribution-section">
-          <h3>Distribuzione alzate per rotazione</h3>
-          <div id="second-distribution" class="distribution-grid"></div>
         </div>
       </div>
       <div class="controls-row agg-actions">
