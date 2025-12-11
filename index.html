@@ -295,6 +295,10 @@ Bianchi 18"></textarea>
                   <input type="checkbox" id="attack-trajectory-toggle" />
                   Disegna traiettoria attacco
                 </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="set-type-toggle" data-set-type-toggle />
+                  Chiedi tipo alzata prima dell'attacco
+                </label>
               </div>
             </div>
             <div class="score-actions court-game-actions">
@@ -706,6 +710,26 @@ Bianchi 18"></textarea>
       </div>
     </div>
   </div>
+  <div id="set-type-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="set-type-title">
+    <div class="skill-modal__backdrop" data-close-settype></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div id="set-type-title" class="skill-modal__title">Scegli tipo di alzata</div>
+        <button id="set-type-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-settype>✕</button>
+      </div>
+      <div class="set-type-grid">
+        <button class="set-type-btn" data-settype="mezza"><span>Mezza</span><small>Space</small></button>
+        <button class="set-type-btn" data-settype="super"><span>Super</span><small>S</small></button>
+        <button class="set-type-btn" data-settype="quick"><span>Quick</span><small>Q</small></button>
+        <button class="set-type-btn" data-settype="veloce"><span>Veloce</span><small>V</small></button>
+        <button class="set-type-btn" data-settype="fast"><span>Fast</span><small>F</small></button>
+        <button class="set-type-btn" data-settype="alta"><span>Alta</span><small>A</small></button>
+      </div>
+      <div class="set-type-actions">
+        <button id="set-type-cancel" class="secondary small" type="button" data-close-settype>Annulla (Esc)</button>
+      </div>
+    </div>
+  </div>
   <div id="floating-actions-modal" class="floating-actions-modal hidden" role="dialog" aria-modal="true" aria-labelledby="floating-actions-title">
     <div class="floating-actions__backdrop" data-close-actions></div>
     <div class="floating-actions__content">
@@ -795,6 +819,10 @@ Bianchi 18"></textarea>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-toggle" />
                   Disegna traiettoria attacco
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="set-type-toggle-settings" data-set-type-toggle />
+                  Chiedi tipo alzata prima dell'attacco
                 </label>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="predictive-skill-toggle" />

@@ -145,6 +145,7 @@ const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-f
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
 const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
+const elSetTypeToggles = document.querySelectorAll("[data-set-type-toggle]");
 const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
 const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
@@ -306,6 +307,7 @@ function loadState() {
     state.rotation = parsed.rotation || 1;
     state.matchFinished = !!parsed.matchFinished;
     state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
+    state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
     state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
@@ -1657,6 +1659,10 @@ function renameSelectedMatch() {
   // intentionally no-op: naming is automatic from match info
 }
 function resetMatchState() {
+  const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
+  const preservedRotation = state.rotation || 1;
+  const preservedServing = !!state.isServing;
+  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
   state.match = {
     opponent: "",
     category: "",
@@ -1666,11 +1672,11 @@ function resetMatchState() {
   };
   state.events = [];
   state.stats = {};
-  state.court = Array.from({ length: 6 }, () => ({ main: "" }));
-  autoRoleBaseCourt = null;
-  state.autoRoleBaseCourt = [];
-  state.rotation = 1;
-  state.isServing = false;
+  state.court = preservedCourt;
+  autoRoleBaseCourt = preservedAutoRoleCourt.length ? [...preservedAutoRoleCourt] : null;
+  state.autoRoleBaseCourt = preservedAutoRoleCourt;
+  state.rotation = preservedRotation;
+  state.isServing = preservedServing;
   state.currentSet = 1;
   state.matchFinished = false;
   state.scoreOverrides = {};

@@ -109,6 +109,7 @@ let state = {
   predictiveSkillFlow: false,
   autoRoleP1American: false,
   attackTrajectoryEnabled: false,
+  setTypePromptEnabled: false,
   freeballPending: false,
   matchFinished: false,
   skillClock: { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null },

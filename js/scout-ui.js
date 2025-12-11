@@ -10,6 +10,8 @@ function isSkillEnabled(skillId) {
   return !cfg || cfg.enabled !== false;
 }
 const selectedSkillPerPlayer = {};
+const setTypeChoicePerPlayer = {};
+let setTypeModalOpen = false;
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
@@ -76,10 +78,37 @@ function closeCurrentEdit({ refresh = false } = {}) {
   }
 }
 function setSelectedSkill(playerIdx, skillId) {
+  if (
+    state.setTypePromptEnabled &&
+    skillId === "attack" &&
+    !setTypeChoicePerPlayer[playerIdx] &&
+    !setTypeModalOpen
+  ) {
+    setTypeModalOpen = true;
+    let resolvedChoice = null;
+    openSetTypeModal()
+      .then(choice => {
+        resolvedChoice = choice;
+        if (choice) {
+          setTypeChoicePerPlayer[playerIdx] = choice;
+          setSelectedSkill(playerIdx, "attack");
+        }
+      })
+      .finally(() => {
+        setTypeModalOpen = false;
+        if (!resolvedChoice) {
+          renderPlayers();
+        }
+      });
+    return;
+  }
   if (skillId) {
     selectedSkillPerPlayer[playerIdx] = skillId;
   } else {
     delete selectedSkillPerPlayer[playerIdx];
+  }
+  if (skillId !== "attack") {
+    delete setTypeChoicePerPlayer[playerIdx];
   }
 }
 function getSelectedSkill(playerIdx) {
@@ -332,6 +361,10 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
+const elSetTypeModal = document.getElementById("set-type-modal");
+const elSetTypeButtons = elSetTypeModal ? elSetTypeModal.querySelectorAll(".set-type-btn") : null;
+const elSetTypeClose = document.getElementById("set-type-close");
+const elSetTypeCancel = document.getElementById("set-type-cancel");
 const elBtnFreeball = document.getElementById("btn-freeball");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
@@ -1024,8 +1057,10 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     btn.dataset.playerName = activeName;
     btn.dataset.skillId = pickedSkillId;
     btn.dataset.code = code;
-    btn.addEventListener("click", e => {
-      handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget);
+    btn.addEventListener("click", async e => {
+      let setTypeChoice = setTypeChoicePerPlayer[playerIdx] || null;
+      handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget, { setTypeChoice });
+      delete setTypeChoicePerPlayer[playerIdx];
       setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();
       renderPlayers();
@@ -1221,7 +1256,7 @@ function applyReceiveContextToEvent(ev) {
     clearReceiveContext();
   }
 }
-function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
+async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl, { setTypeChoice = null } = {}) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
@@ -1243,8 +1278,15 @@ function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl) {
   // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
   event.attackBp = true;
   event.fromFreeball = wasFreeball;
+  const appliedSetType = setTypeChoicePerPlayer[playerIdx] || setTypeChoice || null;
+  if (appliedSetType) {
+    event.setType = appliedSetType;
+  }
   applyReceiveContextToEvent(event);
   state.events.push(event);
+  if (skillId === "attack") {
+    delete setTypeChoicePerPlayer[playerIdx];
+  }
   handleAutoRotationFromEvent(event);
   if (!state.stats[playerIdx]) {
     state.stats[playerIdx] = {};
@@ -3524,12 +3566,12 @@ function renderScoreAndRotations(summary) {
   });
 }
 const DEFAULT_SET_TYPE_OPTIONS = [
-  { value: "Third Tempo", label: "3° tempo (TT)" },
-  { value: "Second Tempo", label: "2° tempo (ST)" },
-  { value: "First Tempo", label: "1° tempo (FT)" },
-  { value: "Shot", label: "Shot" },
-  { value: "Slide", label: "Slide" },
-  { value: "Other", label: "Altro" }
+  { value: "mezza", label: "Mezza" },
+  { value: "super", label: "Super" },
+  { value: "quick", label: "Quick" },
+  { value: "veloce", label: "Veloce" },
+  { value: "fast", label: "Fast" },
+  { value: "alta", label: "Alta" }
 ];
 const DEFAULT_BASE_OPTIONS = [
   { value: "K1", label: "K1" },
@@ -3604,6 +3646,60 @@ function findPreviousEvent(ev) {
   const idx = state.events ? state.events.indexOf(ev) : -1;
   if (idx > 0) return state.events[idx - 1];
   return null;
+}
+function openSetTypeModal() {
+  if (!elSetTypeModal || !elSetTypeButtons) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const cleanup = () => {
+      elSetTypeModal.classList.add("hidden");
+      document.removeEventListener("keydown", onKey);
+      document.body.classList.remove("modal-open");
+      document.body.style.overflow = "";
+    };
+    const finish = val => {
+      cleanup();
+      resolve(val);
+    };
+    const onKey = e => {
+      if (e.key === "Escape") {
+        finish(null);
+        return;
+      }
+      const keyMap = {
+        " ": "mezza",
+        Spacebar: "mezza",
+        s: "super",
+        S: "super",
+        q: "quick",
+        Q: "quick",
+        v: "veloce",
+        V: "veloce",
+        f: "fast",
+        F: "fast",
+        a: "alta",
+        A: "alta"
+      };
+      if (keyMap[e.key]) {
+        e.preventDefault();
+        finish(keyMap[e.key]);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    elSetTypeButtons.forEach(btn => {
+      btn.onclick = () => finish(btn.dataset.settype || null);
+    });
+    [elSetTypeClose, elSetTypeCancel].forEach(btn => {
+      if (!btn) return;
+      btn.onclick = () => finish(null);
+    });
+    const backdrop = elSetTypeModal.querySelector("[data-close-settype]");
+    if (backdrop) {
+      backdrop.onclick = () => finish(null);
+    }
+    document.body.classList.add("modal-open");
+    document.body.style.overflow = "hidden";
+    elSetTypeModal.classList.remove("hidden");
+  });
 }
 function findRelatedSetEvent(ev) {
   if (!ev || !Array.isArray(ev.relatedEvents)) return null;
@@ -3700,7 +3796,9 @@ function matchesAdvancedFilters(ev, filters, { includeSetter = false } = {}) {
     if (setterIdx === null || !filters.setters.has(setterIdx)) return false;
   }
   if (filters.setTypes && filters.setTypes.size) {
-    const setType = normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType));
+    const setType = normalizeSetTypeValue(
+      ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
+    );
     if (!setType || !filters.setTypes.has(setType)) return false;
   }
   if (filters.bases && filters.bases.size) {
@@ -3822,7 +3920,9 @@ function renderTrajectoryFilters() {
   const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
   const setTypeOpts = mergeFilterOptions(
     DEFAULT_SET_TYPE_OPTIONS,
-    attackEvents.map(ev => normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))),
+    attackEvents.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
     normalizeSetTypeValue
   );
   const baseOpts = mergeFilterOptions(
@@ -4692,7 +4792,8 @@ function buildMatchExportPayload() {
       selectedOpponentTeam: state.selectedOpponentTeam,
       video: state.video,
       pointRules: state.pointRules,
-      autoRotate: state.autoRotate
+      autoRotate: state.autoRotate,
+      setTypePromptEnabled: state.setTypePromptEnabled
     }
   };
 }
@@ -5263,13 +5364,20 @@ function exportAnalysisPdf() {
 }
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
+  const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
+  const preservedRotation = state.rotation || 1;
+  const preservedServing = !!state.isServing;
+  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
   state.events = [];
-  state.court = Array.from({ length: 6 }, () => ({ main: "" }));
-  state.rotation = 1;
+  state.court = preservedCourt;
+  state.rotation = preservedRotation;
+  state.autoRoleBaseCourt = preservedAutoRoleCourt;
+  autoRoleBaseCourt = preservedAutoRoleCourt.length ? [...preservedAutoRoleCourt] : autoRoleBaseCourt;
   state.currentSet = 1;
   state.scoreOverrides = {};
   state.matchFinished = false;
   state.autoRotatePending = false;
+  state.isServing = preservedServing;
   state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
@@ -5859,6 +5967,23 @@ function init() {
     elAttackTrajectoryToggle.addEventListener("change", () => {
       state.attackTrajectoryEnabled = !!elAttackTrajectoryToggle.checked;
       saveState();
+    });
+  }
+  const setTypeToggles = document.querySelectorAll("[data-set-type-toggle]");
+  if (setTypeToggles && setTypeToggles.length) {
+    const sync = val => {
+      setTypeToggles.forEach(inp => {
+        if (!(inp instanceof HTMLInputElement)) return;
+        inp.checked = val;
+      });
+    };
+    sync(!!state.setTypePromptEnabled);
+    setTypeToggles.forEach(inp => {
+      inp.addEventListener("change", () => {
+        state.setTypePromptEnabled = !!inp.checked;
+        sync(state.setTypePromptEnabled);
+        saveState();
+      });
     });
   }
   const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
