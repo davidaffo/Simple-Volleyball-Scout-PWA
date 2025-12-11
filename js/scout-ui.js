@@ -1174,6 +1174,15 @@ function animateEventToLog(sourceEl, skillId, code) {
 function clearReceiveContext() {
   lastReceiveContext = null;
 }
+function animateFreeballButton() {
+  if (!elBtnFreeball) return;
+  elBtnFreeball.classList.remove("freeball-pulse");
+  // force reflow to restart animation
+  // eslint-disable-next-line no-unused-expressions
+  elBtnFreeball.offsetWidth;
+  elBtnFreeball.classList.add("freeball-pulse");
+  setTimeout(() => elBtnFreeball.classList.remove("freeball-pulse"), 420);
+}
 function rememberReceiveContext(ev) {
   if (!ev) return;
   const zone = ev.zone || ev.playerPosition || null;
@@ -5863,11 +5872,20 @@ function init() {
     });
   }
   if (elBtnFreeball) {
+    const syncFreeballActive = () => {
+      elBtnFreeball.classList.toggle("active", !!state.freeballPending);
+    };
     elBtnFreeball.addEventListener("click", () => {
-      state.freeballPending = true;
+      const willActivate = !state.freeballPending;
+      state.freeballPending = willActivate;
+      if (willActivate) {
+        animateFreeballButton();
+      }
+      syncFreeballActive();
       saveState();
       renderPlayers();
     });
+    syncFreeballActive();
   }
   [elBtnOpenSettings, elBtnOpenSettingsFloating].forEach(btn => {
     if (!btn) return;

@@ -675,6 +675,35 @@ button.secondary:hover {
 button.danger:hover {
   background: #c7372d;
 }
+.score-card button:hover,
+.score-actions button:hover,
+.court-game-actions button:hover {
+  filter: brightness(1.05);
+}
+#btn-freeball {
+  position: relative;
+  overflow: hidden;
+}
+#btn-freeball.active {
+  background: #1d4ed8;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.35);
+  color: #fff;
+}
+#btn-freeball.freeball-pulse {
+  animation: freeballPulse 360ms ease;
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.25);
+}
+@keyframes freeballPulse {
+  0% {
+    transform: scale(0.98);
+  }
+  40% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 .rotation-controls {
   display: flex;
   align-items: center;
