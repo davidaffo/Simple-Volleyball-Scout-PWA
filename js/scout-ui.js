@@ -4,6 +4,11 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
+function isSkillEnabled(skillId) {
+  if (!skillId) return false;
+  const cfg = state.metricsConfig && state.metricsConfig[skillId];
+  return !cfg || cfg.enabled !== false;
+}
 const selectedSkillPerPlayer = {};
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
@@ -83,9 +88,39 @@ function isAnySelectedSkill(skillId) {
   return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
 }
 function getPredictedSkillId() {
-  if (state.skillFlowOverride) return state.skillFlowOverride;
+  const enabledSkills = getEnabledSkills();
+  const flowNext = skillId => {
+    switch (skillId) {
+      case "serve":
+        return "block";
+      case "pass":
+        return "second";
+      case "second":
+        return "attack";
+      case "attack":
+        return "block";
+      case "block":
+        return "defense";
+      case "defense":
+        return "second";
+      default:
+        return null;
+    }
+  };
+  const resolveEnabledSkill = skillId => {
+    const visited = new Set();
+    let current = skillId;
+    while (current && !visited.has(current)) {
+      if (isSkillEnabled(current)) return current;
+      visited.add(current);
+      current = flowNext(current);
+    }
+    return null;
+  };
+  if (state.skillFlowOverride) return resolveEnabledSkill(state.skillFlowOverride);
   if (!state.predictiveSkillFlow) return null;
-  if (state.freeballPending) return "second";
+  if (enabledSkills.length === 0) return null;
+  if (state.freeballPending) return resolveEnabledSkill("second");
   const ownEvents = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId) return false;
     if (!ev.team) return true; // current app only tracks our team
@@ -93,27 +128,12 @@ function getPredictedSkillId() {
   });
   const last = ownEvents.slice(-1)[0] || null;
   const possessionServe = !!state.isServing;
-  const fallback = possessionServe ? "serve" : "pass";
+  const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
   const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
-  if (dir === "for") return "serve";
-  if (dir === "against") return "pass";
-  switch (last.skillId) {
-    case "serve":
-      return "block"; // dopo la nostra battuta ci prepariamo a muro
-    case "pass":
-      return "second";
-    case "second":
-      return "attack";
-    case "attack":
-      return "block";
-    case "block":
-      return "defense";
-    case "defense":
-      return "second";
-    default:
-      return fallback;
-  }
+  if (dir === "for") return resolveEnabledSkill("serve") || fallback;
+  if (dir === "against") return resolveEnabledSkill("pass") || fallback;
+  return resolveEnabledSkill(flowNext(last.skillId)) || fallback;
 }
 function updateNextSkillIndicator(skillId) {
   if (!elNextSkillIndicator) return;
@@ -936,11 +956,13 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
   };
-  const enabledSkills = SKILLS.filter(skill => {
-    const cfg = state.metricsConfig[skill.id];
-    return !cfg || cfg.enabled !== false;
-  });
-  const pickedSkillId = nextSkillId || getSelectedSkill(playerIdx);
+  const enabledSkills = getEnabledSkills();
+  const enabledSkillIds = new Set(enabledSkills.map(s => s.id));
+  let pickedSkillId = nextSkillId || getSelectedSkill(playerIdx);
+  if (pickedSkillId && !enabledSkillIds.has(pickedSkillId)) {
+    if (!nextSkillId) setSelectedSkill(playerIdx, null);
+    pickedSkillId = null;
+  }
   if (!pickedSkillId) {
     if (enabledSkills.length === 0) {
       const empty = document.createElement("div");
@@ -3448,12 +3470,12 @@ const TRAJECTORY_BG_BY_ZONE = {
   6: "images/trajectory/attack_3_near.png"
 };
 const TRAJECTORY_LINE_COLORS = {
-  "#": "#16a34a",
-  "+": "#22c55e",
-  "=": "#eab308",
-  "!": "#f97316",
-  "-": "#dc2626",
-  "/": "#a1a1aa"
+  "#": "#16a34a", // verde: punto pieno
+  "+": "#2563eb", // blu: attacco positivo
+  "!": "#2563eb", // blu: attacco positivo
+  "-": "#facc15", // giallo acceso: negativo
+  "=": "#dc2626", // rosso: errore
+  "/": "#dc2626" // rosso: murata/errori gravi
 };
 const trajectoryBgCache = {};
 function clamp01Val(n) {
