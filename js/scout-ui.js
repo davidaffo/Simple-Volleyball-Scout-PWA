@@ -3417,6 +3417,7 @@ function renderScoreAndRotations(summary) {
       : effectiveSummary.rotations.some(r => r.for || r.against);
   if (!elRotationTableBody) return;
   elRotationTableBody.innerHTML = "";
+  const rotationLabel = rot => "P" + String(rot || 1);
   if (!hasRotationEvents) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -3442,7 +3443,7 @@ function renderScoreAndRotations(summary) {
       tr.classList.add("worst");
     }
     const cells = [
-      rot.rotation,
+      rotationLabel(rot.rotation),
       rot.for,
       rot.against,
       formatDelta(rot.delta)
@@ -3943,7 +3944,7 @@ function renderSecondDistribution() {
     card.className = "distribution-card";
     card.style.gridArea = item.area;
     const title = document.createElement("h4");
-    title.textContent = rot === "all" ? "Tutte le rotazioni" : "Rotazione " + rot;
+    title.textContent = rot === "all" ? "Tutte le rotazioni" : "P" + rot;
     card.appendChild(title);
     const court = document.createElement("div");
     court.className = "distribution-court";
@@ -4660,7 +4661,7 @@ function buildAnalysisPdfLines() {
   lines.push("Rotazioni (fatti - subiti - delta):");
   pointsSummary.rotations.forEach(r => {
     lines.push(
-      "  Rot " +
+      "  P" +
         r.rotation +
         ": " +
         r.for +

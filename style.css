@@ -2179,26 +2179,53 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
 }
 .trajectory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-rows: repeat(2, 1fr);
+  grid-template-areas:
+    "z4 z3 z2"
+    "z5 z6 z1";
+  gap: 0.6rem;
+}
+.traj-area-z4 { grid-area: z4; }
+.traj-area-z3 { grid-area: z3; }
+.traj-area-z2 { grid-area: z2; }
+.traj-area-z5 { grid-area: z5; }
+.traj-area-z6 { grid-area: z6; }
+.traj-area-z1 { grid-area: z1; }
+@media (max-width: 900px) {
+  .trajectory-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-rows: auto;
+    grid-template-areas: unset;
+  }
+  .traj-area-z1,
+  .traj-area-z2,
+  .traj-area-z3,
+  .traj-area-z4,
+  .traj-area-z5,
+  .traj-area-z6 {
+    grid-area: auto;
+  }
 }
 .trajectory-card {
   position: relative;
   border: 1px solid var(--border-color, #2f2f2f);
   border-radius: 0.75rem;
-  padding: 0.5rem;
+  padding: 0.3rem;
   background: rgba(255, 255, 255, 0.02);
-  min-height: 200px;
+  min-height: 130px;
 }
 .trajectory-card__title {
   font-weight: 700;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.9rem;
 }
 .trajectory-card canvas {
   width: 100%;
   height: auto;
   display: block;
   border-radius: 0.5rem;
+  min-height: 100px;
 }
 .trajectory-card__empty {
   position: absolute;

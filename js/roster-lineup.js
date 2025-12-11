@@ -3356,20 +3356,21 @@ function renderLineupChips() {
   });
 }
 function updateRotationDisplay() {
+  const rotationLabel = rot => "P" + String(parseInt(rot, 10) || 1);
   if (elRotationIndicator) {
-    elRotationIndicator.textContent = String(state.rotation || 1);
+    elRotationIndicator.textContent = rotationLabel(state.rotation || 1);
   }
   if (elRotationSelect) {
     elRotationSelect.value = String(state.rotation || 1);
   }
   if (elRotationIndicatorFloating) {
-    elRotationIndicatorFloating.textContent = String(state.rotation || 1);
+    elRotationIndicatorFloating.textContent = rotationLabel(state.rotation || 1);
   }
   if (elRotationSelectFloating) {
     elRotationSelectFloating.value = String(state.rotation || 1);
   }
   if (elRotationIndicatorModal) {
-    elRotationIndicatorModal.textContent = String(state.rotation || 1);
+    elRotationIndicatorModal.textContent = rotationLabel(state.rotation || 1);
   }
   syncAutoRotateToggle();
   syncAutoRoleToggle();

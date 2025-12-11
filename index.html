@@ -250,7 +250,7 @@ Bianchi 18"></textarea>
             <div class="floating-rot">
               <button id="btn-rotate-cw-floating" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
               <div class="rotation-display minimal">
-                <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
+                <div id="rotation-indicator-floating" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">P1</div>
               </div>
               <button id="btn-rotate-ccw-floating" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
             </div>
@@ -273,17 +273,17 @@ Bianchi 18"></textarea>
               <div class="rotation-controls">
                 <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
                 <div class="rotation-display">
-                  <label>Rotazione</label>
-                  <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">1</div>
+                  <label>Rotazione (P1-P6)</label>
+                  <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">P1</div>
                   <select id="rotation-select" class="rotation-select">
-                    <option value="1">Rotazione 1</option>
-                    <option value="2">Rotazione 2</option>
-                    <option value="3">Rotazione 3</option>
-                    <option value="4">Rotazione 4</option>
-                    <option value="5">Rotazione 5</option>
-                  <option value="6">Rotazione 6</option>
-                </select>
-              </div>
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3">P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                    <option value="6">P6</option>
+                  </select>
+                </div>
                 <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
               </div>
               <div class="rotation-toggles">
@@ -394,7 +394,7 @@ Bianchi 18"></textarea>
           <table class="rotation-table">
             <thead>
               <tr>
-                <th>Rot</th>
+                <th>Rot (P1-P6)</th>
                 <th>Punti fatti</th>
                 <th>Punti subiti</th>
                 <th>Δ</th>
@@ -431,32 +431,32 @@ Bianchi 18"></textarea>
           </div>
         </div>
         <div id="trajectory-grid" class="trajectory-grid">
-          <div class="trajectory-card" data-zone="4">
+          <div class="trajectory-card traj-area-z4" data-zone="4">
             <div class="trajectory-card__title">Zona 4</div>
             <canvas data-traj-canvas="4"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card" data-zone="3">
+          <div class="trajectory-card traj-area-z3" data-zone="3">
             <div class="trajectory-card__title">Zona 3</div>
             <canvas data-traj-canvas="3"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card" data-zone="2">
+          <div class="trajectory-card traj-area-z2" data-zone="2">
             <div class="trajectory-card__title">Zona 2</div>
             <canvas data-traj-canvas="2"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card" data-zone="5">
+          <div class="trajectory-card traj-area-z5" data-zone="5">
             <div class="trajectory-card__title">Zona 5</div>
             <canvas data-traj-canvas="5"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card" data-zone="6">
+          <div class="trajectory-card traj-area-z6" data-zone="6">
             <div class="trajectory-card__title">Zona 6</div>
             <canvas data-traj-canvas="6"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
           </div>
-          <div class="trajectory-card" data-zone="1">
+          <div class="trajectory-card traj-area-z1" data-zone="1">
             <div class="trajectory-card__title">Zona 1</div>
             <canvas data-traj-canvas="1"></canvas>
             <div class="trajectory-card__empty">Nessuna traiettoria</div>
@@ -640,24 +640,24 @@ Bianchi 18"></textarea>
       </div>
       <div class="floating-actions__body">
         <div class="floating-actions__row">
-          <div class="floating-actions__block">
-            <div class="rotation-controls">
-              <button id="btn-rotate-ccw-modal" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
-              <div class="rotation-display">
-                <label for="rotation-select-floating">Rotazione</label>
-                <div id="rotation-indicator-modal" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">1</div>
-                <select id="rotation-select-floating" class="rotation-select">
-                  <option value="1">Rotazione 1</option>
-                  <option value="2">Rotazione 2</option>
-                  <option value="3">Rotazione 3</option>
-                  <option value="4">Rotazione 4</option>
-                  <option value="5">Rotazione 5</option>
-                  <option value="6">Rotazione 6</option>
-                </select>
+            <div class="floating-actions__block">
+              <div class="rotation-controls">
+                <button id="btn-rotate-ccw-modal" class="small rotate-ccw" aria-label="Rotazione precedente">↻</button>
+                <div class="rotation-display">
+                  <label for="rotation-select-floating">Rotazione (P1-P6)</label>
+                  <div id="rotation-indicator-modal" class="rotation-number" role="button" tabindex="0" aria-label="Rotazione corrente">P1</div>
+                  <select id="rotation-select-floating" class="rotation-select">
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3">P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                    <option value="6">P6</option>
+                  </select>
+                </div>
+                <button id="btn-rotate-cw-modal" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
               </div>
-              <button id="btn-rotate-cw-modal" class="small rotate-cw" aria-label="Rotazione successiva">↺</button>
             </div>
-          </div>
         </div>
             <div class="floating-actions__row">
               <div class="floating-actions__block">
