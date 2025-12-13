@@ -3602,6 +3602,45 @@ function setNextSetType(val) {
   state.nextSetType = normalized;
   saveState();
   renderSetTypeShortcuts();
+  // Aggiorna subito le card/skill aperte per mostrare il nuovo tipo alzata
+  renderPlayers();
+}
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (!tag) return false;
+  const editable = el.isContentEditable;
+  if (editable) return true;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return false;
+}
+function handleSetTypeHotkeys(e) {
+  if (e.defaultPrevented) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (isTypingTarget(e.target)) return;
+  if (e.key === "Escape") {
+    setNextSetType("");
+    e.preventDefault();
+    return;
+  }
+  const keyMap = {
+    m: "mezza",
+    M: "mezza",
+    s: "super",
+    S: "super",
+    q: "quick",
+    Q: "quick",
+    v: "veloce",
+    V: "veloce",
+    f: "fast",
+    F: "fast",
+    a: "alta",
+    A: "alta"
+  };
+  const choice = keyMap[e.key];
+  if (!choice) return;
+  e.preventDefault();
+  setNextSetType(choice);
 }
 function initSetTypeShortcuts() {
   renderSetTypeShortcuts();
@@ -3615,6 +3654,7 @@ function initSetTypeShortcuts() {
     }
     setNextSetType(btn.dataset.settype || "");
   });
+  document.addEventListener("keydown", handleSetTypeHotkeys);
 }
 function normalizeBaseValue(val) {
   if (!val) return null;
