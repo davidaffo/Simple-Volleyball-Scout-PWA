@@ -40,7 +40,7 @@
       <h2>Setup match (prima di iniziare)</h2>
       <ol>
         <li><strong>Dati match:</strong> inserisci avversario, categoria, data, tipo e turno. Il nome del match è generato automaticamente.</li>
-        <li><strong>Roster:</strong> aggiungi giocatrici, numeri e liberi. Il template di default popola una squadra completa con ruoli già mappati in campo.</li>
+        <li><strong>Roster:</strong> aggiungi giocatrici, numeri e liberi. Il template di default popola una squadra completa; i ruoli in campo vengono calcolati automaticamente dalla posizione del palleggiatore nella rotazione reale.</li>
         <li><strong>Salvataggi:</strong> usa i menu “Squadre salvate” e “Match salvati” per caricare/esportare roster e partite. Import da file sovrascrive il corrente.</li>
         <li><strong>Reset:</strong> cambiare l’elenco giocatrici azzera statistiche ed eventi del match in corso.</li>
       </ol>
@@ -48,11 +48,12 @@
 
     <section id="rotazioni">
       <h2>Rotazioni e auto-posizionamento</h2>
-      <p>I tre toggle principali (nella sezione rotazioni) controllano automatismi e layout ruolo-based.</p>
+      <p>I tre toggle principali (nella sezione rotazioni) controllano automatismi e layout ruolo-based. I ruoli non si impostano più manualmente: sono dedotti dalla posizione del palleggiatore nella rotazione reale.</p>
       <ul>
         <li><strong>Auto rotazione:</strong> avanza la rotazione sul cambio palla basandosi sul punto “for/against”. Manuale ↺/↻ resta sempre disponibile.</li>
         <li><strong>Auto posizionamento per ruolo:</strong> dispone OH in zona 4, OP o P in zona 2, centrali in 3/5; il libero non resta mai in prima linea. Quando disattivi, il campo torna alla rotazione base salvata.</li>
         <li><strong>P1 americana:</strong> in ricezione piazza l’OH in 4 e l’OP in 2 (override della variante standard). Disattivalo per l’inversione classica OH→2 / OP→4.</li>
+        <li><strong>Tipo alzata rapido:</strong> scegli una scorciatoia (Mezza, Super, Quick, Veloce, Fast, Alta); la scelta resta attiva come default finché non la cambi o la azzeri con “Reset”.</li>
         <li><strong>Rotazione base separata:</strong> il campo “originale” e la versione auto sono mantenuti in due array distinti; spegnere l’auto ripristina la base senza perdite.</li>
       </ul>
     </section>

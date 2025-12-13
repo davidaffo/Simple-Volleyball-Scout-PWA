@@ -10,8 +10,6 @@ function isSkillEnabled(skillId) {
   return !cfg || cfg.enabled !== false;
 }
 const selectedSkillPerPlayer = {};
-const setTypeChoicePerPlayer = {};
-let setTypeModalOpen = false;
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
@@ -78,37 +76,10 @@ function closeCurrentEdit({ refresh = false } = {}) {
   }
 }
 function setSelectedSkill(playerIdx, skillId) {
-  if (
-    state.setTypePromptEnabled &&
-    skillId === "attack" &&
-    !setTypeChoicePerPlayer[playerIdx] &&
-    !setTypeModalOpen
-  ) {
-    setTypeModalOpen = true;
-    let resolvedChoice = null;
-    openSetTypeModal()
-      .then(choice => {
-        resolvedChoice = choice;
-        if (choice) {
-          setTypeChoicePerPlayer[playerIdx] = choice;
-          setSelectedSkill(playerIdx, "attack");
-        }
-      })
-      .finally(() => {
-        setTypeModalOpen = false;
-        if (!resolvedChoice) {
-          renderPlayers();
-        }
-      });
-    return;
-  }
   if (skillId) {
     selectedSkillPerPlayer[playerIdx] = skillId;
   } else {
     delete selectedSkillPerPlayer[playerIdx];
-  }
-  if (skillId !== "attack") {
-    delete setTypeChoicePerPlayer[playerIdx];
   }
 }
 function getSelectedSkill(playerIdx) {
@@ -116,6 +87,9 @@ function getSelectedSkill(playerIdx) {
 }
 function isAnySelectedSkill(skillId) {
   return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
+}
+function resetSetTypeState() {
+  Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
 function getPredictedSkillId() {
   const enabledSkills = getEnabledSkills();
@@ -361,11 +335,9 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
-const elSetTypeModal = document.getElementById("set-type-modal");
-const elSetTypeButtons = elSetTypeModal ? elSetTypeModal.querySelectorAll(".set-type-btn") : null;
-const elSetTypeClose = document.getElementById("set-type-close");
-const elSetTypeCancel = document.getElementById("set-type-cancel");
 const elBtnFreeball = document.getElementById("btn-freeball");
+const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
+const elSetTypeCurrent = document.getElementById("set-type-current");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 function buildReceiveDisplayMapping(court, rotation) {
@@ -769,9 +741,17 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     btn.dataset.playerName = playerName || state.players[playerIdx];
     btn.dataset.skillId = skillId;
     btn.dataset.code = code;
-    btn.addEventListener("click", e => {
-      handleEventClick(playerIdx, skillId, code, playerName, e.currentTarget);
-      closeSkillModal();
+    btn.addEventListener("click", async e => {
+      const success = await handleEventClick(
+        playerIdx,
+        skillId,
+        code,
+        playerName,
+        e.currentTarget
+      );
+      if (success) {
+        closeSkillModal();
+      }
     });
     codesWrap.appendChild(btn);
   });
@@ -1046,6 +1026,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   titleSpan.style.color = colors.text;
   titleSpan.textContent = skillMeta ? skillMeta.label : pickedSkillId;
   title.appendChild(titleSpan);
+  if (pickedSkillId === "attack" && state.nextSetType) {
+    const setTypePill = document.createElement("span");
+    setTypePill.className = "skill-subtitle";
+    setTypePill.textContent = "Tipo alzata: " + (normalizeSetTypeValue(state.nextSetType) || "—");
+    title.appendChild(setTypePill);
+  }
   grid.appendChild(title);
   ordered.forEach(code => {
     const btn = document.createElement("button");
@@ -1058,9 +1044,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     btn.dataset.skillId = pickedSkillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
-      let setTypeChoice = setTypeChoicePerPlayer[playerIdx] || null;
-      handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget, { setTypeChoice });
-      delete setTypeChoicePerPlayer[playerIdx];
+      const success = await handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget);
+      if (!success) return;
       setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();
       renderPlayers();
@@ -1259,14 +1244,14 @@ function applyReceiveContextToEvent(ev) {
 async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl, { setTypeChoice = null } = {}) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
-    return;
+    return false;
   }
   const wasFreeball = !!state.freeballPending;
   let playerIdx = parseInt(playerIdxStr, 10);
   if (isNaN(playerIdx) || !state.players[playerIdx]) {
     playerIdx = state.players.findIndex(p => p === playerName);
   }
-  if (playerIdx === -1 || !state.players[playerIdx]) return;
+  if (playerIdx === -1 || !state.players[playerIdx]) return false;
   state.freeballPending = false;
   state.skillFlowOverride = null;
   const event = buildBaseEventPayload({
@@ -1278,15 +1263,12 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
   // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
   event.attackBp = true;
   event.fromFreeball = wasFreeball;
-  const appliedSetType = setTypeChoicePerPlayer[playerIdx] || setTypeChoice || null;
-  if (appliedSetType) {
+  const appliedSetType = state.nextSetType || setTypeChoice || null;
+  if (appliedSetType && skillId === "attack") {
     event.setType = appliedSetType;
   }
   applyReceiveContextToEvent(event);
   state.events.push(event);
-  if (skillId === "attack") {
-    delete setTypeChoicePerPlayer[playerIdx];
-  }
   handleAutoRotationFromEvent(event);
   if (!state.stats[playerIdx]) {
     state.stats[playerIdx] = {};
@@ -1340,6 +1322,7 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
     renderVideoAnalysis();
     renderTrajectoryAnalysis();
   }
+  return true;
 }
 function computeMetrics(counts, skillId) {
   ensureMetricsConfigDefaults();
@@ -3602,6 +3585,37 @@ function normalizeSetTypeValue(val) {
   }
   return String(val).trim();
 }
+function renderSetTypeShortcuts() {
+  const current = normalizeSetTypeValue(state.nextSetType) || "—";
+  if (elSetTypeCurrent) {
+    elSetTypeCurrent.textContent = current;
+  }
+  if (!elSetTypeShortcuts) return;
+  elSetTypeShortcuts.querySelectorAll("[data-settype]").forEach(btn => {
+    const active = normalizeSetTypeValue(btn.dataset.settype) === normalizeSetTypeValue(state.nextSetType);
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+function setNextSetType(val) {
+  const normalized = normalizeSetTypeValue(val) || "";
+  state.nextSetType = normalized;
+  saveState();
+  renderSetTypeShortcuts();
+}
+function initSetTypeShortcuts() {
+  renderSetTypeShortcuts();
+  if (!elSetTypeShortcuts) return;
+  elSetTypeShortcuts.addEventListener("click", e => {
+    const btn = e.target.closest("[data-settype],[data-clear-settype]");
+    if (!btn) return;
+    if (btn.hasAttribute("data-clear-settype")) {
+      setNextSetType("");
+      return;
+    }
+    setNextSetType(btn.dataset.settype || "");
+  });
+}
 function normalizeBaseValue(val) {
   if (!val) return null;
   return String(val).trim().toUpperCase();
@@ -3646,60 +3660,6 @@ function findPreviousEvent(ev) {
   const idx = state.events ? state.events.indexOf(ev) : -1;
   if (idx > 0) return state.events[idx - 1];
   return null;
-}
-function openSetTypeModal() {
-  if (!elSetTypeModal || !elSetTypeButtons) return Promise.resolve(null);
-  return new Promise(resolve => {
-    const cleanup = () => {
-      elSetTypeModal.classList.add("hidden");
-      document.removeEventListener("keydown", onKey);
-      document.body.classList.remove("modal-open");
-      document.body.style.overflow = "";
-    };
-    const finish = val => {
-      cleanup();
-      resolve(val);
-    };
-    const onKey = e => {
-      if (e.key === "Escape") {
-        finish(null);
-        return;
-      }
-      const keyMap = {
-        " ": "mezza",
-        Spacebar: "mezza",
-        s: "super",
-        S: "super",
-        q: "quick",
-        Q: "quick",
-        v: "veloce",
-        V: "veloce",
-        f: "fast",
-        F: "fast",
-        a: "alta",
-        A: "alta"
-      };
-      if (keyMap[e.key]) {
-        e.preventDefault();
-        finish(keyMap[e.key]);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    elSetTypeButtons.forEach(btn => {
-      btn.onclick = () => finish(btn.dataset.settype || null);
-    });
-    [elSetTypeClose, elSetTypeCancel].forEach(btn => {
-      if (!btn) return;
-      btn.onclick = () => finish(null);
-    });
-    const backdrop = elSetTypeModal.querySelector("[data-close-settype]");
-    if (backdrop) {
-      backdrop.onclick = () => finish(null);
-    }
-    document.body.classList.add("modal-open");
-    document.body.style.overflow = "hidden";
-    elSetTypeModal.classList.remove("hidden");
-  });
 }
 function findRelatedSetEvent(ev) {
   if (!ev || !Array.isArray(ev.relatedEvents)) return null;
@@ -4793,7 +4753,7 @@ function buildMatchExportPayload() {
       video: state.video,
       pointRules: state.pointRules,
       autoRotate: state.autoRotate,
-      setTypePromptEnabled: state.setTypePromptEnabled
+      nextSetType: state.nextSetType
     }
   };
 }
@@ -4867,6 +4827,7 @@ function applyImportedMatch(nextState, options = {}) {
     fallback();
     return;
   }
+  resetSetTypeState();
   const merged = Object.assign({}, state, nextState);
   merged.match = nextState.match || state.match || {};
   merged.playerNumbers = nextState.playerNumbers || {};
@@ -5364,6 +5325,7 @@ function exportAnalysisPdf() {
 }
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
+  resetSetTypeState();
   const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
@@ -5969,23 +5931,7 @@ function init() {
       saveState();
     });
   }
-  const setTypeToggles = document.querySelectorAll("[data-set-type-toggle]");
-  if (setTypeToggles && setTypeToggles.length) {
-    const sync = val => {
-      setTypeToggles.forEach(inp => {
-        if (!(inp instanceof HTMLInputElement)) return;
-        inp.checked = val;
-      });
-    };
-    sync(!!state.setTypePromptEnabled);
-    setTypeToggles.forEach(inp => {
-      inp.addEventListener("change", () => {
-        state.setTypePromptEnabled = !!inp.checked;
-        sync(state.setTypePromptEnabled);
-        saveState();
-      });
-    });
-  }
+  initSetTypeShortcuts();
   const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
   if (elSkillFlowButtons) {
     elSkillFlowButtons.addEventListener("click", e => {

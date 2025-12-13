@@ -124,7 +124,6 @@ const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
 const elTeamMetaManager = document.getElementById("team-meta-manager");
 const elTeamManagerDup = document.getElementById("team-manager-duplicate");
 const elTeamManagerTemplate = document.getElementById("team-manager-template");
-const TEAM_ROLES = ["", "P", "S", "C", "O", "L"];
 const DEFAULT_STAFF = { headCoach: "", assistantCoach: "", manager: "" };
 let teamManagerState = null;
 let teamManagerScope = "our";
@@ -145,7 +144,6 @@ const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-f
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
 const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
-const elSetTypeToggles = document.querySelectorAll("[data-set-type-toggle]");
 const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
 const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
 const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
@@ -308,6 +306,7 @@ function loadState() {
     state.matchFinished = !!parsed.matchFinished;
     state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
     state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
+    state.nextSetType = parsed.nextSetType || "";
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.savedTeams = parsed.savedTeams || {};
     state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
@@ -1118,7 +1117,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
           firstName: p.firstName || parts.firstName || "",
           lastName: p.lastName || parts.lastName || "",
           number: p.number || "",
-          role: p.role || "",
+          role: p.role === "L" ? "L" : "",
           isCaptain: !!p.isCaptain,
           out: !!p.out
         };
@@ -1179,7 +1178,7 @@ function compactTeamPayload(data, fallbackName = "") {
             firstName: p.firstName || parts.firstName || "",
             lastName: p.lastName || parts.lastName || "",
             number: p.number || "",
-            role: p.role || "",
+            role: p.role === "L" ? "L" : "",
             isCaptain: !!p.isCaptain,
             out: !!p.out
           };
@@ -1456,7 +1455,7 @@ function getCurrentTeamPayload(name = "") {
           const isLib = (state.liberos || []).includes(p.name) || p.role === "L";
           return Object.assign({}, p, {
             number: currentNumber,
-            role: isLib ? "L" : p.role,
+            role: isLib ? "L" : "",
             isCaptain: captainSet.has(p.name) || !!p.isCaptain,
             out: !!p.out
           });
@@ -1663,6 +1662,9 @@ function resetMatchState() {
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
   const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
+  if (typeof resetSetTypeState === "function") {
+    resetSetTypeState();
+  }
   state.match = {
     opponent: "",
     category: "",
@@ -2303,13 +2305,16 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
     normalized && normalized.playersDetailed && normalized.playersDetailed.length > 0
       ? normalized.playersDetailed.map(p => {
           const parts = splitNameParts(p.name || buildFullName(p.lastName, p.firstName));
+          const fullName = p.name || buildFullName(p.lastName, p.firstName);
+          const isLib = baseLiberos.includes(fullName) || p.role === "L";
           return Object.assign(
             {},
             p,
             {
               firstName: p.firstName || parts.firstName || "",
               lastName: p.lastName || parts.lastName || "",
-              name: p.name || buildFullName(p.lastName, p.firstName)
+              name: fullName,
+              role: isLib ? "L" : ""
             }
           );
         })
@@ -2375,18 +2380,6 @@ function renderTeamManagerTable() {
       syncFullName();
     });
     let liberoChk = null;
-    const roleSelect = document.createElement("select");
-    TEAM_ROLES.forEach(r => {
-      const opt = document.createElement("option");
-      opt.value = r;
-      opt.textContent = r === "" ? "—" : r;
-      roleSelect.appendChild(opt);
-    });
-    roleSelect.value = p.role || "";
-    roleSelect.addEventListener("change", () => {
-      p.role = roleSelect.value;
-      if (liberoChk) liberoChk.checked = p.role === "L";
-    });
     const captainChk = document.createElement("input");
     captainChk.type = "checkbox";
     captainChk.checked = !!p.isCaptain;
@@ -2399,13 +2392,7 @@ function renderTeamManagerTable() {
     liberoChk.type = "checkbox";
     liberoChk.checked = p.role === "L";
     liberoChk.addEventListener("change", () => {
-      if (liberoChk.checked) {
-        p.role = "L";
-        roleSelect.value = "L";
-      } else if (p.role === "L") {
-        p.role = "";
-        roleSelect.value = "";
-      }
+      p.role = liberoChk.checked ? "L" : "";
     });
     const outChk = document.createElement("input");
     outChk.type = "checkbox";
@@ -2425,7 +2412,6 @@ function renderTeamManagerTable() {
       numberInput,
       lastNameInput,
       firstNameInput,
-      roleSelect,
       captainChk,
       outChk
     ].forEach(control => control.classList.add("team-manager-input"));
@@ -2434,7 +2420,6 @@ function renderTeamManagerTable() {
       numberInput,
       lastNameInput,
       firstNameInput,
-      roleSelect,
       captainChk,
       liberoChk,
       outChk,
@@ -2499,7 +2484,7 @@ function collectTeamManagerPayload() {
         firstName: p.firstName || splitNameParts(p.name).firstName || "",
         lastName: p.lastName || splitNameParts(p.name).lastName || "",
         number: p.number || "",
-        role: p.role || "",
+        role: p.role === "L" ? "L" : "",
         isCaptain: !!p.isCaptain,
         out: !!p.out
       })),
@@ -2907,6 +2892,9 @@ function updatePlayersList(newPlayers, options = {}) {
         "Cambiare l'elenco di giocatrici azzererà tutte le statistiche del match. Procedere?"
       );
       if (!ok) return;
+    }
+    if (typeof resetSetTypeState === "function") {
+      resetSetTypeState();
     }
     state.players = normalized;
     state.playerNumbers = nextNumbers;

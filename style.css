@@ -1263,6 +1263,13 @@ body[data-theme="light"] .skill-row {
   line-height: 1.2;
   color: var(--skill-text, #0b0b0b);
 }
+.skill-subtitle {
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-weight: 600;
+}
 .skill-title.skill-serve {
   background: var(--skill-serve-bg, #1b5e20);
   color: var(--skill-serve-text, #d1fae5);
@@ -2790,6 +2797,10 @@ body[data-theme="light"] .agg-table td {
   background: #1f2937;
   border: 1px solid #334155;
 }
+.set-type-btn.active {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  border-color: #2563eb;
+}
 .set-type-btn span {
   font-size: 1rem;
 }
@@ -2805,6 +2816,36 @@ body[data-theme="light"] .agg-table td {
   display: flex;
   justify-content: flex-end;
   margin-top: 0.3rem;
+}
+.set-type-shortcuts {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+body[data-theme="light"] .set-type-shortcuts {
+  background: #f1f5f9;
+  border-color: #d5dbe5;
+}
+.set-type-shortcuts__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.set-type-shortcuts__label {
+  font-weight: 700;
+}
+.set-type-shortcuts__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.set-type-shortcuts__current strong {
+  font-weight: 800;
 }
 body[data-theme="light"] .skill-modal__content {
   background: #f8fafc;

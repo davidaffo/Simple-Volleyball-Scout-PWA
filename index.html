@@ -295,10 +295,21 @@ Bianchi 18"></textarea>
                   <input type="checkbox" id="attack-trajectory-toggle" />
                   Disegna traiettoria attacco
                 </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="set-type-toggle" data-set-type-toggle />
-                  Chiedi tipo alzata prima dell'attacco
-                </label>
+              </div>
+              <div class="set-type-shortcuts" id="set-type-shortcuts">
+                <div class="set-type-shortcuts__head">
+                  <span class="set-type-shortcuts__label">Tipo alzata</span>
+                  <span class="set-type-shortcuts__current" aria-live="polite">Prossima: <strong id="set-type-current">—</strong></span>
+                </div>
+                <div class="set-type-shortcuts__buttons">
+                  <button class="set-type-btn" data-settype="mezza" type="button">Mezza</button>
+                  <button class="set-type-btn" data-settype="super" type="button">Super</button>
+                  <button class="set-type-btn" data-settype="quick" type="button">Quick</button>
+                  <button class="set-type-btn" data-settype="veloce" type="button">Veloce</button>
+                  <button class="set-type-btn" data-settype="fast" type="button">Fast</button>
+                  <button class="set-type-btn" data-settype="alta" type="button">Alta</button>
+                  <button class="set-type-btn secondary" data-clear-settype type="button">Reset</button>
+                </div>
               </div>
             </div>
             <div class="score-actions court-game-actions">
@@ -625,7 +636,7 @@ Bianchi 18"></textarea>
         <h3>Gestione squadra</h3>
         <button id="team-manager-close" aria-label="Chiudi" class="icon-button">✕</button>
       </div>
-      <div class="team-modal__content">
+        <div class="team-modal__content">
         <div class="team-meta-grid">
           <label>Nome squadra
             <input type="text" id="team-meta-name" placeholder="Nome squadra" />
@@ -640,7 +651,7 @@ Bianchi 18"></textarea>
             <input type="text" id="team-meta-manager" placeholder="Manager" />
           </label>
         </div>
-        <p class="section-note">Imposta staff, capitana (C), liberi (L) e chi è fuori rosa. La prima riga definisce la lineup di default.</p>
+        <p class="section-note">Imposta staff, capitana (C), liberi (L) e chi è fuori rosa. La prima riga definisce la lineup di default. I ruoli in campo sono sempre inferiti automaticamente dalla posizione del palleggiatore nella rotazione reale.</p>
         <div class="team-manager-actions">
           <button id="team-manager-add" class="secondary">Aggiungi giocatrice</button>
           <button id="team-manager-duplicate" class="secondary">Duplica elenco</button>
@@ -654,7 +665,6 @@ Bianchi 18"></textarea>
                 <th>#</th>
                 <th>Cognome</th>
                 <th>Nome</th>
-                <th>Ruolo</th>
                 <th>Capitano</th>
                 <th>Libero</th>
                 <th>Fuori rosa</th>
@@ -707,26 +717,6 @@ Bianchi 18"></textarea>
       </div>
       <div class="attack-trajectory-actions">
         <button id="attack-trajectory-close-btn" class="secondary small" type="button">Chiudi</button>
-      </div>
-    </div>
-  </div>
-  <div id="set-type-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="set-type-title">
-    <div class="skill-modal__backdrop" data-close-settype></div>
-    <div class="skill-modal__content">
-      <div class="skill-modal__head">
-        <div id="set-type-title" class="skill-modal__title">Scegli tipo di alzata</div>
-        <button id="set-type-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-settype>✕</button>
-      </div>
-      <div class="set-type-grid">
-        <button class="set-type-btn" data-settype="mezza"><span>Mezza</span><small>Space</small></button>
-        <button class="set-type-btn" data-settype="super"><span>Super</span><small>S</small></button>
-        <button class="set-type-btn" data-settype="quick"><span>Quick</span><small>Q</small></button>
-        <button class="set-type-btn" data-settype="veloce"><span>Veloce</span><small>V</small></button>
-        <button class="set-type-btn" data-settype="fast"><span>Fast</span><small>F</small></button>
-        <button class="set-type-btn" data-settype="alta"><span>Alta</span><small>A</small></button>
-      </div>
-      <div class="set-type-actions">
-        <button id="set-type-cancel" class="secondary small" type="button" data-close-settype>Annulla (Esc)</button>
       </div>
     </div>
   </div>
@@ -819,10 +809,6 @@ Bianchi 18"></textarea>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-toggle" />
                   Disegna traiettoria attacco
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="set-type-toggle-settings" data-set-type-toggle />
-                  Chiedi tipo alzata prima dell'attacco
                 </label>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="predictive-skill-toggle" />
