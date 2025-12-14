@@ -1,3 +1,35 @@
+// Mappa rotazioni -> permutazioni di ricezione allineata a IntelliScout (team.receive_lineup)
+const INTELLISCOUT_RECEIVE_ASSIGNMENTS = Object.freeze({
+  1: [
+    [0, 1],
+    [1, 0]
+  ],
+  2: [
+    [2, 4],
+    [4, 2]
+  ],
+  3: [
+    [4, 3],
+    [5, 4],
+    [3, 5]
+  ],
+  4: [
+    [4, 1],
+    [5, 4],
+    [0, 5],
+    [1, 0]
+  ],
+  5: [
+    [2, 4],
+    [4, 2]
+  ],
+  6: [
+    [4, 3],
+    [5, 4],
+    [3, 5]
+  ]
+});
+
 /**
  * Logica auto-role/autoposizionamento indipendente dal DOM.
  */
@@ -83,37 +115,7 @@
       const american = buildP1AmericanReceive(lineup, rotation, options.autoRoleP1American);
       if (american) return american;
       const rot = clampRot(rotation);
-      const assignmentsByRot = {
-        1: [
-          [0, 1],
-          [1, 0]
-        ],
-        2: [
-          [2, 4],
-          [4, 2]
-        ],
-        3: [
-          [4, 3],
-          [5, 4],
-          [3, 5]
-        ],
-        4: [
-          [4, 1],
-          [5, 4],
-          [0, 5],
-          [1, 0]
-        ],
-        5: [
-          [2, 4],
-          [4, 2]
-        ],
-        6: [
-          [4, 3],
-          [5, 4],
-          [3, 5]
-        ]
-      };
-      applyAssignments(lineup, assignmentsByRot[rot] || []);
+      applyAssignments(lineup, (INTELLISCOUT_RECEIVE_ASSIGNMENTS[rot] || []).slice());
       return lineup;
     }
 

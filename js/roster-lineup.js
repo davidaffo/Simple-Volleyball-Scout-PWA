@@ -208,6 +208,7 @@ const elAggSubPanels = document.querySelectorAll("[data-agg-tab]");
 let autoRolePhaseApplied = "";
 let autoRoleRotationApplied = null;
 let autoRoleBaseCourt = null;
+let autoRoleRenderedCourt = null;
 let activeTab = "info";
 let activeAggTab = "summary";
 function getTodayIso() {
@@ -748,6 +749,19 @@ function isLibero(name) {
 }
 function canPlaceInSlot(name, posIdx, showAlert = true) {
   if (!name) return true;
+  ensureCourtShape();
+  const targetSlot = state.court[posIdx] || { main: "", replaced: "" };
+  // Se esiste un libero in campo che sostituisce questa giocatrice, può rientrare solo lì (ma sempre consentito su quello slot)
+  const libSlotIdx = (state.court || []).findIndex(
+    slot => isLibero(slot.main) && slot.replaced === name
+  );
+  if (libSlotIdx !== -1) {
+    if (libSlotIdx !== posIdx) {
+      if (showAlert) alert("Questa giocatrice può rientrare solo nello slot del libero che la sta sostituendo.");
+      return false;
+    }
+    return true;
+  }
   if (isLibero(name) && FRONT_ROW_INDEXES.has(posIdx)) {
     if (showAlert) alert("Non puoi mettere il libero in prima linea.");
     return false;
@@ -762,7 +776,8 @@ function canPlaceInSlot(name, posIdx, showAlert = true) {
     }
   }
   const lockedMap = getLockedMap();
-  if (lockedMap[name] !== undefined && lockedMap[name] !== posIdx) {
+  // se la giocatrice è proprio quella sostituita dal libero in questo slot, consentiamo il rientro qui
+  if (lockedMap[name] !== undefined && lockedMap[name] !== posIdx && targetSlot.replaced !== name) {
     if (showAlert) alert("Questa giocatrice può rientrare solo nella sua posizione (sostituita dal libero).");
     return false;
   }
@@ -800,6 +815,7 @@ function reserveNamesInCourt(name, court = state.court) {
 function resetAutoRoleCache() {
   autoRolePhaseApplied = "";
   autoRoleRotationApplied = null;
+  autoRoleRenderedCourt = null;
 }
 function updateAutoRoleBaseCourtCache(base) {
   const shaped = cloneCourtLineup(base);
@@ -812,6 +828,7 @@ function commitCourtChange(baseCourt, options = {}) {
   resetAutoRoleCache();
   if (state.autoRolePositioning) {
     updateAutoRoleBaseCourtCache(baseCourt);
+    state.court = ensureCourtShapeFor(baseCourt); // manteniamo il lineup base aggiornato
     applyAutoRolePositioning();
     return;
   }
@@ -825,13 +842,21 @@ function commitCourtChange(baseCourt, options = {}) {
 }
 function setCourtPlayer(posIdx, target, playerName) {
   ensureCourtShape();
-  const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt
-      ? ensureCourtShapeFor(autoRoleBaseCourt)
-      : ensureCourtShapeFor(state.court);
+  const baseCourt = ensureCourtShapeFor(state.court); // opera sempre sul lineup visibile
   const name = (playerName || "").trim();
   if (!name) return;
   if (!canPlaceInSlot(name, posIdx, true)) return;
+  const slotState = state.court[posIdx] || { main: "", replaced: "" };
+  const slotBase = baseCourt[posIdx] || slotState;
+  const isLiberoHere = isLibero(slotState.main) || isLibero(slotBase.main);
+  const replacedName = slotState.replaced || slotBase.replaced || "";
+  // Caso speciale: rientro titolare al posto del libero che la sostituisce
+  if (isLiberoHere && replacedName === name && !isLibero(name)) {
+    const next = cloneCourtLineup(baseCourt);
+    next[posIdx] = { main: name, replaced: "" };
+    commitCourtChange(next);
+    return;
+  }
   let nextCourt = null;
   if (lineupCore && typeof lineupCore.setPlayerOnCourt === "function") {
     nextCourt = lineupCore.setPlayerOnCourt({
@@ -3227,9 +3252,13 @@ function getBenchPlayers() {
   const used = getUsedNames();
   const libSet = new Set(state.liberos || []);
   const replaced = new Set(getReplacedByLiberos());
-  return (state.players || []).filter(
-    name => !used.has(name) && !libSet.has(name) && !replaced.has(name)
-  );
+  return (state.players || []).filter(name => {
+    if (used.has(name)) return false; // già in campo
+    if (libSet.has(name)) return false; // i liberi stanno nella colonna dedicata
+    // se è la titolare sostituita dal libero, deve comparire
+    if (replaced.has(name)) return true;
+    return true;
+  });
 }
 function getBenchLiberos() {
   const used = getUsedNames();
@@ -3319,7 +3348,7 @@ function renderBenchChips() {
     highlightLibero: true,
     isLiberoColumn: mobileLiberoOnly,
     emptyText: mobileLiberoOnly ? "Nessun libero disponibile." : "Nessuna riserva disponibile.",
-    replacedSet: new Set()
+    replacedSet: new Set(getReplacedByLiberos())
   });
 }
 function ensureBenchDropZone() {
@@ -3517,7 +3546,10 @@ function applyAutoRolePositioning() {
       updateAutoRoleBaseCourtCache(state.court);
     }
   }
-  const baseLineup = autoRoleBaseCourt && autoRoleBaseCourt.length === 6 ? autoRoleBaseCourt : state.court;
+  const baseLineup =
+    autoRoleBaseCourt && autoRoleBaseCourt.length === 6
+      ? cloneCourtLineup(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
   const permuted = applyPhasePermutation({
     lineup: baseLineup,
     rotation: rot,
@@ -3526,7 +3558,7 @@ function applyAutoRolePositioning() {
     liberos: state.liberos || [],
     autoRoleP1American: !!state.autoRoleP1American
   });
-  state.court = permuted;
+  autoRoleRenderedCourt = permuted; // overlay per la vista, non alteriamo il base
   autoRolePhaseApplied = phase;
   autoRoleRotationApplied = rot;
   saveState();
@@ -3549,7 +3581,9 @@ function rotateCourt(direction) {
   });
   ensureCourtShape();
   const court =
-    state.autoRolePositioning && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : state.court;
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
   let rotated = [];
   if (direction === "cw") {
     rotated = [court[5], court[0], court[1], court[2], court[3], court[4]];
@@ -3559,22 +3593,21 @@ function rotateCourt(direction) {
     state.rotation = state.rotation === 1 ? 6 : state.rotation - 1;
   }
   const rotatedClean = rotated.map(slot => Object.assign({}, slot));
-  if (state.autoRolePositioning) {
-    updateAutoRoleBaseCourtCache(rotatedClean);
-    applyAutoRolePositioning();
-  } else {
-    state.court = rotatedClean;
-  }
-  // se un libero finisce in prima linea, rientra la giocatrice sostituita
-  state.court = state.court.map((slot, idx) => {
+  const rotatedBase = rotatedClean.map((slot, idx) => {
     if ((state.liberos || []).includes(slot.main) && FRONT_ROW_INDEXES.has(idx)) {
       return { main: slot.replaced || "" , replaced: "" };
     }
     return slot;
   });
-  resetAutoRoleCache();
-  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+  // Aggiorna sempre il lineup base ruotato
+  state.court = rotatedBase;
+  if (state.autoRolePositioning) {
+    updateAutoRoleBaseCourtCache(rotatedBase);
+    resetAutoRoleCache();
     applyAutoRolePositioning();
+  } else {
+    state.court = rotatedBase;
+    resetAutoRoleCache();
   }
   saveState();
   renderPlayers();

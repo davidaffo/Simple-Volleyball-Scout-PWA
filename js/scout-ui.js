@@ -357,56 +357,19 @@ function buildReceiveDisplayMapping(court, rotation) {
   }
   const base = ensureCourtShapeFor(court);
   const mapping = base.map((slot, idx) => ({ slot, idx }));
-  if (typeof applyReceivePattern === "function") {
-    return applyReceivePattern(mapping, rotation);
-  }
-  const swap = (a, b) => {
-    const tmp = mapping[a];
-    mapping[a] = mapping[b];
-    mapping[b] = tmp;
-  };
   const rot = Math.min(6, Math.max(1, parseInt(rotation, 10) || 1));
-  switch (rot) {
-    case 1:
-      swap(0, 1);
-      break;
-    case 2:
-      swap(2, 4);
-      break;
-    case 3: {
-      const old4 = mapping[3];
-      const old5 = mapping[4];
-      const old6 = mapping[5];
-      mapping[4] = old4;
-      mapping[5] = old5;
-      mapping[3] = old6;
-      break;
-    }
-    case 4: {
-      const old1 = mapping[0];
-      const old2 = mapping[1];
-      const old5 = mapping[4];
-      const old6 = mapping[5];
-      mapping[4] = old2;
-      mapping[5] = old5;
-      mapping[0] = old6;
-      mapping[1] = old1;
-      break;
-    }
-    case 5:
-      swap(2, 4);
-      break;
-    case 6: {
-      const old4 = mapping[3];
-      const old5 = mapping[4];
-      const old6 = mapping[5];
-      mapping[4] = old4;
-      mapping[5] = old5;
-      mapping[3] = old6;
-      break;
-    }
-    default:
-      break;
+  if (typeof INTELLISCOUT_RECEIVE_ASSIGNMENTS !== "undefined") {
+    const pairs = INTELLISCOUT_RECEIVE_ASSIGNMENTS[rot] || [];
+    const snapshot = mapping.slice();
+    pairs.forEach(([targetIdx, sourceIdx]) => {
+      if (targetIdx == null || sourceIdx == null) return;
+      if (!snapshot[sourceIdx]) return;
+      mapping[targetIdx] = snapshot[sourceIdx];
+    });
+    return mapping;
+  }
+  if (typeof applyReceivePattern === "function") {
+    return applyReceivePattern(mapping, rot);
   }
   return mapping;
 }
@@ -417,12 +380,12 @@ function getAutoRoleDisplayCourt(forSkillId = null) {
   if (!useAuto) {
     return baseCourt.map((slot, idx) => ({ slot, idx }));
   }
-  if (forSkillId === "pass") {
-    return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
-  }
   if (forSkillId === "serve") {
     // For the serve we want to display the actual rotation before any auto-role permutation
     return baseCourt.map((slot, idx) => ({ slot, idx }));
+  }
+  if (forSkillId === "pass") {
+    return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
   }
   const phase = getCurrentPhase();
   if (typeof buildAutoRolePermutation === "function") {
@@ -1096,6 +1059,10 @@ function renderPlayers() {
     }
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
+    const isLibSlot = isLibero(slot.main);
+    if (isLibSlot) {
+      card.classList.add("libero-card");
+    }
     card.dataset.posNumber = String(idx + 1);
     card.dataset.posIndex = String(posIdx);
     card.dataset.playerName = activeName || "";
@@ -1115,8 +1082,8 @@ function renderPlayers() {
     posLabel.textContent = "Pos " + (idx + 1);
     const tagLibero = document.createElement("span");
     tagLibero.className = "court-libero-pill";
-    tagLibero.textContent = "Libero";
-    tagLibero.style.visibility = isLibero(slot.main) ? "visible" : "hidden";
+    tagLibero.textContent = "L";
+    tagLibero.style.visibility = isLibSlot ? "visible" : "hidden";
     tagBar.appendChild(posLabel);
     tagBar.appendChild(tagLibero);
     header.appendChild(tagBar);
@@ -1124,7 +1091,7 @@ function renderPlayers() {
     nameBlock.className = "court-name-block inline";
     const nameLabel = document.createElement("div");
     nameLabel.className = "court-name";
-    if (isLibero(slot.main)) {
+    if (isLibSlot) {
       nameLabel.classList.add("libero-flag");
     }
     nameLabel.textContent = slot.main
@@ -1135,21 +1102,17 @@ function renderPlayers() {
     roleTag.textContent = getRoleLabel(posIdx);
     nameBlock.appendChild(nameLabel);
     nameBlock.appendChild(roleTag);
-    if (isLibero(slot.main) && slot.replaced) {
-      const subText = document.createElement("div");
-      subText.className = "libero-replace";
-      subText.textContent = "Sostituisce: " + formatNameWithNumber(slot.replaced);
+    if (isLibSlot && slot.replaced) {
+      const subText = document.createElement("span");
+      subText.className = "libero-replace-pill";
+      const jersey = getPlayerNumber(slot.replaced) || "";
+      const shortName =
+        formatNameWithNumber(slot.replaced, { compactCourt: true }) || "Tit";
+      subText.title = "Sostituisce " + shortName;
+      subText.textContent = "↺ " + (jersey || shortName);
       nameBlock.appendChild(subText);
     }
     header.appendChild(nameBlock);
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "pill-remove clear-slot";
-    clearBtn.textContent = "✕";
-    clearBtn.addEventListener("click", () => {
-      clearCourtAssignment(posIdx, "main");
-    });
-    header.appendChild(clearBtn);
     card.appendChild(header);
 
     card.addEventListener("dragenter", e => handlePositionDragOver(e, card), true);
@@ -3218,31 +3181,40 @@ function handleAutoRotationFromEvent(eventObj) {
     state.autoRotatePending = false;
     return;
   }
-  eventObj.autoRotatePrev = state.autoRotatePending;
+  const wasReceiving = !state.isServing || !!state.autoRotatePending;
+  eventObj.autoRotatePrev = wasReceiving;
   if (typeof ensurePointRulesDefaults === "function") {
     ensurePointRulesDefaults();
   }
   if (eventObj.skillId === "pass") {
-    state.autoRotatePending = true;
+    state.autoRotatePending = true; // siamo in cambio palla
     state.isServing = false;
-    eventObj.autoRotateNext = state.autoRotatePending;
+    eventObj.autoRotateNext = true;
     saveState();
     return;
   }
+  let pending = wasReceiving;
+  let serving = !!state.isServing;
   const direction = getPointDirection(eventObj);
   if (direction === "for") {
-    if (state.autoRotatePending && typeof rotateCourt === "function") {
+    if (pending && typeof rotateCourt === "function") {
       // Side-out rotation: advance in the same direction as manual CCW button
       rotateCourt("ccw");
       eventObj.autoRotationDirection = "ccw";
     }
-    state.autoRotatePending = false;
-    state.isServing = true;
+    pending = false;
+    serving = true;
   } else if (direction === "against") {
-    state.autoRotatePending = false;
-    state.isServing = false;
+    // Siamo tornati in ricezione finché non facciamo punto
+    pending = true;
+    serving = false;
+  } else {
+    // Nessun punto assegnato: manteniamo l'informazione se eravamo in cambio palla
+    pending = pending || !serving;
   }
-  eventObj.autoRotateNext = state.autoRotatePending;
+  state.autoRotatePending = pending;
+  state.isServing = serving;
+  eventObj.autoRotateNext = pending;
   saveState();
   if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
     applyAutoRolePositioning();
@@ -3250,7 +3222,7 @@ function handleAutoRotationFromEvent(eventObj) {
 }
 function recomputeServeFlagsFromHistory() {
   let serving = !!state.isServing;
-  let pending = false;
+  let pending = !serving;
   if (!state || !state.autoRotate) {
     state.isServing = serving;
     state.autoRotatePending = false;
@@ -3268,8 +3240,10 @@ function recomputeServeFlagsFromHistory() {
       pending = false;
       serving = true;
     } else if (dir === "against") {
-      pending = false;
+      pending = true;
       serving = false;
+    } else if (!serving) {
+      pending = true;
     }
   });
   state.isServing = serving;

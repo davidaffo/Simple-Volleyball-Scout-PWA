@@ -1137,30 +1137,50 @@ body[data-theme="light"] .court-role-tag {
   flex: 1 1 auto;
   min-width: 0;
 }
-.libero-replace {
-  font-size: 0.8rem;
-  color: #9ad1ff;
-  opacity: 0.9;
-  width: 100%;
+.libero-replace-pill {
+  font-size: 0.78rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #0f172a;
+  border: 1px dashed #38bdf8;
+  color: #bfe5ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-theme="light"] .libero-replace-pill {
+  background: #eef5ff;
+  border-color: #60a5fa;
+  color: #0f172a;
+}
+.court-card.libero-card {
+  background: #0b2a2a;
+  border-color: #1c9999;
+  color: #d1fae5;
+}
+body[data-theme="light"] .court-card.libero-card {
+  background: #daf5e7;
+  border-color: #22c55e;
+  color: #065f46;
 }
 .court-libero-pill {
   font-size: 0.75rem;
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
-  background: #0d2238;
-  border: 1px solid #38bdf8;
-  color: #c7e9ff;
+  background: #0b2a2a;
+  border: 1px solid #1c9999;
+  color: #d1fae5;
 }
 body[data-theme="light"] .court-libero-pill {
-  background: #dbeafe;
-  border-color: #60a5fa;
-  color: var(--text-color, #0f172a);
+  background: #daf5e7;
+  border-color: #22c55e;
+  color: #065f46;
 }
 @media (max-width: 1024px), (pointer: coarse) {
   .court-libero-pill {
-    background: #f97316;
-    border-color: #fb923c;
-    color: #fff7ed;
+    background: #166534;
+    border-color: #22c55e;
+    color: #ecfdf3;
   }
 }
 .clear-slot {
