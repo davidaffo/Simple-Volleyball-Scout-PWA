@@ -5718,6 +5718,9 @@ function init() {
   if (elBtnSaveTeam) {
     elBtnSaveTeam.addEventListener("click", saveCurrentTeam);
   }
+  if (elBtnOpenLineup) {
+    elBtnOpenLineup.addEventListener("click", openMobileLineupModal);
+  }
   if (elBtnSaveOpponentTeam) {
     elBtnSaveOpponentTeam.addEventListener("click", saveCurrentOpponentTeam);
   }
@@ -5922,11 +5925,7 @@ function init() {
       setAutoRotateEnabled(elAutoRotateToggle.checked)
     );
   }
-  if (elAutoRotateToggleFloating) {
-    elAutoRotateToggleFloating.addEventListener("change", () =>
-      setAutoRotateEnabled(elAutoRotateToggleFloating.checked)
-    );
-  }
+  // Mobile controls rimossi
   const elAutoRoleToggle = document.getElementById("auto-role-toggle");
   if (elAutoRoleToggle) {
     elAutoRoleToggle.checked = !!state.autoRolePositioning;
@@ -6161,29 +6160,7 @@ function init() {
       }
     });
   }
-  if (elRotationIndicatorFloating) {
-    const openModalFromRot = () => openActionsModal();
-    elRotationIndicatorFloating.addEventListener("click", openModalFromRot);
-    elRotationIndicatorFloating.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        openModalFromRot();
-      }
-    });
-  }
-  if (elRotationIndicatorModal && elRotationSelectFloating) {
-    const openSelectFloating = () => {
-      elRotationSelectFloating.focus();
-      elRotationSelectFloating.click();
-    };
-    elRotationIndicatorModal.addEventListener("click", openSelectFloating);
-    elRotationIndicatorModal.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        openSelectFloating();
-      }
-    });
-  }
+  // elementi mobile rimossi
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
@@ -6206,12 +6183,7 @@ function init() {
       elToggleLogMobile.textContent = isOpen ? "Chiudi log eventi" : "Apri log eventi";
     });
   }
-  if (elBtnOpenLineupMobile) {
-    elBtnOpenLineupMobile.addEventListener("click", () => openMobileLineupModal());
-  }
-  if (elBtnOpenLineupMobileFloating) {
-    elBtnOpenLineupMobileFloating.addEventListener("click", () => openMobileLineupModal());
-  }
+  // pulsanti lineup mobile rimossi
   if (elAggTabButtons && typeof elAggTabButtons.forEach === "function") {
     elAggTabButtons.forEach(btn => {
       btn.addEventListener("click", () => {

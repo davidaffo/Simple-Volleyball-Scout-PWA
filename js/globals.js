@@ -194,6 +194,7 @@ const elPlayersList = document.getElementById("players-list");
 const elNewPlayerInput = document.getElementById("new-player-name");
 const elBtnAddPlayer = document.getElementById("btn-add-player");
 const elBtnClearPlayers = document.getElementById("btn-clear-players");
+const elBtnOpenLineup = document.getElementById("btn-open-lineup");
 const elTeamsSelect = document.getElementById("saved-teams");
 const elBtnSaveTeam = document.getElementById("btn-save-team");
 const elBtnDeleteTeam = document.getElementById("btn-delete-team");
