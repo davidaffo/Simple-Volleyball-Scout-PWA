@@ -62,6 +62,8 @@ let benchTouchListenersAttached = false;
 let touchBenchPointerId = null;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
+const BACK_ROW_INDEXES = new Set([0, 4, 5]); // pos1, pos5, pos6
+const AUTO_LIBERO_ROLE_OPTIONS = ["", "P", "S", "C", "O"];
 let isLoadingMatch = false;
 const lineupCore = (typeof window !== "undefined" && window.LineupCore) || null;
 const autoRoleCore =
@@ -309,6 +311,7 @@ function loadState() {
     state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
     state.nextSetType = parsed.nextSetType || "";
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
+    state.liberoAutoMap = parsed.liberoAutoMap || {};
     state.savedTeams = parsed.savedTeams || {};
     state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
     state.savedMatches = parsed.savedMatches || {};
@@ -350,6 +353,12 @@ function loadState() {
     state.video.youtubeId = state.video.youtubeId || "";
     state.video.youtubeUrl = state.video.youtubeUrl || "";
     state.autoRotate = parsed.autoRotate !== false;
+    state.autoLiberoBackline = parsed.autoLiberoBackline !== false;
+    const parsedLiberoRole = typeof parsed.autoLiberoRole === "string" ? parsed.autoLiberoRole : "";
+    state.autoLiberoRole = AUTO_LIBERO_ROLE_OPTIONS.includes(parsedLiberoRole)
+      ? parsedLiberoRole
+      : "";
+    state.preferredLibero = typeof parsed.preferredLibero === "string" ? parsed.preferredLibero : "";
     state.autoRoleP1American = !!parsed.autoRoleP1American;
     state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
     state.autoRotatePending = false;
@@ -380,6 +389,7 @@ function loadState() {
   syncTeamsFromStorage();
   syncOpponentTeamsFromStorage();
   syncMatchesFromStorage();
+  enforceAutoLiberoForState({ skipServerOnServe: true });
 }
 function saveState() {
   try {
@@ -454,6 +464,15 @@ function replacePlayerNameEverywhere(oldName, newName, idx) {
   });
   state.liberos = (state.liberos || []).map(n => (n === oldName ? newName : n));
   state.captains = (state.captains || []).map(n => (n === oldName ? newName : n));
+  if (state.liberoAutoMap) {
+    const updatedMap = {};
+    Object.entries(state.liberoAutoMap).forEach(([replaced, libero]) => {
+      const nextReplaced = replaced === oldName ? newName : replaced;
+      const nextLibero = libero === oldName ? newName : libero;
+      updatedMap[nextReplaced] = nextLibero;
+    });
+    state.liberoAutoMap = updatedMap;
+  }
   (state.events || []).forEach(ev => {
     if (ev.playerIdx === idx || ev.playerName === oldName) {
       ev.playerName = newName;
@@ -632,6 +651,32 @@ function setIsServing(flag) {
   state.isServing = !!flag;
   saveState();
 }
+function setAutoLiberoBackline(enabled) {
+  state.autoLiberoBackline = !!enabled;
+  if (!enabled) {
+    state.autoLiberoRole = "";
+  }
+  enforceAutoLiberoForState({ skipServerOnServe: true });
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+}
+function setAutoLiberoRole(role) {
+  if (typeof role !== "string") return;
+  const sanitized = AUTO_LIBERO_ROLE_OPTIONS.includes(role) ? role : "";
+  state.autoLiberoRole = sanitized;
+  state.autoLiberoBackline = sanitized !== "" ? true : state.autoLiberoBackline;
+  // Cambiando ruolo, azzera i vecchi abbinamenti per forzare la nuova sostituzione
+  state.autoLiberoMap = {};
+  enforceAutoLiberoForState({ skipServerOnServe: true });
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+}
 function getLastOwnEvent() {
   const list = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId || ev.skillId === "manual") return false;
@@ -743,6 +788,120 @@ function cleanCourtPlayers(target = state.court) {
   ensureMetricsConfigDefaults();
   return cleaned;
 }
+function registerLiberoPair(replacedName, liberoName) {
+  if (!replacedName || !liberoName) return;
+  if (!isLibero(liberoName)) return;
+  state.liberoAutoMap = state.liberoAutoMap || {};
+  state.liberoAutoMap[replacedName] = liberoName;
+  if (!state.preferredLibero) {
+    state.preferredLibero = liberoName;
+  }
+}
+function removeLiberosAndRestore(baseCourt) {
+  const shaped = ensureCourtShapeFor(baseCourt).map(slot => Object.assign({}, slot));
+  shaped.forEach((slot, idx) => {
+    if (isLibero(slot.main)) {
+      if (slot.replaced) {
+        shaped[idx] = { main: slot.replaced, replaced: "" };
+      } else {
+        shaped[idx] = { main: "", replaced: "" };
+      }
+    }
+  });
+  return shaped;
+}
+function roleToAutoCategory(roleLabel = "") {
+  const r = (roleLabel || "").toUpperCase();
+  if (r.startsWith("P")) return "P";
+  if (r.startsWith("O")) return "O";
+  if (r.startsWith("C")) return "C";
+  if (r.startsWith("S")) return "S";
+  return "";
+}
+function swapPreferredLibero() {
+  const libs = (state.liberos || []).filter(n => (state.players || []).includes(n));
+  if (libs.length < 2) return;
+  const current = libs.includes(state.preferredLibero) ? state.preferredLibero : libs[0];
+  const next = libs[(libs.indexOf(current) + 1) % libs.length];
+  state.preferredLibero = next;
+  state.liberoAutoMap = {};
+  enforceAutoLiberoForState({ skipServerOnServe: true });
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+}
+function applyAutoLiberoSubstitutionToCourt(baseCourt, options = {}) {
+  const { skipServerOnServe = true } = options;
+  if (!state.autoLiberoBackline) return cloneCourtLineup(baseCourt);
+  if (!state.autoLiberoRole) return cloneCourtLineup(baseCourt);
+  cleanLiberoAutoMap();
+  const libSet = new Set(state.liberos || []);
+  if (libSet.size === 0) return cloneCourtLineup(baseCourt);
+  const liberoList = (state.liberos || []).filter(n => libSet.has(n));
+  const mapping = state.liberoAutoMap || {};
+  const shaped = removeLiberosAndRestore(baseCourt).map(slot => Object.assign({}, slot));
+  let primaryLibero = (state.preferredLibero && libSet.has(state.preferredLibero)) ? state.preferredLibero : null;
+  // normalizza eventuali doppi liberi già presenti
+  for (let i = 0; i < shaped.length; i++) {
+    const slot = shaped[i];
+    if (libSet.has(slot.main)) {
+      if (!primaryLibero) {
+        primaryLibero = slot.main;
+        if (slot.replaced) {
+          registerLiberoPair(slot.replaced, slot.main);
+        }
+      } else {
+        // secondo libero: rimuovilo e rimetti la titolare se nota
+        if (slot.replaced) {
+          shaped[i] = { main: slot.replaced, replaced: "" };
+        } else {
+          shaped[i] = { main: "", replaced: "" };
+        }
+      }
+    }
+  }
+  if (!primaryLibero) {
+    primaryLibero = liberoList[0] || null;
+    state.preferredLibero = primaryLibero || "";
+  }
+  if (!primaryLibero) return shaped;
+  const selCat = (state.autoLiberoRole || "").toUpperCase();
+  let targetIdx = -1;
+  BACK_ROW_INDEXES.forEach(idx => {
+    if (targetIdx !== -1) return;
+    if (skipServerOnServe && state.isServing && idx === 0) return;
+    const roleHere = roleToAutoCategory(getRoleLabel(idx + 1)); // usa il ruolo corrente (ruotato)
+    if (selCat === roleHere && !isLibero(shaped[idx].main)) {
+      targetIdx = idx;
+    }
+  });
+  if (targetIdx === -1) return shaped;
+  const slot = shaped[targetIdx] || { main: "", replaced: "" };
+  const liberoName =
+    (mapping[slot.main] && libSet.has(mapping[slot.main]) && mapping[slot.main]) || primaryLibero;
+  if (!liberoName) return shaped;
+  shaped[targetIdx] = { main: liberoName, replaced: slot.main || "" };
+  registerLiberoPair(slot.main || "", liberoName);
+  state.preferredLibero = liberoName;
+  return shaped;
+}
+function enforceAutoLiberoForState(options = {}) {
+  if (!state.autoLiberoBackline) return;
+  ensureCourtShape();
+  let base =
+    state.autoRolePositioning && autoRoleBaseCourt && autoRoleBaseCourt.length === 6
+      ? cloneCourtLineup(autoRoleBaseCourt)
+      : cloneCourtLineup(state.court);
+  base = removeLiberosAndRestore(base);
+  const adjusted = applyAutoLiberoSubstitutionToCourt(base, options);
+  state.court = cloneCourtLineup(adjusted);
+  if (state.autoRolePositioning) {
+    updateAutoRoleBaseCourtCache(cloneCourtLineup(adjusted));
+    resetAutoRoleCache();
+  }
+}
 function isLibero(name) {
   if (!name) return false;
   return (state.liberos || []).includes(name);
@@ -829,10 +988,12 @@ function commitCourtChange(baseCourt, options = {}) {
   if (state.autoRolePositioning) {
     updateAutoRoleBaseCourtCache(baseCourt);
     state.court = ensureCourtShapeFor(baseCourt); // manteniamo il lineup base aggiornato
+    enforceAutoLiberoForState({ skipServerOnServe: true });
     applyAutoRolePositioning();
     return;
   }
   state.court = ensureCourtShapeFor(baseCourt);
+  enforceAutoLiberoForState({ skipServerOnServe: true });
   saveState();
   renderPlayers();
   renderBenchChips();
@@ -881,12 +1042,25 @@ function setCourtPlayer(posIdx, target, playerName) {
       } else {
         updated.replaced = prevMain || slot.replaced || "";
       }
+      if (updated.replaced) {
+        registerLiberoPair(updated.replaced, name);
+      }
     } else {
       updated.replaced = "";
     }
     releaseReplaced(name, posIdx, baseCourt);
     baseCourt[posIdx] = updated;
     nextCourt = baseCourt;
+  }
+  const placedSlot = nextCourt && nextCourt[posIdx];
+  if (placedSlot && isLibero(placedSlot.main) && placedSlot.replaced) {
+    registerLiberoPair(placedSlot.replaced, placedSlot.main);
+    state.preferredLibero = placedSlot.main;
+    const roleCat = roleToAutoCategory(getRoleLabel(posIdx + 1)); // ruolo corrente della posizione
+    if (roleCat) {
+      state.autoLiberoRole = roleCat;
+      state.autoLiberoBackline = true;
+    }
   }
   commitCourtChange(nextCourt);
 }
@@ -1687,6 +1861,8 @@ function resetMatchState() {
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
   const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
+  const preservedLiberoMap = Object.assign({}, state.liberoAutoMap || {});
+  const preservedPreferredLibero = state.preferredLibero || "";
   if (typeof resetSetTypeState === "function") {
     resetSetTypeState();
   }
@@ -1708,6 +1884,8 @@ function resetMatchState() {
   state.matchFinished = false;
   state.scoreOverrides = {};
   state.autoRotatePending = false;
+  state.liberoAutoMap = preservedLiberoMap;
+  state.preferredLibero = preservedPreferredLibero;
   state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
@@ -1727,6 +1905,7 @@ function resetMatchState() {
     elYoutubeFrame.src = "";
     elYoutubeFrame.style.display = "none";
   }
+  enforceAutoLiberoForState({ skipServerOnServe: true });
   initStats();
   saveState();
   recalcAllStatsAndUpdateUI();
@@ -3288,6 +3467,19 @@ function getReplacedByLiberos() {
 function cleanLiberos() {
   const valid = new Set(state.players || []);
   state.liberos = (state.liberos || []).filter(n => valid.has(n));
+  cleanLiberoAutoMap();
+}
+function cleanLiberoAutoMap() {
+  const validPlayers = new Set(state.players || []);
+  const libSet = new Set(state.liberos || []);
+  const map = state.liberoAutoMap || {};
+  const cleaned = {};
+  Object.entries(map).forEach(([replaced, libero]) => {
+    if (validPlayers.has(replaced) && libSet.has(libero)) {
+      cleaned[replaced] = libero;
+    }
+  });
+  state.liberoAutoMap = cleaned;
 }
 function toggleLibero(name) {
   if (!name) return;
@@ -3419,9 +3611,10 @@ function updateRotationDisplay() {
   }
 }
 function getRoleLabel(index) {
-  const offset = (state.rotation || 1) - 1;
+  const offset = (state.rotation || 1) - 1; // numero rotazioni effettuate
   const roles = BASE_ROLES;
-  return roles[(index - offset + 12) % 6] || roles[index] || "";
+  const idx0 = ((index - 1) % 6 + 6) % 6; // 0-based
+  return roles[(idx0 - offset + 6) % 6] || roles[idx0] || "";
 }
 function syncAutoRotateToggle() {
   if (elAutoRotateToggle) {
@@ -3536,6 +3729,7 @@ function animateFlip(prevRects, selector, keyBuilder) {
 function applyAutoRolePositioning() {
   if (!state.autoRolePositioning) return;
   ensureCourtShape();
+  enforceAutoLiberoForState({ skipServerOnServe: true });
   const phase = getCurrentPhase();
   const rot = state.rotation || 1;
   if (autoRolePhaseApplied === phase && autoRoleRotationApplied === rot) return;
@@ -3599,14 +3793,15 @@ function rotateCourt(direction) {
     }
     return slot;
   });
+  const withLibero = applyAutoLiberoSubstitutionToCourt(rotatedBase, { skipServerOnServe: true });
   // Aggiorna sempre il lineup base ruotato
-  state.court = rotatedBase;
+  state.court = withLibero;
   if (state.autoRolePositioning) {
-    updateAutoRoleBaseCourtCache(rotatedBase);
+    updateAutoRoleBaseCourtCache(withLibero);
     resetAutoRoleCache();
     applyAutoRolePositioning();
   } else {
-    state.court = rotatedBase;
+    state.court = withLibero;
     resetAutoRoleCache();
   }
   saveState();

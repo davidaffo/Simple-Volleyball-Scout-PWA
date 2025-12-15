@@ -3215,6 +3215,9 @@ function handleAutoRotationFromEvent(eventObj) {
   state.autoRotatePending = pending;
   state.isServing = serving;
   eventObj.autoRotateNext = pending;
+  if (typeof enforceAutoLiberoForState === "function") {
+    enforceAutoLiberoForState({ skipServerOnServe: true });
+  }
   saveState();
   if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
     applyAutoRolePositioning();
@@ -3248,6 +3251,9 @@ function recomputeServeFlagsFromHistory() {
   });
   state.isServing = serving;
   state.autoRotatePending = pending;
+  if (typeof enforceAutoLiberoForState === "function") {
+    enforceAutoLiberoForState({ skipServerOnServe: true });
+  }
 }
 function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
   if (state.matchFinished) {
@@ -4767,6 +4773,10 @@ function buildMatchExportPayload() {
       video: state.video,
       pointRules: state.pointRules,
       autoRotate: state.autoRotate,
+      autoLiberoBackline: state.autoLiberoBackline,
+      autoLiberoRole: state.autoLiberoRole,
+      liberoAutoMap: state.liberoAutoMap,
+      preferredLibero: state.preferredLibero,
       nextSetType: state.nextSetType
     }
   };
@@ -4849,6 +4859,11 @@ function applyImportedMatch(nextState, options = {}) {
     .filter(name => (nextState.players || []).includes(name))
     .slice(0, 1);
   merged.liberos = nextState.liberos || [];
+  merged.liberoAutoMap = nextState.liberoAutoMap || {};
+  merged.autoLiberoBackline = nextState.autoLiberoBackline !== false;
+  merged.autoLiberoRole =
+    typeof nextState.autoLiberoRole === "string" ? nextState.autoLiberoRole : state.autoLiberoRole || "";
+  merged.preferredLibero = typeof nextState.preferredLibero === "string" ? nextState.preferredLibero : state.preferredLibero || "";
   merged.court =
     nextState.court ||
     [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }];
@@ -4872,10 +4887,16 @@ function applyImportedMatch(nextState, options = {}) {
   state = merged;
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
+  if (typeof cleanLiberoAutoMap === "function") {
+    cleanLiberoAutoMap();
+  }
   migrateTeamsToPersistent();
   migrateOpponentTeamsToPersistent();
   syncTeamsFromStorage();
   syncOpponentTeamsFromStorage();
+  if (typeof enforceAutoLiberoForState === "function") {
+    enforceAutoLiberoForState({ skipServerOnServe: true });
+  }
   saveState();
   applyTheme(state.theme || "dark");
   applyMatchInfoToUI();
@@ -5344,6 +5365,8 @@ function resetMatch() {
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
   const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
+  const preservedLiberoMap = Object.assign({}, state.liberoAutoMap || {});
+  const preservedPreferredLibero = state.preferredLibero || "";
   state.events = [];
   state.court = preservedCourt;
   state.rotation = preservedRotation;
@@ -5354,6 +5377,11 @@ function resetMatch() {
   state.matchFinished = false;
   state.autoRotatePending = false;
   state.isServing = preservedServing;
+  state.liberoAutoMap = preservedLiberoMap;
+  state.preferredLibero = preservedPreferredLibero;
+  if (typeof enforceAutoLiberoForState === "function") {
+    enforceAutoLiberoForState({ skipServerOnServe: true });
+  }
   state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
@@ -5915,6 +5943,46 @@ function init() {
       }
     });
   }
+  const elAutoLiberoSelect = document.getElementById("auto-libero-select");
+  const elAutoLiberoSelectSettings = document.getElementById("auto-libero-select-settings");
+  const elSwapLibero = document.getElementById("btn-swap-libero");
+  const elSwapLiberoSettings = document.getElementById("btn-swap-libero-settings");
+  const syncAutoLiberoSelects = role => {
+    if (elAutoLiberoSelect) elAutoLiberoSelect.value = role || "";
+    if (elAutoLiberoSelectSettings) elAutoLiberoSelectSettings.value = role || "";
+  };
+  syncAutoLiberoSelects(state.autoLiberoRole || "");
+  [elAutoLiberoSelect, elAutoLiberoSelectSettings].forEach(sel => {
+    if (!sel) return;
+    sel.addEventListener("change", () => {
+      const role = sel.value || "";
+      if (typeof setAutoLiberoRole === "function") {
+        setAutoLiberoRole(role);
+      } else {
+        state.autoLiberoRole = role;
+        state.autoLiberoBackline = role !== "" ? true : state.autoLiberoBackline;
+        state.liberoAutoMap = {};
+        saveState();
+        if (typeof enforceAutoLiberoForState === "function") {
+          enforceAutoLiberoForState({ skipServerOnServe: true });
+        }
+        renderPlayers();
+        renderBenchChips();
+        renderLiberoChipsInline();
+        renderLineupChips();
+      }
+      syncAutoLiberoSelects(role);
+    });
+  });
+  [elSwapLibero, elSwapLiberoSettings].forEach(btn => {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      if (typeof swapPreferredLibero === "function") {
+        swapPreferredLibero();
+        syncAutoLiberoSelects(state.autoLiberoRole || "");
+      }
+    });
+  });
   const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
   if (elAutoRoleP1AmericanToggle) {
     elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;
