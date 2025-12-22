@@ -1102,7 +1102,7 @@ function renderPlayers() {
       : "Trascina una giocatrice qui";
     const roleTag = document.createElement("span");
     roleTag.className = "court-role-tag";
-    roleTag.textContent = getRoleLabel(posIdx);
+    roleTag.textContent = getRoleLabel((posIdx || 0) + 1);
     nameBlock.appendChild(nameLabel);
     nameBlock.appendChild(roleTag);
     if (isLibSlot && slot.replaced) {
@@ -5600,6 +5600,15 @@ function initSwipeTabs() {
   document.addEventListener("touchstart", onStart, { passive: true });
   document.addEventListener("touchend", onEnd, { passive: true });
 }
+function ensureBaseRotationDefault() {
+  const rot = parseInt(state.rotation, 10);
+  const noHistory = !state.events || state.events.length === 0;
+  if (!rot || rot < 1 || rot > 6 || noHistory) {
+    state.rotation = 1;
+    updateRotationDisplay();
+    saveState();
+  }
+}
 function init() {
   isLoadingMatch = true;
   initTabs();
@@ -5607,6 +5616,7 @@ function init() {
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
+  ensureBaseRotationDefault();
   const linkImport = maybeImportMatchFromUrl();
   renderYoutubePlayer();
   restoreCachedLocalVideo();
@@ -5629,9 +5639,6 @@ function init() {
   renderMatchesSelect();
   renderLiveScore();
   renderPlayers();
-  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
-    applyAutoRolePositioning();
-  }
   if (!state.players || state.players.length === 0) {
     applyTemplateTeam({ askReset: false });
   } else {
@@ -5648,6 +5655,9 @@ function init() {
     renderLiberoTags();
     renderMetricsConfig();
     renderTeamsSelect();
+  }
+  if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
+    applyAutoRolePositioning();
   }
   ensureSkillClock();
   ensureVideoClock();

@@ -623,6 +623,8 @@ function applyDefaultLineup(names = []) {
   state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
   state.rotation = 1;
   autoRoleBaseCourt = null;
+  state.autoRoleBaseCourt = null;
+  resetAutoRoleCache();
 }
 function setAutoRolePositioning(enabled) {
   const next = !!enabled;
@@ -3123,6 +3125,9 @@ function updatePlayersList(newPlayers, options = {}) {
     if (setDefaultLineup) {
       applyDefaultLineup(lineupNames);
     }
+    state.autoRoleBaseCourt = null;
+    autoRoleBaseCourt = null;
+    resetAutoRoleCache();
     ensureMetricsConfigDefaults();
     state.savedTeams = state.savedTeams || {};
     initStats();
