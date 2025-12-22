@@ -2841,40 +2841,52 @@ body[data-theme="light"] .agg-table td {
   padding-right: 0.2rem;
 }
 .attack-trajectory-content {
-  max-width: min(1100px, 98vw);
-  width: 100%;
-  height: min(90vh, 900px);
+  max-width: none;
+  width: 100vw;
+  height: 100svh;
+  max-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  position: relative;
 }
 .attack-trajectory-body {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-}
-.attack-trajectory-instructions {
-  font-size: 0.9rem;
-  opacity: 0.85;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
 }
 .attack-trajectory-netpoints {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
+  flex-wrap: wrap;
+  position: relative;
+  padding: 0.1rem 0.1rem 0.2rem 4.2rem;
+  min-height: 1.6rem;
+  border-radius: 0.8rem;
 }
 .attack-trajectory-netpoints.hidden {
   display: none;
 }
 .attack-trajectory-netpoints-label {
-  font-size: 0.85rem;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
   font-weight: 600;
   opacity: 0.8;
+  position: absolute;
+  left: 0.2rem;
+  top: 50%;
+  transform: translateY(-50%);
 }
-.attack-trajectory-netpoints-buttons {
-  display: inline-flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-}
-.attack-trajectory-netpoints-buttons button {
-  padding: 0.25rem 0.5rem;
+.attack-trajectory-netpoints button[data-net-point] {
+  position: absolute;
+  left: calc(var(--net-x, 0.5) * 100%);
+  top: 50%;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.7rem;
   border-radius: 999px;
   border: 1px solid #2f2f2f;
   background: #1f1f1f;
@@ -2882,17 +2894,17 @@ body[data-theme="light"] .agg-table td {
   font-size: 0.78rem;
   font-weight: 700;
 }
-.attack-trajectory-netpoints-buttons button.active {
+.attack-trajectory-netpoints button[data-net-point].active {
   background: #2d6cdf;
   border-color: #2d6cdf;
   color: #fff;
 }
-body[data-theme="light"] .attack-trajectory-netpoints-buttons button {
+body[data-theme="light"] .attack-trajectory-netpoints button[data-net-point] {
   background: #f1f5f9;
   border-color: #cbd5e1;
   color: #0f172a;
 }
-body[data-theme="light"] .attack-trajectory-netpoints-buttons button.active {
+body[data-theme="light"] .attack-trajectory-netpoints button[data-net-point].active {
   background: #2563eb;
   border-color: #2563eb;
   color: #fff;
@@ -2903,7 +2915,8 @@ body[data-theme="light"] .attack-trajectory-netpoints-buttons button.active {
   overflow: hidden;
   border-radius: 0.6rem;
   border: 1px solid #2f2f2f;
-  min-height: 420px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .attack-trajectory-stage img {
   display: block;
@@ -2921,8 +2934,13 @@ body[data-theme="light"] .attack-trajectory-netpoints-buttons button.active {
   pointer-events: auto;
 }
 .attack-trajectory-actions {
-  display: flex;
-  justify-content: flex-end;
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 4;
+}
+body[data-theme="light"] .attack-trajectory-netpoints {
+  color: #0f172a;
 }
 .set-type-grid {
   display: grid;
@@ -3450,6 +3468,14 @@ body[data-theme="light"] .floating-actions__block {
   .tabs-dots {
     display: inline-flex;
   }
+  .attack-trajectory-content {
+    width: 100vw;
+    height: 100svh;
+    max-height: 100svh;
+  }
+  .attack-trajectory-stage {
+    min-height: 0;
+  }
   .scout-grid {
     display: block;
   }
@@ -3561,6 +3587,14 @@ body.force-mobile .players-area {
 body.force-mobile #players-container {
   min-height: 0;
   align-items: start;
+}
+body.force-mobile .attack-trajectory-content {
+  width: 100vw;
+  height: 100svh;
+  max-height: 100svh;
+}
+body.force-mobile .attack-trajectory-stage {
+  min-height: 0;
 }
 
 @media print {

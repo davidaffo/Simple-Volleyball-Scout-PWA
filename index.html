@@ -723,31 +723,22 @@ Bianchi 18"></textarea>
   <div id="attack-trajectory-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="attack-trajectory-title">
     <div class="skill-modal__backdrop" data-close-trajectory></div>
     <div class="skill-modal__content attack-trajectory-content">
-      <div class="skill-modal__head">
-        <div id="attack-trajectory-title" class="skill-modal__title">Seleziona traiettoria attacco</div>
-        <button id="attack-trajectory-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
-      </div>
       <div class="attack-trajectory-body">
-        <div id="attack-trajectory-instructions" class="attack-trajectory-instructions">
-          Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.
-        </div>
-        <div id="attack-trajectory-netpoints" class="attack-trajectory-netpoints hidden" aria-label="Punti rete attacco">
-          <span class="attack-trajectory-netpoints-label">Punto rete</span>
-          <div class="attack-trajectory-netpoints-buttons">
-            <button type="button" data-net-point="5">5</button>
-            <button type="button" data-net-point="7-9">7-9</button>
-            <button type="button" data-net-point="3">3</button>
-            <button type="button" data-net-point="4">4</button>
-            <button type="button" data-net-point="6-F">6-F</button>
-          </div>
-        </div>
         <div class="attack-trajectory-stage">
           <img id="attack-trajectory-image" alt="Campo per traiettoria" />
           <canvas id="attack-trajectory-canvas"></canvas>
         </div>
+        <div id="attack-trajectory-netpoints" class="attack-trajectory-netpoints hidden" aria-label="Punti rete attacco">
+          <span class="attack-trajectory-netpoints-label">Punto rete</span>
+          <button type="button" data-net-point="5" style="--net-x: 0.1667">5</button>
+          <button type="button" data-net-point="7-9" style="--net-x: 0.3333">7-9</button>
+          <button type="button" data-net-point="3" style="--net-x: 0.5">3</button>
+          <button type="button" data-net-point="4" style="--net-x: 0.6667">4</button>
+          <button type="button" data-net-point="6-F" style="--net-x: 0.8333">6-F</button>
+        </div>
       </div>
       <div class="attack-trajectory-actions">
-        <button id="attack-trajectory-close-btn" class="secondary small" type="button">Chiudi</button>
+        <button id="attack-trajectory-close-btn" class="pill-remove" type="button" aria-label="Chiudi">✕</button>
       </div>
     </div>
   </div>
