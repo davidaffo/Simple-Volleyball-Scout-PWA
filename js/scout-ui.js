@@ -5431,6 +5431,14 @@ function initSwipeTabs() {
     if (dt > maxTime) return;
     if (Math.abs(dy) > maxOffset) return;
     if (Math.abs(dx) < minDistance) return;
+    if (document.body.classList.contains("drawer-menu-open")) {
+      if (dx < 0) document.body.classList.remove("drawer-menu-open");
+      return;
+    }
+    if (document.body.classList.contains("drawer-log-open")) {
+      if (dx > 0) document.body.classList.remove("drawer-log-open");
+      return;
+    }
     const dir = dx > 0 ? "right" : "left";
     const idx = tabsOrder.indexOf(activeTab);
     if (idx === -1) return;
