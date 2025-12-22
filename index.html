@@ -207,102 +207,102 @@ Bianchi 18"></textarea>
               <input type="checkbox" id="auto-rotate-toggle" />
               Rotazione automatica su cambio palla
             </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="auto-role-toggle" />
-              Auto posizionamento per ruolo
-            </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="auto-role-toggle" />
+                Auto posizionamento per ruolo
+              </label>
+            </div>
+        </div>
+        <div class="team-settings-panel court-actions-bar">
+          <div class="rotation-block court-rotation-block">
+            <div class="rotation-controls">
+              <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+              <div class="rotation-display">
+                <select id="rotation-select" class="rotation-select">
+                  <option value="1">P1</option>
+                  <option value="2">P2</option>
+                  <option value="3">P3</option>
+                  <option value="4">P4</option>
+                  <option value="5">P5</option>
+                  <option value="6">P6</option>
+                </select>
+              </div>
+              <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
+            </div>
+            <div class="rotation-toggles">
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="auto-role-p1american-toggle" />
+                P1 americana (OH in 4, OP in 2 su cambio palla)
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="attack-trajectory-toggle" />
+                Disegna traiettoria attacco
+              </label>
+              <label class="auto-rotate-toggle auto-libero-row">
+                <span>Libero automatico</span>
+                <div class="auto-libero-controls">
+                  <select id="auto-libero-select">
+                    <option value="">Nessuno</option>
+                    <option value="P">P</option>
+                    <option value="S">S</option>
+                    <option value="C">C</option>
+                    <option value="O">O</option>
+                  </select>
+                  <button type="button" id="btn-swap-libero" class="small secondary">Cambia libero</button>
+                </div>
+              </label>
+            </div>
+            <div class="set-type-shortcuts" id="set-type-shortcuts">
+              <div class="set-type-shortcuts__head">
+                <span class="set-type-shortcuts__label">Tipo alzata</span>
+                <span class="set-type-shortcuts__current" aria-live="polite">Prossima: <strong id="set-type-current">—</strong></span>
+                <span class="set-type-shortcuts__hint">Tasti: M · S · Q · V · F · A (Esc reset)</span>
+              </div>
+              <div class="set-type-shortcuts__buttons">
+                <button class="set-type-btn" data-settype="mezza" type="button">Mezza</button>
+                <button class="set-type-btn" data-settype="super" type="button">Super</button>
+                <button class="set-type-btn" data-settype="quick" type="button">Quick</button>
+                <button class="set-type-btn" data-settype="veloce" type="button">Veloce</button>
+                <button class="set-type-btn" data-settype="fast" type="button">Fast</button>
+                <button class="set-type-btn" data-settype="alta" type="button">Alta</button>
+                <button class="set-type-btn secondary" data-clear-settype type="button">Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="score-actions court-game-actions">
+            <button id="btn-score-team-point" class="small">Punto fatto</button>
+            <button id="btn-score-team-error" class="small danger">Errore/Fallo</button>
+            <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
+            <button id="btn-open-lineup" class="secondary small">Imposta formazione</button>
+          </div>
+          <div class="team-controls-panel">
+            <div class="libero-inline">
+              <label>Libero</label>
+              <div id="libero-tags-inline" class="libero-tags"></div>
+            </div>
+            <div class="rotation-toggles">
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="predictive-skill-toggle" />
+                Flusso skill automatico (mostra solo la prossima)
+              </label>
+            </div>
+            <div class="skill-flow-panel">
+              <label>Forza prossima skill</label>
+              <div class="skill-flow-grid" id="skill-flow-buttons">
+                <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Battuta</button>
+                <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ricezione</button>
+                <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">Attacco</button>
+                <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Muro</button>
+                <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Difesa</button>
+                <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Alzata</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       <div class="section scout-col-center" data-scout-panel="team">
         <div class="players-area">
           <div id="players-container"></div>
-          <div class="court-actions-bar">
-            <div class="rotation-block court-rotation-block">
-              <div class="rotation-controls">
-                <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
-                <div class="rotation-display">
-                  <select id="rotation-select" class="rotation-select">
-                    <option value="1">P1</option>
-                    <option value="2">P2</option>
-                    <option value="3">P3</option>
-                    <option value="4">P4</option>
-                    <option value="5">P5</option>
-                    <option value="6">P6</option>
-                  </select>
-                </div>
-                <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
-              </div>
-              <div class="rotation-toggles">
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="auto-role-p1american-toggle" />
-                  P1 americana (OH in 4, OP in 2 su cambio palla)
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="attack-trajectory-toggle" />
-                  Disegna traiettoria attacco
-                </label>
-                <label class="auto-rotate-toggle auto-libero-row">
-                  <span>Libero automatico</span>
-                  <div class="auto-libero-controls">
-                    <select id="auto-libero-select">
-                      <option value="">Nessuno</option>
-                      <option value="P">P</option>
-                      <option value="S">S</option>
-                      <option value="C">C</option>
-                      <option value="O">O</option>
-                    </select>
-                    <button type="button" id="btn-swap-libero" class="small secondary">Cambia libero</button>
-                  </div>
-                </label>
-              </div>
-              <div class="set-type-shortcuts" id="set-type-shortcuts">
-                <div class="set-type-shortcuts__head">
-                  <span class="set-type-shortcuts__label">Tipo alzata</span>
-                  <span class="set-type-shortcuts__current" aria-live="polite">Prossima: <strong id="set-type-current">—</strong></span>
-                  <span class="set-type-shortcuts__hint">Tasti: M · S · Q · V · F · A (Esc reset)</span>
-                </div>
-                <div class="set-type-shortcuts__buttons">
-                  <button class="set-type-btn" data-settype="mezza" type="button">Mezza</button>
-                  <button class="set-type-btn" data-settype="super" type="button">Super</button>
-                  <button class="set-type-btn" data-settype="quick" type="button">Quick</button>
-                  <button class="set-type-btn" data-settype="veloce" type="button">Veloce</button>
-                  <button class="set-type-btn" data-settype="fast" type="button">Fast</button>
-                  <button class="set-type-btn" data-settype="alta" type="button">Alta</button>
-                  <button class="set-type-btn secondary" data-clear-settype type="button">Reset</button>
-                </div>
-              </div>
-            </div>
-            <div class="score-actions court-game-actions">
-              <button id="btn-score-team-point" class="small">Punto fatto</button>
-              <button id="btn-score-team-error" class="small danger">Errore/Fallo</button>
-              <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
-              <button id="btn-open-lineup" class="secondary small">Imposta formazione</button>
-            </div>
-            <div class="team-controls-panel">
-              <div class="libero-inline">
-                <label>Libero</label>
-                <div id="libero-tags-inline" class="libero-tags"></div>
-              </div>
-              <div class="rotation-toggles">
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="predictive-skill-toggle" />
-                  Flusso skill automatico (mostra solo la prossima)
-                </label>
-              </div>
-              <div class="skill-flow-panel">
-                <label>Forza prossima skill</label>
-                <div class="skill-flow-grid" id="skill-flow-buttons">
-                  <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Battuta</button>
-                  <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ricezione</button>
-                  <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">Attacco</button>
-                  <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Muro</button>
-                  <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Difesa</button>
-                  <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Alzata</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
       <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">
