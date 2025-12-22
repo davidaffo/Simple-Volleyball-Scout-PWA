@@ -1089,6 +1089,26 @@ function renderPlayers() {
     tagLibero.style.visibility = isLibSlot ? "visible" : "hidden";
     tagBar.appendChild(posLabel);
     tagBar.appendChild(tagLibero);
+    if (isLibSlot && slot.replaced) {
+      const btnReturn = document.createElement("button");
+      btnReturn.type = "button";
+      btnReturn.className = "libero-return-btn";
+      btnReturn.title = "Rientra " + slot.replaced;
+      btnReturn.textContent = "↩";
+      const handleReturn = e => {
+        e.stopPropagation();
+        if (typeof restorePlayerFromLibero === "function") {
+          restorePlayerFromLibero(posIdx);
+        }
+      };
+      btnReturn.addEventListener("click", handleReturn);
+      btnReturn.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") {
+          handleReturn(e);
+        }
+      });
+      tagBar.appendChild(btnReturn);
+    }
     header.appendChild(tagBar);
     const nameBlock = document.createElement("div");
     nameBlock.className = "court-name-block inline";
@@ -1105,26 +1125,6 @@ function renderPlayers() {
     roleTag.textContent = getRoleLabel((posIdx || 0) + 1);
     nameBlock.appendChild(nameLabel);
     nameBlock.appendChild(roleTag);
-    if (isLibSlot && slot.replaced) {
-      const subText = document.createElement("span");
-      subText.className = "libero-replace-pill";
-      const jersey = getPlayerNumber(slot.replaced) || "";
-      const shortName =
-        formatNameWithNumber(slot.replaced, { compactCourt: true }) || "Tit";
-      subText.title = "Sostituisce " + shortName;
-      subText.textContent = "↺ " + (jersey || shortName);
-      subText.draggable = true;
-      subText.addEventListener("dragstart", e => handleLiberoReplacedDragStart(e, slot.replaced));
-      subText.addEventListener("dragend", handleBenchDragEnd);
-      nameBlock.appendChild(subText);
-      const returnBtn = document.createElement("button");
-      returnBtn.type = "button";
-      returnBtn.className = "libero-return-btn small secondary";
-      returnBtn.textContent = "Rientra";
-      returnBtn.title = "Rimetti la titolare al posto del libero";
-      returnBtn.addEventListener("click", () => setCourtPlayer(posIdx, "main", slot.replaced));
-      nameBlock.appendChild(returnBtn);
-    }
     header.appendChild(nameBlock);
     card.appendChild(header);
 
@@ -5969,6 +5969,7 @@ function init() {
   const elAutoLiberoSelectSettings = document.getElementById("auto-libero-select-settings");
   const elSwapLibero = document.getElementById("btn-swap-libero");
   const elSwapLiberoSettings = document.getElementById("btn-swap-libero-settings");
+  const elLiberoToBench = document.getElementById("btn-libero-to-bench");
   const syncAutoLiberoSelects = role => {
     if (elAutoLiberoSelect) elAutoLiberoSelect.value = role || "";
     if (elAutoLiberoSelectSettings) elAutoLiberoSelectSettings.value = role || "";
@@ -6005,6 +6006,13 @@ function init() {
       }
     });
   });
+  if (elLiberoToBench) {
+    elLiberoToBench.addEventListener("click", () => {
+      if (typeof sendLiberoToBench === "function") {
+        sendLiberoToBench();
+      }
+    });
+  }
   const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
   if (elAutoRoleP1AmericanToggle) {
     elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;

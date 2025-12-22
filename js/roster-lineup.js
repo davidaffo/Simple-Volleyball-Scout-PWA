@@ -841,6 +841,25 @@ function swapPreferredLibero() {
   renderLiberoChipsInline();
   renderLineupChips();
 }
+function restorePlayerFromLibero(posIdx) {
+  ensureCourtShape();
+  const idx = typeof posIdx === "number" ? posIdx : parseInt(posIdx, 10);
+  if (isNaN(idx) || idx < 0 || idx >= state.court.length) return;
+  const slot = state.court[idx] || { main: "", replaced: "" };
+  if (!isLibero(slot.main) || !slot.replaced) return;
+  state.court[idx] = { main: slot.replaced, replaced: "" };
+  state.liberoAutoMap = {};
+  state.preferredLibero = (state.liberos || [])[0] || "";
+  if (state.autoRolePositioning) {
+    updateAutoRoleBaseCourtCache(state.court);
+    resetAutoRoleCache();
+  }
+  saveState();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+}
 function applyAutoLiberoSubstitutionToCourt(baseCourt, options = {}) {
   const { skipServerOnServe = true } = options;
   if (!state.autoLiberoBackline) return cloneCourtLineup(baseCourt);
@@ -3524,7 +3543,7 @@ function getBenchLiberos() {
   const replaced = new Set(getReplacedByLiberos());
   const names = [];
   (state.players || []).forEach(name => {
-    if (libSet.has(name) && !used.has(name)) {
+    if (libSet.has(name) && (!used.has(name) || replaced.has(name))) {
       names.push(name);
     }
   });

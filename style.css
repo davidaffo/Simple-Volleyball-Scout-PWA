@@ -1175,6 +1175,27 @@ body[data-theme="light"] .court-card.libero-card {
   border: 1px solid #1c9999;
   color: #d1fae5;
 }
+.libero-return-btn {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.25rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border-color, #2f2f2f);
+  border-radius: 0.35rem;
+  background: #1f2937;
+  color: var(--text-color, #f5f5f5);
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.libero-return-btn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
 body[data-theme="light"] .court-libero-pill {
   background: #daf5e7;
   border-color: #22c55e;
