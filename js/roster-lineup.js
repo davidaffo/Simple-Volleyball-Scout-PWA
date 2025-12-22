@@ -26,22 +26,29 @@ function renderChipList(container, names, lockedMap, options = {}) {
     }
     if (lockedMap[name] !== undefined) classes.push("bench-locked");
     chip.className = classes.join(" ");
-    chip.draggable = true;
+    const isLiberoPlayer = libSet.has(name);
+    const allowDirect = isLiberoColumn || isLiberoPlayer;
+    chip.draggable = allowDirect;
     chip.dataset.playerName = name;
     const label = document.createElement("span");
     label.textContent =
       formatNameWithNumber(name) + (lockedMap[name] !== undefined ? " (sost. libero)" : "");
     chip.appendChild(label);
-    chip.addEventListener("dragstart", handleBenchDragStart);
-    chip.addEventListener("dragend", handleBenchDragEnd);
-    chip.addEventListener("click", () => handleBenchClick(name));
-    chip.addEventListener("pointerdown", ev => handleBenchPointerDown(ev, name));
-    chip.addEventListener("touchstart", ev => handleBenchTouchStart(ev, name), {
-      passive: false
-    });
-    chip.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
-    chip.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
-    chip.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
+    if (allowDirect) {
+      chip.addEventListener("dragstart", handleBenchDragStart);
+      chip.addEventListener("dragend", handleBenchDragEnd);
+      chip.addEventListener("click", () => handleBenchClick(name));
+      chip.addEventListener("pointerdown", ev => handleBenchPointerDown(ev, name));
+      chip.addEventListener("touchstart", ev => handleBenchTouchStart(ev, name), {
+        passive: false
+      });
+      chip.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
+      chip.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
+      chip.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
+    } else {
+      chip.title = "Usa Imposta formazione per cambiare le titolari.";
+      chip.setAttribute("aria-disabled", "true");
+    }
     container.appendChild(chip);
   });
 }
@@ -3166,6 +3173,7 @@ function handleBenchDragStart(e) {
   if (!(target instanceof HTMLElement)) return;
   const name = target.dataset.playerName;
   if (!name || !e.dataTransfer) return;
+  if (!isLibero(name)) return;
   draggedPlayerName = name;
   draggedFromPos = null;
   dragSourceType = "bench";
@@ -3178,6 +3186,18 @@ function handleBenchDragStart(e) {
 }
 function handleBenchDragEnd() {
   resetDragState();
+}
+function handleLiberoReplacedDragStart(e, name) {
+  if (!name || !e.dataTransfer) return;
+  draggedPlayerName = name;
+  draggedFromPos = null;
+  dragSourceType = "libero-return";
+  e.dataTransfer.setData("text/plain", name);
+  e.dataTransfer.effectAllowed = "move";
+  if (activeDropChip) {
+    activeDropChip.classList.remove("drop-over");
+    activeDropChip = null;
+  }
 }
 function handleBenchDropZoneOver(e) {
   if (dragSourceType !== "court" || draggedFromPos === null) return;
@@ -3398,8 +3418,61 @@ function handlePositionDrop(e, card) {
     resetDragState();
     return;
   }
+  const targetSlot = state.court[posIdx] || { main: "", replaced: "" };
+  if (isLibero(targetSlot.main) && targetSlot.replaced === name) {
+    setCourtPlayer(posIdx, target, name);
+    resetDragState();
+    return;
+  }
   if (dragSourceType === "court" && draggedFromPos !== null) {
-    swapCourtPlayers(draggedFromPos, posIdx);
+    if (!isLibero(name)) {
+      resetDragState();
+      return;
+    }
+    if (draggedFromPos === posIdx) {
+      resetDragState();
+      return;
+    }
+    if (!canPlaceInSlot(name, posIdx, true)) {
+      resetDragState();
+      return;
+    }
+    const baseCourt = ensureCourtShapeFor(state.court);
+    const originSlot = baseCourt[draggedFromPos] || { main: "", replaced: "" };
+    if (originSlot.main === name) {
+      baseCourt[draggedFromPos] = originSlot.replaced
+        ? { main: originSlot.replaced, replaced: "" }
+        : { main: "", replaced: "" };
+    }
+    let nextCourt = null;
+    if (lineupCore && typeof lineupCore.setPlayerOnCourt === "function") {
+      nextCourt = lineupCore.setPlayerOnCourt({
+        court: baseCourt,
+        posIdx,
+        playerName: name,
+        liberos: state.liberos || []
+      });
+    } else {
+      const reserved = reserveNamesInCourt(name, baseCourt);
+      const slot = reserved[posIdx] || { main: "", replaced: "" };
+      const prevMain = slot.main;
+      const updated = Object.assign({}, slot, { main: name });
+      const prevWasLibero = isLibero(prevMain);
+      updated.replaced = prevWasLibero ? slot.replaced || "" : prevMain || slot.replaced || "";
+      releaseReplaced(name, posIdx, reserved);
+      reserved[posIdx] = updated;
+      nextCourt = reserved;
+    }
+    commitCourtChange(nextCourt);
+    resetDragState();
+    return;
+  }
+  if (dragSourceType === "libero-return") {
+    setCourtPlayer(posIdx, target, name);
+    resetDragState();
+    return;
+  }
+  if (!isLibero(name)) {
     resetDragState();
     return;
   }
@@ -3407,6 +3480,7 @@ function handlePositionDrop(e, card) {
   resetDragState();
 }
 function handleBenchClick(name) {
+  if (!isLibero(name)) return;
   ensureCourtShape();
   const lockedMap = getLockedMap();
   const targetPos =
@@ -3574,7 +3648,7 @@ function renderLineupChips() {
     chip.className = "lineup-chip";
     const roleSpan = document.createElement("span");
     roleSpan.className = "chip-role";
-    roleSpan.textContent = "Pos " + (idx + 1) + " · " + getRoleLabel(idx);
+    roleSpan.textContent = "Pos " + (idx + 1) + " · " + getRoleLabel(idx + 1);
     const nameSpan = document.createElement("span");
     nameSpan.className = "chip-name";
     const active = slot.main;

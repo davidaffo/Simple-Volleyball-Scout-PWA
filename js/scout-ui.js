@@ -1071,10 +1071,13 @@ function renderPlayers() {
     }
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
-    header.className = "court-header" + (activeName ? " draggable" : "");
-    header.draggable = !!activeName;
-    header.addEventListener("dragstart", e => handleCourtDragStart(e, posIdx));
-    header.addEventListener("dragend", handleCourtDragEnd);
+    const canDrag = !!activeName && isLibSlot;
+    header.className = "court-header" + (canDrag ? " draggable" : "");
+    header.draggable = canDrag;
+    if (canDrag) {
+      header.addEventListener("dragstart", e => handleCourtDragStart(e, posIdx));
+      header.addEventListener("dragend", handleCourtDragEnd);
+    }
     const tagBar = document.createElement("div");
     tagBar.className = "court-tagbar";
     const posLabel = document.createElement("span");
@@ -1110,7 +1113,17 @@ function renderPlayers() {
         formatNameWithNumber(slot.replaced, { compactCourt: true }) || "Tit";
       subText.title = "Sostituisce " + shortName;
       subText.textContent = "↺ " + (jersey || shortName);
+      subText.draggable = true;
+      subText.addEventListener("dragstart", e => handleLiberoReplacedDragStart(e, slot.replaced));
+      subText.addEventListener("dragend", handleBenchDragEnd);
       nameBlock.appendChild(subText);
+      const returnBtn = document.createElement("button");
+      returnBtn.type = "button";
+      returnBtn.className = "libero-return-btn small secondary";
+      returnBtn.textContent = "Rientra";
+      returnBtn.title = "Rimetti la titolare al posto del libero";
+      returnBtn.addEventListener("click", () => setCourtPlayer(posIdx, "main", slot.replaced));
+      nameBlock.appendChild(returnBtn);
     }
     header.appendChild(nameBlock);
     card.appendChild(header);

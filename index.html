@@ -167,7 +167,7 @@ Bianchi 18"></textarea>
 
   <div class="tab-panel" data-tab="scout">
     <div class="scout-grid">
-      <div class="section scout-col-left">
+      <div class="section scout-col-left" data-scout-panel="match">
         <div class="set-controls grid-row">
           <div class="score-card score-card-top">
             <div class="score-top-row">
@@ -183,11 +183,11 @@ Bianchi 18"></textarea>
                 </select>
               </div>
             </div>
-            <div class="score-layout">
-              <div class="score-side score-side-for">
-                <button id="btn-score-for-plus" class="small">+ Fatti</button>
-                <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
-              </div>
+          <div class="score-layout">
+            <div class="score-side score-side-for">
+              <button id="btn-score-for-plus" class="small">+ Fatti</button>
+              <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
+            </div>
               <div class="score-center">
                 <label>Punteggio</label>
                 <div id="live-score" class="score-value emph">0 - 0</div>
@@ -197,14 +197,6 @@ Bianchi 18"></textarea>
                 <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
               </div>
             </div>
-          </div>
-          <div class="bench-inline">
-            <label>Riserve (trascina in campo)</label>
-            <div id="bench-chips" class="bench-chips bench-inline-list"></div>
-          </div>
-          <div class="libero-inline">
-            <label>Libero</label>
-            <div id="libero-tags-inline" class="libero-tags"></div>
           </div>
           <div class="set-bottom-actions">
             <button id="btn-next-set" class="small secondary">Set successivo</button>
@@ -219,25 +211,10 @@ Bianchi 18"></textarea>
               <input type="checkbox" id="auto-role-toggle" />
               Auto posizionamento per ruolo
             </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="predictive-skill-toggle" />
-              Flusso skill automatico (mostra solo la prossima)
-            </label>
-          </div>
-          <div class="skill-flow-panel">
-            <label>Forza prossima skill</label>
-            <div class="skill-flow-grid" id="skill-flow-buttons">
-              <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Battuta</button>
-              <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ricezione</button>
-              <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">Attacco</button>
-              <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Muro</button>
-              <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Difesa</button>
-              <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Alzata</button>
-            </div>
           </div>
         </div>
       </div>
-      <div class="section scout-col-center">
+      <div class="section scout-col-center" data-scout-panel="team">
         <div class="players-area">
           <div id="players-container"></div>
           <div class="court-actions-bar">
@@ -245,8 +222,6 @@ Bianchi 18"></textarea>
               <div class="rotation-controls">
                 <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
                 <div class="rotation-display">
-                  <label>Rotazione (P1-P6)</label>
-                  <div id="rotation-indicator" class="rotation-number" role="button" tabindex="0">P1</div>
                   <select id="rotation-select" class="rotation-select">
                     <option value="1">P1</option>
                     <option value="2">P2</option>
@@ -304,10 +279,33 @@ Bianchi 18"></textarea>
               <button id="btn-freeball" class="secondary small">Freeball (salta muro/difesa)</button>
               <button id="btn-open-lineup" class="secondary small">Imposta formazione</button>
             </div>
+            <div class="team-controls-panel">
+              <div class="libero-inline">
+                <label>Libero</label>
+                <div id="libero-tags-inline" class="libero-tags"></div>
+              </div>
+              <div class="rotation-toggles">
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="predictive-skill-toggle" />
+                  Flusso skill automatico (mostra solo la prossima)
+                </label>
+              </div>
+              <div class="skill-flow-panel">
+                <label>Forza prossima skill</label>
+                <div class="skill-flow-grid" id="skill-flow-buttons">
+                  <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Battuta</button>
+                  <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ricezione</button>
+                  <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">Attacco</button>
+                  <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Muro</button>
+                  <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Difesa</button>
+                  <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Alzata</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      <div class="section log-section scout-col-right" data-log-section>
+      <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">
         <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
         <div id="events-log"></div>
         <div class="card-inline log-undo">
