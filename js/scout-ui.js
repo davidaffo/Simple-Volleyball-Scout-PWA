@@ -5261,6 +5261,39 @@ function initTabs() {
   });
   setActiveTab("info");
 }
+function initSwipeTabs() {
+  if (!("ontouchstart" in window)) return;
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  const minDistance = 90;
+  const maxOffset = 50;
+  const maxTime = 700;
+  const tabsOrder = ["info", "scout", "aggregated", "video"];
+  const onStart = e => {
+    const t = (e.changedTouches && e.changedTouches[0]) || e;
+    startX = t.clientX;
+    startY = t.clientY;
+    startTime = Date.now();
+  };
+  const onEnd = e => {
+    if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
+    const t = (e.changedTouches && e.changedTouches[0]) || e;
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    const dt = Date.now() - startTime;
+    if (dt > maxTime) return;
+    if (Math.abs(dy) > maxOffset) return;
+    if (Math.abs(dx) < minDistance) return;
+    const dir = dx > 0 ? "right" : "left";
+    const idx = tabsOrder.indexOf(activeTab);
+    if (idx === -1) return;
+    const nextIdx = dir === "left" ? Math.min(tabsOrder.length - 1, idx + 1) : Math.max(0, idx - 1);
+    if (nextIdx !== idx) setActiveTab(tabsOrder[nextIdx]);
+  };
+  document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchend", onEnd, { passive: true });
+}
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
   const noHistory = !state.events || state.events.length === 0;
@@ -5273,6 +5306,7 @@ function ensureBaseRotationDefault() {
 function init() {
   isLoadingMatch = true;
   initTabs();
+  initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
@@ -5402,7 +5436,13 @@ function init() {
     elBtnSaveTeam.addEventListener("click", saveCurrentTeam);
   }
   if (elBtnOpenLineup) {
-    elBtnOpenLineup.addEventListener("click", openMobileLineupModal);
+    elBtnOpenLineup.addEventListener("click", () => {
+      if (typeof openMobileLineupModal === "function") {
+        openMobileLineupModal();
+      } else if (typeof openTeamManagerModal === "function") {
+        openTeamManagerModal("our");
+      }
+    });
   }
   if (elBtnSaveOpponentTeam) {
     elBtnSaveOpponentTeam.addEventListener("click", saveCurrentOpponentTeam);
@@ -5591,17 +5631,52 @@ function init() {
   if (elRotationSelect) {
     elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
   }
+  const elAutoRotateToggleSettings = document.getElementById("auto-rotate-toggle-settings");
   if (elAutoRotateToggle) {
-    elAutoRotateToggle.addEventListener("change", () =>
-      setAutoRotateEnabled(elAutoRotateToggle.checked)
-    );
+    elAutoRotateToggle.addEventListener("change", () => {
+      setAutoRotateEnabled(elAutoRotateToggle.checked);
+      if (elAutoRotateToggleSettings) {
+        elAutoRotateToggleSettings.checked = elAutoRotateToggle.checked;
+      }
+    });
+  }
+  if (elAutoRotateToggleSettings) {
+    elAutoRotateToggleSettings.checked = !!state.autoRotate;
+    elAutoRotateToggleSettings.addEventListener("change", () => {
+      setAutoRotateEnabled(elAutoRotateToggleSettings.checked);
+      if (elAutoRotateToggle) {
+        elAutoRotateToggle.checked = elAutoRotateToggleSettings.checked;
+      }
+    });
   }
   // Mobile controls rimossi
   const elAutoRoleToggle = document.getElementById("auto-role-toggle");
+  const elAutoRoleToggleSettings = document.getElementById("auto-role-toggle-settings");
   if (elAutoRoleToggle) {
     elAutoRoleToggle.checked = !!state.autoRolePositioning;
     elAutoRoleToggle.addEventListener("change", () => {
       const enabled = elAutoRoleToggle.checked;
+      if (elAutoRoleToggleSettings) {
+        elAutoRoleToggleSettings.checked = enabled;
+      }
+      if (typeof setAutoRolePositioning === "function") {
+        setAutoRolePositioning(enabled);
+      } else {
+        state.autoRolePositioning = enabled;
+        saveState();
+      }
+      if (enabled && typeof applyAutoRolePositioning === "function") {
+        applyAutoRolePositioning();
+      }
+    });
+  }
+  if (elAutoRoleToggleSettings) {
+    elAutoRoleToggleSettings.checked = !!state.autoRolePositioning;
+    elAutoRoleToggleSettings.addEventListener("change", () => {
+      const enabled = elAutoRoleToggleSettings.checked;
+      if (elAutoRoleToggle) {
+        elAutoRoleToggle.checked = enabled;
+      }
       if (typeof setAutoRolePositioning === "function") {
         setAutoRolePositioning(enabled);
       } else {
@@ -5662,9 +5737,13 @@ function init() {
     });
   }
   const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
+  const elAutoRoleP1AmericanToggleSettings = document.getElementById("auto-role-p1american-toggle-settings");
   if (elAutoRoleP1AmericanToggle) {
     elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;
     elAutoRoleP1AmericanToggle.addEventListener("change", () => {
+      if (elAutoRoleP1AmericanToggleSettings) {
+        elAutoRoleP1AmericanToggleSettings.checked = elAutoRoleP1AmericanToggle.checked;
+      }
       if (typeof setAutoRoleP1American === "function") {
         setAutoRoleP1American(elAutoRoleP1AmericanToggle.checked);
       } else {
@@ -5673,21 +5752,65 @@ function init() {
       }
     });
   }
+  if (elAutoRoleP1AmericanToggleSettings) {
+    elAutoRoleP1AmericanToggleSettings.checked = !!state.autoRoleP1American;
+    elAutoRoleP1AmericanToggleSettings.addEventListener("change", () => {
+      if (elAutoRoleP1AmericanToggle) {
+        elAutoRoleP1AmericanToggle.checked = elAutoRoleP1AmericanToggleSettings.checked;
+      }
+      if (typeof setAutoRoleP1American === "function") {
+        setAutoRoleP1American(elAutoRoleP1AmericanToggleSettings.checked);
+      } else {
+        state.autoRoleP1American = !!elAutoRoleP1AmericanToggleSettings.checked;
+        saveState();
+      }
+    });
+  }
   const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
+  const elPredictiveSkillToggleSettings = document.getElementById("predictive-skill-toggle-settings");
   if (elPredictiveSkillToggle) {
     elPredictiveSkillToggle.checked = !!state.predictiveSkillFlow;
     elPredictiveSkillToggle.addEventListener("change", () => {
+      if (elPredictiveSkillToggleSettings) {
+        elPredictiveSkillToggleSettings.checked = elPredictiveSkillToggle.checked;
+      }
       state.predictiveSkillFlow = !!elPredictiveSkillToggle.checked;
       if (!state.predictiveSkillFlow) state.skillFlowOverride = null;
       saveState();
       renderPlayers();
     });
   }
+  if (elPredictiveSkillToggleSettings) {
+    elPredictiveSkillToggleSettings.checked = !!state.predictiveSkillFlow;
+    elPredictiveSkillToggleSettings.addEventListener("change", () => {
+      if (elPredictiveSkillToggle) {
+        elPredictiveSkillToggle.checked = elPredictiveSkillToggleSettings.checked;
+      }
+      state.predictiveSkillFlow = !!elPredictiveSkillToggleSettings.checked;
+      if (!state.predictiveSkillFlow) state.skillFlowOverride = null;
+      saveState();
+      renderPlayers();
+    });
+  }
   const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
+  const elAttackTrajectoryToggleSettings = document.getElementById("attack-trajectory-toggle-settings");
   if (elAttackTrajectoryToggle) {
     elAttackTrajectoryToggle.checked = !!state.attackTrajectoryEnabled;
     elAttackTrajectoryToggle.addEventListener("change", () => {
+      if (elAttackTrajectoryToggleSettings) {
+        elAttackTrajectoryToggleSettings.checked = elAttackTrajectoryToggle.checked;
+      }
       state.attackTrajectoryEnabled = !!elAttackTrajectoryToggle.checked;
+      saveState();
+    });
+  }
+  if (elAttackTrajectoryToggleSettings) {
+    elAttackTrajectoryToggleSettings.checked = !!state.attackTrajectoryEnabled;
+    elAttackTrajectoryToggleSettings.addEventListener("change", () => {
+      if (elAttackTrajectoryToggle) {
+        elAttackTrajectoryToggle.checked = elAttackTrajectoryToggleSettings.checked;
+      }
+      state.attackTrajectoryEnabled = !!elAttackTrajectoryToggleSettings.checked;
       saveState();
     });
   }
