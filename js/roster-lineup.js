@@ -300,6 +300,7 @@ function loadState() {
     state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
     state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
     state.nextSetType = parsed.nextSetType || "";
+    state.forceMobileLayout = !!parsed.forceMobileLayout;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
     state.liberoAutoMap = parsed.liberoAutoMap || {};
     state.savedTeams = parsed.savedTeams || {};

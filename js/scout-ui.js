@@ -751,6 +751,16 @@ function openSkillModal(playerIdx, playerName) {
   document.body.style.overflow = "hidden";
   document.body.classList.add("modal-open");
 }
+function openSkillCodesModal(playerIdx, playerName, skillId) {
+  if (!elSkillModal || !elSkillModalBody) return;
+  const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
+  if (isNaN(idx) || !state.players[idx]) return;
+  if (!skillId) return;
+  renderSkillCodes(idx, playerName, skillId);
+  elSkillModal.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  document.body.classList.add("modal-open");
+}
 function openSubModal(posIdx) {
   if (!elSkillModal || !elSkillModalBody) return;
   modalMode = "sub";
@@ -945,7 +955,36 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
   };
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   const enabledSkills = getEnabledSkills();
+  if (enabledSkills.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
+    targetEl.appendChild(empty);
+    return;
+  }
+  if (isCompactMobile) {
+    const pickedSkillId = nextSkillId || null;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "skill-picker-btn skill-single-btn" + (pickedSkillId ? " skill-" + pickedSkillId : "");
+    if (pickedSkillId) {
+      const colors = getSkillColors(pickedSkillId);
+      const meta = SKILLS.find(s => s.id === pickedSkillId);
+      btn.style.backgroundColor = colors.bg;
+      btn.style.color = colors.text;
+      btn.textContent = meta ? meta.label : pickedSkillId;
+      btn.addEventListener("click", () => {
+        openSkillCodesModal(playerIdx, activeName, pickedSkillId);
+      });
+    } else {
+      btn.textContent = "Seleziona skill";
+      btn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
+    }
+    targetEl.appendChild(btn);
+    return;
+  }
   const enabledSkillIds = new Set(enabledSkills.map(s => s.id));
   let pickedSkillId = nextSkillId || getSelectedSkill(playerIdx);
   if (pickedSkillId && !enabledSkillIds.has(pickedSkillId)) {
@@ -953,13 +992,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     pickedSkillId = null;
   }
   if (!pickedSkillId) {
-    if (enabledSkills.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "players-empty";
-      empty.textContent = "Abilita almeno un fondamentale nelle impostazioni per scoutizzare.";
-      targetEl.appendChild(empty);
-      return;
-    }
     const grid = document.createElement("div");
     grid.className = "skill-grid";
     enabledSkills.forEach(skill => {
@@ -1042,6 +1074,7 @@ function renderPlayers() {
   ensureCourtShape();
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   updateSetTypeVisibility(predictedSkillId);
   const hasSelectedServe = isAnySelectedSkill("serve");
   const layoutSkill =
@@ -1075,6 +1108,9 @@ function renderPlayers() {
     card.dataset.playerName = activeName || "";
     if (!activeName) {
       card.classList.add("empty");
+    }
+    if (isCompactMobile) {
+      card.classList.add("compact-card");
     }
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
@@ -5333,6 +5369,11 @@ function init() {
   renderMatchesSelect();
   renderLiveScore();
   renderPlayers();
+  const applyForceMobileLayout = enabled => {
+    document.body.classList.toggle("force-mobile", !!enabled);
+    renderPlayers();
+  };
+  applyForceMobileLayout(!!state.forceMobileLayout);
   if (!state.players || state.players.length === 0) {
     applyTemplateTeam({ askReset: false });
   } else {
@@ -5815,6 +5856,15 @@ function init() {
     });
   }
   initSetTypeShortcuts();
+  const elForceMobileToggle = document.getElementById("force-mobile-toggle");
+  if (elForceMobileToggle) {
+    elForceMobileToggle.checked = !!state.forceMobileLayout;
+    elForceMobileToggle.addEventListener("change", () => {
+      state.forceMobileLayout = !!elForceMobileToggle.checked;
+      applyForceMobileLayout(state.forceMobileLayout);
+      saveState();
+    });
+  }
   const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
   if (elSkillFlowButtons) {
     elSkillFlowButtons.addEventListener("click", e => {
@@ -5977,6 +6027,30 @@ function init() {
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   // pulsanti lineup mobile rimossi
+  const elMobileMenuBtn = document.getElementById("btn-open-menu-mobile");
+  const elMobileLogBtn = document.getElementById("btn-open-log-mobile");
+  const elDrawerBackdrop = document.getElementById("scout-drawer-backdrop");
+  const closeDrawers = () => {
+    document.body.classList.remove("drawer-menu-open", "drawer-log-open");
+  };
+  if (elMobileMenuBtn) {
+    elMobileMenuBtn.addEventListener("click", () => {
+      document.body.classList.toggle("drawer-menu-open");
+      document.body.classList.remove("drawer-log-open");
+    });
+  }
+  if (elMobileLogBtn) {
+    elMobileLogBtn.addEventListener("click", () => {
+      document.body.classList.toggle("drawer-log-open");
+      document.body.classList.remove("drawer-menu-open");
+    });
+  }
+  if (elDrawerBackdrop) {
+    elDrawerBackdrop.addEventListener("click", closeDrawers);
+  }
+  document.querySelectorAll("[data-close-drawer]").forEach(btn => {
+    btn.addEventListener("click", closeDrawers);
+  });
   if (elAggTabButtons && typeof elAggTabButtons.forEach === "function") {
     elAggTabButtons.forEach(btn => {
       btn.addEventListener("click", () => {
