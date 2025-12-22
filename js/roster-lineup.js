@@ -38,13 +38,6 @@ function renderChipList(container, names, lockedMap, options = {}) {
       chip.addEventListener("dragstart", handleBenchDragStart);
       chip.addEventListener("dragend", handleBenchDragEnd);
       chip.addEventListener("click", () => handleBenchClick(name));
-      chip.addEventListener("pointerdown", ev => handleBenchPointerDown(ev, name));
-      chip.addEventListener("touchstart", ev => handleBenchTouchStart(ev, name), {
-        passive: false
-      });
-      chip.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
-      chip.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
-      chip.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
     } else {
       chip.title = "Usa Imposta formazione per cambiare le titolari.";
       chip.setAttribute("aria-disabled", "true");
@@ -61,12 +54,6 @@ let draggedPlayerName = "";
 let draggedFromPos = null;
 let dragSourceType = "";
 let benchDropZoneInitialized = false;
-let touchBenchName = "";
-let touchBenchOverPos = -1;
-let touchBenchGhost = null;
-let touchBenchStart = { x: 0, y: 0 };
-let benchTouchListenersAttached = false;
-let touchBenchPointerId = null;
 const BASE_ROLES = ["P", "S1", "C2", "O", "S2", "C1"];
 const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const BACK_ROW_INDEXES = new Set([0, 4, 5]); // pos1, pos5, pos6
@@ -93,7 +80,6 @@ window.applyPhasePermutation = applyPhasePermutation;
 const elEventsLog = document.getElementById("events-log");
 const elUndoLastSummary = document.getElementById("undo-last-summary");
 const elEventsLogSummary = document.getElementById("events-log-summary");
-const elFloatingLogSummary = document.getElementById("floating-log-summary");
 const elBtnApplyPlayers = document.getElementById("btn-apply-players");
 const elBtnApplyOpponentPlayers = document.getElementById("btn-apply-opponent-players");
 const elOpponentPlayersInput = document.getElementById("opponent-players-input");
@@ -140,28 +126,15 @@ const elBtnExportDb = document.getElementById("btn-export-db");
 const elBtnImportDb = document.getElementById("btn-import-db");
 const elDbFileInput = document.getElementById("db-file-input");
 const elBtnUndo = document.getElementById("btn-undo");
-const elBtnUndoFloating = document.getElementById("btn-undo-floating");
-const elBtnOpenActionsModal = document.getElementById("btn-open-actions-modal");
-const elActionsModal = document.getElementById("floating-actions-modal");
-const elActionsClose = document.getElementById("floating-actions-close");
 const elBtnOpenSettings = document.getElementById("btn-open-settings");
-const elBtnOpenSettingsFloating = document.getElementById("btn-open-settings-floating");
 const elSettingsModal = document.getElementById("settings-modal");
 const elSettingsClose = document.getElementById("settings-close");
 const elAutoRotateToggle = document.getElementById("auto-rotate-toggle");
-const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
 const elAutoRoleToggle = document.getElementById("auto-role-toggle");
 const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
 const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
 const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
 const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
-const elBtnOpenLineupMobile = document.getElementById("btn-open-lineup-mobile");
-const elBtnOpenLineupMobileFloating = document.getElementById("btn-open-lineup-mobile-floating");
-const elMobileLineupModal = document.getElementById("mobile-lineup-modal");
-const elMobileLineupClose = document.getElementById("mobile-lineup-close");
-const elMobileLineupList = document.getElementById("mobile-lineup-list");
-const elMiniCourt = document.getElementById("mini-court");
-const elMobileLineupConfirm = document.getElementById("mobile-lineup-confirm");
 const elAggTableBody = document.getElementById("agg-table-body");
 const elAggSecondBody = document.getElementById("agg-second-body");
 const elTrajectoryGrid = document.getElementById("trajectory-grid");
@@ -187,7 +160,6 @@ const elSecondFilterPrev = document.getElementById("second-filter-prev");
 const elSecondFilterReset = document.getElementById("second-filter-reset");
 const elRotationTableBody = document.getElementById("rotation-table-body");
 const elLiveScore = document.getElementById("live-score");
-const elLiveScoreFloating = document.getElementById("live-score-floating");
 const elLiveScoreModal = document.getElementById("live-score-modal");
 const elAggScore = document.getElementById("agg-score");
 const elAggSetCards = document.getElementById("agg-set-cards");
@@ -209,8 +181,6 @@ const elBtnNextSetModal = document.getElementById("btn-next-set-modal");
 const elBtnEndMatchModal = document.getElementById("btn-end-match-modal");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanels = document.querySelectorAll(".tab-panel");
-const tabDots = document.querySelectorAll(".tab-dot");
-const elToggleLogMobile = document.getElementById("toggle-log-mobile");
 const elLogSection = document.querySelector("[data-log-section]");
 const elAggTabButtons = document.querySelectorAll("[data-agg-tab-target]");
 const elAggSubPanels = document.querySelectorAll("[data-agg-tab]");
@@ -970,18 +940,6 @@ function canPlaceInSlot(name, posIdx, showAlert = true) {
   }
   return true;
 }
-function isMobileLayout() {
-  return (
-    window.matchMedia("(max-width: 900px)").matches ||
-    window.matchMedia("(pointer: coarse)").matches
-  );
-}
-function isTouchInput() {
-  const hasFine = window.matchMedia("(any-pointer: fine)").matches;
-  const hasCoarse = window.matchMedia("(any-pointer: coarse)").matches;
-  // Consider touch-only devices when there's no fine pointer available
-  return hasCoarse && !hasFine;
-}
 function reserveNamesInCourt(name, court = state.court) {
   if (lineupCore && typeof lineupCore.reserveNamesInCourt === "function") {
     const next = lineupCore.reserveNamesInCourt(name, court);
@@ -1170,15 +1128,10 @@ function syncCurrentSetUI(value) {
   if (elCurrentSet) {
     elCurrentSet.value = setValue;
   }
-  if (elCurrentSetFloating) {
-    elCurrentSetFloating.value = setValue;
-  }
   if (typeof document !== "undefined") {
     const label = "Set " + setValue;
     const display = document.getElementById("current-set-display");
-    const displayFloating = document.getElementById("current-set-floating-display");
     if (display) display.textContent = label;
-    if (displayFloating) displayFloating.textContent = label;
   }
 }
 const matchSettings = (typeof window !== "undefined" &&
@@ -1196,7 +1149,6 @@ const matchSettings = (typeof window !== "undefined" &&
     elMatchType,
     elLeg,
     elCurrentSet,
-    elCurrentSetFloating,
     elPlayersInput,
     elOpponentPlayersInput
   })) || {
@@ -2805,9 +2757,6 @@ function saveTeamManagerPayload(options = {}) {
   saveState();
   if (closeModal) closeTeamManagerModal();
   if (showAlert) alert((isOpponent ? "Avversaria salvata: " : "Squadra salvata: ") + payload.name);
-  if (!isOpponent && openLineupAfter && typeof openMobileLineupModal === "function") {
-    openMobileLineupModal();
-  }
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();
@@ -3240,163 +3189,6 @@ function handleBenchDropZoneDrop(e) {
   handleBenchDropZoneLeave();
   resetDragState();
 }
-function ensureBenchTouchListeners() {
-  if (benchTouchListenersAttached) return;
-  document.addEventListener("touchmove", handleBenchTouchMove, { passive: false });
-  document.addEventListener("touchend", handleBenchTouchEnd, { passive: false });
-  document.addEventListener("touchcancel", handleBenchTouchCancel, { passive: false });
-  document.addEventListener("pointermove", handleBenchPointerMove, { passive: false });
-  document.addEventListener("pointerup", handleBenchPointerUp, { passive: false });
-  document.addEventListener("pointercancel", handleBenchPointerCancel, { passive: false });
-  benchTouchListenersAttached = true;
-}
-function createBenchTouchGhost(text, x, y) {
-  if (touchBenchGhost && touchBenchGhost.parentNode) {
-    touchBenchGhost.parentNode.removeChild(touchBenchGhost);
-  }
-  const ghost = document.createElement("div");
-  ghost.className = "touch-drag-ghost";
-  ghost.textContent = text;
-  ghost.style.left = x + "px";
-  ghost.style.top = y + "px";
-  document.body.appendChild(ghost);
-  touchBenchGhost = ghost;
-}
-function moveBenchTouchGhost(x, y) {
-  if (!touchBenchGhost) return;
-  touchBenchGhost.style.left = x + "px";
-  touchBenchGhost.style.top = y + "px";
-}
-function clearBenchTouch() {
-  const prev = document.querySelector(".court-card.drop-over");
-  if (prev) prev.classList.remove("drop-over");
-  if (touchBenchGhost && touchBenchGhost.parentNode) {
-    touchBenchGhost.parentNode.removeChild(touchBenchGhost);
-  }
-  touchBenchGhost = null;
-  touchBenchName = "";
-  touchBenchOverPos = -1;
-  touchBenchPointerId = null;
-  document.body.style.overflow = "";
-}
-function updateBenchTouchOver(x, y) {
-  const elAt = document.elementFromPoint(x, y);
-  const card = elAt && elAt.closest(".court-card");
-  const prev = document.querySelector(".court-card.drop-over");
-  if (prev) prev.classList.remove("drop-over");
-  if (!card || !card.dataset.posIndex) {
-    touchBenchOverPos = -1;
-    return;
-  }
-  const posIdx = parseInt(card.dataset.posIndex, 10);
-  if (isNaN(posIdx) || !canPlaceInSlot(touchBenchName, posIdx, false)) {
-    touchBenchOverPos = -1;
-    return;
-  }
-  touchBenchOverPos = posIdx;
-  card.classList.add("drop-over");
-}
-function handleBenchTouchStart(e, name) {
-  if (!isMobileLayout()) return;
-  const t = e.touches && e.touches[0];
-  if (!t) return;
-  ensureBenchTouchListeners();
-  touchBenchName = name;
-  touchBenchStart = { x: t.clientX, y: t.clientY };
-  createBenchTouchGhost(formatNameWithNumber(name), t.clientX, t.clientY);
-  updateBenchTouchOver(t.clientX, t.clientY);
-  document.body.style.overflow = "hidden";
-  e.stopPropagation();
-  e.preventDefault();
-}
-function handleBenchTouchMove(e) {
-  if (!touchBenchName) return;
-  const t = e.touches && e.touches[0];
-  if (!t) return;
-  moveBenchTouchGhost(t.clientX, t.clientY);
-  updateBenchTouchOver(t.clientX, t.clientY);
-  e.stopPropagation();
-  e.preventDefault();
-}
-function handleBenchTouchEnd(e) {
-  if (!touchBenchName) return;
-  const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
-  const endX = t ? t.clientX : touchBenchStart.x;
-  const endY = t ? t.clientY : touchBenchStart.y;
-  const dist = Math.hypot(endX - touchBenchStart.x, endY - touchBenchStart.y);
-  if (dist < 8) {
-    handleBenchClick(touchBenchName);
-    clearBenchTouch();
-    return;
-  }
-  if (touchBenchOverPos >= 0 && canPlaceInSlot(touchBenchName, touchBenchOverPos, true)) {
-    setCourtPlayer(touchBenchOverPos, "main", touchBenchName);
-  }
-  e.stopPropagation();
-  clearBenchTouch();
-}
-function handleBenchTouchCancel() {
-  clearBenchTouch();
-}
-function handleBenchPointerDown(e, name) {
-  if (e.pointerType !== "touch" && e.pointerType !== "pen") return;
-  if (!isMobileLayout()) return;
-  ensureBenchTouchListeners();
-  touchBenchPointerId = e.pointerId;
-  touchBenchName = name;
-  touchBenchStart = { x: e.clientX, y: e.clientY };
-  createBenchTouchGhost(formatNameWithNumber(name), e.clientX, e.clientY);
-  updateBenchTouchOver(e.clientX, e.clientY);
-  document.body.style.overflow = "hidden";
-  if (e.target && typeof e.target.setPointerCapture === "function") {
-    e.target.setPointerCapture(e.pointerId);
-  }
-  e.stopPropagation();
-  e.preventDefault();
-}
-function handleBenchPointerMove(e) {
-  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
-  if (!touchBenchName) return;
-  moveBenchTouchGhost(e.clientX, e.clientY);
-  updateBenchTouchOver(e.clientX, e.clientY);
-  e.stopPropagation();
-  e.preventDefault();
-}
-function handleBenchPointerUp(e) {
-  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
-  if (e.target && typeof e.target.releasePointerCapture === "function") {
-    e.target.releasePointerCapture(e.pointerId);
-  }
-  handleBenchPointerDrop(e);
-}
-function handleBenchPointerCancel(e) {
-  if (touchBenchPointerId === null || e.pointerId !== touchBenchPointerId) return;
-  if (e.target && typeof e.target.releasePointerCapture === "function") {
-    e.target.releasePointerCapture(e.pointerId);
-  }
-  clearBenchTouch();
-  touchBenchPointerId = null;
-}
-function handleBenchPointerDrop(e) {
-  if (!touchBenchName) {
-    clearBenchTouch();
-    touchBenchPointerId = null;
-    return;
-  }
-  const dist = Math.hypot(e.clientX - touchBenchStart.x, e.clientY - touchBenchStart.y);
-  if (dist < 8) {
-    handleBenchClick(touchBenchName);
-  } else if (
-    touchBenchOverPos >= 0 &&
-    canPlaceInSlot(touchBenchName, touchBenchOverPos, true)
-  ) {
-    setCourtPlayer(touchBenchOverPos, "main", touchBenchName);
-  }
-  e.stopPropagation();
-  e.preventDefault();
-  clearBenchTouch();
-  touchBenchPointerId = null;
-}
 function handleCourtDragStart(e, posIdx) {
   const slot = state.court[posIdx] || { main: "" };
   if (!slot.main || !e.dataTransfer) return;
@@ -3631,13 +3423,12 @@ function renderBenchChips() {
   ensureBenchDropZone();
   if (!elBenchChips) return;
   elBenchChips.innerHTML = "";
-  const mobileLiberoOnly = isTouchInput();
-  const bench = mobileLiberoOnly ? getBenchLiberos() : getBenchPlayers();
+  const bench = getBenchPlayers();
   const lockedMap = getLockedMap();
   renderChipList(elBenchChips, bench, lockedMap, {
     highlightLibero: true,
-    isLiberoColumn: mobileLiberoOnly,
-    emptyText: mobileLiberoOnly ? "Nessun libero disponibile." : "Nessuna riserva disponibile.",
+    isLiberoColumn: false,
+    emptyText: "Nessuna riserva disponibile.",
     replacedSet: new Set(getReplacedByLiberos())
   });
 }
@@ -3691,15 +3482,6 @@ function updateRotationDisplay() {
   if (elRotationSelect) {
     elRotationSelect.value = String(state.rotation || 1);
   }
-  if (elRotationIndicatorFloating) {
-    elRotationIndicatorFloating.textContent = rotationLabel(state.rotation || 1);
-  }
-  if (elRotationSelectFloating) {
-    elRotationSelectFloating.value = String(state.rotation || 1);
-  }
-  if (elRotationIndicatorModal) {
-    elRotationIndicatorModal.textContent = rotationLabel(state.rotation || 1);
-  }
   syncAutoRotateToggle();
   syncAutoRoleToggle();
   syncAutoRoleP1AmericanToggle();
@@ -3717,9 +3499,6 @@ function getRoleLabel(index) {
 function syncAutoRotateToggle() {
   if (elAutoRotateToggle) {
     elAutoRotateToggle.checked = !!state.autoRotate;
-  }
-  if (elAutoRotateToggleFloating) {
-    elAutoRotateToggleFloating.checked = !!state.autoRotate;
   }
 }
 function setAutoRotateEnabled(enabled) {
@@ -3917,16 +3696,6 @@ function rotateCourt(direction) {
     const pos = el.dataset.slotIndex || "";
     return name || "mini-" + pos;
   });
-}
-function openActionsModal() {
-  if (!elActionsModal) return;
-  elActionsModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-}
-function closeActionsModal() {
-  if (!elActionsModal) return;
-  elActionsModal.classList.add("hidden");
-  document.body.style.overflow = "";
 }
 function openSettingsModal() {
   if (!elSettingsModal) return;

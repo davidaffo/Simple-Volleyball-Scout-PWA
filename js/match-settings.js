@@ -17,7 +17,6 @@
       elMatchType,
       elLeg,
       elCurrentSet,
-      elCurrentSetFloating,
       elPlayersInput,
       elOpponentPlayersInput
     } = deps;
@@ -41,10 +40,7 @@
       }
       state.match.matchType = (elMatchType && elMatchType.value) || "amichevole";
       state.match.leg = (elLeg && elLeg.value) || "";
-      const setValue =
-        (elCurrentSetFloating && elCurrentSetFloating.value) ||
-        (elCurrentSet && elCurrentSet.value) ||
-        1;
+      const setValue = (elCurrentSet && elCurrentSet.value) || 1;
       setCurrentSet(setValue, { save: false });
       saveState();
     }

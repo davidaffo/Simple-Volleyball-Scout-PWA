@@ -840,9 +840,6 @@ function renderErrorModal() {
 }
 function openErrorModal() {
   if (!elErrorModal) return;
-  if (typeof closeActionsModal === "function") {
-    closeActionsModal();
-  }
   renderErrorModal();
   elErrorModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
@@ -1688,7 +1685,6 @@ function renderEventsLog(options = {}) {
   if (!state.events || state.events.length === 0) {
     if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
-    if (elFloatingLogSummary) elFloatingLogSummary.textContent = "—";
     if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
     return;
   }
@@ -1751,9 +1747,6 @@ function renderEventsLog(options = {}) {
   }
   if (elEventsLogSummary) {
     elEventsLogSummary.textContent = summaryText;
-  }
-  if (elFloatingLogSummary) {
-    elFloatingLogSummary.textContent = compactSummary || "—";
   }
   if (elUndoLastSummary) {
     elUndoLastSummary.textContent = compactSummary || "—";
@@ -2893,311 +2886,10 @@ function renderLiveScore() {
     elLiveScore.textContent = totalLabel;
     elLiveScore.classList.add("emph");
   }
-  if (elLiveScoreFloating) {
-    const prefix = "S" + (state.currentSet || 1) + " · ";
-    elLiveScoreFloating.textContent = prefix + totalLabel;
-  }
   if (elLiveScoreModal) {
     elLiveScoreModal.textContent = totalLabel;
   }
-  if (elBtnOpenActionsModal) {
-    elBtnOpenActionsModal.textContent = "S" + (state.currentSet || 1) + " · " + totalLabel;
-  }
   updateMatchStatusUI();
-}
-function renderMobileLineupMiniCourt() {
-  if (!elMiniCourt) return;
-  elMiniCourt.innerHTML = "";
-  const slots = MINI_SLOT_ORDER.map(idx => mobileLineupOrder[idx] || "");
-  slots.forEach((name, visualIdx) => {
-    const slotIdx = MINI_SLOT_ORDER[visualIdx];
-    const btn = document.createElement("button");
-    btn.type = "button";
-    const selectedClass =
-      touchDragName &&
-      touchDragFromSlot === slotIdx &&
-      touchDragName === name &&
-      !touchDragFromList
-        ? " touch-selected"
-        : "";
-    const overClass = touchDragOverSlot === slotIdx ? " drop-over" : "";
-    btn.className = "mini-slot" + (name ? "" : " empty") + selectedClass + overClass;
-    btn.dataset.posNumber = String(slotIdx + 1);
-    btn.dataset.playerName = name || "";
-    btn.textContent = name ? formatNameWithNumber(name) : "";
-    btn.setAttribute("aria-label", name ? formatNameWithNumber(name) : "Slot " + (slotIdx + 1));
-    btn.dataset.slotIndex = String(slotIdx);
-    if (name) {
-      btn.draggable = true;
-      btn.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("text/plain", name);
-        e.dataTransfer.setData("source-slot", String(slotIdx));
-        e.dataTransfer.setData("source-list", "false");
-        e.dataTransfer.effectAllowed = "move";
-      });
-      btn.addEventListener("touchstart", ev => startTouchDrag(name, slotIdx, false, ev), {
-        passive: true
-      });
-    }
-    btn.addEventListener("touchmove", handleTouchMove, { passive: false });
-    btn.addEventListener("touchend", handleTouchEnd, { passive: false });
-    btn.addEventListener("dragover", e => {
-      e.preventDefault();
-      btn.classList.add("drop-over");
-    });
-    btn.addEventListener("dragleave", () => btn.classList.remove("drop-over"));
-    btn.addEventListener("drop", e => {
-      e.preventDefault();
-      btn.classList.remove("drop-over");
-      const nameDropped = e.dataTransfer.getData("text/plain");
-      if (!nameDropped) return;
-      const fromSlot = parseInt(e.dataTransfer.getData("source-slot"), 10);
-      const fromList = e.dataTransfer.getData("source-list") === "true";
-      if (!canPlaceInSlot(nameDropped, slotIdx, true)) return;
-      if (!fromList && !isNaN(fromSlot) && fromSlot === slotIdx) return;
-      const currentOccupant = mobileLineupOrder[slotIdx] || "";
-      if (!fromList && !isNaN(fromSlot) && currentOccupant) {
-        if (!canPlaceInSlot(currentOccupant, fromSlot, true)) return;
-      }
-      if (!fromList && !isNaN(fromSlot)) {
-        mobileLineupOrder[fromSlot] = "";
-      }
-      if (!fromList && !isNaN(fromSlot) && currentOccupant && fromSlot >= 0 && fromSlot < 6) {
-        mobileLineupOrder[fromSlot] = currentOccupant;
-      }
-      mobileLineupOrder[slotIdx] = nameDropped;
-      renderMobileLineupMiniCourt();
-      renderMobileLineupList();
-    });
-    btn.addEventListener("click", () => {
-      mobileLineupOrder[slotIdx] = "";
-      renderMobileLineupMiniCourt();
-      renderMobileLineupList();
-    });
-    elMiniCourt.appendChild(btn);
-  });
-}
-function renderMobileLineupList() {
-  if (!elMobileLineupList) return;
-  elMobileLineupList.innerHTML = "";
-  const used = new Set(mobileLineupOrder.filter(Boolean));
-  const mobileMode = isMobileLayout();
-  const liberoSet = new Set(state.liberos || []);
-  const playersList = (state.players || []).filter(
-    name => !(mobileMode && liberoSet.has(name))
-  );
-  if (!playersList || playersList.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "players-empty";
-    empty.textContent = "Aggiungi giocatrici nella sezione gestione.";
-    elMobileLineupList.appendChild(empty);
-    return;
-  }
-  playersList.forEach(name => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    const selectedClass =
-      touchDragName && touchDragName === name && touchDragFromList ? " touch-selected" : "";
-    btn.className = "mobile-lineup-chip" + (used.has(name) ? " selected" : "") + selectedClass;
-    btn.textContent = formatNameWithNumber(name);
-    btn.disabled = used.has(name);
-    btn.draggable = !used.has(name);
-    btn.addEventListener("click", () => {
-      let nextIndex = -1;
-      mobileLineupOrder.every((slot, idx) => {
-        if (!slot && canPlaceInSlot(name, idx, false)) {
-          nextIndex = idx;
-          return false;
-        }
-        return true;
-      });
-      if (nextIndex === -1) {
-        alert("Nessuna posizione disponibile per questa giocatrice.");
-        return;
-      }
-      mobileLineupOrder[nextIndex] = name;
-      renderMobileLineupMiniCourt();
-      renderMobileLineupList();
-    });
-    if (!used.has(name)) {
-      btn.addEventListener("dragstart", e => {
-        e.dataTransfer.setData("text/plain", name);
-        e.dataTransfer.setData("source-slot", "-1");
-        e.dataTransfer.setData("source-list", "true");
-        e.dataTransfer.effectAllowed = "copyMove";
-      });
-      btn.addEventListener("touchstart", ev => startTouchDrag(name, -1, true, ev), {
-        passive: true
-      });
-      btn.addEventListener("touchmove", handleTouchMove, { passive: false });
-      btn.addEventListener("touchend", handleTouchEnd, { passive: false });
-    }
-    elMobileLineupList.appendChild(btn);
-  });
-  elMobileLineupList.ondragover = e => {
-    e.preventDefault();
-  };
-  elMobileLineupList.ondrop = e => {
-    e.preventDefault();
-    const fromSlot = parseInt(e.dataTransfer.getData("source-slot"), 10);
-    const fromList = e.dataTransfer.getData("source-list") === "true";
-    if (!fromList && !isNaN(fromSlot) && fromSlot >= 0 && fromSlot < 6) {
-      mobileLineupOrder[fromSlot] = "";
-      renderMobileLineupMiniCourt();
-      renderMobileLineupList();
-    }
-  };
-  elMobileLineupList.addEventListener("touchmove", handleTouchMove, { passive: false });
-  elMobileLineupList.addEventListener("touchend", handleTouchEnd, { passive: false });
-}
-function openMobileLineupModal() {
-  if (!elMobileLineupModal) return;
-  ensureCourtShape();
-  mobileLineupOrder = Array.from({ length: 6 }, (_, idx) => state.court[idx]?.main || "");
-  elMobileLineupModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  renderMobileLineupMiniCourt();
-  renderMobileLineupList();
-}
-function closeMobileLineupModal() {
-  if (!elMobileLineupModal) return;
-  elMobileLineupModal.classList.add("hidden");
-  document.body.style.overflow = "";
-}
-function createTouchGhost(text, x, y) {
-  removeTouchGhost();
-  const ghost = document.createElement("div");
-  ghost.className = "touch-drag-ghost";
-  ghost.textContent = text;
-  ghost.style.left = x + "px";
-  ghost.style.top = y + "px";
-  document.body.appendChild(ghost);
-  touchGhost = ghost;
-}
-function moveTouchGhost(x, y) {
-  if (!touchGhost) return;
-  touchGhost.style.left = x + "px";
-  touchGhost.style.top = y + "px";
-}
-function removeTouchGhost() {
-  if (touchGhost && touchGhost.parentNode) {
-    touchGhost.parentNode.removeChild(touchGhost);
-  }
-  touchGhost = null;
-}
-function resetTouchDragState() {
-  touchDragName = "";
-  touchDragFromSlot = -1;
-  touchDragFromList = false;
-  touchDragOverSlot = -1;
-  removeTouchGhost();
-  renderMobileLineupMiniCourt();
-  renderMobileLineupList();
-}
-function startTouchDrag(name, sourceSlot, fromList, e) {
-  touchDragName = name;
-  touchDragFromSlot = sourceSlot;
-  touchDragFromList = fromList;
-  touchDragOverSlot = -1;
-  const t = e && e.touches && e.touches[0];
-  touchStartX = t ? t.clientX : 0;
-  touchStartY = t ? t.clientY : 0;
-  touchStartTime = Date.now();
-  createTouchGhost(formatNameWithNumber(name), touchStartX, touchStartY);
-  renderMobileLineupMiniCourt();
-  renderMobileLineupList();
-}
-function updateTouchOver(x, y) {
-  const elAtPoint = document.elementFromPoint(x, y);
-  const slotEl = elAtPoint && elAtPoint.closest(".mini-slot");
-  if (slotEl && slotEl.dataset.slotIndex) {
-    touchDragOverSlot = parseInt(slotEl.dataset.slotIndex, 10);
-  } else {
-    touchDragOverSlot = -1;
-  }
-  renderMobileLineupMiniCourt();
-}
-function applyTouchDrop(toSlot, dropToList) {
-  if (!touchDragName) return;
-  if (dropToList) {
-    if (touchDragFromSlot >= 0 && touchDragFromSlot < 6) {
-      mobileLineupOrder[touchDragFromSlot] = "";
-    }
-    resetTouchDragState();
-    return;
-  }
-  if (toSlot === null || toSlot === undefined || toSlot < 0) {
-    resetTouchDragState();
-    return;
-  }
-  if (!canPlaceInSlot(touchDragName, toSlot, true)) {
-    resetTouchDragState();
-    return;
-  }
-  const currentOccupant = mobileLineupOrder[toSlot] || "";
-  if (touchDragFromSlot >= 0 && currentOccupant) {
-    if (!canPlaceInSlot(currentOccupant, touchDragFromSlot, true)) {
-      resetTouchDragState();
-      return;
-    }
-  }
-  if (touchDragFromSlot >= 0 && touchDragFromSlot < 6) {
-    mobileLineupOrder[touchDragFromSlot] = "";
-  }
-  if (touchDragFromSlot >= 0 && touchDragFromSlot < 6 && currentOccupant) {
-    mobileLineupOrder[touchDragFromSlot] = currentOccupant;
-  }
-  mobileLineupOrder[toSlot] = touchDragName;
-  resetTouchDragState();
-}
-function handleTouchMove(e) {
-  if (!touchDragName) return;
-  if (!e.touches || !e.touches[0]) return;
-  const t = e.touches[0];
-  updateTouchOver(t.clientX, t.clientY);
-  moveTouchGhost(t.clientX, t.clientY);
-  e.preventDefault();
-}
-function handleTouchEnd(e) {
-  if (!touchDragName) return;
-  const touch = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
-  const x = touch ? touch.clientX : 0;
-  const y = touch ? touch.clientY : 0;
-  const elapsed = Date.now() - touchStartTime;
-  const dist = Math.hypot(x - touchStartX, y - touchStartY);
-  const isTap = dist < 10 && elapsed < 200;
-  const elAtPoint = document.elementFromPoint(x, y);
-  const slotEl = elAtPoint && elAtPoint.closest(".mini-slot");
-  const listEl = elAtPoint && elAtPoint.closest(".mobile-lineup-list");
-  if (isTap) {
-    if (touchDragFromList) {
-      let nextIndex = -1;
-      mobileLineupOrder.every((slot, idx) => {
-        if (!slot && canPlaceInSlot(touchDragName, idx, false)) {
-          nextIndex = idx;
-          return false;
-        }
-        return true;
-      });
-      if (nextIndex !== -1) {
-        mobileLineupOrder[nextIndex] = touchDragName;
-      }
-    } else if (touchDragFromSlot >= 0) {
-      mobileLineupOrder[touchDragFromSlot] = "";
-    }
-    resetTouchDragState();
-    e.preventDefault();
-    return;
-  }
-  if (slotEl && slotEl.dataset.slotIndex) {
-    const targetSlot = parseInt(slotEl.dataset.slotIndex, 10);
-    applyTouchDrop(targetSlot, false);
-  } else if (listEl) {
-    applyTouchDrop(-1, true);
-  } else {
-    resetTouchDragState();
-  }
-  e.preventDefault();
 }
 function handleAutoRotationFromEvent(eventObj) {
   if (!state || !state.autoRotate) {
@@ -5553,9 +5245,6 @@ function setActiveTab(target) {
   tabButtons.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tabTarget === target);
   });
-  tabDots.forEach(dot => {
-    dot.classList.toggle("active", dot.dataset.tabTarget === target);
-  });
   tabPanels.forEach(panel => {
     panel.classList.toggle("active", panel.dataset.tab === target);
   });
@@ -5570,46 +5259,7 @@ function initTabs() {
       }
     });
   });
-  tabDots.forEach(dot => {
-    dot.addEventListener("click", () => {
-      const target = dot.dataset.tabTarget;
-      if (target) setActiveTab(target);
-    });
-  });
   setActiveTab("info");
-}
-function initSwipeTabs() {
-  if (!("ontouchstart" in window)) return;
-  let startX = 0;
-  let startY = 0;
-  let startTime = 0;
-  const minDistance = 90;
-  const maxOffset = 50;
-  const maxTime = 700;
-  const tabsOrder = ["info", "scout", "aggregated", "video"];
-  const onStart = e => {
-    const t = (e.changedTouches && e.changedTouches[0]) || e;
-    startX = t.clientX;
-    startY = t.clientY;
-    startTime = Date.now();
-  };
-  const onEnd = e => {
-    if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
-    const t = (e.changedTouches && e.changedTouches[0]) || e;
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
-    const dt = Date.now() - startTime;
-    if (dt > maxTime) return;
-    if (Math.abs(dy) > maxOffset) return;
-    if (Math.abs(dx) < minDistance) return;
-    const dir = dx > 0 ? "right" : "left";
-    const idx = tabsOrder.indexOf(activeTab);
-    if (idx === -1) return;
-    const nextIdx = dir === "left" ? Math.min(tabsOrder.length - 1, idx + 1) : Math.max(0, idx - 1);
-    if (nextIdx !== idx) setActiveTab(tabsOrder[nextIdx]);
-  };
-  document.addEventListener("touchstart", onStart, { passive: true });
-  document.addEventListener("touchend", onEnd, { passive: true });
 }
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
@@ -5623,7 +5273,6 @@ function ensureBaseRotationDefault() {
 function init() {
   isLoadingMatch = true;
   initTabs();
-  initSwipeTabs();
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
@@ -5675,7 +5324,7 @@ function init() {
   updateMatchStatusUI();
   setScoutControlsDisabled(!!state.matchFinished);
 
-  [elCurrentSet, elCurrentSetFloating].forEach(select => {
+  [elCurrentSet].forEach(select => {
     if (!select) return;
     select.addEventListener("change", () => setCurrentSet(select.value));
   });
@@ -5933,26 +5582,14 @@ function init() {
   if (elBtnRotateCcw) {
     elBtnRotateCcw.addEventListener("click", () => rotateCourt("ccw"));
   }
-  if (elBtnRotateCwFloating) {
-    elBtnRotateCwFloating.addEventListener("click", () => rotateCourt("cw"));
-  }
-  if (elBtnRotateCcwFloating) {
-    elBtnRotateCcwFloating.addEventListener("click", () => rotateCourt("ccw"));
-  }
   if (elBtnRotateCwModal) {
     elBtnRotateCwModal.addEventListener("click", () => rotateCourt("cw"));
   }
   if (elBtnRotateCcwModal) {
     elBtnRotateCcwModal.addEventListener("click", () => rotateCourt("ccw"));
   }
-  const elAutoRotateToggleFloating = document.getElementById("auto-rotate-toggle-floating");
   if (elRotationSelect) {
     elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
-  }
-  if (elRotationSelectFloating) {
-    elRotationSelectFloating.addEventListener("change", () =>
-      setRotation(elRotationSelectFloating.value)
-    );
   }
   if (elAutoRotateToggle) {
     elAutoRotateToggle.addEventListener("change", () =>
@@ -6081,12 +5718,11 @@ function init() {
     });
     syncFreeballActive();
   }
-  [elBtnOpenSettings, elBtnOpenSettingsFloating].forEach(btn => {
-    if (!btn) return;
-    btn.addEventListener("click", () => {
+  if (elBtnOpenSettings) {
+    elBtnOpenSettings.addEventListener("click", () => {
       if (typeof openSettingsModal === "function") openSettingsModal();
     });
-  });
+  }
   if (elSettingsClose) {
     elSettingsClose.addEventListener("click", () => {
       if (typeof closeSettingsModal === "function") closeSettingsModal();
@@ -6217,14 +5853,6 @@ function init() {
   }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
-  if (elBtnUndoFloating) elBtnUndoFloating.addEventListener("click", undoLastEvent);
-  if (elToggleLogMobile && elLogSection) {
-    elToggleLogMobile.addEventListener("click", () => {
-      const isOpen = elLogSection.classList.toggle("open");
-      elToggleLogMobile.setAttribute("aria-expanded", String(isOpen));
-      elToggleLogMobile.textContent = isOpen ? "Chiudi log eventi" : "Apri log eventi";
-    });
-  }
   // pulsanti lineup mobile rimossi
   if (elAggTabButtons && typeof elAggTabButtons.forEach === "function") {
     elAggTabButtons.forEach(btn => {
@@ -6233,64 +5861,6 @@ function init() {
           setActiveAggTab(btn.dataset.aggTabTarget);
         }
       });
-    });
-  }
-  if (elMobileLineupClose) {
-    elMobileLineupClose.addEventListener("click", closeMobileLineupModal);
-  }
-  if (elMobileLineupModal) {
-    elMobileLineupModal.addEventListener("click", e => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.dataset.closeLineup !== undefined || target.classList.contains("mobile-lineup__backdrop")) {
-        closeMobileLineupModal();
-      }
-    });
-  }
-  if (elMobileLineupConfirm) {
-    elMobileLineupConfirm.addEventListener("click", () => {
-      const filled = mobileLineupOrder.filter(Boolean);
-      if (filled.length < 6) {
-        alert("Inserisci 6 giocatrici per impostare la rotazione.");
-        return;
-      }
-      ensureCourtShape();
-      const baseCourt =
-        state.autoRolePositioning && autoRoleBaseCourt
-          ? ensureCourtShapeFor(autoRoleBaseCourt)
-          : ensureCourtShapeFor(state.court);
-      mobileLineupOrder.slice(0, 6).forEach((name, idx) => {
-        baseCourt[idx] = { main: name || "", replaced: "" };
-      });
-      resetAutoRoleCache();
-      updateAutoRoleBaseCourtCache(baseCourt);
-      if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
-        applyAutoRolePositioning();
-      } else {
-        state.court = cloneCourtLineup(baseCourt);
-        saveState();
-        renderPlayers();
-        renderBenchChips();
-        renderLineupChips();
-        renderLiberoChipsInline();
-        updateRotationDisplay();
-      }
-      closeMobileLineupModal();
-    });
-  }
-  if (elBtnOpenActionsModal) {
-    elBtnOpenActionsModal.addEventListener("click", openActionsModal);
-  }
-  if (elActionsClose) {
-    elActionsClose.addEventListener("click", closeActionsModal);
-  }
-  if (elActionsModal) {
-    elActionsModal.addEventListener("click", e => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.dataset.closeActions !== undefined || target.classList.contains("floating-actions__backdrop")) {
-        closeActionsModal();
-      }
     });
   }
   if (elBtnScoreForPlusModal) elBtnScoreForPlusModal.addEventListener("click", () => handleManualScore("for", 1));
@@ -6397,9 +5967,7 @@ function init() {
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
       closeSkillModal();
-      closeActionsModal();
       closeSettingsModal();
-      closeMobileLineupModal();
     }
   });
   document.addEventListener("mousedown", e => {
