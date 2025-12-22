@@ -6135,6 +6135,7 @@ function init() {
       trajectoryEnd = pos;
       drawTrajectory();
       e.preventDefault();
+      setTimeout(confirmCurrentTrajectory, 120);
     };
     if (elAttackTrajectoryCanvas) {
       elAttackTrajectoryCanvas.addEventListener("pointerdown", onPointerDown);
@@ -6179,12 +6180,6 @@ function init() {
     if (elAttackTrajectoryCloseBtn) {
       elAttackTrajectoryCloseBtn.addEventListener("click", handleCloseTrajectory);
     }
-    // Conferma automatica a rilascio se abbiamo entrambi i punti
-    window.addEventListener("pointerup", () => {
-      if (trajectoryStart && trajectoryEnd) {
-        confirmCurrentTrajectory();
-      }
-    });
   }
   setAutoRotateEnabled(state.autoRotate !== false);
   if (elRotationIndicator && elRotationSelect) {
