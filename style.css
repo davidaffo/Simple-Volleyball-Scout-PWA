@@ -396,22 +396,31 @@ button.small {
   background: #0f172a;
   border: 1px solid #1f2937;
 }
+.panel-title {
+  width: 100%;
+  margin: 0 0 0.2rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
 body[data-theme="light"] .court-actions-bar {
   background: #f8fafc;
   border-color: #e2e8f0;
 }
 .court-actions-inline {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 1fr);
-  align-items: stretch;
-  gap: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.35rem;
   margin-top: 0.6rem;
   overflow-x: auto;
 }
+.court-actions-inline > * {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
 .court-rotation-block {
   flex: 1 1 260px;
-  min-width: 240px;
+  min-width: 220px;
   gap: 0.4rem;
 }
 .court-rotation-block .rotation-toggles {
@@ -429,9 +438,9 @@ body[data-theme="light"] .court-actions-bar {
   gap: 0.25rem;
 }
 .skill-flow-grid.skill-flow-inline .skill-flow-btn {
-  min-height: 40px;
-  padding: 0.45rem 0.35rem;
-  font-size: 0.95rem;
+  min-height: 36px;
+  padding: 0.35rem 0.32rem;
+  font-size: 0.9rem;
   font-weight: 700;
   flex: 1 1 0;
 }
@@ -460,18 +469,31 @@ body[data-theme="light"] .court-actions-bar {
   align-items: stretch;
 }
 .court-actions-inline .court-game-actions {
-  min-width: 220px;
-  display: flex;
-  gap: 0.35rem;
+  min-width: 280px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  gap: 0.25rem;
 }
 .court-game-actions button {
   flex: 1 1 150px;
 }
 .court-actions-inline .court-game-actions button {
   width: 100%;
+  min-height: 0;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.9rem;
+  line-height: 1.05;
+  border-radius: 0.4rem;
 }
 .court-actions-inline .team-controls-panel {
   min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.court-actions-inline .team-controls-panel .skill-flow-panel {
+  margin-top: 0;
+  flex: 1 1 0;
 }
 .rotation-display {
   position: relative;
@@ -1038,10 +1060,16 @@ body[data-theme="light"] .rotation-number {
 }
 .libero-inline {
   display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  flex: 1 1 140px;
-  min-width: 140px;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1 1 200px;
+  min-width: 200px;
+}
+.libero-inline .libero-tags {
+  flex: 1 1 auto;
+}
+.court-actions-inline .libero-inline button {
+  min-height: 34px;
 }
 .libero-inline label {
   margin: 0;

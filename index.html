@@ -206,17 +206,41 @@ Bianchi 18"></textarea>
             <label class="auto-rotate-toggle">
               <input type="checkbox" id="auto-rotate-toggle" />
               Rotazione automatica su cambio palla
-            </label>
+            </label><br>
               <label class="auto-rotate-toggle">
                 <input type="checkbox" id="auto-role-toggle" />
                 Auto posizionamento per ruolo
-              </label>
+              </label><br>
               <label class="auto-rotate-toggle">
                 <input type="checkbox" id="predictive-skill-toggle" />
                 Flusso skill automatico
+                </label><br>
             </div>
         </div>
         <div class="team-settings-panel court-actions-bar">
+          <h3 class="panel-title">Impostazioni squadra</h3>
+          <div class="rotation-toggles">
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="auto-role-p1american-toggle" />
+              P1 americana
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="attack-trajectory-toggle" />
+              Traiettoria attacco
+            </label>
+            <label class="auto-rotate-toggle auto-libero-row">
+              <span>Libero automatico</span>
+              <div class="auto-libero-controls">
+                <select id="auto-libero-select">
+                  <option value="">Nessuno</option>
+                  <option value="P">P</option>
+                  <option value="S">S</option>
+                  <option value="C">C</option>
+                  <option value="O">O</option>
+                </select>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
       <div class="section scout-col-center" data-scout-panel="team">
@@ -254,29 +278,6 @@ Bianchi 18"></textarea>
                 </div>
                 <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
               </div>
-              <div class="rotation-toggles">
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="auto-role-p1american-toggle" />
-                  P1 americana
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="attack-trajectory-toggle" />
-                  Traiettoria attacco
-                </label>
-                <label class="auto-rotate-toggle auto-libero-row">
-                  <span>Libero automatico</span>
-                <div class="auto-libero-controls">
-                  <select id="auto-libero-select">
-                    <option value="">Nessuno</option>
-                    <option value="P">P</option>
-                    <option value="S">S</option>
-                      <option value="C">C</option>
-                      <option value="O">O</option>
-                    </select>
-                    <button type="button" id="btn-swap-libero" class="small secondary">Cambia</button>
-                  </div>
-                </label>
-              </div>
             </div>
             <div class="score-actions court-game-actions">
               <button id="btn-score-team-point" class="small">Punto</button>
@@ -288,6 +289,7 @@ Bianchi 18"></textarea>
               <div class="libero-inline">
                 <label>Libero</label>
                 <div id="libero-tags-inline" class="libero-tags"></div>
+                <button type="button" id="btn-swap-libero" class="small secondary">Cambia</button>
               </div>
               <div class="skill-flow-panel">
                 <label>Forza prossima skill</label>
