@@ -141,6 +141,7 @@ function getPredictedSkillId() {
 }
 function updateNextSkillIndicator(skillId) {
   if (!elNextSkillIndicator) return;
+  updateSetTypeVisibility(skillId);
   if (!state.predictiveSkillFlow) {
     elNextSkillIndicator.style.display = "none";
     elNextSkillIndicator.textContent = "Prossima skill: —";
@@ -152,6 +153,12 @@ function updateNextSkillIndicator(skillId) {
   const label = meta ? meta.label : skillId || "—";
   elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
   elNextSkillIndicator.classList.toggle("active", !!skillId);
+}
+function updateSetTypeVisibility(nextSkillId = null) {
+  if (!elSetTypeShortcuts) return;
+  const shouldShow = nextSkillId === "attack";
+  elSetTypeShortcuts.classList.toggle("set-type-inline--active", shouldShow);
+  elSetTypeShortcuts.style.display = shouldShow ? "" : "none";
 }
 function resetTrajectoryState() {
   trajectoryStart = null;
@@ -636,6 +643,7 @@ function renderSkillChoice(playerIdx, playerName) {
     return;
   }
   if (!elSkillModalBody) return;
+  updateSetTypeVisibility(getPredictedSkillId());
   modalMode = "skill";
   modalSubPosIdx = -1;
   elSkillModalBody.innerHTML = "";
@@ -667,6 +675,7 @@ function renderSkillChoice(playerIdx, playerName) {
 }
 function renderSkillCodes(playerIdx, playerName, skillId) {
   if (!elSkillModalBody) return;
+  updateSetTypeVisibility(skillId === "attack" ? "attack" : getPredictedSkillId());
   modalMode = "skill-codes";
   modalSubPosIdx = -1;
   elSkillModalBody.innerHTML = "";
@@ -1036,6 +1045,7 @@ function renderPlayers() {
   ensureCourtShape();
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
+  updateSetTypeVisibility(predictedSkillId);
   const hasSelectedServe = isAnySelectedSkill("serve");
   const layoutSkill =
     state.predictiveSkillFlow && predictedSkillId
@@ -3637,6 +3647,7 @@ function handleSetTypeHotkeys(e) {
 }
 function initSetTypeShortcuts() {
   renderSetTypeShortcuts();
+  updateSetTypeVisibility(getPredictedSkillId());
   if (!elSetTypeShortcuts) return;
   elSetTypeShortcuts.addEventListener("click", e => {
     const btn = e.target.closest("[data-settype],[data-clear-settype]");
