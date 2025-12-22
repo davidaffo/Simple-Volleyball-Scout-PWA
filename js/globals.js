@@ -113,6 +113,8 @@ let state = {
   predictiveSkillFlow: false,
   autoRoleP1American: false,
   attackTrajectoryEnabled: false,
+  attackTrajectorySimplified: false,
+  defaultSetType: "",
   setTypePromptEnabled: false,
   nextSetType: "",
   freeballPending: false,

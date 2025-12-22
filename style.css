@@ -2854,6 +2854,49 @@ body[data-theme="light"] .agg-table td {
   font-size: 0.9rem;
   opacity: 0.85;
 }
+.attack-trajectory-netpoints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.attack-trajectory-netpoints.hidden {
+  display: none;
+}
+.attack-trajectory-netpoints-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.attack-trajectory-netpoints-buttons {
+  display: inline-flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.attack-trajectory-netpoints-buttons button {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #2f2f2f;
+  background: #1f1f1f;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.attack-trajectory-netpoints-buttons button.active {
+  background: #2d6cdf;
+  border-color: #2d6cdf;
+  color: #fff;
+}
+body[data-theme="light"] .attack-trajectory-netpoints-buttons button {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+body[data-theme="light"] .attack-trajectory-netpoints-buttons button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
 .attack-trajectory-stage {
   position: relative;
   width: 100%;

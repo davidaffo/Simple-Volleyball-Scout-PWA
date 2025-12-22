@@ -232,6 +232,22 @@ Bianchi 18"></textarea>
                 Flusso skill automatico
                 </label><br>
               <label class="auto-rotate-toggle">
+                <span>Alzata di default</span>
+                <select id="default-settype-select">
+                  <option value="">Nessuna</option>
+                  <option value="mezza">Mezza (M)</option>
+                  <option value="super">Super (S)</option>
+                  <option value="quick">Quick (Q)</option>
+                  <option value="veloce">Veloce (V)</option>
+                  <option value="fast">Fast (F)</option>
+                  <option value="alta">Alta (A)</option>
+                </select>
+              </label><br>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="attack-trajectory-simple-toggle" />
+                Direzione attacco semplificata
+              </label><br>
+              <label class="auto-rotate-toggle">
                 <input type="checkbox" id="force-mobile-toggle" />
                 Modalità mobile (test)
               </label>
@@ -712,7 +728,19 @@ Bianchi 18"></textarea>
         <button id="attack-trajectory-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
       </div>
       <div class="attack-trajectory-body">
-        <div class="attack-trajectory-instructions">Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.</div>
+        <div id="attack-trajectory-instructions" class="attack-trajectory-instructions">
+          Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.
+        </div>
+        <div id="attack-trajectory-netpoints" class="attack-trajectory-netpoints hidden" aria-label="Punti rete attacco">
+          <span class="attack-trajectory-netpoints-label">Punto rete</span>
+          <div class="attack-trajectory-netpoints-buttons">
+            <button type="button" data-net-point="5">5</button>
+            <button type="button" data-net-point="7-9">7-9</button>
+            <button type="button" data-net-point="3">3</button>
+            <button type="button" data-net-point="4">4</button>
+            <button type="button" data-net-point="6-F">6-F</button>
+          </div>
+        </div>
         <div class="attack-trajectory-stage">
           <img id="attack-trajectory-image" alt="Campo per traiettoria" />
           <canvas id="attack-trajectory-canvas"></canvas>
@@ -761,8 +789,24 @@ Bianchi 18"></textarea>
                   Disegna traiettoria attacco
                 </label>
                 <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="attack-trajectory-simple-toggle-settings" />
+                  Direzione attacco semplificata
+                </label>
+                <label class="auto-rotate-toggle">
                   <input type="checkbox" id="predictive-skill-toggle-settings" />
                   Flusso skill automatico
+                </label>
+                <label class="auto-rotate-toggle">
+                  <span>Alzata di default</span>
+                  <select id="default-settype-select-settings">
+                    <option value="">Nessuna</option>
+                    <option value="mezza">Mezza (M)</option>
+                    <option value="super">Super (S)</option>
+                    <option value="quick">Quick (Q)</option>
+                    <option value="veloce">Veloce (V)</option>
+                    <option value="fast">Fast (F)</option>
+                    <option value="alta">Alta (A)</option>
+                  </select>
                 </label>
       </div>
     </div>
