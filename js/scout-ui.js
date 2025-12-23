@@ -10,6 +10,8 @@ function isSkillEnabled(skillId) {
   return !cfg || cfg.enabled !== false;
 }
 const selectedSkillPerPlayer = {};
+const serveMetaByPlayer = {};
+const serveTypeSelectHandlers = {};
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
@@ -75,6 +77,9 @@ let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
 let lineupDragName = "";
 let lineupSelectedName = "";
+let serveTypeInlineHandler = null;
+let serveTypeInlinePlayer = null;
+let serveTypeFocusPlayer = null;
 let currentEditControl = null;
 let currentEditCell = null;
 function isBackRowZone(z) {
@@ -118,6 +123,103 @@ if (elServeTypeButtons) {
     setServeTypeSelection(type);
   });
   setServeTypeSelection("JF");
+}
+function bindServeTypeInlineListener(playerIdx, onSelect) {
+  serveTypeSelectHandlers[playerIdx] = onSelect;
+  if (serveTypeInlineHandler) return;
+  serveTypeInlineHandler = e => {
+    const key = (e.key || "").toUpperCase();
+    if (key !== "F" && key !== "J" && key !== "S") return;
+    const activePlayer =
+      serveTypeInlinePlayer !== null ? serveTypeInlinePlayer : serveTypeFocusPlayer;
+    if (activePlayer === null || activePlayer === undefined) return;
+    const handler = serveTypeSelectHandlers[activePlayer];
+    if (typeof handler === "function") {
+      handler(key === "J" ? "JF" : key);
+    }
+  };
+  window.addEventListener("keydown", serveTypeInlineHandler);
+}
+function setServeTypeFocusPlayer(playerIdx) {
+  serveTypeFocusPlayer = playerIdx;
+}
+function removeServeTypeInlineKeyListener() {
+  if (serveTypeInlineHandler) {
+    window.removeEventListener("keydown", serveTypeInlineHandler);
+    serveTypeInlineHandler = null;
+  }
+}
+function clearServeTypeInlineListener() {
+  removeServeTypeInlineKeyListener();
+  serveTypeInlinePlayer = null;
+  serveTypeFocusPlayer = null;
+  Object.keys(serveTypeSelectHandlers).forEach(key => {
+    delete serveTypeSelectHandlers[key];
+  });
+}
+function getServeBaseZoneForPlayer(playerIdx) {
+  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return null;
+  const name = state.players[playerIdx];
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? getCourtShape(autoRoleBaseCourt)
+      : getCourtShape(state.court);
+  if (!baseCourt || !baseCourt.length) return null;
+  const slotIdx = baseCourt.findIndex(
+    slot => slot && (slot.main === name || slot.replaced === name)
+  );
+  return slotIdx === -1 ? null : slotIdx + 1;
+}
+function maybeRotateServeToZoneOne(playerIdx) {
+  const zone = getServeBaseZoneForPlayer(playerIdx);
+  if (!zone || zone === 1) return;
+  const name =
+    formatNameWithNumber(state.players[playerIdx]) ||
+    state.players[playerIdx] ||
+    "Giocatrice";
+  const msg =
+    name +
+    " non è in zona 1 (zona " +
+    zone +
+    "). Vuoi ruotare automaticamente per farla andare in zona 1?";
+  const wantsRotate = window.confirm(msg);
+  if (!wantsRotate || typeof rotateCourt !== "function") return;
+  const steps = zone - 1;
+  for (let i = 0; i < steps; i += 1) {
+    rotateCourt("ccw");
+  }
+}
+async function startServeTypeSelection(playerIdx, type, onDone) {
+  if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) return;
+  serveTypeInlinePlayer = playerIdx;
+  setServeTypeFocusPlayer(playerIdx);
+  removeServeTypeInlineKeyListener();
+  maybeRotateServeToZoneOne(playerIdx);
+  const meta = { serveType: type };
+  if (state.serveTrajectoryEnabled) {
+    const traj = await collectServeTrajectory(meta);
+    meta.serveType = traj.serveType || type;
+    meta.serveStart = traj.serveStart || null;
+    meta.serveEnd = traj.serveEnd || null;
+  }
+  serveMetaByPlayer[playerIdx] = meta;
+  if (typeof onDone === "function") {
+    onDone();
+  }
+}
+async function collectServeTrajectory(prefill = {}) {
+  const startRes = await openAttackTrajectoryModal({
+    mode: "serve-start",
+    start: prefill.serveStart || null
+  });
+  const serveType = (startRes && startRes.serveType) || prefill.serveType || "JF";
+  const serveStart = startRes && startRes.point ? startRes.point : prefill.serveStart || null;
+  const endRes = await openAttackTrajectoryModal({
+    mode: "serve-end",
+    end: prefill.serveEnd || null
+  });
+  const serveEnd = endRes && endRes.point ? endRes.point : prefill.serveEnd || null;
+  return { serveType, serveStart, serveEnd };
 }
 function getBenchForLineup(court) {
   const libSet = new Set(state.liberos || []);
@@ -332,8 +434,12 @@ function closeCurrentEdit({ refresh = false } = {}) {
 function setSelectedSkill(playerIdx, skillId) {
   if (skillId) {
     selectedSkillPerPlayer[playerIdx] = skillId;
+    if (skillId !== "serve") {
+      delete serveMetaByPlayer[playerIdx];
+    }
   } else {
     delete selectedSkillPerPlayer[playerIdx];
+    delete serveMetaByPlayer[playerIdx];
   }
 }
 function getSelectedSkill(playerIdx) {
@@ -1115,9 +1221,47 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
   backBtn.type = "button";
   backBtn.className = "secondary modal-skill-back";
   backBtn.textContent = "Indietro";
-  backBtn.addEventListener("click", () => renderSkillChoice(playerIdx, playerName));
+  backBtn.addEventListener("click", () => {
+    delete serveMetaByPlayer[playerIdx];
+    clearServeTypeInlineListener();
+    renderSkillChoice(playerIdx, playerName);
+  });
   header.appendChild(backBtn);
   elSkillModalBody.appendChild(header);
+
+  if (skillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
+    clearServeTypeInlineListener();
+  }
+  if (skillId === "serve" && !serveMetaByPlayer[playerIdx]) {
+    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) {
+      return;
+    }
+    const typeWrap = document.createElement("div");
+    typeWrap.className = "modal-skill-codes";
+    typeWrap.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx));
+    setServeTypeFocusPlayer(playerIdx);
+    const types = [
+      { id: "F", label: "Float (F)" },
+      { id: "JF", label: "Jump float (JF)" },
+      { id: "S", label: "Spin (S)" }
+    ];
+    const handleSelect = async type => {
+      await startServeTypeSelection(playerIdx, type, () => {
+        renderSkillCodes(playerIdx, playerName, skillId);
+      });
+    };
+    types.forEach(t => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-btn";
+      btn.textContent = t.label;
+      btn.addEventListener("click", () => handleSelect(t.id));
+      typeWrap.appendChild(btn);
+    });
+    bindServeTypeInlineListener(playerIdx, handleSelect);
+    elSkillModalBody.appendChild(typeWrap);
+    return;
+  }
 
   const codesWrap = document.createElement("div");
   codesWrap.className = "modal-skill-codes";
@@ -1141,9 +1285,14 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
         skillId,
         code,
         playerName,
-        e.currentTarget
+        e.currentTarget,
+        { serveMeta: serveMetaByPlayer[playerIdx] || null }
       );
       if (success) {
+        delete serveMetaByPlayer[playerIdx];
+        if (skillId === "serve") {
+          clearServeTypeInlineListener();
+        }
         closeSkillModal();
       }
     });
@@ -1413,6 +1562,9 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     if (!nextSkillId) setSelectedSkill(playerIdx, null);
     pickedSkillId = null;
   }
+  if (pickedSkillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
+    clearServeTypeInlineListener();
+  }
   if (!pickedSkillId) {
     const grid = document.createElement("div");
     grid.className = "skill-grid";
@@ -1430,6 +1582,40 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       });
       grid.appendChild(btn);
     });
+    targetEl.appendChild(grid);
+    return;
+  }
+  if (pickedSkillId === "serve" && !serveMetaByPlayer[playerIdx]) {
+    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) {
+      return;
+    }
+    const grid = document.createElement("div");
+    grid.className = "code-grid serve-type-grid";
+    grid.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx));
+    const title = document.createElement("div");
+    title.className = "skill-header";
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "skill-title skill-serve";
+    titleSpan.textContent = "Battuta · tipo";
+    title.appendChild(titleSpan);
+    grid.appendChild(title);
+    const types = [
+      { id: "F", label: "Float (F)" },
+      { id: "JF", label: "Jump float (JF)" },
+      { id: "S", label: "Spin (S)" }
+    ];
+    const handleSelect = async type => {
+      await startServeTypeSelection(playerIdx, type, renderPlayers);
+    };
+    types.forEach(t => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-btn";
+      btn.textContent = t.label;
+      btn.addEventListener("click", () => handleSelect(t.id));
+      grid.appendChild(btn);
+    });
+    bindServeTypeInlineListener(playerIdx, handleSelect);
     targetEl.appendChild(grid);
     return;
   }
@@ -1467,8 +1653,19 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     btn.dataset.skillId = pickedSkillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
-      const success = await handleEventClick(playerIdx, pickedSkillId, code, activeName, e.currentTarget);
+      const success = await handleEventClick(
+        playerIdx,
+        pickedSkillId,
+        code,
+        activeName,
+        e.currentTarget,
+        { serveMeta: serveMetaByPlayer[playerIdx] || null }
+      );
       if (!success) return;
+      delete serveMetaByPlayer[playerIdx];
+      if (pickedSkillId === "serve") {
+        clearServeTypeInlineListener();
+      }
       setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();
       renderPlayers();
@@ -1682,7 +1879,14 @@ function applyReceiveContextToEvent(ev) {
     clearReceiveContext();
   }
 }
-async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceEl, { setTypeChoice = null } = {}) {
+async function handleEventClick(
+  playerIdxStr,
+  skillId,
+  code,
+  playerName,
+  sourceEl,
+  { setTypeChoice = null, serveMeta = null } = {}
+) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return false;
@@ -1701,8 +1905,14 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
     skillId,
     code
   });
-  if (skillId === "serve" && !event.serveType) {
-    event.serveType = "JF";
+  if (skillId === "serve") {
+    if (serveMeta) {
+      event.serveType = serveMeta.serveType || event.serveType || "JF";
+      event.serveStart = serveMeta.serveStart || event.serveStart || null;
+      event.serveEnd = serveMeta.serveEnd || event.serveEnd || null;
+    } else if (!event.serveType) {
+      event.serveType = "JF";
+    }
   }
   // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
   event.attackBp = true;
@@ -1765,7 +1975,7 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
       }
     });
   }
-  if (state.serveTrajectoryEnabled && skillId === "serve") {
+  if (state.serveTrajectoryEnabled && skillId === "serve" && !serveMeta) {
     captureServeTrajectory(event);
   }
   if (!state.predictiveSkillFlow) {

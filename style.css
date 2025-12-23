@@ -1500,6 +1500,17 @@ body[data-theme="light"] .skill-row {
   gap: 0.35rem;
   width: 100%;
 }
+.serve-type-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.player-card {
+  overflow: hidden;
+}
+.player-card .serve-type-grid button {
+  min-width: 0;
+  padding: 0.45rem 0.3rem;
+  font-size: 0.9rem;
+}
 .skill-picker-btn {
   padding: 0.6rem 0.4rem;
   border-radius: 10px;
