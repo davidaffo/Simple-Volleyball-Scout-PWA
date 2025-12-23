@@ -905,6 +905,7 @@ async function captureServeTrajectory(event) {
     saveState();
     renderEventsLog({ suppressScroll: true });
     renderVideoAnalysis();
+    renderServeTrajectoryAnalysis();
   }
 }
 function forceNextSkill(skillId) {
@@ -2107,6 +2108,7 @@ async function handleEventClick(
         renderEventsLog({ suppressScroll: true });
         renderVideoAnalysis();
         renderTrajectoryAnalysis();
+        renderServeTrajectoryAnalysis();
       }
     });
   }
@@ -2119,6 +2121,7 @@ async function handleEventClick(
     renderAggregatedTable();
     renderVideoAnalysis();
     renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
   }
   return true;
 }
@@ -3350,6 +3353,7 @@ function renderEventTableRows(target, events, options = {}) {
             renderEventsLog({ suppressScroll: true });
             renderVideoAnalysis();
             renderTrajectoryAnalysis();
+            renderServeTrajectoryAnalysis();
           });
         },
         editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done), editGuard)
@@ -4387,6 +4391,18 @@ const trajectoryFilterState = {
   receiveZones: new Set(),
   prevSkill: "any"
 };
+const serveTrajectoryFilterState = {
+  players: new Set(),
+  sets: new Set(),
+  codes: new Set(),
+  zones: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  prevSkill: "any"
+};
 const secondFilterState = {
   setters: new Set(),
   setTypes: new Set(),
@@ -4414,6 +4430,7 @@ const TRAJECTORY_LINE_COLORS = {
   "/": "#dc2626" // rosso: murata/errori gravi
 };
 const trajectoryBgCache = {};
+let serveTrajectoryImgs = null;
 function clamp01Val(n) {
   if (n == null || isNaN(n)) return 0;
   return Math.min(1, Math.max(0, n));
@@ -4430,9 +4447,25 @@ function syncTrajectoryFilterState() {
   trajectoryFilterState.receiveZones = new Set(getCheckedValues(elTrajFilterReceiveZones, { asNumber: true }));
   trajectoryFilterState.prevSkill = (elTrajFilterPrev && elTrajFilterPrev.value) || "any";
 }
+function syncServeTrajectoryFilterState() {
+  serveTrajectoryFilterState.players = new Set(getCheckedValues(elServeTrajFilterPlayers, { asNumber: true }));
+  serveTrajectoryFilterState.sets = new Set(getCheckedValues(elServeTrajFilterSets, { asNumber: true }));
+  serveTrajectoryFilterState.codes = new Set(getCheckedValues(elServeTrajFilterCodes));
+  serveTrajectoryFilterState.zones = new Set(getCheckedValues(elServeTrajFilterZones, { asNumber: true }));
+  serveTrajectoryFilterState.setTypes = new Set(getCheckedValues(elServeTrajFilterSetTypes));
+  serveTrajectoryFilterState.bases = new Set(getCheckedValues(elServeTrajFilterBases));
+  serveTrajectoryFilterState.phases = new Set(getCheckedValues(elServeTrajFilterPhases));
+  serveTrajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elServeTrajFilterReceiveEvals));
+  serveTrajectoryFilterState.receiveZones = new Set(getCheckedValues(elServeTrajFilterReceiveZones, { asNumber: true }));
+  serveTrajectoryFilterState.prevSkill = (elServeTrajFilterPrev && elServeTrajFilterPrev.value) || "any";
+}
 function handleTrajectoryFilterChange() {
   syncTrajectoryFilterState();
   renderTrajectoryAnalysis();
+}
+function handleServeTrajectoryFilterChange() {
+  syncServeTrajectoryFilterState();
+  renderServeTrajectoryAnalysis();
 }
 function resetTrajectoryFilters() {
   trajectoryFilterState.players.clear();
@@ -4448,6 +4481,21 @@ function resetTrajectoryFilters() {
   if (elTrajFilterPrev) elTrajFilterPrev.value = "any";
   renderTrajectoryFilters();
   renderTrajectoryAnalysis();
+}
+function resetServeTrajectoryFilters() {
+  serveTrajectoryFilterState.players.clear();
+  serveTrajectoryFilterState.sets.clear();
+  serveTrajectoryFilterState.codes.clear();
+  serveTrajectoryFilterState.zones.clear();
+  serveTrajectoryFilterState.setTypes.clear();
+  serveTrajectoryFilterState.bases.clear();
+  serveTrajectoryFilterState.phases.clear();
+  serveTrajectoryFilterState.receiveEvaluations.clear();
+  serveTrajectoryFilterState.receiveZones.clear();
+  serveTrajectoryFilterState.prevSkill = "any";
+  if (elServeTrajFilterPrev) elServeTrajFilterPrev.value = "any";
+  renderServeTrajectoryFilters();
+  renderServeTrajectoryAnalysis();
 }
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
@@ -4570,6 +4618,129 @@ function renderTrajectoryFilters() {
     elTrajFilterReset._trajResetBound = true;
   }
 }
+function renderServeTrajectoryFilters() {
+  if (!elServeTrajectoryGrid) return;
+  const events = state.events || [];
+  const serveEvents = events.filter(
+    ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd
+  );
+  const maxSetFromEvents = Math.max(
+    1,
+    state.currentSet || 1,
+    ...serveEvents.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
+  );
+  const playersOpts = (state.players || []).map((name, idx) => ({
+    value: idx,
+    label: formatNameWithNumber(name) || name || "—"
+  }));
+  const setsOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
+  const codesOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
+  const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
+  const setTypeOpts = mergeFilterOptions(
+    [],
+    serveEvents.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
+    normalizeSetTypeValue
+  );
+  const baseOpts = mergeFilterOptions(
+    DEFAULT_BASE_OPTIONS,
+    serveEvents.map(ev => normalizeBaseValue(ev.base)),
+    normalizeBaseValue
+  );
+  const phaseOpts = mergeFilterOptions(
+    DEFAULT_PHASE_OPTIONS,
+    serveEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
+    v => v
+  );
+  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
+  const recvEvalOpts = mergeFilterOptions(
+    defaultEvalOpts,
+    serveEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    normalizeEvalCode
+  );
+  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
+  const recvZoneOpts = mergeFilterOptions(
+    defaultZoneOpts,
+    serveEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
+    normalizeReceiveZone,
+    val => "Z" + val
+  );
+
+  serveTrajectoryFilterState.players = new Set(
+    [...serveTrajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
+  );
+  serveTrajectoryFilterState.sets = new Set(
+    [...serveTrajectoryFilterState.sets].filter(setNum => setNum >= 1 && setNum <= maxSetFromEvents)
+  );
+  serveTrajectoryFilterState.codes = new Set(
+    [...serveTrajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  serveTrajectoryFilterState.zones = new Set(
+    [...serveTrajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
+  );
+  serveTrajectoryFilterState.setTypes = new Set(
+    [...serveTrajectoryFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  serveTrajectoryFilterState.bases = new Set(
+    [...serveTrajectoryFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  serveTrajectoryFilterState.phases = new Set(
+    [...serveTrajectoryFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  serveTrajectoryFilterState.receiveEvaluations = new Set(
+    [...serveTrajectoryFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  serveTrajectoryFilterState.receiveZones = new Set(
+    [...serveTrajectoryFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === serveTrajectoryFilterState.prevSkill)) {
+    serveTrajectoryFilterState.prevSkill = "any";
+  }
+
+  buildFilterOptions(elServeTrajFilterPlayers, playersOpts, serveTrajectoryFilterState.players, {
+    asNumber: true,
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterSets, setsOpts, serveTrajectoryFilterState.sets, {
+    asNumber: true,
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterSetTypes, setTypeOpts, serveTrajectoryFilterState.setTypes, {
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterBases, baseOpts, serveTrajectoryFilterState.bases, {
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterPhases, phaseOpts, serveTrajectoryFilterState.phases, {
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterReceiveEvals, recvEvalOpts, serveTrajectoryFilterState.receiveEvaluations, {
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterReceiveZones, recvZoneOpts, serveTrajectoryFilterState.receiveZones, {
+    asNumber: true,
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterCodes, codesOpts, serveTrajectoryFilterState.codes, {
+    onChange: handleServeTrajectoryFilterChange
+  });
+  buildFilterOptions(elServeTrajFilterZones, zonesOpts, serveTrajectoryFilterState.zones, {
+    asNumber: true,
+    onChange: handleServeTrajectoryFilterChange
+  });
+  if (elServeTrajFilterPrev) {
+    elServeTrajFilterPrev.value = serveTrajectoryFilterState.prevSkill || "any";
+    if (!elServeTrajFilterPrev._serveTrajPrevBound) {
+      elServeTrajFilterPrev.addEventListener("change", handleServeTrajectoryFilterChange);
+      elServeTrajFilterPrev._serveTrajPrevBound = true;
+    }
+  }
+  if (elServeTrajFilterReset && !elServeTrajFilterReset._serveTrajResetBound) {
+    elServeTrajFilterReset.addEventListener("click", resetServeTrajectoryFilters);
+    elServeTrajFilterReset._serveTrajResetBound = true;
+  }
+}
 function getTrajectoryBg(zone, cb) {
   const key = String(zone);
   if (trajectoryBgCache[key] && trajectoryBgCache[key].complete) {
@@ -4582,6 +4753,23 @@ function getTrajectoryBg(zone, cb) {
   }
   trajectoryBgCache[key] = img;
   return img;
+}
+function getServeTrajectoryImages(cb) {
+  if (serveTrajectoryImgs && serveTrajectoryImgs.start && serveTrajectoryImgs.end) {
+    if (serveTrajectoryImgs.start.complete && serveTrajectoryImgs.end.complete) {
+      return serveTrajectoryImgs;
+    }
+  }
+  const start = new Image();
+  const end = new Image();
+  start.src = SERVE_START_IMG_NEAR;
+  end.src = SERVE_END_IMG_NEAR;
+  if (cb) {
+    start.onload = cb;
+    end.onload = cb;
+  }
+  serveTrajectoryImgs = { start, end };
+  return serveTrajectoryImgs;
 }
 function getTrajectoryColorForCode(code) {
   return TRAJECTORY_LINE_COLORS[code] || "#38bdf8";
@@ -4600,6 +4788,25 @@ function getFilteredTrajectoryEvents() {
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
     if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
     if (trajectoryFilterState.zones.size && !trajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
+function getServeStartZone(ev) {
+  if (!ev || !ev.serveStart) return null;
+  return getAttackZone(ev.serveStart, false);
+}
+function getFilteredServeTrajectoryEvents() {
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "serve") return false;
+    return ev.serveStart && ev.serveEnd;
+  });
+  return events.filter(ev => {
+    const startZone = getServeStartZone(ev);
+    if (!matchesAdvancedFilters(ev, serveTrajectoryFilterState)) return false;
+    if (serveTrajectoryFilterState.players.size && !serveTrajectoryFilterState.players.has(ev.playerIdx)) return false;
+    if (serveTrajectoryFilterState.sets.size && !serveTrajectoryFilterState.sets.has(ev.set)) return false;
+    if (serveTrajectoryFilterState.codes.size && !serveTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (serveTrajectoryFilterState.zones.size && !serveTrajectoryFilterState.zones.has(startZone)) return false;
     return true;
   });
 }
@@ -4646,6 +4853,105 @@ function renderTrajectoryAnalysis() {
       const sy = clamp01Val(start.y) * height;
       const ex = clamp01Val(end.x) * width;
       const ey = clamp01Val(end.y) * height;
+      ctx.strokeStyle = getTrajectoryColorForCode(ev.code);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    });
+  });
+}
+function renderServeTrajectoryAnalysis() {
+  if (!elServeTrajectoryGrid) return;
+  renderServeTrajectoryFilters();
+  const events = getFilteredServeTrajectoryEvents();
+  const selectedPlayers = serveTrajectoryFilterState.players.size
+    ? Array.from(serveTrajectoryFilterState.players)
+    : Array.from(new Set(events.map(ev => ev.playerIdx))).filter(idx => typeof idx === "number");
+  const playersToRender = selectedPlayers.length ? selectedPlayers : [];
+  elServeTrajectoryGrid.innerHTML = "";
+  const cards = [];
+  playersToRender.forEach(playerIdx => {
+    const card = document.createElement("div");
+    card.className = "trajectory-card serve-trajectory-card";
+    card.dataset.playerIdx = String(playerIdx);
+    const title = document.createElement("div");
+    title.className = "trajectory-card__title";
+    title.textContent = formatNameWithNumber(state.players[playerIdx]) || state.players[playerIdx] || "—";
+    const canvas = document.createElement("canvas");
+    canvas.dataset.serveTrajCanvas = String(playerIdx);
+    const empty = document.createElement("div");
+    empty.className = "trajectory-card__empty";
+    empty.textContent = "Nessuna traiettoria";
+    card.appendChild(title);
+    card.appendChild(canvas);
+    card.appendChild(empty);
+    elServeTrajectoryGrid.appendChild(card);
+    cards.push({ card, canvas, playerIdx });
+  });
+  if (!cards.length) return;
+  const imgs = getServeTrajectoryImages(() => renderServeTrajectoryAnalysis());
+  const startImg = imgs && imgs.start;
+  const endImg = imgs && imgs.end;
+  const startRatio = startImg && startImg.naturalWidth ? startImg.naturalHeight / startImg.naturalWidth : 0.65;
+  const endRatio = endImg && endImg.naturalWidth ? endImg.naturalHeight / endImg.naturalWidth : 0.65;
+  const grouped = {};
+  events.forEach(ev => {
+    if (typeof ev.playerIdx !== "number") return;
+    if (!grouped[ev.playerIdx]) grouped[ev.playerIdx] = [];
+    grouped[ev.playerIdx].push(ev);
+  });
+  cards.forEach(({ card, canvas, playerIdx }) => {
+    const list = grouped[playerIdx] || [];
+    const width =
+      (canvas.parentElement && canvas.parentElement.clientWidth) ||
+      (startImg && startImg.naturalWidth) ||
+      (endImg && endImg.naturalWidth) ||
+      320;
+    const startHeight = Math.max(80, Math.round(width * startRatio));
+    const endHeight = Math.max(80, Math.round(width * endRatio));
+    const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
+    const height = startHeight + gapHeight + endHeight;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+    if (endImg && endImg.complete && endImg.naturalWidth) {
+      ctx.drawImage(endImg, 0, 0, width, endHeight);
+    }
+    if (gapHeight > 0) {
+      ctx.fillStyle = "#ffb142";
+      ctx.fillRect(0, endHeight, width, gapHeight);
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, endHeight, width, gapHeight);
+    }
+    if (startImg && startImg.complete && startImg.naturalWidth) {
+      ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
+    }
+    const netY = endHeight;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 8;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.moveTo(0, netY);
+    ctx.lineTo(width, netY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (!list.length) {
+      card.classList.add("empty");
+      return;
+    }
+    card.classList.remove("empty");
+    list.forEach(ev => {
+      const start = ev.serveStart;
+      const end = ev.serveEnd;
+      if (!start || !end) return;
+      const sx = clamp01Val(start.x) * width;
+      const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
+      const ex = clamp01Val(end.x) * width;
+      const ey = clamp01Val(end.y) * endHeight;
       ctx.strokeStyle = getTrajectoryColorForCode(ev.code);
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -4796,6 +5102,7 @@ function renderAggregatedTable() {
   renderScoreAndRotations(summaryAll);
   renderSecondTable();
   renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
   applyAggColumnsVisibility();
 }
 function syncSecondFilterState() {
