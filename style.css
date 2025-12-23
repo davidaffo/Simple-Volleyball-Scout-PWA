@@ -1511,6 +1511,10 @@ body[data-theme="light"] .skill-row {
   padding: 0.45rem 0.3rem;
   font-size: 0.9rem;
 }
+.attack-main-btn {
+  grid-column: 1 / -1;
+  width: 100%;
+}
 .skill-picker-btn {
   padding: 0.6rem 0.4rem;
   border-radius: 10px;

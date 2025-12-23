@@ -11,6 +11,7 @@ function isSkillEnabled(skillId) {
 }
 const selectedSkillPerPlayer = {};
 const serveMetaByPlayer = {};
+const attackMetaByPlayer = {};
 const serveTypeSelectHandlers = {};
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
@@ -80,6 +81,7 @@ let lineupSelectedName = "";
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
+let attackInlinePlayer = null;
 let currentEditControl = null;
 let currentEditCell = null;
 function isBackRowZone(z) {
@@ -156,6 +158,60 @@ function clearServeTypeInlineListener() {
   Object.keys(serveTypeSelectHandlers).forEach(key => {
     delete serveTypeSelectHandlers[key];
   });
+}
+function clearAttackSelection(playerIdx = null) {
+  if (playerIdx === null || playerIdx === undefined) {
+    attackInlinePlayer = null;
+    Object.keys(attackMetaByPlayer).forEach(key => {
+      delete attackMetaByPlayer[key];
+    });
+    return;
+  }
+  delete attackMetaByPlayer[playerIdx];
+  if (attackInlinePlayer === playerIdx) {
+    attackInlinePlayer = null;
+  }
+}
+function shouldPromptAttackSetType() {
+  return !!state.setTypePromptEnabled || !!normalizeSetTypeValue(state.defaultSetType);
+}
+function applyAttackTrajectoryToEvent(event, payload) {
+  if (!payload || !event) return;
+  event.attackStart = payload.start || event.attackStart || null;
+  event.attackEnd = payload.end || event.attackEnd || null;
+  event.attackStartZone = payload.startZone || event.attackStartZone || null;
+  event.attackEndZone = payload.endZone || event.attackEndZone || null;
+  event.attackDirection = payload;
+  event.attackTrajectory = payload;
+  if (!event.originZone) {
+    event.originZone = event.attackStartZone || event.originZone || null;
+  }
+  if (event.attackStartZone) {
+    event.zone = event.attackStartZone;
+    event.playerPosition = event.attackStartZone;
+  }
+}
+async function startAttackSelection(playerIdx, setTypeChoice, onDone) {
+  if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) return;
+  attackInlinePlayer = playerIdx;
+  const meta = { setType: setTypeChoice || null };
+  if (state.attackTrajectoryEnabled) {
+    const baseZone = getCurrentZoneForPlayer(playerIdx, "attack");
+    const coords = await openAttackTrajectoryModal({
+      baseZone: baseZone || null,
+      setType: setTypeChoice || null
+    });
+    if (!coords) {
+      clearAttackSelection(playerIdx);
+      if (typeof onDone === "function") onDone();
+      return;
+    }
+    meta.trajectory = coords;
+  }
+  attackMetaByPlayer[playerIdx] = meta;
+  if (typeof onDone === "function") {
+    onDone();
+  }
 }
 function getServeBaseZoneForPlayer(playerIdx) {
   if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return null;
@@ -516,9 +572,8 @@ function updateNextSkillIndicator(skillId) {
 }
 function updateSetTypeVisibility(nextSkillId = null) {
   if (!elSetTypeShortcuts) return;
-  const shouldShow = nextSkillId === "attack";
-  elSetTypeShortcuts.classList.toggle("set-type-inline--active", shouldShow);
-  elSetTypeShortcuts.style.display = shouldShow ? "" : "none";
+  elSetTypeShortcuts.classList.remove("set-type-inline--active");
+  elSetTypeShortcuts.style.display = "none";
 }
 function resetTrajectoryState() {
   trajectoryStart = null;
@@ -1224,6 +1279,7 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
   backBtn.addEventListener("click", () => {
     delete serveMetaByPlayer[playerIdx];
     clearServeTypeInlineListener();
+    clearAttackSelection(playerIdx);
     renderSkillChoice(playerIdx, playerName);
   });
   header.appendChild(backBtn);
@@ -1231,6 +1287,9 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
 
   if (skillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
     clearServeTypeInlineListener();
+  }
+  if (skillId !== "attack" && attackInlinePlayer === playerIdx) {
+    clearAttackSelection(playerIdx);
   }
   if (skillId === "serve" && !serveMetaByPlayer[playerIdx]) {
     if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) {
@@ -1262,6 +1321,41 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     elSkillModalBody.appendChild(typeWrap);
     return;
   }
+  if (skillId === "attack" && !attackMetaByPlayer[playerIdx]) {
+    if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
+      return;
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "modal-skill-codes";
+    if (shouldPromptAttackSetType()) {
+      DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "event-btn";
+        btn.textContent = opt.label;
+        btn.addEventListener("click", async () => {
+          await startAttackSelection(playerIdx, opt.value, () => {
+            renderSkillCodes(playerIdx, playerName, skillId);
+          });
+        });
+        wrap.appendChild(btn);
+      });
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-btn attack-main-btn";
+      btn.textContent = "Attacco";
+      btn.addEventListener("click", async () => {
+        const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
+        await startAttackSelection(playerIdx, fallback, () => {
+          renderSkillCodes(playerIdx, playerName, skillId);
+        });
+      });
+      wrap.appendChild(btn);
+    }
+    elSkillModalBody.appendChild(wrap);
+    return;
+  }
 
   const codesWrap = document.createElement("div");
   codesWrap.className = "modal-skill-codes";
@@ -1286,12 +1380,15 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
         code,
         playerName,
         e.currentTarget,
-        { serveMeta: serveMetaByPlayer[playerIdx] || null }
+        { serveMeta: serveMetaByPlayer[playerIdx] || null, attackMeta: attackMetaByPlayer[playerIdx] || null }
       );
       if (success) {
         delete serveMetaByPlayer[playerIdx];
         if (skillId === "serve") {
           clearServeTypeInlineListener();
+        }
+        if (skillId === "attack") {
+          clearAttackSelection(playerIdx);
         }
         closeSkillModal();
       }
@@ -1565,6 +1662,9 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (pickedSkillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
     clearServeTypeInlineListener();
   }
+  if (pickedSkillId !== "attack" && attackInlinePlayer === playerIdx) {
+    clearAttackSelection(playerIdx);
+  }
   if (!pickedSkillId) {
     const grid = document.createElement("div");
     grid.className = "skill-grid";
@@ -1619,6 +1719,44 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     targetEl.appendChild(grid);
     return;
   }
+  if (pickedSkillId === "attack" && !attackMetaByPlayer[playerIdx]) {
+    if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
+      return;
+    }
+    const grid = document.createElement("div");
+    grid.className = "code-grid attack-select-grid";
+    const title = document.createElement("div");
+    title.className = "skill-header";
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "skill-title skill-attack";
+    titleSpan.textContent = "Attacco";
+    title.appendChild(titleSpan);
+    grid.appendChild(title);
+    if (shouldPromptAttackSetType()) {
+      DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "event-btn";
+        btn.textContent = opt.label;
+        btn.addEventListener("click", async () => {
+          await startAttackSelection(playerIdx, opt.value, renderPlayers);
+        });
+        grid.appendChild(btn);
+      });
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-btn attack-main-btn";
+      btn.textContent = "Attacco";
+      btn.addEventListener("click", async () => {
+        const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
+        await startAttackSelection(playerIdx, fallback, renderPlayers);
+      });
+      grid.appendChild(btn);
+    }
+    targetEl.appendChild(grid);
+    return;
+  }
   const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
   const codes = (state.metricsConfig[pickedSkillId]?.activeCodes || RESULT_CODES).slice();
   if (!codes.includes("/")) codes.push("/");
@@ -1635,12 +1773,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   titleSpan.style.color = colors.text;
   titleSpan.textContent = skillMeta ? skillMeta.label : pickedSkillId;
   title.appendChild(titleSpan);
-  if (pickedSkillId === "attack" && state.nextSetType) {
-    const setTypePill = document.createElement("span");
-    setTypePill.className = "skill-subtitle";
-    setTypePill.textContent = "Tipo alzata: " + (normalizeSetTypeValue(state.nextSetType) || "—");
-    title.appendChild(setTypePill);
-  }
   grid.appendChild(title);
   ordered.forEach(code => {
     const btn = document.createElement("button");
@@ -1659,12 +1791,15 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         code,
         activeName,
         e.currentTarget,
-        { serveMeta: serveMetaByPlayer[playerIdx] || null }
+        { serveMeta: serveMetaByPlayer[playerIdx] || null, attackMeta: attackMetaByPlayer[playerIdx] || null }
       );
       if (!success) return;
       delete serveMetaByPlayer[playerIdx];
       if (pickedSkillId === "serve") {
         clearServeTypeInlineListener();
+      }
+      if (pickedSkillId === "attack") {
+        clearAttackSelection(playerIdx);
       }
       setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();
@@ -1862,7 +1997,6 @@ function applyReceiveContextToEvent(ev) {
   if (ev.skillId === "pass") {
     const zone = ev.zone || ev.playerPosition || null;
     if (ev.receivePosition == null) ev.receivePosition = zone;
-    ev.attackBp = false; // non è BP, siamo in cambio palla
     rememberReceiveContext(ev);
     return;
   }
@@ -1885,7 +2019,7 @@ async function handleEventClick(
   code,
   playerName,
   sourceEl,
-  { setTypeChoice = null, serveMeta = null } = {}
+  { setTypeChoice = null, serveMeta = null, attackMeta = null } = {}
 ) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
@@ -1914,13 +2048,20 @@ async function handleEventClick(
       event.serveType = "JF";
     }
   }
-  // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
-  event.attackBp = true;
-  event.fromFreeball = wasFreeball;
-  const appliedSetType = state.nextSetType || setTypeChoice || null;
-  if (appliedSetType && skillId === "attack") {
-    event.setType = appliedSetType;
+  let appliedSetType = setTypeChoice || (attackMeta && attackMeta.setType) || null;
+  if (skillId === "attack") {
+    const fallbackSetType = normalizeSetTypeValue(state.defaultSetType) || null;
+    if (!appliedSetType && fallbackSetType) appliedSetType = fallbackSetType;
+    if (appliedSetType) {
+      event.setType = appliedSetType;
+    }
+    if (attackMeta && attackMeta.trajectory) {
+      applyAttackTrajectoryToEvent(event, attackMeta.trajectory);
+    }
+    // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
+    event.attackBp = true;
   }
+  event.fromFreeball = wasFreeball;
   applyReceiveContextToEvent(event);
   state.events.push(event);
   handleAutoRotationFromEvent(event);
@@ -1937,13 +2078,7 @@ async function handleEventClick(
   updateSkillStatsUI(playerIdx, skillId);
   renderEventsLog();
   renderPlayers();
-  if (skillId === "attack") {
-    const defaultSetType = normalizeSetTypeValue(state.defaultSetType) || "";
-    if (normalizeSetTypeValue(state.nextSetType) !== defaultSetType) {
-      setNextSetType(defaultSetType);
-    }
-  }
-  if (state.attackTrajectoryEnabled && skillId === "attack") {
+  if (state.attackTrajectoryEnabled && skillId === "attack" && !(attackMeta && attackMeta.trajectory)) {
     const baseZoneForMapping = event.originZone || event.zone || event.playerPosition || null;
     openAttackTrajectoryModal({ baseZone: baseZoneForMapping, setType: event.setType || null }).then(coords => {
       if (coords && coords.start && coords.end) {
@@ -6587,6 +6722,19 @@ function init() {
     if (elServeTrajectoryToggleInline) elServeTrajectoryToggleInline.checked = !!value;
     saveState();
   };
+  const elSetTypePromptToggleInline = document.getElementById("settype-prompt-toggle-inline");
+  const syncSetTypePromptToggle = value => {
+    state.setTypePromptEnabled = !!value;
+    if (elSetTypePromptToggleInline) elSetTypePromptToggleInline.checked = !!value;
+    saveState();
+    renderPlayers();
+  };
+  if (elSetTypePromptToggleInline) {
+    elSetTypePromptToggleInline.checked = !!state.setTypePromptEnabled;
+    elSetTypePromptToggleInline.addEventListener("change", () =>
+      syncSetTypePromptToggle(elSetTypePromptToggleInline.checked)
+    );
+  }
   if (elServeTrajectoryToggleInline) {
     elServeTrajectoryToggleInline.checked = !!state.serveTrajectoryEnabled;
     elServeTrajectoryToggleInline.addEventListener("change", () =>
@@ -6615,7 +6763,6 @@ function init() {
       saveState();
     });
   }
-  initSetTypeShortcuts();
   const elForceMobileToggle = document.getElementById("force-mobile-toggle");
   if (elForceMobileToggle) {
     elForceMobileToggle.checked = !!state.forceMobileLayout;
