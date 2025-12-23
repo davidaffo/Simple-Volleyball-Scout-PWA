@@ -171,7 +171,6 @@ const elServeTrajFilterBases = document.getElementById("serve-traj-filter-bases"
 const elServeTrajFilterPhases = document.getElementById("serve-traj-filter-phases");
 const elServeTrajFilterReceiveEvals = document.getElementById("serve-traj-filter-receive-evals");
 const elServeTrajFilterReceiveZones = document.getElementById("serve-traj-filter-receive-zones");
-const elServeTrajFilterPrev = document.getElementById("serve-traj-filter-prev");
 const elServeTrajFilterZones = document.getElementById("serve-traj-filter-zones");
 const elServeTrajFilterReset = document.getElementById("serve-traj-filter-reset");
 const elSecondFilterSetters = document.getElementById("second-filter-setters");

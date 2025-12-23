@@ -1,5 +1,5 @@
 popup per modifiche su tutti i dati
-aggiungi analisi traiettorie battuta
+le zone di partenza di battuta non sono inferite in modo corretto
 aggiungi scout da video
 Aggiungi squadra avversaria
 

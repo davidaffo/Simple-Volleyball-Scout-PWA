@@ -4306,6 +4306,45 @@ function buildFilterOptions(container, options, selectedSet, { asNumber = false,
     container.appendChild(label);
   });
 }
+function buildUniqueOptions(values, { asNumber = false, labelFn } = {}) {
+  const seen = new Set();
+  const opts = [];
+  (values || []).forEach(raw => {
+    if (raw === null || raw === undefined || raw === "") return;
+    const val = asNumber ? Number(raw) : String(raw);
+    if (asNumber && Number.isNaN(val)) return;
+    if (seen.has(val)) return;
+    seen.add(val);
+    opts.push({
+      value: val,
+      label: labelFn ? labelFn(val) : String(val)
+    });
+  });
+  return opts;
+}
+function toggleFilterVisibility(container, shouldShow) {
+  if (!container) return;
+  const wrapper = container.closest(".analysis-filter");
+  if (!wrapper) return;
+  wrapper.style.display = shouldShow ? "" : "none";
+}
+function renderDynamicFilter(container, options, selectedSet, config = {}) {
+  const shouldShow = Array.isArray(options) && options.length > 0;
+  if (!shouldShow) {
+    if (selectedSet && typeof selectedSet.clear === "function") selectedSet.clear();
+    if (container) container.innerHTML = "";
+  }
+  toggleFilterVisibility(container, shouldShow);
+  if (shouldShow) {
+    buildFilterOptions(container, options, selectedSet, config);
+  }
+  return shouldShow;
+}
+function getOptionLabel(options, value) {
+  const match = (options || []).find(opt => String(opt.value) === String(value));
+  if (match && match.label) return match.label;
+  return String(value);
+}
 function getCheckedValues(container, { asNumber = false } = {}) {
   if (!container) return [];
   return Array.from(container.querySelectorAll("input[type=checkbox]:checked")).map(inp =>
@@ -4400,8 +4439,7 @@ const serveTrajectoryFilterState = {
   bases: new Set(),
   phases: new Set(),
   receiveEvaluations: new Set(),
-  receiveZones: new Set(),
-  prevSkill: "any"
+  receiveZones: new Set()
 };
 const secondFilterState = {
   setters: new Set(),
@@ -4457,7 +4495,6 @@ function syncServeTrajectoryFilterState() {
   serveTrajectoryFilterState.phases = new Set(getCheckedValues(elServeTrajFilterPhases));
   serveTrajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elServeTrajFilterReceiveEvals));
   serveTrajectoryFilterState.receiveZones = new Set(getCheckedValues(elServeTrajFilterReceiveZones, { asNumber: true }));
-  serveTrajectoryFilterState.prevSkill = (elServeTrajFilterPrev && elServeTrajFilterPrev.value) || "any";
 }
 function handleTrajectoryFilterChange() {
   syncTrajectoryFilterState();
@@ -4492,8 +4529,6 @@ function resetServeTrajectoryFilters() {
   serveTrajectoryFilterState.phases.clear();
   serveTrajectoryFilterState.receiveEvaluations.clear();
   serveTrajectoryFilterState.receiveZones.clear();
-  serveTrajectoryFilterState.prevSkill = "any";
-  if (elServeTrajFilterPrev) elServeTrajFilterPrev.value = "any";
   renderServeTrajectoryFilters();
   renderServeTrajectoryAnalysis();
 }
@@ -4501,54 +4536,57 @@ function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
   const events = state.events || [];
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
-  const maxSetFromEvents = Math.max(
-    1,
-    state.currentSet || 1,
-    ...attackEvents.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
+  const trajEvents = attackEvents.filter(ev => {
+    const dir = ev.attackDirection || ev.attackTrajectory;
+    return dir && dir.start && dir.end;
+  });
+  const playersOpts = buildUniqueOptions(
+    trajEvents.map(ev => ev.playerIdx),
+    {
+      asNumber: true,
+      labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
+    }
   );
-  const playersOpts = (state.players || []).map((name, idx) => ({
-    value: idx,
-    label: formatNameWithNumber(name) || name || "—"
-  }));
-  const setsOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
-  const codesOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
-  const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
-  const setTypeOpts = mergeFilterOptions(
-    DEFAULT_SET_TYPE_OPTIONS,
-    attackEvents.map(ev =>
+  const setsOpts = buildUniqueOptions(trajEvents.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const codesOpts = buildUniqueOptions(trajEvents.map(ev => ev.code), { labelFn: val => val });
+  const zonesOpts = buildUniqueOptions(
+    trajEvents.map(ev => {
+      const traj = ev.attackDirection || ev.attackTrajectory || {};
+      return ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    }),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+  const setTypeOpts = buildUniqueOptions(
+    trajEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
     ),
-    normalizeSetTypeValue
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
-  const baseOpts = mergeFilterOptions(
-    DEFAULT_BASE_OPTIONS,
-    attackEvents.map(ev => normalizeBaseValue(ev.base)),
-    normalizeBaseValue
+  const baseOpts = buildUniqueOptions(
+    trajEvents.map(ev => normalizeBaseValue(ev.base)),
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = mergeFilterOptions(
-    DEFAULT_PHASE_OPTIONS,
-    attackEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    v => v
+  const phaseOpts = buildUniqueOptions(
+    trajEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
+    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
   );
-  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
-  const recvEvalOpts = mergeFilterOptions(
-    defaultEvalOpts,
-    attackEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
-    normalizeEvalCode
+  const recvEvalOpts = buildUniqueOptions(
+    trajEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    { labelFn: val => val }
   );
-  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
-  const recvZoneOpts = mergeFilterOptions(
-    defaultZoneOpts,
-    attackEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
-    normalizeReceiveZone,
-    val => "Z" + val
+  const recvZoneOpts = buildUniqueOptions(
+    trajEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
   );
 
   trajectoryFilterState.players = new Set(
     [...trajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
   );
   trajectoryFilterState.sets = new Set(
-    [...trajectoryFilterState.sets].filter(setNum => setNum >= 1 && setNum <= maxSetFromEvents)
+    [...trajectoryFilterState.sets].filter(setNum => setsOpts.some(o => Number(o.value) === setNum))
   );
   trajectoryFilterState.codes = new Set(
     [...trajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
@@ -4575,37 +4613,58 @@ function renderTrajectoryFilters() {
     trajectoryFilterState.prevSkill = "any";
   }
 
-  buildFilterOptions(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
-    asNumber: true,
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterSets, setsOpts, trajectoryFilterState.sets, {
-    asNumber: true,
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterSetTypes, setTypeOpts, trajectoryFilterState.setTypes, {
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterBases, baseOpts, trajectoryFilterState.bases, {
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterPhases, phaseOpts, trajectoryFilterState.phases, {
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterReceiveEvals, recvEvalOpts, trajectoryFilterState.receiveEvaluations, {
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterReceiveZones, recvZoneOpts, trajectoryFilterState.receiveZones, {
-    asNumber: true,
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes, {
-    onChange: handleTrajectoryFilterChange
-  });
-  buildFilterOptions(elTrajFilterZones, zonesOpts, trajectoryFilterState.zones, {
-    asNumber: true,
-    onChange: handleTrajectoryFilterChange
-  });
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
+      asNumber: true,
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterSets, setsOpts, trajectoryFilterState.sets, {
+      asNumber: true,
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterSetTypes, setTypeOpts, trajectoryFilterState.setTypes, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterBases, baseOpts, trajectoryFilterState.bases, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterPhases, phaseOpts, trajectoryFilterState.phases, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterReceiveEvals, recvEvalOpts, trajectoryFilterState.receiveEvaluations, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterReceiveZones, recvZoneOpts, trajectoryFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterZones, zonesOpts, trajectoryFilterState.zones, {
+      asNumber: true,
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  toggleFilterVisibility(elTrajFilterPrev, true);
+  toggleFilterVisibility(elTrajFilterReset, visibleFilters.some(Boolean));
   if (elTrajFilterPrev) {
     elTrajFilterPrev.value = trajectoryFilterState.prevSkill || "any";
     if (!elTrajFilterPrev._trajPrevBound) {
@@ -4621,57 +4680,51 @@ function renderTrajectoryFilters() {
 function renderServeTrajectoryFilters() {
   if (!elServeTrajectoryGrid) return;
   const events = state.events || [];
-  const serveEvents = events.filter(
-    ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd
+  const serveEvents = events.filter(ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd);
+  const playersOpts = buildUniqueOptions(
+    serveEvents.map(ev => ev.playerIdx),
+    {
+      asNumber: true,
+      labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
+    }
   );
-  const maxSetFromEvents = Math.max(
-    1,
-    state.currentSet || 1,
-    ...serveEvents.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
-  );
-  const playersOpts = (state.players || []).map((name, idx) => ({
-    value: idx,
-    label: formatNameWithNumber(name) || name || "—"
-  }));
-  const setsOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
-  const codesOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
-  const zonesOpts = [4, 3, 2, 5, 6, 1].map(z => ({ value: z, label: "Z" + z }));
-  const setTypeOpts = mergeFilterOptions(
-    [],
+  const setsOpts = buildUniqueOptions(serveEvents.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const codesOpts = buildUniqueOptions(serveEvents.map(ev => ev.code), { labelFn: val => val });
+  const zonesOpts = buildUniqueOptions(serveEvents.map(ev => getServeStartZone(ev)), {
+    asNumber: true,
+    labelFn: val => "Z" + val
+  });
+  const setTypeOpts = buildUniqueOptions(
     serveEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
     ),
-    normalizeSetTypeValue
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
-  const baseOpts = mergeFilterOptions(
-    DEFAULT_BASE_OPTIONS,
+  const baseOpts = buildUniqueOptions(
     serveEvents.map(ev => normalizeBaseValue(ev.base)),
-    normalizeBaseValue
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = mergeFilterOptions(
-    DEFAULT_PHASE_OPTIONS,
+  const phaseOpts = buildUniqueOptions(
     serveEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    v => v
+    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
   );
-  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
-  const recvEvalOpts = mergeFilterOptions(
-    defaultEvalOpts,
+  const recvEvalOpts = buildUniqueOptions(
     serveEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
-    normalizeEvalCode
+    { labelFn: val => val }
   );
-  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
-  const recvZoneOpts = mergeFilterOptions(
-    defaultZoneOpts,
-    serveEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
-    normalizeReceiveZone,
-    val => "Z" + val
+  const recvZoneOpts = buildUniqueOptions(
+    serveEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
   );
 
   serveTrajectoryFilterState.players = new Set(
     [...serveTrajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
   );
   serveTrajectoryFilterState.sets = new Set(
-    [...serveTrajectoryFilterState.sets].filter(setNum => setNum >= 1 && setNum <= maxSetFromEvents)
+    [...serveTrajectoryFilterState.sets].filter(setNum => setsOpts.some(o => Number(o.value) === setNum))
   );
   serveTrajectoryFilterState.codes = new Set(
     [...serveTrajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
@@ -4694,48 +4747,58 @@ function renderServeTrajectoryFilters() {
   serveTrajectoryFilterState.receiveZones = new Set(
     [...serveTrajectoryFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
   );
-  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === serveTrajectoryFilterState.prevSkill)) {
-    serveTrajectoryFilterState.prevSkill = "any";
-  }
 
-  buildFilterOptions(elServeTrajFilterPlayers, playersOpts, serveTrajectoryFilterState.players, {
-    asNumber: true,
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterSets, setsOpts, serveTrajectoryFilterState.sets, {
-    asNumber: true,
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterSetTypes, setTypeOpts, serveTrajectoryFilterState.setTypes, {
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterBases, baseOpts, serveTrajectoryFilterState.bases, {
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterPhases, phaseOpts, serveTrajectoryFilterState.phases, {
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterReceiveEvals, recvEvalOpts, serveTrajectoryFilterState.receiveEvaluations, {
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterReceiveZones, recvZoneOpts, serveTrajectoryFilterState.receiveZones, {
-    asNumber: true,
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterCodes, codesOpts, serveTrajectoryFilterState.codes, {
-    onChange: handleServeTrajectoryFilterChange
-  });
-  buildFilterOptions(elServeTrajFilterZones, zonesOpts, serveTrajectoryFilterState.zones, {
-    asNumber: true,
-    onChange: handleServeTrajectoryFilterChange
-  });
-  if (elServeTrajFilterPrev) {
-    elServeTrajFilterPrev.value = serveTrajectoryFilterState.prevSkill || "any";
-    if (!elServeTrajFilterPrev._serveTrajPrevBound) {
-      elServeTrajFilterPrev.addEventListener("change", handleServeTrajectoryFilterChange);
-      elServeTrajFilterPrev._serveTrajPrevBound = true;
-    }
-  }
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterPlayers, playersOpts, serveTrajectoryFilterState.players, {
+      asNumber: true,
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterSets, setsOpts, serveTrajectoryFilterState.sets, {
+      asNumber: true,
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterSetTypes, setTypeOpts, serveTrajectoryFilterState.setTypes, {
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterBases, baseOpts, serveTrajectoryFilterState.bases, {
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterPhases, phaseOpts, serveTrajectoryFilterState.phases, {
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterReceiveEvals, recvEvalOpts, serveTrajectoryFilterState.receiveEvaluations, {
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterReceiveZones, recvZoneOpts, serveTrajectoryFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterCodes, codesOpts, serveTrajectoryFilterState.codes, {
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elServeTrajFilterZones, zonesOpts, serveTrajectoryFilterState.zones, {
+      asNumber: true,
+      onChange: handleServeTrajectoryFilterChange
+    })
+  );
+  toggleFilterVisibility(elServeTrajFilterReset, visibleFilters.some(Boolean));
   if (elServeTrajFilterReset && !elServeTrajFilterReset._serveTrajResetBound) {
     elServeTrajFilterReset.addEventListener("click", resetServeTrajectoryFilters);
     elServeTrajFilterReset._serveTrajResetBound = true;
@@ -5135,52 +5198,46 @@ function resetSecondFilters() {
 function renderSecondFilters() {
   if (!elSecondFilterSetters) return;
   const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
-  const maxSetFromEvents = Math.max(
-    1,
-    state.currentSet || 1,
-    ...events.map(ev => (ev && typeof ev.set === "number" ? ev.set : 1))
-  );
-  const playersOpts = (state.players || []).map((name, idx) => ({
-    value: idx,
-    label: formatNameWithNumber(name) || name || "—"
-  }));
+  const playerLabels = new Map();
   events.forEach(ev => {
-    if (typeof ev.playerIdx === "number" && !playersOpts.some(p => Number(p.value) === ev.playerIdx)) {
-      playersOpts.push({
-        value: ev.playerIdx,
-        label: formatNameWithNumber(ev.playerName || "Alzatrice " + (ev.playerIdx + 1))
-      });
-    }
+    if (typeof ev.playerIdx !== "number") return;
+    const label =
+      formatNameWithNumber(ev.playerName || state.players[ev.playerIdx]) ||
+      ev.playerName ||
+      state.players[ev.playerIdx] ||
+      "Alzatrice " + (ev.playerIdx + 1);
+    playerLabels.set(ev.playerIdx, label);
   });
-  const setTypeOpts = mergeFilterOptions(
-    DEFAULT_SET_TYPE_OPTIONS,
-    events.map(ev => normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))),
-    normalizeSetTypeValue
+  const playersOpts = Array.from(playerLabels.entries()).map(([idx, label]) => ({
+    value: idx,
+    label
+  }));
+  const setTypeOpts = buildUniqueOptions(
+    events.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
-  const baseOpts = mergeFilterOptions(
-    DEFAULT_BASE_OPTIONS,
+  const baseOpts = buildUniqueOptions(
     events.map(ev => normalizeBaseValue(ev.base)),
-    normalizeBaseValue
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = mergeFilterOptions(
-    DEFAULT_PHASE_OPTIONS,
+  const phaseOpts = buildUniqueOptions(
     events.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    v => v
+    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
   );
-  const defaultEvalOpts = RESULT_CODES.map(code => ({ value: code, label: code }));
-  const recvEvalOpts = mergeFilterOptions(
-    defaultEvalOpts,
+  const recvEvalOpts = buildUniqueOptions(
     events.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
-    normalizeEvalCode
+    { labelFn: val => val }
   );
-  const defaultZoneOpts = Array.from({ length: 9 }, (_, i) => ({ value: i + 1, label: "Z" + (i + 1) }));
-  const recvZoneOpts = mergeFilterOptions(
-    defaultZoneOpts,
-    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)).filter(v => v !== null),
-    normalizeReceiveZone,
-    val => "Z" + val
+  const recvZoneOpts = buildUniqueOptions(
+    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
   );
-  const setOpts = Array.from({ length: maxSetFromEvents }, (_, i) => ({ value: i + 1, label: "Set " + (i + 1) }));
+  const setOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
 
   secondFilterState.setters = new Set(
     [...secondFilterState.setters].filter(idx => playersOpts.some(p => Number(p.value) === idx))
@@ -5201,24 +5258,47 @@ function renderSecondFilters() {
     secondFilterState.prevSkill = "any";
   }
 
-  buildFilterOptions(elSecondFilterSetters, playersOpts, secondFilterState.setters, {
-    asNumber: true,
-    onChange: handleSecondFilterChange
-  });
-  buildFilterOptions(elSecondFilterSetTypes, setTypeOpts, secondFilterState.setTypes, { onChange: handleSecondFilterChange });
-  buildFilterOptions(elSecondFilterBases, baseOpts, secondFilterState.bases, { onChange: handleSecondFilterChange });
-  buildFilterOptions(elSecondFilterPhases, phaseOpts, secondFilterState.phases, { onChange: handleSecondFilterChange });
-  buildFilterOptions(elSecondFilterReceiveEvals, recvEvalOpts, secondFilterState.receiveEvaluations, {
-    onChange: handleSecondFilterChange
-  });
-  buildFilterOptions(elSecondFilterReceiveZones, recvZoneOpts, secondFilterState.receiveZones, {
-    asNumber: true,
-    onChange: handleSecondFilterChange
-  });
-  buildFilterOptions(elSecondFilterSets, setOpts, secondFilterState.sets, {
-    asNumber: true,
-    onChange: handleSecondFilterChange
-  });
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterSetters, playersOpts, secondFilterState.setters, {
+      asNumber: true,
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterSetTypes, setTypeOpts, secondFilterState.setTypes, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterBases, baseOpts, secondFilterState.bases, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterPhases, phaseOpts, secondFilterState.phases, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterReceiveEvals, recvEvalOpts, secondFilterState.receiveEvaluations, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterReceiveZones, recvZoneOpts, secondFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elSecondFilterSets, setOpts, secondFilterState.sets, {
+      asNumber: true,
+      onChange: handleSecondFilterChange
+    })
+  );
+  toggleFilterVisibility(elSecondFilterPrev, events.length > 0);
+  toggleFilterVisibility(elSecondFilterReset, visibleFilters.some(Boolean));
   if (elSecondFilterPrev) {
     elSecondFilterPrev.value = secondFilterState.prevSkill || "any";
     if (!elSecondFilterPrev._secondPrevBound) {
