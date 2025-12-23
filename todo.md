@@ -3,6 +3,8 @@ inserimento traiettorie e tipo battute
 aggiungi analisi traiettorie battuta
 aggiungi scout da video
 Aggiungi squadra avversaria
+prima traiettoria poi voto
+schermata formazione migliorata
 
 Nuovo TODO (portare le feature di IntelliScout nel PWA):
 

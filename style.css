@@ -906,43 +906,38 @@ body[data-theme="light"] .settings-modal__content {
 .lineup-slot {
   background: #111827;
   border: 1px dashed #334155;
-  border-radius: 0.7rem;
-  min-height: 110px;
-  padding: 0.35rem;
+  border-radius: 999px;
+  min-height: 44px;
+  padding: 0.2rem 0.35rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  justify-content: center;
   position: relative;
 }
 .lineup-slot.empty::after {
   content: attr(data-pos);
   position: absolute;
-  inset: 0.4rem;
+  inset: 0;
   display: grid;
   place-items: center;
-  font-size: 2.4rem;
-  color: rgba(59, 130, 246, 0.24);
+  font-size: 1.05rem;
+  color: rgba(148, 163, 184, 0.6);
   pointer-events: none;
 }
 .lineup-slot .slot-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 700;
-  color: #cbd5e1;
+  display: none;
 }
 .lineup-slot .slot-body {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0.35rem;
+  background: transparent;
+  padding: 0;
 }
 .lineup-slot .slot-name {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-align: center;
   color: #e2e8f0;
   word-break: break-word;
@@ -988,6 +983,10 @@ body[data-theme="light"] .settings-modal__content {
 }
 .lineup-chip span {
   font-weight: 700;
+}
+.lineup-chip.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.6);
 }
 .lineup-modal__foot {
   display: flex;

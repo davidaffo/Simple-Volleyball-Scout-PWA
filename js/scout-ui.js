@@ -74,6 +74,7 @@ let serveTrajectoryType = "JF";
 let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
 let lineupDragName = "";
+let lineupSelectedName = "";
 let currentEditControl = null;
 let currentEditCell = null;
 function isBackRowZone(z) {
@@ -164,6 +165,7 @@ function renderLineupModal() {
   if (!elLineupModalCourt || !elLineupModalBench) return;
   elLineupModalCourt.innerHTML = "";
   const court = getCourtShape(lineupModalCourt);
+  const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   court.forEach((slot, idx) => {
     const areaClass = "pos-" + (idx + 1);
     const card = document.createElement("div");
@@ -183,6 +185,26 @@ function renderLineupModal() {
         assignPlayerToLineup(name, idx);
         renderLineupModal();
       }
+    });
+    card.addEventListener("click", () => {
+      if (lineupSelectedName) {
+        assignPlayerToLineup(lineupSelectedName, idx);
+        lineupSelectedName = "";
+        renderLineupModal();
+        return;
+      }
+      if (slot.main) {
+        clearLineupSlot(idx);
+        renderLineupModal();
+      }
+    });
+    card.addEventListener("touchend", e => {
+      if (!lineupDragName) return;
+      e.preventDefault();
+      assignPlayerToLineup(lineupDragName, idx);
+      lineupDragName = "";
+      lineupSelectedName = "";
+      renderLineupModal();
     });
     const head = document.createElement("div");
     head.className = "slot-head";
@@ -218,7 +240,7 @@ function renderLineupModal() {
   } else {
     benchNames.forEach(name => {
       const chip = document.createElement("div");
-      chip.className = "lineup-chip";
+      chip.className = "lineup-chip" + (lineupSelectedName === name ? " selected" : "");
       chip.draggable = true;
       chip.dataset.playerName = name;
       chip.addEventListener("dragstart", e => {
@@ -235,6 +257,14 @@ function renderLineupModal() {
         const nextEmpty = court.findIndex(slot => !slot.main);
         const targetIdx = nextEmpty !== -1 ? nextEmpty : 0;
         assignPlayerToLineup(name, targetIdx);
+        lineupSelectedName = "";
+        renderLineupModal();
+      });
+      chip.addEventListener("touchstart", e => {
+        if (!isCoarse) return;
+        e.preventDefault();
+        lineupDragName = name;
+        lineupSelectedName = name;
         renderLineupModal();
       });
       const span = document.createElement("span");
@@ -265,6 +295,7 @@ function closeLineupModal() {
     document.body.classList.remove("modal-open");
   }
   lineupDragName = "";
+  lineupSelectedName = "";
 }
 function saveLineupModal() {
   const nextCourt = getCourtShape(lineupModalCourt);
