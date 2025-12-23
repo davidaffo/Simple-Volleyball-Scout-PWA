@@ -248,10 +248,6 @@ Bianchi 18"></textarea>
                 Direzione attacco semplificata
               </label><br>
               <label class="auto-rotate-toggle">
-                <input type="checkbox" id="serve-trajectory-toggle" />
-                Traiettoria servizio
-              </label><br>
-              <label class="auto-rotate-toggle">
                 <input type="checkbox" id="force-mobile-toggle" />
                 Modalità mobile (test)
               </label>
@@ -767,17 +763,17 @@ Bianchi 18"></textarea>
           <button type="button" data-net-point="6-F" style="--net-x: 0.8333">6-F</button>
         </div>
       </div>
-      <div class="attack-trajectory-actions">
-        <div class="attack-trajectory-info">
-          <div id="attack-trajectory-instructions" class="attack-trajectory-instructions"></div>
-          <div id="serve-type-buttons" class="serve-type-buttons hidden" role="group" aria-label="Tipo battuta">
-            <button type="button" data-serve-type="F">Float (F)</button>
-            <button type="button" data-serve-type="J" class="active">Jump float (J)</button>
-            <button type="button" data-serve-type="S">Spin (S)</button>
+          <div class="attack-trajectory-actions">
+            <div class="attack-trajectory-info">
+              <div id="attack-trajectory-instructions" class="attack-trajectory-instructions"></div>
+              <div id="serve-type-buttons" class="serve-type-buttons hidden" role="group" aria-label="Tipo battuta">
+                <button type="button" data-serve-type="F">Float (F)</button>
+                <button type="button" data-serve-type="JF" class="active">Jump float (JF)</button>
+                <button type="button" data-serve-type="S">Spin (S)</button>
+              </div>
+            </div>
+            <button id="attack-trajectory-close-btn" class="pill-remove" type="button" aria-label="Chiudi">✕</button>
           </div>
-        </div>
-        <button id="attack-trajectory-close-btn" class="pill-remove" type="button" aria-label="Chiudi">✕</button>
-      </div>
     </div>
   </div>
   <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
@@ -816,10 +812,6 @@ Bianchi 18"></textarea>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-toggle-settings" />
                   Disegna traiettoria attacco
-                </label>
-                <label class="auto-rotate-toggle">
-                  <input type="checkbox" id="serve-trajectory-toggle-settings" />
-                  Traiettoria servizio
                 </label>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-simple-toggle-settings" />

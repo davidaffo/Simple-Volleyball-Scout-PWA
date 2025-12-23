@@ -2982,14 +2982,30 @@ body[data-theme="light"] .agg-table td {
   padding-right: 0.2rem;
 }
 .attack-trajectory-content {
-  max-width: none;
-  width: 100vw;
-  height: 100svh;
-  max-height: 100svh;
+  width: min(1100px, 96vw);
+  max-width: 1100px;
+  height: auto;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
-  border-radius: 0;
+  border-radius: 0.9rem;
   position: relative;
+  overflow: hidden;
+}
+.attack-trajectory-body {
+  flex: 1 1 auto;
+  min-height: 520px;
+}
+@media (max-width: 900px) {
+  .attack-trajectory-content {
+    width: 100vw;
+    height: 100svh;
+    max-height: 100svh;
+    border-radius: 0;
+  }
+  .attack-trajectory-body {
+    min-height: 0;
+  }
 }
 .attack-trajectory-body {
   display: flex;
@@ -3057,7 +3073,40 @@ body[data-theme="light"] .attack-trajectory-netpoints button[data-net-point].act
   border-radius: 0.6rem;
   border: 1px solid #2f2f2f;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 520px;
+  height: 520px;
+  max-height: 70vh;
+}
+.attack-trajectory-stage img {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.attack-trajectory-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+@media (max-width: 900px) {
+  .attack-trajectory-content {
+    width: 100vw;
+    height: 100svh;
+    max-height: 100svh;
+    border-radius: 0;
+  }
+  .attack-trajectory-body {
+    min-height: 0;
+  }
+  .attack-trajectory-stage {
+    min-height: 360px;
+    height: 360px;
+    max-height: none;
+  }
 }
 .attack-trajectory-stage img {
   display: block;
@@ -3075,16 +3124,13 @@ body[data-theme="light"] .attack-trajectory-netpoints button[data-net-point].act
   pointer-events: auto;
 }
 .attack-trajectory-actions {
-  position: absolute;
-  left: 0.6rem;
-  right: 0.6rem;
-  bottom: 0.6rem;
-  z-index: 4;
+  position: static;
+  margin-top: 0.35rem;
   display: flex;
   gap: 0.6rem;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .attack-trajectory-actions button {
   pointer-events: auto;
@@ -3099,15 +3145,23 @@ body[data-theme="light"] .attack-trajectory-netpoints button[data-net-point].act
   padding: 0.4rem 0.55rem;
   pointer-events: auto;
   max-width: 70%;
+  width: 100%;
 }
 .attack-trajectory-instructions {
   font-size: 0.92rem;
   color: #e2e8f0;
 }
+.attack-trajectory-instructions.hidden {
+  display: none;
+}
 .serve-type-buttons {
   display: flex;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.35rem;
   flex-wrap: wrap;
+  width: 100%;
+  padding-top: 0.15rem;
+  align-items: center;
 }
 .serve-type-buttons.hidden {
   display: none;

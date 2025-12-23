@@ -70,7 +70,7 @@ let trajectoryDragging = false;
 let trajectoryNetPointId = null;
 let trajectorySetType = null;
 let trajectoryMode = "attack";
-let serveTrajectoryType = "J";
+let serveTrajectoryType = "JF";
 let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
 let lineupDragName = "";
@@ -98,7 +98,8 @@ function cloneCourt(court) {
   return getCourtShape(court).map(slot => ({ main: slot.main, replaced: slot.replaced }));
 }
 function setServeTypeSelection(type) {
-  const normalized = type === "F" || type === "S" ? type : "J";
+  const t = (type || "").toUpperCase();
+  const normalized = t === "F" || t === "S" ? t : "JF";
   serveTrajectoryType = normalized;
   if (!elServeTypeButtons) return;
   const btns = elServeTypeButtons.querySelectorAll("[data-serve-type]");
@@ -115,7 +116,7 @@ if (elServeTypeButtons) {
     if (!type) return;
     setServeTypeSelection(type);
   });
-  setServeTypeSelection("J");
+  setServeTypeSelection("JF");
 }
 function getBenchForLineup(court) {
   const libSet = new Set(state.liberos || []);
@@ -589,24 +590,21 @@ function openAttackTrajectoryModal(prefill = null) {
     if (elServeTypeButtons) {
       elServeTypeButtons.classList.toggle("hidden", mode !== "serve-start");
       if (mode === "serve-start") {
-        setServeTypeSelection("J");
+        setServeTypeSelection("JF");
       }
     }
     if (elAttackTrajectoryInstructions) {
-      if (mode === "serve-start") {
-        elAttackTrajectoryInstructions.textContent =
-          "Seleziona tipo battuta (F/J/S) e clicca il punto di partenza della battuta.";
-      } else if (mode === "serve-end") {
-        elAttackTrajectoryInstructions.textContent = "Clicca il punto di arrivo della battuta.";
-      } else {
-        elAttackTrajectoryInstructions.textContent = simplified
+      const hideInstructions = mode === "serve-start" || mode === "serve-end";
+      elAttackTrajectoryInstructions.textContent = hideInstructions
+        ? ""
+        : simplified
           ? "Scegli il punto rete e poi clicca il punto di arrivo."
           : "Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.";
-      }
+      elAttackTrajectoryInstructions.classList.toggle("hidden", hideInstructions);
     }
     const getInitialImage = () => {
       if (mode === "serve-start") return SERVE_START_IMG_NEAR;
-      if (mode === "serve-end") return SERVE_END_IMG_FAR;
+      if (mode === "serve-end") return SERVE_END_IMG_NEAR;
       return TRAJECTORY_IMG_NEAR;
     };
     elAttackTrajectoryImage.dataset.activeSrc = getInitialImage();
@@ -618,7 +616,7 @@ function openAttackTrajectoryModal(prefill = null) {
       serveTypeKeyHandler = e => {
         const key = (e.key || "").toUpperCase();
         if (key === "F" || key === "J" || key === "S") {
-          setServeTypeSelection(key);
+          setServeTypeSelection(key === "J" ? "JF" : key);
         }
       };
       window.addEventListener("keydown", serveTypeKeyHandler);
@@ -1673,7 +1671,7 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
     code
   });
   if (skillId === "serve" && !event.serveType) {
-    event.serveType = "J";
+    event.serveType = "JF";
   }
   // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
   event.attackBp = true;
@@ -2883,12 +2881,24 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, done => createTextInput(ev, "combination", done), editGuard)
       },
       {
-        text: valueToString(ev.serveStart),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveStart", done), editGuard)
+        text: formatTrajPoint(ev.serveStart),
+        classes: ["traj-cell"],
+        onClick: e => {
+          e.stopPropagation();
+          captureServeTrajectory(ev).then(() => {
+            renderEventTableRows(target, events, options);
+          });
+        }
       },
       {
-        text: valueToString(ev.serveEnd),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveEnd", done), editGuard)
+        text: formatTrajPoint(ev.serveEnd),
+        classes: ["traj-cell"],
+        onClick: e => {
+          e.stopPropagation();
+          captureServeTrajectory(ev).then(() => {
+            renderEventTableRows(target, events, options);
+          });
+        }
       },
       {
         text: valueToString(ev.serveType),
@@ -6288,9 +6298,7 @@ function init() {
   const elAttackTrajectoryToggleSettings = document.getElementById("attack-trajectory-toggle-settings");
   const elAttackTrajectorySimpleToggle = document.getElementById("attack-trajectory-simple-toggle");
   const elAttackTrajectorySimpleToggleSettings = document.getElementById("attack-trajectory-simple-toggle-settings");
-  const elServeTrajectoryToggle = document.getElementById("serve-trajectory-toggle");
   const elServeTrajectoryToggleInline = document.getElementById("serve-trajectory-toggle-inline");
-  const elServeTrajectoryToggleSettings = document.getElementById("serve-trajectory-toggle-settings");
   const elDefaultSetTypeSelect = document.getElementById("default-settype-select");
   const elDefaultSetTypeSelectSettings = document.getElementById("default-settype-select-settings");
   if (elAttackTrajectoryToggle) {
@@ -6335,25 +6343,13 @@ function init() {
   }
   const syncServeTrajectoryToggles = value => {
     state.serveTrajectoryEnabled = !!value;
-    if (elServeTrajectoryToggle) elServeTrajectoryToggle.checked = !!value;
     if (elServeTrajectoryToggleInline) elServeTrajectoryToggleInline.checked = !!value;
-    if (elServeTrajectoryToggleSettings) elServeTrajectoryToggleSettings.checked = !!value;
     saveState();
   };
-  if (elServeTrajectoryToggle) {
-    elServeTrajectoryToggle.checked = !!state.serveTrajectoryEnabled;
-    elServeTrajectoryToggle.addEventListener("change", () => syncServeTrajectoryToggles(elServeTrajectoryToggle.checked));
-  }
   if (elServeTrajectoryToggleInline) {
     elServeTrajectoryToggleInline.checked = !!state.serveTrajectoryEnabled;
     elServeTrajectoryToggleInline.addEventListener("change", () =>
       syncServeTrajectoryToggles(elServeTrajectoryToggleInline.checked)
-    );
-  }
-  if (elServeTrajectoryToggleSettings) {
-    elServeTrajectoryToggleSettings.checked = !!state.serveTrajectoryEnabled;
-    elServeTrajectoryToggleSettings.addEventListener("change", () =>
-      syncServeTrajectoryToggles(elServeTrajectoryToggleSettings.checked)
     );
   }
   if (elDefaultSetTypeSelect) {
