@@ -114,6 +114,7 @@ let state = {
   autoRoleP1American: false,
   attackTrajectoryEnabled: false,
   attackTrajectorySimplified: false,
+  serveTrajectoryEnabled: false,
   defaultSetType: "",
   setTypePromptEnabled: false,
   nextSetType: "",

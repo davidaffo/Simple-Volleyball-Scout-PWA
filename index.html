@@ -248,6 +248,10 @@ Bianchi 18"></textarea>
                 Direzione attacco semplificata
               </label><br>
               <label class="auto-rotate-toggle">
+                <input type="checkbox" id="serve-trajectory-toggle" />
+                Traiettoria servizio
+              </label><br>
+              <label class="auto-rotate-toggle">
                 <input type="checkbox" id="force-mobile-toggle" />
                 Modalità mobile (test)
               </label>
@@ -263,6 +267,10 @@ Bianchi 18"></textarea>
             <label class="auto-rotate-toggle">
               <input type="checkbox" id="attack-trajectory-toggle" />
               Traiettoria attacco
+            </label>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="serve-trajectory-toggle-inline" />
+              Traiettoria servizio
             </label>
           </div>
         </div>
@@ -710,6 +718,28 @@ Bianchi 18"></textarea>
       <div id="skill-modal-body" class="skill-modal__body"></div>
     </div>
   </div>
+  <div id="lineup-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="lineup-modal-title">
+    <div class="skill-modal__backdrop" data-close-lineup></div>
+    <div class="skill-modal__content lineup-modal__content">
+      <div class="skill-modal__head">
+        <h3 id="lineup-modal-title">Imposta formazione</h3>
+        <button id="lineup-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
+      </div>
+      <div class="lineup-modal__body">
+        <div class="lineup-modal__court">
+          <div id="lineup-modal-court" class="lineup-court-grid"></div>
+        </div>
+        <div class="lineup-modal__bench">
+          <h4>Panchina</h4>
+          <div id="lineup-modal-bench" class="lineup-bench-chips"></div>
+        </div>
+      </div>
+      <div class="lineup-modal__foot">
+        <button id="lineup-modal-save">Salva formazione</button>
+        <button id="lineup-modal-cancel" class="secondary">Chiudi</button>
+      </div>
+    </div>
+  </div>
   <div id="error-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-modal-title">
     <div class="skill-modal__backdrop" data-close-error></div>
     <div class="skill-modal__content">
@@ -738,6 +768,14 @@ Bianchi 18"></textarea>
         </div>
       </div>
       <div class="attack-trajectory-actions">
+        <div class="attack-trajectory-info">
+          <div id="attack-trajectory-instructions" class="attack-trajectory-instructions"></div>
+          <div id="serve-type-buttons" class="serve-type-buttons hidden" role="group" aria-label="Tipo battuta">
+            <button type="button" data-serve-type="F">Float (F)</button>
+            <button type="button" data-serve-type="J" class="active">Jump float (J)</button>
+            <button type="button" data-serve-type="S">Spin (S)</button>
+          </div>
+        </div>
         <button id="attack-trajectory-close-btn" class="pill-remove" type="button" aria-label="Chiudi">✕</button>
       </div>
     </div>
@@ -778,6 +816,10 @@ Bianchi 18"></textarea>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-toggle-settings" />
                   Disegna traiettoria attacco
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="serve-trajectory-toggle-settings" />
+                  Traiettoria servizio
                 </label>
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="attack-trajectory-simple-toggle-settings" />

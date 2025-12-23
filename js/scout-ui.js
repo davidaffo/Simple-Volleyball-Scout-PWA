@@ -22,6 +22,17 @@ const elAttackTrajectoryInstructions = document.getElementById("attack-trajector
 const elAttackTrajectoryNetpoints = document.getElementById("attack-trajectory-netpoints");
 const elAttackTrajectoryClose = document.getElementById("attack-trajectory-close");
 const elAttackTrajectoryCloseBtn = document.getElementById("attack-trajectory-close-btn");
+const elLineupModal = document.getElementById("lineup-modal");
+const elLineupModalCourt = document.getElementById("lineup-modal-court");
+const elLineupModalBench = document.getElementById("lineup-modal-bench");
+const elLineupModalClose = document.getElementById("lineup-modal-close");
+const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
+const elLineupModalSave = document.getElementById("lineup-modal-save");
+const elServeTypeButtons = document.getElementById("serve-type-buttons");
+const SERVE_START_IMG_NEAR = "images/trajectory/service_start_near.png";
+const SERVE_START_IMG_FAR = "images/trajectory/service_start_far.png";
+const SERVE_END_IMG_NEAR = "images/trajectory/service_end_near.png";
+const SERVE_END_IMG_FAR = "images/trajectory/service_end_far.png";
 const TRAJECTORY_IMG_NEAR = "images/trajectory/attack_empty_near.png";
 const TRAJECTORY_IMG_FAR = "images/trajectory/attack_empty_far.png";
 const TRAJECTORY_NET_POINTS = [
@@ -58,6 +69,11 @@ let trajectoryResolver = null;
 let trajectoryDragging = false;
 let trajectoryNetPointId = null;
 let trajectorySetType = null;
+let trajectoryMode = "attack";
+let serveTrajectoryType = "J";
+let serveTypeKeyHandler = null;
+let lineupModalCourt = [];
+let lineupDragName = "";
 let currentEditControl = null;
 let currentEditCell = null;
 function isBackRowZone(z) {
@@ -68,6 +84,200 @@ function clamp01(n) {
   if (n < 0) return 0;
   if (n > 1) return 1;
   return n;
+}
+function getCourtShape(court) {
+  if (typeof ensureCourtShapeFor === "function") return ensureCourtShapeFor(court);
+  const shaped = Array.isArray(court) ? court : [];
+  return Array.from({ length: 6 }, (_, idx) => {
+    const slot = shaped[idx] || {};
+    return { main: slot.main || "", replaced: slot.replaced || "" };
+  });
+}
+function cloneCourt(court) {
+  if (typeof cloneCourtLineup === "function") return cloneCourtLineup(court);
+  return getCourtShape(court).map(slot => ({ main: slot.main, replaced: slot.replaced }));
+}
+function setServeTypeSelection(type) {
+  const normalized = type === "F" || type === "S" ? type : "J";
+  serveTrajectoryType = normalized;
+  if (!elServeTypeButtons) return;
+  const btns = elServeTypeButtons.querySelectorAll("[data-serve-type]");
+  btns.forEach(btn => {
+    const isActive = (btn.dataset.serveType || "").toUpperCase() === normalized;
+    btn.classList.toggle("active", isActive);
+  });
+}
+if (elServeTypeButtons) {
+  elServeTypeButtons.addEventListener("click", e => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const type = (target.dataset.serveType || "").toUpperCase();
+    if (!type) return;
+    setServeTypeSelection(type);
+  });
+  setServeTypeSelection("J");
+}
+function getBenchForLineup(court) {
+  const libSet = new Set(state.liberos || []);
+  const used = new Set();
+  getCourtShape(court).forEach(slot => {
+    const name = slot.main || "";
+    if (name) used.add(name);
+  });
+  return (state.players || []).filter(name => name && !libSet.has(name) && !used.has(name));
+}
+function assignPlayerToLineup(name, posIdx) {
+  const core = typeof LineupCore !== "undefined" ? LineupCore : null;
+  if (core && typeof core.setPlayerOnCourt === "function") {
+    lineupModalCourt = core.setPlayerOnCourt({
+      court: lineupModalCourt,
+      posIdx,
+      playerName: name,
+      liberos: state.liberos || []
+    });
+  } else {
+    lineupModalCourt = getCourtShape(lineupModalCourt).map((slot, idx) => {
+      const updated = Object.assign({}, slot);
+      if (updated.main === name) updated.main = "";
+      if (updated.replaced === name) updated.replaced = "";
+      if (idx === posIdx) updated.main = name;
+      return updated;
+    });
+  }
+}
+function clearLineupSlot(posIdx) {
+  const core = typeof LineupCore !== "undefined" ? LineupCore : null;
+  if (core && typeof core.clearCourtSlot === "function") {
+    lineupModalCourt = core.clearCourtSlot({
+      court: lineupModalCourt,
+      posIdx,
+      liberos: state.liberos || []
+    });
+  } else {
+    lineupModalCourt = getCourtShape(lineupModalCourt).map((slot, idx) =>
+      idx === posIdx ? { main: "", replaced: "" } : slot
+    );
+  }
+}
+function renderLineupModal() {
+  if (!elLineupModalCourt || !elLineupModalBench) return;
+  elLineupModalCourt.innerHTML = "";
+  const court = getCourtShape(lineupModalCourt);
+  court.forEach((slot, idx) => {
+    const areaClass = "pos-" + (idx + 1);
+    const card = document.createElement("div");
+    card.className = "lineup-slot " + areaClass + (!slot.main ? " empty" : "");
+    card.style.gridArea = "pos" + (idx + 1);
+    card.dataset.pos = "P" + (idx + 1);
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      card.classList.add("drop-over");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drop-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drop-over");
+      const name = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || lineupDragName || "";
+      if (name) {
+        assignPlayerToLineup(name, idx);
+        renderLineupModal();
+      }
+    });
+    const head = document.createElement("div");
+    head.className = "slot-head";
+    const label = document.createElement("span");
+    label.textContent = "Pos " + (idx + 1);
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "secondary small slot-clear";
+    clearBtn.textContent = "✕";
+    clearBtn.addEventListener("click", () => {
+      clearLineupSlot(idx);
+      renderLineupModal();
+    });
+    head.appendChild(label);
+    head.appendChild(clearBtn);
+    const body = document.createElement("div");
+    body.className = "slot-body";
+    const nameLabel = document.createElement("div");
+    nameLabel.className = "slot-name";
+    nameLabel.textContent = slot.main ? formatNameWithNumber(slot.main, { compactCourt: true }) : "Trascina qui";
+    body.appendChild(nameLabel);
+    card.appendChild(head);
+    card.appendChild(body);
+    elLineupModalCourt.appendChild(card);
+  });
+  const benchNames = getBenchForLineup(court);
+  elLineupModalBench.innerHTML = "";
+  if (benchNames.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "bench-empty";
+    empty.textContent = "Nessuna riserva disponibile.";
+    elLineupModalBench.appendChild(empty);
+  } else {
+    benchNames.forEach(name => {
+      const chip = document.createElement("div");
+      chip.className = "lineup-chip";
+      chip.draggable = true;
+      chip.dataset.playerName = name;
+      chip.addEventListener("dragstart", e => {
+        lineupDragName = name;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", name);
+          e.dataTransfer.effectAllowed = "move";
+        }
+      });
+      chip.addEventListener("dragend", () => {
+        lineupDragName = "";
+      });
+      chip.addEventListener("click", () => {
+        const nextEmpty = court.findIndex(slot => !slot.main);
+        const targetIdx = nextEmpty !== -1 ? nextEmpty : 0;
+        assignPlayerToLineup(name, targetIdx);
+        renderLineupModal();
+      });
+      const span = document.createElement("span");
+      span.textContent = formatNameWithNumber(name, { compactCourt: true });
+      chip.appendChild(span);
+      elLineupModalBench.appendChild(chip);
+    });
+  }
+}
+function openMobileLineupModal() {
+  const libSet = new Set(state.liberos || []);
+  const baseCourt = getCourtShape(state.court).map(slot => {
+    if (libSet.has(slot.main)) {
+      return { main: slot.replaced || "", replaced: "" };
+    }
+    return { main: slot.main || "", replaced: "" };
+  });
+  lineupModalCourt = cloneCourt(baseCourt);
+  renderLineupModal();
+  if (elLineupModal) {
+    elLineupModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+  }
+}
+function closeLineupModal() {
+  if (elLineupModal) {
+    elLineupModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+  }
+  lineupDragName = "";
+}
+function saveLineupModal() {
+  const nextCourt = getCourtShape(lineupModalCourt);
+  if (typeof commitCourtChange === "function") {
+    commitCourtChange(nextCourt, { clean: true });
+  } else {
+    state.court = nextCourt;
+    saveState();
+    if (typeof renderPlayers === "function") renderPlayers();
+    if (typeof renderBenchChips === "function") renderBenchChips();
+    if (typeof renderLineupChips === "function") renderLineupChips();
+    if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+  }
+  closeLineupModal();
 }
 function closeCurrentEdit({ refresh = false } = {}) {
   if (currentEditControl) {
@@ -202,6 +412,26 @@ function drawTrajectory(tempEnd = null) {
   ctx.clearRect(0, 0, elAttackTrajectoryCanvas.width, elAttackTrajectoryCanvas.height);
   const start = trajectoryStart;
   const end = tempEnd || trajectoryEnd;
+  if (trajectoryMode === "serve-start") {
+    const pt = start;
+    if (pt) {
+      ctx.fillStyle = "#22c55e";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  if (trajectoryMode === "serve-end") {
+    const pt = end || start;
+    if (pt) {
+      ctx.fillStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
   if (start) {
     ctx.fillStyle = "#22c55e";
     ctx.beginPath();
@@ -315,6 +545,7 @@ function setTrajectoryNetPointId(id) {
   });
 }
 function updateTrajectoryImageFromStart() {
+  if (trajectoryMode !== "attack") return;
   if (!trajectoryStart || !elAttackTrajectoryImage) return;
   const startNorm = normalizeTrajectoryPoint(trajectoryStart);
   if (!startNorm) return;
@@ -326,6 +557,7 @@ function updateTrajectoryImageFromStart() {
   }
 }
 function applyTrajectoryStartFromNetPoint() {
+  if (trajectoryMode !== "attack") return;
   const point = getTrajectoryNetPoint(trajectoryNetPointId);
   if (!point || !elAttackTrajectoryCanvas) return;
   const box = getTrajectoryDisplayBox();
@@ -342,6 +574,8 @@ function openAttackTrajectoryModal(prefill = null) {
       resolve(null);
       return;
     }
+    const mode = (prefill && prefill.mode) || "attack";
+    trajectoryMode = mode;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
     trajectorySetType = prefill && prefill.setType ? prefill.setType : null;
     trajectoryResolver = resolve;
@@ -349,15 +583,48 @@ function openAttackTrajectoryModal(prefill = null) {
     trajectoryNetPointId = null;
     const simplified = !!state.attackTrajectorySimplified;
     if (elAttackTrajectoryNetpoints) {
-      elAttackTrajectoryNetpoints.classList.toggle("hidden", !simplified);
+      const shouldShowNet = mode === "attack" && simplified;
+      elAttackTrajectoryNetpoints.classList.toggle("hidden", !shouldShowNet);
+    }
+    if (elServeTypeButtons) {
+      elServeTypeButtons.classList.toggle("hidden", mode !== "serve-start");
+      if (mode === "serve-start") {
+        setServeTypeSelection("J");
+      }
     }
     if (elAttackTrajectoryInstructions) {
-      elAttackTrajectoryInstructions.textContent = simplified
-        ? "Scegli il punto rete e poi clicca il punto di arrivo."
-        : "Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.";
+      if (mode === "serve-start") {
+        elAttackTrajectoryInstructions.textContent =
+          "Seleziona tipo battuta (F/J/S) e clicca il punto di partenza della battuta.";
+      } else if (mode === "serve-end") {
+        elAttackTrajectoryInstructions.textContent = "Clicca il punto di arrivo della battuta.";
+      } else {
+        elAttackTrajectoryInstructions.textContent = simplified
+          ? "Scegli il punto rete e poi clicca il punto di arrivo."
+          : "Clicca (o trascina) per disegnare la traiettoria dal punto di partenza a quello di arrivo.";
+      }
     }
-    elAttackTrajectoryImage.dataset.activeSrc = TRAJECTORY_IMG_NEAR;
-    elAttackTrajectoryImage.src = TRAJECTORY_IMG_NEAR;
+    const getInitialImage = () => {
+      if (mode === "serve-start") return SERVE_START_IMG_NEAR;
+      if (mode === "serve-end") return SERVE_END_IMG_FAR;
+      return TRAJECTORY_IMG_NEAR;
+    };
+    elAttackTrajectoryImage.dataset.activeSrc = getInitialImage();
+    elAttackTrajectoryImage.src = getInitialImage();
+    if (serveTypeKeyHandler) {
+      window.removeEventListener("keydown", serveTypeKeyHandler);
+    }
+    if (mode === "serve-start") {
+      serveTypeKeyHandler = e => {
+        const key = (e.key || "").toUpperCase();
+        if (key === "F" || key === "J" || key === "S") {
+          setServeTypeSelection(key);
+        }
+      };
+      window.addEventListener("keydown", serveTypeKeyHandler);
+    } else {
+      serveTypeKeyHandler = null;
+    }
     elAttackTrajectoryModal.classList.remove("hidden");
     document.body.classList.add("modal-open");
     const applyPrefill = () => {
@@ -378,7 +645,21 @@ function openAttackTrajectoryModal(prefill = null) {
         drawTrajectory();
         return;
       }
-      if (simplified) {
+      if (mode === "serve-start" && prefill && prefill.start) {
+        const startPx = denormalizeTrajectoryPoint(prefill.start);
+        if (startPx) {
+          trajectoryStart = startPx;
+          drawTrajectory();
+        }
+      }
+      if (mode === "serve-end" && prefill && prefill.end) {
+        const endPx = denormalizeTrajectoryPoint(prefill.end);
+        if (endPx) {
+          trajectoryEnd = endPx;
+          drawTrajectory();
+        }
+      }
+      if (simplified && mode === "attack") {
         const defaultNetPoint = getDefaultTrajectoryNetPointId(trajectoryBaseZone, trajectorySetType);
         setTrajectoryNetPointId(defaultNetPoint);
         applyTrajectoryStartFromNetPoint();
@@ -399,9 +680,41 @@ function closeAttackTrajectoryModal(result = null) {
   document.body.classList.remove("modal-open");
   trajectoryBaseZone = null;
   trajectorySetType = null;
+  trajectoryMode = "attack";
+  if (serveTypeKeyHandler) {
+    window.removeEventListener("keydown", serveTypeKeyHandler);
+    serveTypeKeyHandler = null;
+  }
   if (trajectoryResolver) {
     trajectoryResolver(result);
     trajectoryResolver = null;
+  }
+}
+async function captureServeTrajectory(event) {
+  try {
+    const startRes = await openAttackTrajectoryModal({
+      mode: "serve-start",
+      start: event.serveStart || null
+    });
+    if (startRes && startRes.serveType) {
+      event.serveType = startRes.serveType;
+    }
+    if (startRes && startRes.point) {
+      event.serveStart = startRes.point;
+    }
+    const endRes = await openAttackTrajectoryModal({
+      mode: "serve-end",
+      end: event.serveEnd || null
+    });
+    if (endRes && endRes.point) {
+      event.serveEnd = endRes.point;
+    }
+  } catch (err) {
+    console.error("Errore cattura traiettoria servizio", err);
+  } finally {
+    saveState();
+    renderEventsLog({ suppressScroll: true });
+    renderVideoAnalysis();
   }
 }
 function forceNextSkill(skillId) {
@@ -1359,6 +1672,9 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
     skillId,
     code
   });
+  if (skillId === "serve" && !event.serveType) {
+    event.serveType = "J";
+  }
   // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
   event.attackBp = true;
   event.fromFreeball = wasFreeball;
@@ -1419,6 +1735,9 @@ async function handleEventClick(playerIdxStr, skillId, code, playerName, sourceE
         renderTrajectoryAnalysis();
       }
     });
+  }
+  if (state.serveTrajectoryEnabled && skillId === "serve") {
+    captureServeTrajectory(event);
   }
   if (!state.predictiveSkillFlow) {
     renderLiveScore();
@@ -5596,11 +5915,7 @@ function init() {
   }
   if (elBtnOpenLineup) {
     elBtnOpenLineup.addEventListener("click", () => {
-      if (typeof openMobileLineupModal === "function") {
-        openMobileLineupModal();
-      } else if (typeof openTeamManagerModal === "function") {
-        openTeamManagerModal("our");
-      }
+      openMobileLineupModal();
     });
   }
   if (elBtnSaveOpponentTeam) {
@@ -5623,6 +5938,24 @@ function init() {
         preserveCourt: true,
         askReset: false
       });
+    });
+  }
+  if (elLineupModalClose) {
+    elLineupModalClose.addEventListener("click", closeLineupModal);
+  }
+  if (elLineupModalCancel) {
+    elLineupModalCancel.addEventListener("click", closeLineupModal);
+  }
+  if (elLineupModalSave) {
+    elLineupModalSave.addEventListener("click", saveLineupModal);
+  }
+  if (elLineupModal) {
+    elLineupModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeLineup !== undefined) {
+        closeLineupModal();
+      }
     });
   }
   if (elTeamManagerClose) {
@@ -5955,6 +6288,9 @@ function init() {
   const elAttackTrajectoryToggleSettings = document.getElementById("attack-trajectory-toggle-settings");
   const elAttackTrajectorySimpleToggle = document.getElementById("attack-trajectory-simple-toggle");
   const elAttackTrajectorySimpleToggleSettings = document.getElementById("attack-trajectory-simple-toggle-settings");
+  const elServeTrajectoryToggle = document.getElementById("serve-trajectory-toggle");
+  const elServeTrajectoryToggleInline = document.getElementById("serve-trajectory-toggle-inline");
+  const elServeTrajectoryToggleSettings = document.getElementById("serve-trajectory-toggle-settings");
   const elDefaultSetTypeSelect = document.getElementById("default-settype-select");
   const elDefaultSetTypeSelectSettings = document.getElementById("default-settype-select-settings");
   if (elAttackTrajectoryToggle) {
@@ -5996,6 +6332,29 @@ function init() {
       state.attackTrajectorySimplified = !!elAttackTrajectorySimpleToggleSettings.checked;
       saveState();
     });
+  }
+  const syncServeTrajectoryToggles = value => {
+    state.serveTrajectoryEnabled = !!value;
+    if (elServeTrajectoryToggle) elServeTrajectoryToggle.checked = !!value;
+    if (elServeTrajectoryToggleInline) elServeTrajectoryToggleInline.checked = !!value;
+    if (elServeTrajectoryToggleSettings) elServeTrajectoryToggleSettings.checked = !!value;
+    saveState();
+  };
+  if (elServeTrajectoryToggle) {
+    elServeTrajectoryToggle.checked = !!state.serveTrajectoryEnabled;
+    elServeTrajectoryToggle.addEventListener("change", () => syncServeTrajectoryToggles(elServeTrajectoryToggle.checked));
+  }
+  if (elServeTrajectoryToggleInline) {
+    elServeTrajectoryToggleInline.checked = !!state.serveTrajectoryEnabled;
+    elServeTrajectoryToggleInline.addEventListener("change", () =>
+      syncServeTrajectoryToggles(elServeTrajectoryToggleInline.checked)
+    );
+  }
+  if (elServeTrajectoryToggleSettings) {
+    elServeTrajectoryToggleSettings.checked = !!state.serveTrajectoryEnabled;
+    elServeTrajectoryToggleSettings.addEventListener("change", () =>
+      syncServeTrajectoryToggles(elServeTrajectoryToggleSettings.checked)
+    );
   }
   if (elDefaultSetTypeSelect) {
     elDefaultSetTypeSelect.value = normalizeSetTypeValue(state.defaultSetType) || "";
@@ -6087,6 +6446,22 @@ function init() {
     const onPointerDown = e => {
       const pos = getPos(e);
       if (!pos || !elAttackTrajectoryCanvas) return;
+      if (trajectoryMode === "serve-start") {
+        trajectoryStart = pos;
+        trajectoryEnd = null;
+        trajectoryDragging = true;
+        drawTrajectory();
+        e.preventDefault();
+        return;
+      }
+      if (trajectoryMode === "serve-end") {
+        trajectoryStart = null;
+        trajectoryEnd = pos;
+        trajectoryDragging = true;
+        drawTrajectory();
+        e.preventDefault();
+        return;
+      }
       if (state.attackTrajectorySimplified) {
         if (!trajectoryStart) {
           if (!trajectoryNetPointId) {
@@ -6121,17 +6496,43 @@ function init() {
       e.preventDefault();
     };
     const onPointerMove = e => {
-      if (!trajectoryDragging || !trajectoryStart) return;
+      if (!trajectoryDragging || (!trajectoryStart && !trajectoryEnd)) return;
       const pos = getPos(e);
       if (!pos) return;
+      if (trajectoryMode === "serve-start") {
+        trajectoryStart = pos;
+        drawTrajectory();
+        e.preventDefault();
+        return;
+      }
+      if (trajectoryMode === "serve-end") {
+        trajectoryEnd = pos;
+        drawTrajectory();
+        e.preventDefault();
+        return;
+      }
       drawTrajectory(pos);
       e.preventDefault();
     };
     const onPointerUp = e => {
-      if (!trajectoryDragging || !trajectoryStart) return;
+      if (!trajectoryDragging || (!trajectoryStart && !trajectoryEnd)) return;
       const pos = getPos(e);
       trajectoryDragging = false;
       if (!pos) return;
+      if (trajectoryMode === "serve-start") {
+        trajectoryStart = pos;
+        drawTrajectory();
+        e.preventDefault();
+        setTimeout(confirmCurrentTrajectory, 100);
+        return;
+      }
+      if (trajectoryMode === "serve-end") {
+        trajectoryEnd = pos;
+        drawTrajectory();
+        e.preventDefault();
+        setTimeout(confirmCurrentTrajectory, 100);
+        return;
+      }
       trajectoryEnd = pos;
       drawTrajectory();
       e.preventDefault();
@@ -6155,6 +6556,19 @@ function init() {
       });
     }
     const confirmCurrentTrajectory = () => {
+      if (trajectoryMode === "serve-start") {
+        if (!trajectoryStart) return;
+        const point = normalizeTrajectoryPoint(trajectoryStart);
+        closeAttackTrajectoryModal({ point, serveType: serveTrajectoryType });
+        return;
+      }
+      if (trajectoryMode === "serve-end") {
+        const pt = trajectoryEnd || trajectoryStart;
+        if (!pt) return;
+        const point = normalizeTrajectoryPoint(pt);
+        closeAttackTrajectoryModal({ point });
+        return;
+      }
       if (!trajectoryStart || !trajectoryEnd) return;
       const start = normalizeTrajectoryPoint(trajectoryStart);
       const end = normalizeTrajectoryPoint(trajectoryEnd);
