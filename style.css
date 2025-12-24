@@ -23,6 +23,9 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
 }
+.hidden {
+  display: none !important;
+}
 body.modal-open {
   overflow: hidden;
   position: fixed;
@@ -2711,6 +2714,29 @@ body[data-theme="light"] .rotation-table td {
   grid-template-columns: minmax(420px, 1.35fr) minmax(360px, 1fr);
   gap: 0.8rem;
   align-items: stretch;
+}
+.video-scout-container {
+  width: 100%;
+  margin-bottom: 0.8rem;
+}
+.video-scout-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.video-scout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.video-player-wrap--scout {
+  position: static;
+}
+.video-player-wrap--scout video,
+.video-player-wrap--scout .youtube-frame {
+  min-height: 200px;
+  max-height: 320px;
 }
 .video-skills {
   display: flex;

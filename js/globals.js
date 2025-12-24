@@ -115,6 +115,7 @@ let state = {
   attackTrajectoryEnabled: false,
   attackTrajectorySimplified: false,
   serveTrajectoryEnabled: false,
+  videoScoutMode: false,
   defaultSetType: "",
   setTypePromptEnabled: false,
   nextSetType: "",
@@ -128,7 +129,8 @@ let state = {
     offsetSeconds: 0,
     fileName: "",
     youtubeId: "",
-    youtubeUrl: ""
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
   }
 };
 function canUseShare() {
@@ -233,6 +235,15 @@ const elBtnCopyFfmpeg = document.getElementById("btn-copy-ffmpeg");
 const elYoutubeUrlInput = document.getElementById("youtube-url-input");
 const elBtnLoadYoutube = document.getElementById("btn-load-youtube");
 const elYoutubeFrame = document.getElementById("youtube-frame");
+const elVideoScoutToggle = document.getElementById("video-scout-toggle");
+const elVideoScoutContainer = document.getElementById("video-scout-container");
+const elVideoAnalysisSection = document.getElementById("video-analysis-section");
+const elVideoAnalysisHost = document.getElementById("video-analysis-host");
+const elVideoFileInputScout = document.getElementById("video-file-input-scout");
+const elAnalysisVideoScout = document.getElementById("analysis-video-scout");
+const elYoutubeUrlInputScout = document.getElementById("youtube-url-input-scout");
+const elBtnLoadYoutubeScout = document.getElementById("btn-load-youtube-scout");
+const elYoutubeFrameScout = document.getElementById("youtube-frame-scout");
 const elSecondDistribution = document.getElementById("second-distribution");
 const elThemeToggleDark = document.getElementById("theme-dark");
 const elThemeToggleLight = document.getElementById("theme-light");

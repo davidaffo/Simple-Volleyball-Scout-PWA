@@ -195,6 +195,10 @@ async function startAttackSelection(playerIdx, setTypeChoice, onDone) {
   if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) return;
   attackInlinePlayer = playerIdx;
   const meta = { setType: setTypeChoice || null };
+  if (state.videoScoutMode) {
+    const videoTime = getActiveVideoPlaybackSeconds();
+    if (typeof videoTime === "number") meta.videoTime = videoTime;
+  }
   if (state.attackTrajectoryEnabled) {
     const baseZone = getCurrentZoneForPlayer(playerIdx, "attack");
     const coords = await openAttackTrajectoryModal({
@@ -252,6 +256,10 @@ async function startServeTypeSelection(playerIdx, type, onDone) {
   removeServeTypeInlineKeyListener();
   maybeRotateServeToZoneOne(playerIdx);
   const meta = { serveType: type };
+  if (state.videoScoutMode) {
+    const videoTime = getActiveVideoPlaybackSeconds();
+    if (typeof videoTime === "number") meta.videoTime = videoTime;
+  }
   if (state.serveTrajectoryEnabled) {
     const traj = await collectServeTrajectory(meta);
     meta.serveType = traj.serveType || type;
@@ -918,6 +926,19 @@ function forceNextSkill(skillId) {
   const toggle = document.getElementById("predictive-skill-toggle");
   if (toggle) toggle.checked = true;
 }
+function updateVideoScoutModeLayout() {
+  if (!elVideoScoutContainer) return;
+  const useScout = !!state.videoScoutMode;
+  elVideoScoutContainer.classList.toggle("hidden", !useScout);
+  if (!useScout) {
+    if (elAnalysisVideoScout) {
+      elAnalysisVideoScout.pause();
+    }
+    if (ytPlayerScout && typeof ytPlayerScout.pauseVideo === "function") {
+      ytPlayerScout.pauseVideo();
+    }
+  }
+}
 let videoObjectUrl = "";
 let ytPlayer = null;
 let ytApiPromise = null;
@@ -925,11 +946,19 @@ let ytPlayerReady = false;
 let currentYoutubeId = "";
 let youtubeFallback = false;
 let pendingYoutubeSeek = null;
+let ytPlayerScout = null;
+let ytPlayerScoutReady = false;
+let currentYoutubeIdScout = "";
+let youtubeScoutFallback = false;
+let lastVideoSnapshotMs = 0;
+let videoSnapshotTimer = null;
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
+const LOCAL_VIDEO_DB = "volley-video-db";
+const LOCAL_VIDEO_STORE = "videos";
 function buildReceiveDisplayMapping(court, rotation) {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -1152,11 +1181,99 @@ function resumeVideoClock() {
   state.videoClock.paused = false;
   state.videoClock.pausedAtMs = null;
 }
+function getActiveVideoPlaybackSeconds() {
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  const preferScout = !!state.videoScoutMode && activeTab !== "video";
+  if (state.video && state.video.youtubeId) {
+    const scoutFirst =
+      preferScout &&
+      ytPlayerScout &&
+      ytPlayerScoutReady &&
+      typeof ytPlayerScout.getCurrentTime === "function";
+    if (scoutFirst) {
+      const t = ytPlayerScout.getCurrentTime();
+      if (isFinite(t)) return Math.max(0, t);
+    }
+    if (ytPlayer && ytPlayerReady && typeof ytPlayer.getCurrentTime === "function") {
+      const t = ytPlayer.getCurrentTime();
+      if (isFinite(t)) return Math.max(0, t);
+    }
+    if (
+      ytPlayerScout &&
+      ytPlayerScoutReady &&
+      typeof ytPlayerScout.getCurrentTime === "function"
+    ) {
+      const t = ytPlayerScout.getCurrentTime();
+      if (isFinite(t)) return Math.max(0, t);
+    }
+    return null;
+  }
+  if (preferScout && elAnalysisVideoScout && typeof elAnalysisVideoScout.currentTime === "number") {
+    return Math.max(0, elAnalysisVideoScout.currentTime || 0);
+  }
+  if (elAnalysisVideo && typeof elAnalysisVideo.currentTime === "number") {
+    return Math.max(0, elAnalysisVideo.currentTime || 0);
+  }
+  if (elAnalysisVideoScout && typeof elAnalysisVideoScout.currentTime === "number") {
+    return Math.max(0, elAnalysisVideoScout.currentTime || 0);
+  }
+  return null;
+}
+function applySavedPlaybackToVideo(videoEl) {
+  if (!videoEl || !state.video) return;
+  const saved = state.video.lastPlaybackSeconds;
+  if (typeof saved !== "number" || !isFinite(saved)) return;
+  const target = Math.max(0, saved);
+  const applyTime = () => {
+    try {
+      videoEl.currentTime = target;
+    } catch (_) {
+      // ignore seek errors
+    }
+  };
+  if (videoEl.readyState >= 1) {
+    applyTime();
+    return;
+  }
+  const onMeta = () => {
+    applyTime();
+    videoEl.removeEventListener("loadedmetadata", onMeta);
+  };
+  videoEl.addEventListener("loadedmetadata", onMeta);
+}
+function updateVideoPlaybackSnapshot(forcedSeconds = null, force = false) {
+  if (!state.video) return;
+  const now = Date.now();
+  if (!force && now - lastVideoSnapshotMs < 1500) return;
+  const playback =
+    typeof forcedSeconds === "number" && isFinite(forcedSeconds)
+      ? forcedSeconds
+      : getActiveVideoPlaybackSeconds();
+  if (typeof playback !== "number" || !isFinite(playback)) return;
+  lastVideoSnapshotMs = now;
+  state.video.lastPlaybackSeconds = Math.max(0, playback);
+  saveState();
+}
+function startVideoPlaybackSnapshotTimer() {
+  if (videoSnapshotTimer) return;
+  videoSnapshotTimer = setInterval(() => {
+    if (!state.video || !state.video.youtubeId) return;
+    updateVideoPlaybackSnapshot();
+  }, 2000);
+}
+function getEventVideoSeconds(baseVideoTime = null) {
+  if (typeof baseVideoTime === "number") return Math.max(0, baseVideoTime);
+  if (state.videoScoutMode) {
+    const playback = getActiveVideoPlaybackSeconds();
+    if (typeof playback === "number") return Math.max(0, playback);
+  }
+  return getVideoClockSeconds();
+}
 function buildBaseEventPayload(base) {
   const now = new Date();
   const nowIso = now.toISOString();
   const clockMs = getSkillClockMs();
-  const videoSeconds = getVideoClockSeconds();
+  const videoSeconds = getEventVideoSeconds(base && base.videoTime);
   const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
   const zone =
     typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx, base.skillId) : null;
@@ -2042,11 +2159,19 @@ async function handleEventClick(
   if (playerIdx === -1 || !state.players[playerIdx]) return false;
   state.freeballPending = false;
   state.skillFlowOverride = null;
+  const selectionVideoTime = state.videoScoutMode
+    ? serveMeta && typeof serveMeta.videoTime === "number"
+      ? serveMeta.videoTime
+      : attackMeta && typeof attackMeta.videoTime === "number"
+        ? attackMeta.videoTime
+        : null
+    : null;
   const event = buildBaseEventPayload({
     playerIdx,
     playerName: state.players[playerIdx],
     skillId,
-    code
+    code,
+    videoTime: selectionVideoTime
   });
   if (skillId === "serve") {
     if (serveMeta) {
@@ -2567,7 +2692,7 @@ function renderEventsLog(options = {}) {
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
   renderEventTableRows(elEventsLog, recent, {
-    showSeek: false,
+    showSeek: !!state.videoScoutMode,
     showVideoTime: true,
     baseMs,
     showIndex: false,
@@ -2765,6 +2890,78 @@ async function renderYoutubePlayer(startSeconds = 0) {
     elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
   }
 }
+async function renderYoutubePlayerScout(startSeconds = 0) {
+  const id = state.video && state.video.youtubeId;
+  const hasYoutube = !!id;
+  if (elAnalysisVideoScout) {
+    elAnalysisVideoScout.style.display = hasYoutube ? "none" : "block";
+  }
+  if (!elYoutubeFrameScout) return;
+  elYoutubeFrameScout.style.display = hasYoutube ? "block" : "none";
+  const isFileOrigin = window.location && window.location.protocol === "file:";
+  if (!hasYoutube) {
+    if (ytPlayerScout && ytPlayerScout.stopVideo) {
+      ytPlayerScout.stopVideo();
+    }
+    elYoutubeFrameScout.src = "";
+    ytPlayerScoutReady = false;
+    currentYoutubeIdScout = "";
+    return;
+  }
+  const start = Math.max(0, startSeconds || 0);
+  currentYoutubeIdScout = id;
+  youtubeScoutFallback = isFileOrigin;
+  if (youtubeScoutFallback) {
+    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+    return;
+  }
+  try {
+    await loadYoutubeApi();
+    if (ytPlayerScout) {
+      ytPlayerScout.loadVideoById(id, start);
+      ytPlayerScoutReady = true;
+      return;
+    }
+    ytPlayerScout = new YT.Player("youtube-frame-scout", {
+      videoId: id,
+      host: "https://www.youtube.com",
+      playerVars: {
+        start: start,
+        rel: 0,
+        playsinline: 1,
+        origin: window.location.origin
+      },
+      events: {
+        onReady: () => {
+          ytPlayerScoutReady = true;
+          if (start) {
+            ytPlayerScout.seekTo(start, true);
+          }
+        },
+        onError: () => {
+          ytPlayerScoutReady = false;
+          youtubeScoutFallback = true;
+          ytPlayerScout = null;
+          if (elYoutubeFrameScout) {
+            elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+          }
+        }
+      }
+    });
+  } catch (_) {
+    youtubeScoutFallback = true;
+    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+  }
+}
+function syncYoutubeUrlInputs(value) {
+  const url = value || "";
+  if (elYoutubeUrlInput && elYoutubeUrlInput.value !== url) {
+    elYoutubeUrlInput.value = url;
+  }
+  if (elYoutubeUrlInputScout && elYoutubeUrlInputScout.value !== url) {
+    elYoutubeUrlInputScout.value = url;
+  }
+}
 function handleYoutubeUrlLoad(url) {
   const id = parseYoutubeId(url);
   if (!id) {
@@ -2785,21 +2982,34 @@ function handleYoutubeUrlLoad(url) {
     elAnalysisVideo.removeAttribute("src");
     elAnalysisVideo.load();
   }
-  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  if (elAnalysisVideoScout) {
+    elAnalysisVideoScout.pause();
+    elAnalysisVideoScout.removeAttribute("src");
+    elAnalysisVideoScout.load();
+  }
+  state.video = state.video || {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
   state.video.youtubeId = id;
   state.video.youtubeUrl = url.trim();
   state.video.fileName = "YouTube: " + state.video.youtubeUrl;
+  state.video.lastPlaybackSeconds = 0;
+  syncYoutubeUrlInputs(state.video.youtubeUrl);
   saveState();
   renderYoutubePlayer(0);
+  renderYoutubePlayerScout(0);
   renderVideoAnalysis();
 }
 function clearYoutubeSource() {
   if (!state.video) return;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
-  if (elYoutubeUrlInput) {
-    elYoutubeUrlInput.value = "";
-  }
+  state.video.lastPlaybackSeconds = 0;
+  syncYoutubeUrlInputs("");
   if (ytPlayer && ytPlayer.stopVideo) {
     ytPlayer.stopVideo();
   }
@@ -2812,36 +3022,121 @@ function clearYoutubeSource() {
     elYoutubeFrame.style.display = "none";
   }
   currentYoutubeId = "";
+  if (ytPlayerScout && ytPlayerScout.stopVideo) {
+    ytPlayerScout.stopVideo();
+  }
+  ytPlayerScout = null;
+  ytPlayerScoutReady = false;
+  youtubeScoutFallback = false;
+  if (elYoutubeFrameScout) {
+    elYoutubeFrameScout.src = "";
+    elYoutubeFrameScout.style.display = "none";
+  }
+  currentYoutubeIdScout = "";
 }
 async function clearCachedLocalVideo() {
   try {
-    if (!("caches" in window)) return;
-    const cache = await caches.open(LOCAL_VIDEO_CACHE);
-    await cache.delete(LOCAL_VIDEO_REQUEST);
+    if ("caches" in window) {
+      const cache = await caches.open(LOCAL_VIDEO_CACHE);
+      await cache.delete(LOCAL_VIDEO_REQUEST);
+    }
+    await clearVideoBlobFromDb();
   } catch (_) {
     // ignore cache errors
   }
 }
-async function persistLocalVideo(file) {
-  if (!file || !("caches" in window)) return;
+function openVideoDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("indexedDB-unavailable"));
+      return;
+    }
+    const request = indexedDB.open(LOCAL_VIDEO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LOCAL_VIDEO_STORE)) {
+        db.createObjectStore(LOCAL_VIDEO_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("indexedDB-open-failed"));
+  });
+}
+async function saveVideoBlobToDb(file) {
+  if (!file) return;
   try {
-    const cache = await caches.open(LOCAL_VIDEO_CACHE);
-    await cache.put(
-      LOCAL_VIDEO_REQUEST,
-      new Response(file, { headers: { "Content-Type": file.type || "video/mp4" } })
-    );
+    const db = await openVideoDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(LOCAL_VIDEO_STORE, "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("indexedDB-write-failed"));
+      tx.objectStore(LOCAL_VIDEO_STORE).put(file, "current");
+    });
+    db.close();
+  } catch (_) {
+    // ignore indexedDB errors
+  }
+}
+async function loadVideoBlobFromDb() {
+  try {
+    const db = await openVideoDb();
+    const blob = await new Promise((resolve, reject) => {
+      const tx = db.transaction(LOCAL_VIDEO_STORE, "readonly");
+      const req = tx.objectStore(LOCAL_VIDEO_STORE).get("current");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error || new Error("indexedDB-read-failed"));
+    });
+    db.close();
+    return blob || null;
+  } catch (_) {
+    return null;
+  }
+}
+async function clearVideoBlobFromDb() {
+  try {
+    const db = await openVideoDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(LOCAL_VIDEO_STORE, "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("indexedDB-clear-failed"));
+      tx.objectStore(LOCAL_VIDEO_STORE).delete("current");
+    });
+    db.close();
+  } catch (_) {
+    // ignore indexedDB errors
+  }
+}
+async function persistLocalVideo(file) {
+  if (!file) return;
+  try {
+    if ("caches" in window) {
+      const cache = await caches.open(LOCAL_VIDEO_CACHE);
+      await cache.put(
+        LOCAL_VIDEO_REQUEST,
+        new Response(file, { headers: { "Content-Type": file.type || "video/mp4" } })
+      );
+    }
+    await saveVideoBlobToDb(file);
   } catch (_) {
     // ignore cache errors
   }
 }
 async function restoreCachedLocalVideo() {
-  if (!elAnalysisVideo || !("caches" in window)) return;
+  if (!elAnalysisVideo && !elAnalysisVideoScout) return;
   if (state.video && state.video.youtubeId) return;
   try {
-    const cache = await caches.open(LOCAL_VIDEO_CACHE);
-    const match = await cache.match(LOCAL_VIDEO_REQUEST);
-    if (!match) return;
-    const blob = await match.blob();
+    let blob = null;
+    if ("caches" in window) {
+      const cache = await caches.open(LOCAL_VIDEO_CACHE);
+      const match = await cache.match(LOCAL_VIDEO_REQUEST);
+      if (match) {
+        blob = await match.blob();
+      }
+    }
+    if (!blob) {
+      blob = await loadVideoBlobFromDb();
+    }
+    if (!blob) return;
     if (videoObjectUrl) {
       try {
         URL.revokeObjectURL(videoObjectUrl);
@@ -2851,8 +3146,16 @@ async function restoreCachedLocalVideo() {
     }
     const url = URL.createObjectURL(blob);
     videoObjectUrl = url;
-    elAnalysisVideo.src = url;
-    elAnalysisVideo.load();
+    if (elAnalysisVideo) {
+      elAnalysisVideo.src = url;
+      elAnalysisVideo.load();
+      applySavedPlaybackToVideo(elAnalysisVideo);
+    }
+    if (elAnalysisVideoScout) {
+      elAnalysisVideoScout.src = url;
+      elAnalysisVideoScout.load();
+      applySavedPlaybackToVideo(elAnalysisVideoScout);
+    }
     if (state.video) {
       state.video.fileName = state.video.fileName || "Video locale";
     }
@@ -2863,10 +3166,15 @@ async function restoreCachedLocalVideo() {
 }
 function restoreYoutubeFromState() {
   if (!state.video || !state.video.youtubeId) return;
-  if (elYoutubeUrlInput && state.video.youtubeUrl) {
-    elYoutubeUrlInput.value = state.video.youtubeUrl;
+  if (state.video.youtubeUrl) {
+    syncYoutubeUrlInputs(state.video.youtubeUrl);
   }
-  renderYoutubePlayer(state.video.offsetSeconds || 0);
+  const start =
+    typeof state.video.lastPlaybackSeconds === "number" && isFinite(state.video.lastPlaybackSeconds)
+      ? state.video.lastPlaybackSeconds
+      : state.video.offsetSeconds || 0;
+  renderYoutubePlayer(start);
+  renderYoutubePlayerScout(start);
   renderVideoAnalysis();
 }
 function updateVideoSyncLabel() {
@@ -3674,7 +3982,40 @@ function renderVideoAnalysis() {
 function seekVideoToTime(seconds) {
   if (!isFinite(seconds)) return;
   const target = Math.max(0, seconds);
+  updateVideoPlaybackSnapshot(target, true);
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  const preferScout = !!state.videoScoutMode && activeTab !== "video";
   if (state.video && state.video.youtubeId) {
+    if (preferScout) {
+      if (youtubeScoutFallback && elYoutubeFrameScout) {
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, false, true);
+        return;
+      }
+      if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
+        ytPlayerScout.seekTo(target, true);
+        if (typeof ytPlayerScout.playVideo === "function") {
+          ytPlayerScout.playVideo();
+        }
+      } else if (elYoutubeFrameScout) {
+        if (elYoutubeFrameScout.contentWindow) {
+          try {
+            elYoutubeFrameScout.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+              "*"
+            );
+            elYoutubeFrameScout.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+              "*"
+            );
+            return;
+          } catch (_) {
+            // ignore postMessage errors and fall back to src update
+          }
+        }
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, true);
+      }
+      return;
+    }
     if (youtubeFallback && elYoutubeFrame) {
       elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, false, true);
       return;
@@ -3701,6 +4042,15 @@ function seekVideoToTime(seconds) {
     }
     return;
   }
+  if (preferScout && elAnalysisVideoScout) {
+    try {
+      elAnalysisVideoScout.currentTime = target;
+      elAnalysisVideoScout.play().catch(() => {});
+    } catch (_) {
+      // ignore errors when seeking
+    }
+    return;
+  }
   if (!elAnalysisVideo) return;
   try {
     elAnalysisVideo.currentTime = target;
@@ -3710,7 +4060,7 @@ function seekVideoToTime(seconds) {
   }
 }
 function handleVideoFileChange(file) {
-  if (!file || !elAnalysisVideo) return;
+  if (!file || (!elAnalysisVideo && !elAnalysisVideoScout)) return;
   clearYoutubeSource();
   try {
     if (videoObjectUrl) {
@@ -3721,13 +4071,27 @@ function handleVideoFileChange(file) {
   }
   const url = URL.createObjectURL(file);
   videoObjectUrl = url;
-  elAnalysisVideo.src = url;
+  if (elAnalysisVideo) {
+    elAnalysisVideo.src = url;
+  }
+  if (elAnalysisVideoScout) {
+    elAnalysisVideoScout.src = url;
+  }
   persistLocalVideo(file);
-  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  state.video = state.video || {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
   state.video.fileName = file.name || "video";
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  state.video.lastPlaybackSeconds = 0;
   saveState();
+  renderYoutubePlayer(0);
+  renderYoutubePlayerScout(0);
   renderVideoAnalysis();
 }
 function syncFirstSkillToVideo() {
@@ -3737,18 +4101,21 @@ function syncFirstSkillToVideo() {
     return;
   }
   const baseMs = getVideoBaseTimeMs(skillEvents);
-  let currentVideoTime = 0;
-  if (state.video && state.video.youtubeId) {
-    if (ytPlayer && ytPlayerReady && typeof ytPlayer.getCurrentTime === "function") {
-      currentVideoTime = ytPlayer.getCurrentTime() || 0;
-    } else {
+  let currentVideoTime = getActiveVideoPlaybackSeconds();
+  if (typeof currentVideoTime !== "number" || !isFinite(currentVideoTime)) {
+    if (state.video && state.video.youtubeId) {
       alert("Apri e avvia il video YouTube per sincronizzare.");
       return;
     }
-  } else if (elAnalysisVideo) {
-    currentVideoTime = isFinite(elAnalysisVideo.currentTime) ? elAnalysisVideo.currentTime : 0;
+    currentVideoTime = 0;
   }
-  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  state.video = state.video || {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
   state.video.offsetSeconds = Math.max(0, currentVideoTime);
   const base = typeof baseMs === "number" ? baseMs : null;
   if (base !== null) {
@@ -6041,7 +6408,12 @@ function applyImportedMatch(nextState, options = {}) {
   merged.matchFinished = !!nextState.matchFinished;
   merged.skillClock = nextState.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   merged.scoreOverrides = normalizeScoreOverrides(nextState.scoreOverrides || {});
-  merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "" };
+  merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "", lastPlaybackSeconds: 0 };
+  if (typeof merged.video.lastPlaybackSeconds !== "number") {
+    merged.video.lastPlaybackSeconds = 0;
+  }
+  merged.video.youtubeId = merged.video.youtubeId || "";
+  merged.video.youtubeUrl = merged.video.youtubeUrl || "";
   state = merged;
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
@@ -6541,21 +6913,40 @@ function resetMatch() {
     enforceAutoLiberoForState({ skipServerOnServe: true });
   }
   state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
-  state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
+  state.video = state.video || {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  state.video.lastPlaybackSeconds = 0;
+  syncYoutubeUrlInputs("");
   clearCachedLocalVideo();
   if (ytPlayer && ytPlayer.stopVideo) {
     ytPlayer.stopVideo();
+  }
+  if (ytPlayerScout && ytPlayerScout.stopVideo) {
+    ytPlayerScout.stopVideo();
   }
   if (elAnalysisVideo) {
     elAnalysisVideo.pause();
     elAnalysisVideo.currentTime = 0;
   }
+  if (elAnalysisVideoScout) {
+    elAnalysisVideoScout.pause();
+    elAnalysisVideoScout.currentTime = 0;
+  }
   if (elYoutubeFrame) {
     elYoutubeFrame.src = "";
     elYoutubeFrame.style.display = "none";
+  }
+  if (elYoutubeFrameScout) {
+    elYoutubeFrameScout.src = "";
+    elYoutubeFrameScout.style.display = "none";
   }
   syncCurrentSetUI(1);
   initStats();
@@ -6769,6 +7160,7 @@ function init() {
   ensureBaseRotationDefault();
   const linkImport = maybeImportMatchFromUrl();
   renderYoutubePlayer();
+  renderYoutubePlayerScout();
   restoreCachedLocalVideo();
   restoreYoutubeFromState();
   applyTheme(state.theme || "dark");
@@ -7338,6 +7730,18 @@ function init() {
       syncServeTrajectoryToggles(elServeTrajectoryToggleInline.checked)
     );
   }
+  if (elVideoScoutToggle) {
+    elVideoScoutToggle.checked = !!state.videoScoutMode;
+    elVideoScoutToggle.addEventListener("change", () => {
+      const nextValue = !!elVideoScoutToggle.checked;
+      if (state.videoScoutMode && !nextValue) {
+        updateVideoPlaybackSnapshot();
+      }
+      state.videoScoutMode = nextValue;
+      saveState();
+      updateVideoScoutModeLayout();
+    });
+  }
   if (elDefaultSetTypeSelect) {
     elDefaultSetTypeSelect.value = normalizeSetTypeValue(state.defaultSetType) || "";
     elDefaultSetTypeSelect.addEventListener("change", () => {
@@ -7660,6 +8064,18 @@ function init() {
       }
     });
   }
+  if (elVideoFileInputScout) {
+    elVideoFileInputScout.addEventListener("change", e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (file) {
+        handleVideoFileChange(file);
+      }
+      if (input) {
+        input.value = "";
+      }
+    });
+  }
   if (elBtnSyncFirstSkill) {
     elBtnSyncFirstSkill.addEventListener("click", syncFirstSkillToVideo);
   }
@@ -7672,6 +8088,12 @@ function init() {
       handleYoutubeUrlLoad(url);
     });
   }
+  if (elBtnLoadYoutubeScout) {
+    elBtnLoadYoutubeScout.addEventListener("click", () => {
+      const url = (elYoutubeUrlInputScout && elYoutubeUrlInputScout.value) || "";
+      handleYoutubeUrlLoad(url);
+    });
+  }
   if (elYoutubeUrlInput) {
     elYoutubeUrlInput.addEventListener("keydown", e => {
       if (e.key === "Enter") {
@@ -7680,6 +8102,20 @@ function init() {
       }
     });
   }
+  if (elYoutubeUrlInputScout) {
+    elYoutubeUrlInputScout.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleYoutubeUrlLoad(elYoutubeUrlInputScout.value || "");
+      }
+    });
+  }
+  [elAnalysisVideo, elAnalysisVideoScout].forEach(video => {
+    if (!video) return;
+    ["timeupdate", "pause", "seeked", "ended"].forEach(evt => {
+      video.addEventListener(evt, () => updateVideoPlaybackSnapshot(video.currentTime));
+    });
+  });
   if (elBtnResetMetrics) {
     elBtnResetMetrics.addEventListener("click", resetMetricsToDefault);
   }
@@ -7781,6 +8217,19 @@ function init() {
       closeSkillModal();
     }
   });
+  const snapshotPlayback = () => {
+    const playback = getActiveVideoPlaybackSeconds();
+    updateVideoPlaybackSnapshot(playback, true);
+  };
+  window.addEventListener("beforeunload", snapshotPlayback);
+  window.addEventListener("pagehide", snapshotPlayback);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      snapshotPlayback();
+    }
+  });
+  startVideoPlaybackSnapshotTimer();
+  updateVideoScoutModeLayout();
   renderVideoAnalysis();
   attachModalCloseHandlers();
   registerServiceWorker();

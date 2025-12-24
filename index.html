@@ -251,6 +251,10 @@ Bianchi 18"></textarea>
                 <input type="checkbox" id="force-mobile-toggle" />
                 Modalità mobile (test)
               </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="video-scout-toggle" />
+                Scout da video
+              </label>
             </div>
         </div>
         <div class="team-settings-panel court-actions-bar">
@@ -289,6 +293,28 @@ Bianchi 18"></textarea>
               <button class="set-type-btn" data-settype="fast" type="button">Fast(F)</button>
               <button class="set-type-btn" data-settype="alta" type="button">Alta(A)</button>
               <button class="set-type-btn secondary" data-clear-settype type="button">Nessuna(N)</button>
+            </div>
+          </div>
+        </div>
+        <div id="video-scout-container" class="video-scout-container hidden">
+          <div class="video-scout-panel">
+            <div class="video-scout-actions">
+              <label class="file-btn" for="video-file-input-scout">Carica video</label>
+              <input id="video-file-input-scout" type="file" accept="video/*" hidden />
+              <div class="youtube-input">
+                <input id="youtube-url-input-scout" type="url" placeholder="https://youtu.be/..." />
+                <button id="btn-load-youtube-scout" class="secondary">Usa YouTube</button>
+              </div>
+            </div>
+            <div class="video-player-wrap video-player-wrap--scout">
+              <video id="analysis-video-scout" controls preload="metadata"></video>
+              <iframe
+                id="youtube-frame-scout"
+                class="youtube-frame"
+                title="YouTube player"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+              ></iframe>
             </div>
           </div>
         </div>
@@ -666,7 +692,8 @@ Bianchi 18"></textarea>
     </div>
   </div>
   <div class="tab-panel" data-tab="video" id="video-panel">
-    <div class="section video-analysis">
+    <div id="video-analysis-host">
+      <div class="section video-analysis" id="video-analysis-section">
         <div class="video-analysis__head">
           <div>
             <h2>Analisi video</h2>
@@ -700,6 +727,7 @@ Bianchi 18"></textarea>
           ></iframe>
           <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato. Puoi usare un file o un link YouTube.</p>
         </div>
+      </div>
       </div>
     </div>
   </div>

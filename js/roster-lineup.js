@@ -310,6 +310,7 @@ function loadState() {
     state.matchFinished = !!parsed.matchFinished;
     state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
     state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
+    state.videoScoutMode = !!parsed.videoScoutMode;
     state.nextSetType = parsed.nextSetType || "";
     state.forceMobileLayout = !!parsed.forceMobileLayout;
     state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
@@ -346,7 +347,8 @@ function loadState() {
         offsetSeconds: 0,
         fileName: "",
         youtubeId: "",
-        youtubeUrl: ""
+        youtubeUrl: "",
+        lastPlaybackSeconds: 0
       };
     if (typeof state.video.offsetSeconds !== "number") {
       state.video.offsetSeconds = 0;
@@ -354,6 +356,9 @@ function loadState() {
     state.video.fileName = state.video.fileName || "";
     state.video.youtubeId = state.video.youtubeId || "";
     state.video.youtubeUrl = state.video.youtubeUrl || "";
+    if (typeof state.video.lastPlaybackSeconds !== "number") {
+      state.video.lastPlaybackSeconds = 0;
+    }
     state.autoRotate = parsed.autoRotate !== false;
     state.autoLiberoBackline = parsed.autoLiberoBackline !== false;
     const parsedLiberoRole = typeof parsed.autoLiberoRole === "string" ? parsed.autoLiberoRole : "";
