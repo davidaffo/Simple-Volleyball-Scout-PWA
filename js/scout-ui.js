@@ -756,7 +756,7 @@ function applyTrajectoryStartFromNetPoint() {
   const box = getTrajectoryDisplayBox();
   const canvas = elAttackTrajectoryCanvas;
   const x = box ? box.offsetX + point.x * box.width : point.x * canvas.width;
-  const fixedY = canvas.height - 0.5;
+  const fixedY = box ? box.offsetY + box.height - 0.5 : canvas.height - 0.5;
   trajectoryStart = { x, y: fixedY };
   updateTrajectoryImageFromStart();
   drawTrajectory();
@@ -1326,9 +1326,9 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
       return;
     }
-    const wrap = document.createElement("div");
-    wrap.className = "modal-skill-codes";
     if (shouldPromptAttackSetType()) {
+      const wrap = document.createElement("div");
+      wrap.className = "modal-skill-codes";
       DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1341,20 +1341,14 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
         });
         wrap.appendChild(btn);
       });
+      elSkillModalBody.appendChild(wrap);
     } else {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "event-btn attack-main-btn";
-      btn.textContent = "Attacco";
-      btn.addEventListener("click", async () => {
-        const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-        await startAttackSelection(playerIdx, fallback, () => {
-          renderSkillCodes(playerIdx, playerName, skillId);
-        });
+      if (attackInlinePlayer === playerIdx) return;
+      const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
+      startAttackSelection(playerIdx, fallback, () => {
+        renderSkillCodes(playerIdx, playerName, skillId);
       });
-      wrap.appendChild(btn);
     }
-    elSkillModalBody.appendChild(wrap);
     return;
   }
 
@@ -1724,16 +1718,16 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
       return;
     }
-    const grid = document.createElement("div");
-    grid.className = "code-grid attack-select-grid";
-    const title = document.createElement("div");
-    title.className = "skill-header";
-    const titleSpan = document.createElement("span");
-    titleSpan.className = "skill-title skill-attack";
-    titleSpan.textContent = "Attacco";
-    title.appendChild(titleSpan);
-    grid.appendChild(title);
     if (shouldPromptAttackSetType()) {
+      const grid = document.createElement("div");
+      grid.className = "code-grid attack-select-grid";
+      const title = document.createElement("div");
+      title.className = "skill-header";
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "skill-title skill-attack";
+      titleSpan.textContent = "Attacco";
+      title.appendChild(titleSpan);
+      grid.appendChild(title);
       DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -1744,7 +1738,17 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         });
         grid.appendChild(btn);
       });
-    } else {
+      targetEl.appendChild(grid);
+    } else if (nextSkillId) {
+      const grid = document.createElement("div");
+      grid.className = "code-grid attack-select-grid";
+      const title = document.createElement("div");
+      title.className = "skill-header";
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "skill-title skill-attack";
+      titleSpan.textContent = "Attacco";
+      title.appendChild(titleSpan);
+      grid.appendChild(title);
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "event-btn attack-main-btn";
@@ -1754,8 +1758,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         await startAttackSelection(playerIdx, fallback, renderPlayers);
       });
       grid.appendChild(btn);
+      targetEl.appendChild(grid);
+    } else {
+      if (attackInlinePlayer === playerIdx) return;
+      const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
+      startAttackSelection(playerIdx, fallback, renderPlayers);
     }
-    targetEl.appendChild(grid);
     return;
   }
   const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
@@ -7250,7 +7258,9 @@ function init() {
       if (!trajectoryStart || trajectoryEnd) {
         const box = getTrajectoryDisplayBox();
         const w = box ? box.width : elAttackTrajectoryCanvas.clientWidth || elAttackTrajectoryCanvas.width || 1;
-        const fixedY = elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
+        const fixedY = box
+          ? box.offsetY + box.height - 0.5
+          : elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
         trajectoryStart = { x: pos.x, y: fixedY };
         trajectoryEnd = null;
         const xWithinStage = box ? pos.x - box.offsetX : pos.x;
