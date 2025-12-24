@@ -4864,7 +4864,7 @@ function getFilteredTrajectoryEvents() {
 }
 function getServeStartZone(ev) {
   if (!ev || !ev.serveStart) return null;
-  return getAttackZone(ev.serveStart, false);
+  return getAttackZone(ev.serveStart, true);
 }
 function getFilteredServeTrajectoryEvents() {
   const events = (state.events || []).filter(ev => {

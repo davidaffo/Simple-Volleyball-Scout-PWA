@@ -1,5 +1,4 @@
 popup per modifiche su tutti i dati
-le zone di partenza di battuta non sono inferite in modo corretto
 aggiungi scout da video
 Aggiungi squadra avversaria
 
