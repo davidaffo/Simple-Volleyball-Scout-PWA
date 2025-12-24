@@ -6666,6 +6666,8 @@ function registerServiceWorker() {
 function setActiveAggTab(target) {
   const desired = target || "summary";
   activeAggTab = desired;
+  state.uiAggTab = desired;
+  if (!isLoadingMatch) saveState();
   if (document && document.body) {
     document.body.dataset.aggTab = desired;
   }
@@ -6683,6 +6685,8 @@ function setActiveAggTab(target) {
 function setActiveTab(target) {
   if (!target) return;
   activeTab = target;
+  state.uiActiveTab = target;
+  if (!isLoadingMatch) saveState();
   document.body.dataset.activeTab = target;
   tabButtons.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tabTarget === target);
@@ -6760,6 +6764,8 @@ function init() {
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
+  setActiveTab(state.uiActiveTab || activeTab || "info");
+  setActiveAggTab(state.uiAggTab || activeAggTab || "summary");
   ensureBaseRotationDefault();
   const linkImport = maybeImportMatchFromUrl();
   renderYoutubePlayer();
