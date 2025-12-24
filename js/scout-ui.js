@@ -2958,6 +2958,175 @@ function createCodeSelect(ev, onDone) {
   });
   return select;
 }
+function createNumberSelect(ev, field, min, max, onDone) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  for (let i = min; i <= max; i += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = String(i);
+    select.appendChild(opt);
+  }
+  select.value = ev[field] != null ? String(ev[field]) : "";
+  select.addEventListener("change", () => {
+    const val = parseInt(select.value, 10);
+    if (!isNaN(val) && val >= min && val <= max) {
+      ev[field] = val;
+      refreshAfterVideoEdit(field === "rotation" || field === "setterPosition" || field === "opponentSetterPosition");
+    }
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createBaseSelect(ev, onDone) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  DEFAULT_BASE_OPTIONS.forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label || opt.value;
+    select.appendChild(option);
+  });
+  select.value = ev.base || "";
+  select.addEventListener("change", () => {
+    ev.base = select.value || null;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createSetTypeSelect(ev, onDone) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label || opt.value;
+    select.appendChild(option);
+  });
+  select.value = ev.setType || "";
+  select.addEventListener("change", () => {
+    ev.setType = select.value || null;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createServeTypeSelect(ev, onDone) {
+  const select = document.createElement("select");
+  const options = [
+    { value: "F", label: "F" },
+    { value: "JF", label: "JF" },
+    { value: "S", label: "S" }
+  ];
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  options.forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label;
+    select.appendChild(option);
+  });
+  select.value = ev.serveType || "";
+  select.addEventListener("change", () => {
+    ev.serveType = select.value || null;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createEvalSelect(ev, field, onDone, { includeFb = false } = {}) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  const list = RESULT_CODES.slice();
+  if (includeFb) list.push("FB");
+  list.forEach(code => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = code;
+    select.appendChild(opt);
+  });
+  select.value = ev[field] || "";
+  select.addEventListener("change", () => {
+    ev[field] = select.value || null;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createPhaseSelect(ev, onDone) {
+  const select = document.createElement("select");
+  DEFAULT_PHASE_OPTIONS.forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label || opt.value;
+    select.appendChild(option);
+  });
+  const val = normalizePhaseValue(ev.attackBp);
+  select.value = val || "bp";
+  select.addEventListener("change", () => {
+    const choice = select.value;
+    ev.attackBp = choice === "bp";
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
+function createPlayerNameSelect(ev, field, onDone) {
+  const select = document.createElement("select");
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "—";
+  select.appendChild(emptyOpt);
+  (state.players || []).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = formatNameWithNumber(name) || name;
+    select.appendChild(opt);
+  });
+  select.value = ev[field] || "";
+  select.addEventListener("change", () => {
+    ev[field] = select.value || null;
+    refreshAfterVideoEdit(true);
+  });
+  select.addEventListener("blur", () => {
+    if (typeof onDone === "function") onDone();
+    renderVideoAnalysis();
+  });
+  return select;
+}
 function createSetInput(ev, onDone) {
   const input = document.createElement("input");
   input.type = "number";
@@ -3036,7 +3205,7 @@ function createVideoTimeInput(ev, videoTime, onDone) {
   });
   return input;
 }
-function makeEditableCell(td, factory, guard = null) {
+function makeEditableCell(td, _title, factory, guard = null) {
   const startEdit = () => {
     if (td.dataset.editing === "true") return;
     if (currentEditCell && currentEditCell !== td) {
@@ -3062,6 +3231,7 @@ function makeEditableCell(td, factory, guard = null) {
     control.addEventListener("blur", endEdit);
   };
   td.addEventListener("click", e => {
+    e.stopPropagation();
     const isAllowed =
       !guard || typeof guard.isRowSelected !== "function" || guard.isRowSelected() === true;
     if (!isAllowed) {
@@ -3213,59 +3383,69 @@ function renderEventTableRows(target, events, options = {}) {
         ? [
             {
               text: formatVideoTimestamp(videoTime),
-              editable: td => makeEditableCell(td, done => createVideoTimeInput(ev, videoTime, done), editGuard)
+              classes: ["event-time-cell"],
+              editable: td =>
+                makeEditableCell(td, "Tempo video", done => createVideoTimeInput(ev, videoTime, done), editGuard)
             }
           ]
         : []),
       ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
-        editable: td => makeEditableCell(td, done => createPlayerSelect(ev, done), editGuard)
+        editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
       },
       {
         text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "",
-        editable: td => makeEditableCell(td, done => createSkillSelect(ev, done), editGuard)
+        editable: td => makeEditableCell(td, "Fondamentale", done => createSkillSelect(ev, done), editGuard)
       },
       {
         text: ev.code || "",
-        editable: td => makeEditableCell(td, done => createCodeSelect(ev, done), editGuard)
+        editable: td => makeEditableCell(td, "Codice", done => createCodeSelect(ev, done), editGuard)
       },
       {
         text: ev.set || "1",
-        editable: td => makeEditableCell(td, done => createSetInput(ev, done), editGuard)
+        editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
       },
       {
         text: ev.rotation || "-",
-        editable: td => makeEditableCell(td, done => createRotationInput(ev, done), editGuard)
+        editable: td =>
+          makeEditableCell(td, "Rotazione", done => createNumberSelect(ev, "rotation", 1, 6, done), editGuard)
       },
       {
         text: zoneDisplay ? String(zoneDisplay) : "",
-        editable: td => makeEditableCell(td, done => createZoneInput(ev, done), editGuard)
+        editable: td => makeEditableCell(td, "Zona", done => createNumberSelect(ev, "zone", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.setterPosition || ev.rotation || ""),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "setterPosition", 1, 6, done), editGuard)
+        editable: td =>
+          makeEditableCell(td, "Posizione palleggio", done => createNumberSelect(ev, "setterPosition", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.opponentSetterPosition),
         editable: td =>
-          makeEditableCell(td, done => createNumberInput(ev, "opponentSetterPosition", 1, 6, done), editGuard)
+          makeEditableCell(
+            td,
+            "Posizione palleggio avv",
+            done => createNumberSelect(ev, "opponentSetterPosition", 1, 6, done),
+            editGuard
+          )
       },
       {
         text: valueToString(ev.receivePosition),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "receivePosition", 1, 6, done), editGuard)
+        editable: td =>
+          makeEditableCell(td, "Zona ricezione", done => createNumberSelect(ev, "receivePosition", 1, 6, done), editGuard)
       },
       {
         text: valueToString(ev.base),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "base", done), editGuard)
+        editable: td => makeEditableCell(td, "Base", done => createBaseSelect(ev, done), editGuard)
       },
       {
         text: valueToString(ev.setType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "setType", done), editGuard)
+        editable: td => makeEditableCell(td, "Tipo alzata", done => createSetTypeSelect(ev, done), editGuard)
       },
       {
         text: valueToString(ev.combination),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "combination", done), editGuard)
+        editable: td => makeEditableCell(td, "Combinazione", done => createTextInput(ev, "combination", done), editGuard)
       },
       {
         text: formatTrajPoint(ev.serveStart),
@@ -3289,23 +3469,30 @@ function renderEventTableRows(target, events, options = {}) {
       },
       {
         text: valueToString(ev.serveType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "serveType", done), editGuard)
+        editable: td => makeEditableCell(td, "Tipo servizio", done => createServeTypeSelect(ev, done), editGuard)
       },
       {
         text: receiveEvalDisplay,
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "receiveEvaluation", done), editGuard)
+        editable: td =>
+          makeEditableCell(
+            td,
+            "Valutazione ricezione",
+            done => createEvalSelect(ev, "receiveEvaluation", done, { includeFb: true }),
+            editGuard
+          )
       },
       {
         text: valueToString(ev.attackEvaluation),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackEvaluation", done), editGuard)
+        editable: td =>
+          makeEditableCell(td, "Valutazione attacco", done => createEvalSelect(ev, "attackEvaluation", done), editGuard)
       },
       {
         text: attackPhaseDisplay,
-        editable: td => makeEditableCell(td, done => createCheckboxInput(ev, "attackBp", done), editGuard)
+        editable: td => makeEditableCell(td, "Fase attacco", done => createPhaseSelect(ev, done), editGuard)
       },
       {
         text: valueToString(ev.attackType),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackType", done), editGuard)
+        editable: td => makeEditableCell(td, "Tipo attacco", done => createTextInput(ev, "attackType", done), editGuard)
       },
       {
         text: formatAttackDir(),
@@ -3363,26 +3550,35 @@ function renderEventTableRows(target, events, options = {}) {
             renderTrajectoryAnalysis();
             renderServeTrajectoryAnalysis();
           });
-        },
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "attackDirection", done), editGuard)
+        }
       },
       {
         text: valueToString(ev.blockNumber),
-        editable: td => makeEditableCell(td, done => createNumberInput(ev, "blockNumber", 0, undefined, done), editGuard)
+        editable: td =>
+          makeEditableCell(td, "Numero muro", done => createNumberInput(ev, "blockNumber", 0, undefined, done), editGuard)
       },
       {
         text: valueToString(ev.playerIn),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerIn", done), editGuard)
+        editable: td => makeEditableCell(td, "In", done => createPlayerNameSelect(ev, "playerIn", done), editGuard)
       },
       {
         text: valueToString(ev.playerOut),
-        editable: td => makeEditableCell(td, done => createTextInput(ev, "playerOut", done), editGuard)
+        editable: td => makeEditableCell(td, "Out", done => createPlayerNameSelect(ev, "playerOut", done), editGuard)
       },
-      { text: valueToString(ev.durationMs || "") }
+      {
+        text: valueToString(ev.durationMs || ""),
+        editable: td =>
+          makeEditableCell(td, "Durata (ms)", done => createNumberInput(ev, "durationMs", 0, undefined, done), editGuard)
+      }
     ];
     cells.forEach(cell => {
       const td = document.createElement("td");
-      td.textContent = cell.text != null ? String(cell.text) : "";
+      if (cell.control) {
+        td.innerHTML = "";
+        td.appendChild(cell.control);
+      } else {
+        td.textContent = cell.text != null ? String(cell.text) : "";
+      }
       if (cell.editable) {
         cell.editable(td);
       }

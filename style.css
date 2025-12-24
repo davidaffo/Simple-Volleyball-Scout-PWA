@@ -2591,6 +2591,12 @@ body[data-theme="light"] .analysis-filter select {
 .trajectory-card.empty canvas {
   opacity: 0.35;
 }
+.event-time-cell {
+  min-width: 92px;
+}
+.event-time-cell input[type="number"] {
+  width: 88px;
+}
 .distribution-card h4 {
   margin: 0 0 0.4rem;
   font-size: 0.95rem;
