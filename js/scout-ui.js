@@ -7304,20 +7304,20 @@ function init() {
         trajectoryStart = pos;
         drawTrajectory();
         e.preventDefault();
-        setTimeout(confirmCurrentTrajectory, 100);
+        confirmCurrentTrajectory();
         return;
       }
       if (trajectoryMode === "serve-end") {
         trajectoryEnd = pos;
         drawTrajectory();
         e.preventDefault();
-        setTimeout(confirmCurrentTrajectory, 100);
+        confirmCurrentTrajectory();
         return;
       }
       trajectoryEnd = pos;
       drawTrajectory();
       e.preventDefault();
-      setTimeout(confirmCurrentTrajectory, 120);
+      confirmCurrentTrajectory();
     };
     if (elAttackTrajectoryCanvas) {
       elAttackTrajectoryCanvas.addEventListener("pointerdown", onPointerDown);
