@@ -930,6 +930,7 @@ function updateVideoScoutModeLayout() {
   if (!elVideoScoutContainer) return;
   const useScout = !!state.videoScoutMode;
   elVideoScoutContainer.classList.toggle("hidden", !useScout);
+  renderEventsLog({ suppressScroll: true });
   if (!useScout) {
     if (elAnalysisVideoScout) {
       elAnalysisVideoScout.pause();
