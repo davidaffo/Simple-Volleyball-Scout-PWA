@@ -3941,6 +3941,11 @@ function renderVideoAnalysis() {
     elVideoFileLabel.textContent = label;
   }
   if (!skillEvents.length) {
+    try {
+      renderVideoFilters([]);
+    } catch (err) {
+      console.error("Video filters error", err);
+    }
     elVideoSkillsContainer.innerHTML = "";
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -3955,6 +3960,11 @@ function renderVideoAnalysis() {
     elVideoSkillsContainer.appendChild(tbl);
     return;
   }
+  try {
+    renderVideoFilters(skillEvents.map(item => item.ev));
+  } catch (err) {
+    console.error("Video filters error", err);
+  }
   let updatedZones = false;
   skillEvents.forEach(({ ev }) => {
     const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
@@ -3963,9 +3973,27 @@ function renderVideoAnalysis() {
       updatedZones = true;
     }
   });
+  const filteredEvents = skillEvents
+    .map(item => item.ev)
+    .filter(ev => matchesVideoFilters(ev, videoFilterState));
+  if (!filteredEvents.length) {
+    elVideoSkillsContainer.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.textContent = "Nessuna skill con i filtri attivi.";
+    tr.appendChild(td);
+    const tbl = document.createElement("table");
+    tbl.className = "video-skills-table event-edit-table";
+    const tbody = document.createElement("tbody");
+    tbody.appendChild(tr);
+    tbl.appendChild(tbody);
+    elVideoSkillsContainer.appendChild(tbl);
+    return;
+  }
   renderEventTableRows(
     elVideoSkillsContainer,
-    skillEvents.map(item => item.ev),
+    filteredEvents,
     {
       showSeek: true,
       showVideoTime: true,
@@ -4990,6 +5018,61 @@ function matchesAdvancedFilters(ev, filters, { includeSetter = false } = {}) {
   if (filters.prevSkill && !matchesPreviousSkill(ev, filters.prevSkill)) return false;
   return true;
 }
+function matchesVideoFilters(ev, filters) {
+  if (!ev || !filters) return true;
+  if (filters.players && filters.players.size) {
+    const idx = resolvePlayerIdx(ev);
+    if (idx === -1 || !filters.players.has(idx)) return false;
+  }
+  if (filters.skills && filters.skills.size) {
+    if (!ev.skillId || !filters.skills.has(ev.skillId)) return false;
+  }
+  if (filters.codes && filters.codes.size) {
+    if (!ev.code || !filters.codes.has(ev.code)) return false;
+  }
+  if (filters.sets && filters.sets.size) {
+    const setNum = normalizeSetNumber(ev.set);
+    if (setNum === null || !filters.sets.has(setNum)) return false;
+  }
+  if (filters.rotations && filters.rotations.size) {
+    const rot = Number(ev.rotation);
+    if (!Number.isFinite(rot) || !filters.rotations.has(rot)) return false;
+  }
+  if (filters.zones && filters.zones.size) {
+    const zoneVal = Number(ev.zone || ev.playerPosition);
+    if (!Number.isFinite(zoneVal) || !filters.zones.has(zoneVal)) return false;
+  }
+  if (filters.bases && filters.bases.size) {
+    const base = normalizeBaseValue(ev.base);
+    if (!base || !filters.bases.has(base)) return false;
+  }
+  if (filters.setTypes && filters.setTypes.size) {
+    const setType = normalizeSetTypeValue(
+      ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
+    );
+    if (!setType || !filters.setTypes.has(setType)) return false;
+  }
+  if (filters.phases && filters.phases.size) {
+    let rawPhase = ev.attackBp;
+    if (rawPhase === undefined || rawPhase === null) {
+      rawPhase = ev.phase !== undefined ? ev.phase : ev.attackPhase !== undefined ? ev.attackPhase : true;
+    }
+    const phase = normalizePhaseValue(rawPhase);
+    if (phase === null || !filters.phases.has(phase)) return false;
+  }
+  if (filters.receiveEvaluations && filters.receiveEvaluations.size) {
+    const recvEval = normalizeEvalCode(ev.receiveEvaluation);
+    if (!recvEval || !filters.receiveEvaluations.has(recvEval)) return false;
+  }
+  if (filters.receiveZones && filters.receiveZones.size) {
+    const recvZone = normalizeReceiveZone(ev.receivePosition || ev.receiveZone);
+    if (recvZone === null || !filters.receiveZones.has(recvZone)) return false;
+  }
+  if (filters.serveTypes && filters.serveTypes.size) {
+    if (!ev.serveType || !filters.serveTypes.has(ev.serveType)) return false;
+  }
+  return true;
+}
 const trajectoryFilterState = {
   players: new Set(),
   sets: new Set(),
@@ -5022,6 +5105,20 @@ const secondFilterState = {
   receiveZones: new Set(),
   sets: new Set(),
   prevSkill: "any"
+};
+const videoFilterState = {
+  players: new Set(),
+  skills: new Set(),
+  codes: new Set(),
+  sets: new Set(),
+  rotations: new Set(),
+  zones: new Set(),
+  bases: new Set(),
+  setTypes: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  serveTypes: new Set()
 };
 const TRAJECTORY_BG_BY_ZONE = {
   1: "images/trajectory/attack_2_near.png",
@@ -5068,6 +5165,22 @@ function syncServeTrajectoryFilterState() {
   serveTrajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elServeTrajFilterReceiveEvals));
   serveTrajectoryFilterState.receiveZones = new Set(getCheckedValues(elServeTrajFilterReceiveZones, { asNumber: true }));
 }
+function syncVideoFilterState() {
+  const els = getVideoFilterElements();
+  if (!els) return;
+  videoFilterState.players = new Set(getCheckedValues(els.players, { asNumber: true }));
+  videoFilterState.skills = new Set(getCheckedValues(els.skills));
+  videoFilterState.codes = new Set(getCheckedValues(els.codes));
+  videoFilterState.sets = new Set(getCheckedValues(els.sets, { asNumber: true }));
+  videoFilterState.rotations = new Set(getCheckedValues(els.rotations, { asNumber: true }));
+  videoFilterState.zones = new Set(getCheckedValues(els.zones, { asNumber: true }));
+  videoFilterState.bases = new Set(getCheckedValues(els.bases));
+  videoFilterState.setTypes = new Set(getCheckedValues(els.setTypes));
+  videoFilterState.phases = new Set(getCheckedValues(els.phases));
+  videoFilterState.receiveEvaluations = new Set(getCheckedValues(els.receiveEvals));
+  videoFilterState.receiveZones = new Set(getCheckedValues(els.receiveZones, { asNumber: true }));
+  videoFilterState.serveTypes = new Set(getCheckedValues(els.serveTypes));
+}
 function handleTrajectoryFilterChange() {
   syncTrajectoryFilterState();
   renderTrajectoryAnalysis();
@@ -5075,6 +5188,10 @@ function handleTrajectoryFilterChange() {
 function handleServeTrajectoryFilterChange() {
   syncServeTrajectoryFilterState();
   renderServeTrajectoryAnalysis();
+}
+function handleVideoFilterChange() {
+  syncVideoFilterState();
+  renderVideoAnalysis();
 }
 function resetTrajectoryFilters() {
   trajectoryFilterState.players.clear();
@@ -5103,6 +5220,42 @@ function resetServeTrajectoryFilters() {
   serveTrajectoryFilterState.receiveZones.clear();
   renderServeTrajectoryFilters();
   renderServeTrajectoryAnalysis();
+}
+function resetVideoFilters() {
+  videoFilterState.players.clear();
+  videoFilterState.skills.clear();
+  videoFilterState.codes.clear();
+  videoFilterState.sets.clear();
+  videoFilterState.rotations.clear();
+  videoFilterState.zones.clear();
+  videoFilterState.bases.clear();
+  videoFilterState.setTypes.clear();
+  videoFilterState.phases.clear();
+  videoFilterState.receiveEvaluations.clear();
+  videoFilterState.receiveZones.clear();
+  videoFilterState.serveTypes.clear();
+  renderVideoAnalysis();
+}
+function getVideoFilterElements() {
+  const wrap = document.getElementById("video-filters");
+  const players = document.getElementById("video-filter-players");
+  if (!players) return null;
+  return {
+    wrap,
+    players,
+    skills: document.getElementById("video-filter-skills"),
+    codes: document.getElementById("video-filter-codes"),
+    sets: document.getElementById("video-filter-sets"),
+    rotations: document.getElementById("video-filter-rotations"),
+    zones: document.getElementById("video-filter-zones"),
+    bases: document.getElementById("video-filter-bases"),
+    setTypes: document.getElementById("video-filter-set-types"),
+    phases: document.getElementById("video-filter-phases"),
+    receiveEvals: document.getElementById("video-filter-receive-evals"),
+    receiveZones: document.getElementById("video-filter-receive-zones"),
+    serveTypes: document.getElementById("video-filter-serve-types"),
+    reset: document.getElementById("video-filter-reset")
+  };
 }
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
@@ -5374,6 +5527,164 @@ function renderServeTrajectoryFilters() {
   if (elServeTrajFilterReset && !elServeTrajFilterReset._serveTrajResetBound) {
     elServeTrajFilterReset.addEventListener("click", resetServeTrajectoryFilters);
     elServeTrajFilterReset._serveTrajResetBound = true;
+  }
+}
+function renderVideoFilters(events) {
+  const els = getVideoFilterElements();
+  if (!els) return;
+  const list = Array.isArray(events) ? events : [];
+  const playerOpts = buildUniqueOptions(
+    list.map(ev => {
+      const idx = resolvePlayerIdx(ev);
+      return idx === -1 ? null : idx;
+    }),
+    {
+      asNumber: true,
+      labelFn: idx =>
+        formatNameWithNumber(state.players[idx]) || state.players[idx] || "#" + (Number(idx) + 1)
+    }
+  );
+  const skillOpts = buildUniqueOptions(list.map(ev => ev.skillId), {
+    labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
+  });
+  const codeOpts = buildUniqueOptions(list.map(ev => ev.code), { labelFn: val => val });
+  const setOpts = buildUniqueOptions(list.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const rotOpts = buildUniqueOptions(list.map(ev => ev.rotation), {
+    asNumber: true,
+    labelFn: val => "P" + val
+  });
+  const zoneOpts = buildUniqueOptions(list.map(ev => ev.zone || ev.playerPosition), {
+    asNumber: true,
+    labelFn: val => "Z" + val
+  });
+  const baseOpts = buildUniqueOptions(list.map(ev => normalizeBaseValue(ev.base)), {
+    labelFn: val => val.toUpperCase()
+  });
+  const setTypeOpts = buildUniqueOptions(
+    list.map(ev =>
+      normalizeSetTypeValue(
+        ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
+      )
+    ),
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
+  );
+  const phaseOpts = buildUniqueOptions(
+    list.map(ev => {
+      let rawPhase = ev.attackBp;
+      if (rawPhase === undefined || rawPhase === null) {
+        rawPhase = ev.phase !== undefined ? ev.phase : ev.attackPhase !== undefined ? ev.attackPhase : null;
+      }
+      return normalizePhaseValue(rawPhase);
+    }),
+    { labelFn: val => formatAttackPhaseLabel(val) }
+  );
+  const recvEvalOpts = buildUniqueOptions(list.map(ev => normalizeEvalCode(ev.receiveEvaluation)), {
+    labelFn: val => val
+  });
+  const recvZoneOpts = buildUniqueOptions(
+    list.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+  const serveTypeOpts = buildUniqueOptions(list.map(ev => ev.serveType), { labelFn: val => val });
+
+  videoFilterState.players = new Set(
+    [...videoFilterState.players].filter(idx => playerOpts.some(p => Number(p.value) === idx))
+  );
+  videoFilterState.skills = new Set(
+    [...videoFilterState.skills].filter(val => skillOpts.some(o => o.value === val))
+  );
+  videoFilterState.codes = new Set(
+    [...videoFilterState.codes].filter(val => codeOpts.some(o => o.value === val))
+  );
+  videoFilterState.sets = new Set(
+    [...videoFilterState.sets].filter(val => setOpts.some(o => Number(o.value) === val))
+  );
+  videoFilterState.rotations = new Set(
+    [...videoFilterState.rotations].filter(val => rotOpts.some(o => Number(o.value) === val))
+  );
+  videoFilterState.zones = new Set(
+    [...videoFilterState.zones].filter(val => zoneOpts.some(o => Number(o.value) === val))
+  );
+  videoFilterState.bases = new Set(
+    [...videoFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  videoFilterState.setTypes = new Set(
+    [...videoFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  videoFilterState.phases = new Set(
+    [...videoFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  videoFilterState.receiveEvaluations = new Set(
+    [...videoFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  videoFilterState.receiveZones = new Set(
+    [...videoFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  videoFilterState.serveTypes = new Set(
+    [...videoFilterState.serveTypes].filter(val => serveTypeOpts.some(o => o.value === val))
+  );
+
+  renderDynamicFilter(els.players, playerOpts, videoFilterState.players, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.skills, skillOpts, videoFilterState.skills, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.codes, codeOpts, videoFilterState.codes, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.sets, setOpts, videoFilterState.sets, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.rotations, rotOpts, videoFilterState.rotations, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.zones, zoneOpts, videoFilterState.zones, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.bases, baseOpts, videoFilterState.bases, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.setTypes, setTypeOpts, videoFilterState.setTypes, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.phases, phaseOpts, videoFilterState.phases, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.receiveEvals, recvEvalOpts, videoFilterState.receiveEvaluations, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.receiveZones, recvZoneOpts, videoFilterState.receiveZones, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.serveTypes, serveTypeOpts, videoFilterState.serveTypes, {
+    onChange: handleVideoFilterChange
+  });
+
+  const visibleFilters = [
+    playerOpts.length,
+    skillOpts.length,
+    codeOpts.length,
+    setOpts.length,
+    rotOpts.length,
+    zoneOpts.length,
+    baseOpts.length,
+    setTypeOpts.length,
+    phaseOpts.length,
+    recvEvalOpts.length,
+    recvZoneOpts.length,
+    serveTypeOpts.length
+  ];
+  if (els.wrap) {
+    els.wrap.style.display = visibleFilters.some(Boolean) ? "" : "none";
+  }
+  toggleFilterVisibility(els.reset, visibleFilters.some(Boolean));
+  if (els.reset && !els.reset._videoResetBound) {
+    els.reset.addEventListener("click", resetVideoFilters);
+    els.reset._videoResetBound = true;
   }
 }
 function getTrajectoryBg(zone, cb) {
