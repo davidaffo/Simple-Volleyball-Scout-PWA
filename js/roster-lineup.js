@@ -1900,11 +1900,21 @@ function resetMatchState() {
   state.autoRotatePending = false;
   state.liberoAutoMap = preservedLiberoMap;
   state.preferredLibero = preservedPreferredLibero;
-  state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  state.skillClock = { paused: true, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: 0 };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  state.videoClock = {
+    paused: true,
+    pausedAtMs: null,
+    pausedAccumMs: 0,
+    startMs: Date.now(),
+    currentSeconds: 0
+  };
+  if (typeof clearEventSelection === "function") {
+    clearEventSelection({ clearContexts: true });
+  }
   if (typeof clearCachedLocalVideo === "function") {
     clearCachedLocalVideo();
   }

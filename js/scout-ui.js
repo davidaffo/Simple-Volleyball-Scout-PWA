@@ -1263,6 +1263,20 @@ function startVideoPlaybackSnapshotTimer() {
   }, 2000);
 }
 function getEventVideoSeconds(baseVideoTime = null) {
+  if (!state.events || state.events.length === 0) {
+    ensureVideoClock();
+    if (
+      state.videoClock.paused &&
+      (state.videoClock.currentSeconds || 0) === 0 &&
+      state.videoClock.pausedAccumMs === 0
+    ) {
+      state.videoClock.startMs = Date.now();
+      state.videoClock.currentSeconds = 0;
+      state.videoClock.paused = false;
+      state.videoClock.pausedAtMs = null;
+    }
+    return 0;
+  }
   if (typeof baseVideoTime === "number") return Math.max(0, baseVideoTime);
   if (state.videoScoutMode) {
     const playback = getActiveVideoPlaybackSeconds();
@@ -1271,10 +1285,51 @@ function getEventVideoSeconds(baseVideoTime = null) {
   return getVideoClockSeconds();
 }
 function buildBaseEventPayload(base) {
+  ensureSkillClock();
+  if (
+    (!state.events || state.events.length === 0) &&
+    state.skillClock &&
+    state.skillClock.pausedAccumMs === 0 &&
+    !state.skillClock.pausedAtMs &&
+    !state.skillClock.lastEffectiveMs
+  ) {
+    state.skillClock.pausedAccumMs = Date.now();
+    state.skillClock.paused = false;
+    state.skillClock.pausedAtMs = null;
+    state.skillClock.lastEffectiveMs = 0;
+  }
+  ensureVideoClock();
+  if (
+    (!state.events || state.events.length === 0) &&
+    state.videoClock &&
+    state.videoClock.paused &&
+    state.videoClock.pausedAccumMs === 0 &&
+    !state.videoClock.pausedAtMs &&
+    (state.videoClock.currentSeconds || 0) === 0
+  ) {
+    const offset = state.video && typeof state.video.offsetSeconds === "number" ? state.video.offsetSeconds : 0;
+    state.videoClock.startMs = Date.now();
+    state.videoClock.currentSeconds = Math.max(0, offset);
+    state.videoClock.paused = false;
+    state.videoClock.pausedAtMs = null;
+  }
   const now = new Date();
   const nowIso = now.toISOString();
   const clockMs = getSkillClockMs();
-  const videoSeconds = getEventVideoSeconds(base && base.videoTime);
+  let videoSeconds = getEventVideoSeconds(base && base.videoTime);
+  if (
+    (!state.events || state.events.length === 0) &&
+    !state.videoScoutMode &&
+    !(base && typeof base.videoTime === "number")
+  ) {
+    ensureVideoClock();
+    state.videoClock.startMs = Date.now();
+    state.videoClock.pausedAccumMs = 0;
+    state.videoClock.paused = false;
+    state.videoClock.pausedAtMs = null;
+    state.videoClock.currentSeconds = 0;
+    videoSeconds = 0;
+  }
   const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
   const zone =
     typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx, base.skillId) : null;
@@ -2426,6 +2481,17 @@ function pruneEventSelection() {
     lastSelectedEventId = null;
   }
 }
+function clearEventSelection({ clearContexts = true } = {}) {
+  selectedEventIds.clear();
+  lastSelectedEventId = null;
+  lastEventContextKey = null;
+  if (clearContexts) {
+    Object.keys(eventTableContexts).forEach(key => {
+      delete eventTableContexts[key];
+    });
+  }
+  updateSelectionStyles();
+}
 function updateSelectionStyles() {
   pruneEventSelection();
   Object.values(eventTableContexts).forEach(ctx => {
@@ -2519,6 +2585,10 @@ function scrollRowIntoView(record) {
   record.tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 function handleSeekForSelection(contextKey) {
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (contextKey === "log" && !state.videoScoutMode && activeTab !== "video") {
+    return;
+  }
   const rows = getSelectedRows(contextKey);
   if (!rows.length) return;
   const target =
@@ -7202,6 +7272,16 @@ function exportAnalysisPdf() {
 }
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(reg => reg.unregister());
+    });
+  }
+  if ("caches" in window) {
+    caches.keys().then(keys => {
+      keys.forEach(key => caches.delete(key));
+    });
+  }
   resetSetTypeState();
   const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
   const preservedRotation = state.rotation || 1;
@@ -7224,7 +7304,7 @@ function resetMatch() {
   if (typeof enforceAutoLiberoForState === "function") {
     enforceAutoLiberoForState({ skipServerOnServe: true });
   }
-  state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  state.skillClock = { paused: true, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: 0 };
   state.video = state.video || {
     offsetSeconds: 0,
     fileName: "",
@@ -7236,6 +7316,14 @@ function resetMatch() {
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
   state.video.lastPlaybackSeconds = 0;
+  state.videoClock = {
+    paused: true,
+    pausedAtMs: null,
+    pausedAccumMs: 0,
+    startMs: Date.now(),
+    currentSeconds: 0
+  };
+  clearEventSelection({ clearContexts: true });
   syncYoutubeUrlInputs("");
   clearCachedLocalVideo();
   if (ytPlayer && ytPlayer.stopVideo) {
@@ -7268,6 +7356,9 @@ function resetMatch() {
   renderPlayers();
   renderBenchChips();
   updateRotationDisplay();
+  setTimeout(() => {
+    window.location.reload();
+  }, 200);
 }
 function undoLastEvent() {
   if (!state.events || state.events.length === 0) {
