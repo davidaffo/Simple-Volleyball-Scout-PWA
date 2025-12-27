@@ -1041,6 +1041,14 @@ function setCourtPlayer(posIdx, target, playerName) {
   const slotBase = baseCourt[posIdx] || slotState;
   const isLiberoHere = isLibero(slotState.main) || isLibero(slotBase.main);
   const replacedName = slotState.replaced || slotBase.replaced || "";
+  const prevMain = slotBase.main || "";
+  const benchPlayers = new Set(getBenchPlayers());
+  const shouldRecordSub =
+    prevMain &&
+    prevMain !== name &&
+    !isLibero(prevMain) &&
+    !isLibero(name) &&
+    benchPlayers.has(name);
   // Caso speciale: rientro titolare al posto del libero che la sostituisce
   if (isLiberoHere && replacedName === name && !isLibero(name)) {
     const next = cloneCourtLineup(baseCourt);
@@ -1093,6 +1101,9 @@ function setCourtPlayer(posIdx, target, playerName) {
     }
   }
   commitCourtChange(nextCourt);
+  if (shouldRecordSub && typeof recordSubstitutionEvent === "function") {
+    recordSubstitutionEvent({ playerIn: name, playerOut: prevMain });
+  }
 }
 function swapCourtPlayers(fromIdx, toIdx) {
   ensureCourtShape();

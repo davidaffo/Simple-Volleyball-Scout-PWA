@@ -499,10 +499,25 @@ body[data-theme="light"] .court-actions-bar {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  flex-wrap: wrap;
 }
 .court-actions-inline .team-controls-panel .skill-flow-panel {
   margin-top: 0;
   flex: 1 1 0;
+}
+.team-timeout-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.team-timeout-block .team-counter {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.team-timeout-block strong {
+  font-weight: 700;
 }
 .rotation-display {
   position: relative;

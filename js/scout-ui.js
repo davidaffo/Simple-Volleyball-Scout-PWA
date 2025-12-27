@@ -30,7 +30,8 @@ const elLineupModalCourt = document.getElementById("lineup-modal-court");
 const elLineupModalBench = document.getElementById("lineup-modal-bench");
 const elLineupModalClose = document.getElementById("lineup-modal-close");
 const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
-const elLineupModalSave = document.getElementById("lineup-modal-save");
+const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-override");
+const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
 const elServeTypeButtons = document.getElementById("serve-type-buttons");
 const SERVE_START_IMG_NEAR = "images/trajectory/service_start_near.png";
 const SERVE_START_IMG_FAR = "images/trajectory/service_start_far.png";
@@ -294,6 +295,27 @@ function getBenchForLineup(court) {
   });
   return (state.players || []).filter(name => name && !libSet.has(name) && !used.has(name));
 }
+function getLineupBaseCourtFromState() {
+  const libSet = new Set(state.liberos || []);
+  return getCourtShape(state.court).map(slot => {
+    if (libSet.has(slot.main)) {
+      return { main: slot.replaced || "", replaced: "" };
+    }
+    return { main: slot.main || "", replaced: "" };
+  });
+}
+function getLineupSubstitutions(prevCourt, nextCourt) {
+  const libSet = new Set(state.liberos || []);
+  const subs = [];
+  for (let i = 0; i < 6; i += 1) {
+    const prevName = (prevCourt[i] && prevCourt[i].main) || "";
+    const nextName = (nextCourt[i] && nextCourt[i].main) || "";
+    if (!prevName || !nextName || prevName === nextName) continue;
+    if (libSet.has(prevName) || libSet.has(nextName)) continue;
+    subs.push({ playerIn: nextName, playerOut: prevName });
+  }
+  return subs;
+}
 function assignPlayerToLineup(name, posIdx) {
   const core = typeof LineupCore !== "undefined" ? LineupCore : null;
   if (core && typeof core.setPlayerOnCourt === "function") {
@@ -463,7 +485,8 @@ function closeLineupModal() {
   lineupDragName = "";
   lineupSelectedName = "";
 }
-function saveLineupModal() {
+function saveLineupModal({ countSubstitutions = false } = {}) {
+  const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
   const nextCourt = getCourtShape(lineupModalCourt);
   if (typeof commitCourtChange === "function") {
     commitCourtChange(nextCourt, { clean: true });
@@ -474,6 +497,10 @@ function saveLineupModal() {
     if (typeof renderBenchChips === "function") renderBenchChips();
     if (typeof renderLineupChips === "function") renderLineupChips();
     if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+  }
+  if (countSubstitutions) {
+    const subs = getLineupSubstitutions(prevCourt || [], nextCourt);
+    subs.forEach(sub => recordSubstitutionEvent(sub));
   }
   closeLineupModal();
 }
@@ -961,6 +988,9 @@ const elOffsetModal = document.getElementById("offset-modal");
 const elOffsetSkillGrid = document.getElementById("offset-skill-grid");
 const elOffsetClose = document.getElementById("offset-close");
 const elOffsetApply = document.getElementById("offset-apply");
+const elBtnTimeout = document.getElementById("btn-timeout");
+const elTimeoutCount = document.getElementById("timeout-count");
+const elSubstitutionRemaining = document.getElementById("substitution-remaining");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -2435,7 +2465,7 @@ function recalcAllStatsAndUpdateUI() {
   initStats();
   state.events.forEach(ev => {
     const idx = ev.playerIdx;
-    if (ev.skillId === "manual") {
+    if (ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
       return;
     }
     if (idx === null || idx === undefined || idx < 0 || !state.players[idx]) {
@@ -2805,6 +2835,17 @@ function renderEventsLog(options = {}) {
     return (a.eventId || 0) - (b.eventId || 0);
   });
   const latest = recent[recent.length - 1];
+  const getEventSkillLabel = ev => {
+    if (ev.actionType === "timeout") return "Timeout";
+    if (ev.actionType === "substitution") return "Cambio";
+    const meta = SKILLS.find(s => s.id === ev.skillId);
+    return meta ? meta.label : ev.skillId || "";
+  };
+  const getEventShortLabel = ev => {
+    if (ev.actionType === "timeout") return "TO";
+    if (ev.actionType === "substitution") return "CH";
+    return getShortSkill(ev.skillId);
+  };
   const formatEv = ev => {
     const dateObj = new Date(ev.t);
     const timeStr = isNaN(dateObj.getTime())
@@ -2820,10 +2861,10 @@ function renderEventsLog(options = {}) {
       "] " +
       (ev.playerName ? formatNameWithNumber(ev.playerName) : "#" + ev.playerIdx) +
       " - " +
-      ev.skillId +
+      getEventSkillLabel(ev) +
       " " +
       ev.code;
-    const shortSkill = getShortSkill(ev.skillId);
+    const shortSkill = getEventShortLabel(ev);
     const num = getPlayerNumber(ev.playerName);
     const initials = getInitials(ev.playerName);
     const compact =
@@ -2861,6 +2902,54 @@ function renderEventsLog(options = {}) {
   if (elUndoLastSummary) {
     elUndoLastSummary.textContent = compactSummary || "—";
   }
+  updateTeamCounters();
+}
+function getTimeoutCountForSet(setNum) {
+  const set = Number(setNum) || 1;
+  return (state.events || []).filter(ev => ev && ev.actionType === "timeout" && ev.set === set).length;
+}
+function getSubstitutionCountForSet(setNum) {
+  const set = Number(setNum) || 1;
+  return (state.events || []).filter(ev => ev && ev.actionType === "substitution" && ev.set === set).length;
+}
+function updateTeamCounters() {
+  const setNum = state.currentSet || 1;
+  if (elTimeoutCount) {
+    const used = getTimeoutCountForSet(setNum);
+    const remaining = Math.max(0, 2 - used);
+    elTimeoutCount.textContent = String(remaining);
+  }
+  if (elSubstitutionRemaining) {
+    const used = getSubstitutionCountForSet(setNum);
+    const remaining = Math.max(0, 6 - used);
+    elSubstitutionRemaining.textContent = String(remaining);
+  }
+}
+function recordTimeoutEvent() {
+  recordSetAction("timeout", { playerName: "Timeout", code: "TO" });
+  saveState();
+  renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
+}
+function recordSubstitutionEvent({ playerIn, playerOut }) {
+  const label = playerIn || "Cambio";
+  recordSetAction("substitution", {
+    playerName: label,
+    playerIn: playerIn || null,
+    playerOut: playerOut || null,
+    code: "SUB"
+  });
+  saveState();
+  renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
 }
 function openOffsetModal() {
   if (!elOffsetModal || !elOffsetSkillGrid) return;
@@ -3933,7 +4022,12 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
       },
       {
-        text: (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "",
+        text:
+          ev.actionType === "timeout"
+            ? "Timeout"
+            : ev.actionType === "substitution"
+              ? "Cambio"
+              : (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "",
         editable: td => makeEditableCell(td, "Fondamentale", done => createSkillSelect(ev, done), editGuard)
       },
       {
@@ -4776,10 +4870,11 @@ function setScoutControlsDisabled(disabled) {
   });
 }
 function recordSetAction(actionType, payload) {
+  const code = payload && payload.code ? payload.code : actionType;
   const event = buildBaseEventPayload(
     Object.assign({}, payload, {
       skillId: "manual",
-      code: actionType,
+      code,
       actionType
     })
   );
@@ -7608,6 +7703,9 @@ function undoLastEvent() {
     const reverseDir = ev.autoRotationDirection === "ccw" ? "cw" : "ccw";
     rotateCourt(reverseDir);
   }
+  if (ev && ev.actionType === "substitution") {
+    undoSubstitutionEvent(ev);
+  }
   if (ev.actionType === "match-end") {
     restoreSkillClock(ev.prevClock || null);
     restoreVideoClock(ev.prevVideoClock || null);
@@ -7662,6 +7760,37 @@ function deleteEventByKey(eventKey) {
   updateRotationDisplay();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
+}
+function undoSubstitutionEvent(ev) {
+  if (!ev) return false;
+  const playerIn = (ev.playerIn || "").trim();
+  const playerOut = (ev.playerOut || "").trim();
+  if (!playerIn || !playerOut) return false;
+  if (typeof isLibero === "function" && (isLibero(playerIn) || isLibero(playerOut))) {
+    return false;
+  }
+  const baseCourt = getCourtShape(state.court);
+  const inIdx = baseCourt.findIndex(slot => slot && slot.main === playerIn);
+  if (inIdx === -1) return false;
+  const outIdx = baseCourt.findIndex(slot => slot && slot.main === playerOut);
+  const nextCourt = cloneCourt(baseCourt);
+  if (outIdx !== -1 && outIdx !== inIdx) {
+    nextCourt[inIdx].main = playerOut;
+    nextCourt[outIdx].main = playerIn;
+  } else {
+    nextCourt[inIdx].main = playerOut;
+  }
+  if (typeof commitCourtChange === "function") {
+    commitCourtChange(nextCourt, { clean: true });
+  } else {
+    state.court = ensureCourtShapeFor(nextCourt);
+    saveState();
+    if (typeof renderPlayers === "function") renderPlayers();
+    if (typeof renderBenchChips === "function") renderBenchChips();
+    if (typeof renderLineupChips === "function") renderLineupChips();
+    if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+  }
+  return true;
 }
 function applyAggColumnsVisibility() {
   ensureMetricsConfigDefaults();
@@ -7960,8 +8089,15 @@ function init() {
   if (elLineupModalCancel) {
     elLineupModalCancel.addEventListener("click", closeLineupModal);
   }
-  if (elLineupModalSave) {
-    elLineupModalSave.addEventListener("click", saveLineupModal);
+  if (elLineupModalSaveOverride) {
+    elLineupModalSaveOverride.addEventListener("click", () => {
+      saveLineupModal({ countSubstitutions: false });
+    });
+  }
+  if (elLineupModalSaveSubstitution) {
+    elLineupModalSaveSubstitution.addEventListener("click", () => {
+      saveLineupModal({ countSubstitutions: true });
+    });
   }
   if (elLineupModal) {
     elLineupModal.addEventListener("click", e => {
@@ -8437,6 +8573,11 @@ function init() {
       renderPlayers();
     });
     syncFreeballActive();
+  }
+  if (elBtnTimeout) {
+    elBtnTimeout.addEventListener("click", () => {
+      recordTimeoutEvent();
+    });
   }
   if (elBtnOffsetSkills) {
     elBtnOffsetSkills.addEventListener("click", openOffsetModal);

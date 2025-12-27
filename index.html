@@ -277,6 +277,12 @@ Bianchi 18"></textarea>
               Traiettoria servizio
             </label>
           </div>
+          <div class="team-timeout-block">
+            <button id="btn-timeout" class="small secondary">Timeout</button>
+            <button id="btn-open-lineup" class="secondary small">Formazione/Sostituzione</button>
+            <span class="team-counter">TO: <strong id="timeout-count">0</strong></span>
+            <span class="team-counter">Cambi: <strong id="substitution-remaining">6</strong></span>
+          </div>
         </div>
       </div>
       <div class="section scout-col-center" data-scout-panel="team">
@@ -341,7 +347,6 @@ Bianchi 18"></textarea>
               <button id="btn-score-team-point" class="small">Punto</button>
               <button id="btn-score-team-error" class="small danger">Errore</button>
               <button id="btn-freeball" class="secondary small">Freeball</button>
-              <button id="btn-open-lineup" class="secondary small">Formazione</button>
             </div>
             <div class="team-controls-panel">
               <div class="libero-inline">
@@ -873,7 +878,8 @@ Bianchi 18"></textarea>
         </div>
       </div>
       <div class="lineup-modal__foot">
-        <button id="lineup-modal-save">Salva formazione</button>
+        <button id="lineup-modal-save-override">Metti in campo (Override)</button>
+        <button id="lineup-modal-save-substitution" class="danger">Effettua sostituzioni</button>
         <button id="lineup-modal-cancel" class="secondary">Chiudi</button>
       </div>
     </div>
