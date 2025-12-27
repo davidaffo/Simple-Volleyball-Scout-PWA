@@ -2608,7 +2608,24 @@ function moveSelection(contextKey, delta, extendRange = false) {
     (selectedEventIds.size && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
       ? lastSelectedEventId
       : selectedEventIds.values().next().value) || rows[0].key;
-  let anchorKey = extendRange && lastSelectedEventId ? lastSelectedEventId : currentKey;
+  if (extendRange && selectedEventIds.size) {
+    const selectedIdx = rows
+      .map((row, idx) => (selectedEventIds.has(row.key) ? idx : -1))
+      .filter(idx => idx !== -1);
+    const edgeIdx = delta > 0 ? Math.max(...selectedIdx) : Math.min(...selectedIdx);
+    let anchorKey =
+      lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
+        ? lastSelectedEventId
+        : rows[selectedIdx[0]].key;
+    let targetIdx = Math.min(rows.length - 1, Math.max(0, edgeIdx + delta));
+    const targetKey = rows[targetIdx].key;
+    selectRangeForContext(contextKey, anchorKey, targetKey);
+    const targetRow = rows.find(r => r.key === targetKey);
+    scrollRowIntoView(targetRow);
+    handleSeekForSelection(contextKey);
+    return;
+  }
+  let anchorKey = currentKey;
   let anchorIdx = rows.findIndex(r => r.key === anchorKey);
   if (anchorIdx === -1) {
     anchorIdx = 0;
@@ -2616,11 +2633,7 @@ function moveSelection(contextKey, delta, extendRange = false) {
   }
   let targetIdx = Math.min(rows.length - 1, Math.max(0, anchorIdx + delta));
   const targetKey = rows[targetIdx].key;
-  if (extendRange) {
-    selectRangeForContext(contextKey, anchorKey, targetKey);
-  } else {
-    setSelectionForContext(contextKey, new Set([targetKey]), targetKey);
-  }
+  setSelectionForContext(contextKey, new Set([targetKey]), targetKey);
   const targetRow = rows.find(r => r.key === targetKey);
   scrollRowIntoView(targetRow);
   handleSeekForSelection(contextKey);
@@ -2793,8 +2806,8 @@ function renderEventsLog(options = {}) {
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
   renderEventTableRows(elEventsLog, recent, {
-    showSeek: !!state.videoScoutMode,
-    showVideoTime: true,
+    showSeek: false,
+    showVideoTime: false,
     baseMs,
     showIndex: false,
     enableSelection: true,
@@ -3639,7 +3652,7 @@ function makeEditableCell(td, _title, factory, guard = null) {
     }
     control.addEventListener("blur", endEdit);
   };
-  td.addEventListener("click", e => {
+  td.addEventListener("dblclick", e => {
     e.stopPropagation();
     const isAllowed =
       !guard || typeof guard.isRowSelected !== "function" || guard.isRowSelected() === true;
@@ -3730,7 +3743,7 @@ function renderEventTableRows(target, events, options = {}) {
       "Dur (ms)"
     ];
     if (showVideoTime) headers.push("Video");
-    if (showSeek) headers.push("Azione");
+    headers.push("Elimina");
     headers.forEach(h => {
       const th = document.createElement("th");
       th.textContent = h;
@@ -3996,27 +4009,29 @@ function renderEventTableRows(target, events, options = {}) {
       }
       if (typeof cell.onClick === "function") {
         td.classList.add("clickable-cell");
-        td.addEventListener("click", e => cell.onClick(e, td));
+        td.addEventListener("dblclick", e => cell.onClick(e, td));
       }
       tr.appendChild(td);
     });
     rowRecords.push({ key, tr, idx: displayIdx, ev, videoTime, checkbox: rowCheckbox });
-    if (showSeek) {
-      const actionTd = document.createElement("td");
-      const link = document.createElement("span");
-      link.className = "video-seek-link";
-      link.textContent = "▶ Vai";
-      link.title = "Apri al timestamp";
-      link.addEventListener("click", () => seekVideoToTime(videoTime));
-      actionTd.appendChild(link);
-      tr.appendChild(actionTd);
-      tr.addEventListener("dblclick", () => {
-        seekVideoToTime(videoTime);
-      });
-    }
+    tr.addEventListener("dblclick", () => {
+      if (showSeek) seekVideoToTime(videoTime);
+    });
     if (enableSelection) {
       tr.addEventListener("click", e => handleRowClick({ key, tr, idx: displayIdx }, e));
     }
+    const deleteTd = document.createElement("td");
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "small danger";
+    deleteBtn.textContent = "✕";
+    deleteBtn.title = "Elimina skill";
+    deleteBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      deleteEventByKey(key);
+    });
+    deleteTd.appendChild(deleteBtn);
+    tr.appendChild(deleteTd);
     tbody.appendChild(tr);
   });
   if (enableSelection && ctxRef) {
@@ -4095,8 +4110,8 @@ function renderVideoAnalysis() {
     elVideoSkillsContainer,
     filteredEvents,
     {
-      showSeek: true,
-      showVideoTime: true,
+      showSeek: false,
+      showVideoTime: false,
       baseMs,
       tableClass: "video-skills-table event-edit-table",
       enableSelection: true,
@@ -7508,6 +7523,29 @@ function undoLastEvent() {
   renderLiberoChipsInline();
   renderLineupChips();
   updateRotationDisplay();
+}
+function deleteEventByKey(eventKey) {
+  if (!eventKey) return;
+  const evIndex = (state.events || []).findIndex((ev, idx) => getEventKey(ev, idx) === eventKey);
+  if (evIndex === -1) return;
+  const ev = state.events[evIndex];
+  const label = ev
+    ? `${formatNameWithNumber(ev.playerName || "")} ${ev.skillId || ""} ${ev.code || ""}`.trim()
+    : "questa skill";
+  if (!confirm(`Eliminare ${label}?`)) return;
+  state.events.splice(evIndex, 1);
+  clearEventSelection();
+  recomputeServeFlagsFromHistory();
+  saveState();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
 }
 function applyAggColumnsVisibility() {
   ensureMetricsConfigDefaults();

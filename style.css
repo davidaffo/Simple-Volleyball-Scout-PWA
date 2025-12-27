@@ -2356,9 +2356,15 @@ tbody tr:hover {
   background: rgba(45, 108, 223, 0.22);
   box-shadow: inset 2px 0 0 0 #3b82f6;
 }
+.event-row.selected:hover {
+  background: rgba(45, 108, 223, 0.32);
+}
 body[data-theme="light"] .event-row.selected {
   background: #dbeafe;
   box-shadow: inset 2px 0 0 0 #2563eb;
+}
+body[data-theme="light"] .event-row.selected:hover {
+  background: #c7d9fb;
 }
 .row-select {
   width: 36px;
