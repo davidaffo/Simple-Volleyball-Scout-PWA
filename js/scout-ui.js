@@ -34,6 +34,9 @@ const elLineupModalClose = document.getElementById("lineup-modal-close");
 const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
 const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-override");
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
+const courtModalElements = [];
+let courtOverlayEl = null;
+courtModalElements.push(elSkillModal, elLineupModal, elErrorModal, elAttackTrajectoryModal);
 const elServeTypeButtons = document.getElementById("serve-type-buttons");
 const SERVE_START_IMG_NEAR = "images/trajectory/service_start_near.png";
 const SERVE_START_IMG_FAR = "images/trajectory/service_start_far.png";
@@ -76,6 +79,63 @@ let trajectoryDragging = false;
 let trajectoryNetPointId = null;
 let trajectorySetType = null;
 let trajectoryMode = "attack";
+let attackTrajectoryForcePopup = false;
+const attackTrajectoryCourtSizingEls = {
+  content: null,
+  body: null,
+  stage: null
+};
+function setAttackTrajectoryCourtSizing(isCourt) {
+  if (!attackTrajectoryCourtSizingEls.content) {
+    attackTrajectoryCourtSizingEls.content = elAttackTrajectoryModal?.querySelector(".attack-trajectory-content") || null;
+    attackTrajectoryCourtSizingEls.body = elAttackTrajectoryModal?.querySelector(".attack-trajectory-body") || null;
+    attackTrajectoryCourtSizingEls.stage = elAttackTrajectoryModal?.querySelector(".attack-trajectory-stage") || null;
+  }
+  const { content, body, stage } = attackTrajectoryCourtSizingEls;
+  if (isCourt) {
+    if (content) {
+      content.style.width = "100%";
+      content.style.height = "100%";
+      content.style.maxHeight = "100%";
+      content.style.minHeight = "0";
+      content.style.display = "grid";
+      content.style.gridTemplateRows = "1fr auto";
+      content.style.overflow = "hidden";
+    }
+    if (body) {
+      body.style.flex = "1 1 auto";
+      body.style.height = "100%";
+      body.style.minHeight = "0";
+    }
+    if (stage) {
+      stage.style.flex = "1 1 auto";
+      stage.style.height = "100%";
+      stage.style.minHeight = "0";
+      stage.style.maxHeight = "100%";
+    }
+  } else {
+    if (content) {
+      content.style.width = "";
+      content.style.height = "";
+      content.style.maxHeight = "";
+      content.style.minHeight = "";
+      content.style.display = "";
+      content.style.gridTemplateRows = "";
+      content.style.overflow = "";
+    }
+    if (body) {
+      body.style.flex = "";
+      body.style.height = "";
+      body.style.minHeight = "";
+    }
+    if (stage) {
+      stage.style.flex = "";
+      stage.style.height = "";
+      stage.style.minHeight = "";
+      stage.style.maxHeight = "";
+    }
+  }
+}
 let serveTrajectoryType = "JF";
 let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
@@ -87,6 +147,138 @@ let serveTypeFocusPlayer = null;
 let attackInlinePlayer = null;
 let currentEditControl = null;
 let currentEditCell = null;
+let lockedCourtAreaHeight = null;
+function isDesktopCourtModalLayout() {
+  if (state.forceMobileLayout) return false;
+  if (document.body && document.body.classList.contains("force-mobile")) return false;
+  if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return false;
+  return true;
+}
+function updateCourtModalPlacement() {
+  const playersArea = document.querySelector("#court-area") || document.querySelector(".players-area");
+  const useCourt = isDesktopCourtModalLayout();
+  if (typeof document !== "undefined" && document.body) {
+    document.body.classList.toggle("desktop-court-modal", useCourt);
+  }
+  if (!playersArea) return;
+  if (useCourt) {
+    if (!courtOverlayEl) {
+      courtOverlayEl = document.createElement("div");
+      courtOverlayEl.id = "court-overlay";
+      playersArea.appendChild(courtOverlayEl);
+    } else if (courtOverlayEl.parentElement !== playersArea) {
+      playersArea.appendChild(courtOverlayEl);
+    }
+  }
+  courtModalElements.forEach(modal => {
+    if (!modal) return;
+    if (!modal.__originalParent) {
+      modal.__originalParent = modal.parentElement || document.body;
+    }
+    if (modal.classList.contains("force-popup")) {
+      if (modal.__originalParent && modal.parentElement !== modal.__originalParent) {
+        modal.__originalParent.appendChild(modal);
+      }
+      modal.classList.remove("court-modal");
+      modal.style.position = "";
+      modal.style.inset = "";
+      modal.style.width = "";
+      modal.style.height = "";
+      modal.style.padding = "";
+      modal.style.overflow = "";
+      return;
+    }
+    if (useCourt) {
+      if (courtOverlayEl && modal.parentElement !== courtOverlayEl) {
+        courtOverlayEl.appendChild(modal);
+      }
+      modal.classList.add("court-modal");
+      modal.style.position = "absolute";
+      modal.style.inset = "0";
+      modal.style.width = "100%";
+      modal.style.height = "100%";
+      modal.style.padding = "0";
+      modal.style.overflow = "hidden";
+    } else {
+      if (modal.__originalParent && modal.parentElement !== modal.__originalParent) {
+        modal.__originalParent.appendChild(modal);
+      }
+      modal.classList.remove("court-modal");
+      modal.style.position = "";
+      modal.style.inset = "";
+      modal.style.width = "";
+      modal.style.height = "";
+      modal.style.padding = "";
+      modal.style.overflow = "";
+    }
+  });
+}
+function restoreModalToPopup(modal) {
+  if (!modal) return;
+  if (!modal.__originalParent) {
+    modal.__originalParent = modal.parentElement || document.body;
+  }
+  if (modal.__originalParent && modal.parentElement !== modal.__originalParent) {
+    modal.__originalParent.appendChild(modal);
+  }
+  modal.classList.remove("court-modal");
+  modal.style.position = "";
+  modal.style.inset = "";
+  modal.style.width = "";
+  modal.style.height = "";
+  modal.style.padding = "";
+  modal.style.overflow = "";
+}
+function setCourtAreaLocked(isLocked) {
+  const courtArea = document.querySelector("#court-area") || document.querySelector(".players-area");
+  if (!courtArea) return;
+  if (isLocked) {
+    if (lockedCourtAreaHeight === null) {
+      const playerEl = courtArea.querySelector("#players-container");
+      const actionsEl = courtArea.querySelector(".court-actions-bar");
+      const gapValue = window.getComputedStyle(courtArea).gap || "0px";
+      const gap = parseFloat(gapValue) || 0;
+      const getOuterHeight = el => {
+        if (!el) return 0;
+        const rect = el.getBoundingClientRect();
+        const styles = window.getComputedStyle(el);
+        const marginTop = parseFloat(styles.marginTop) || 0;
+        const marginBottom = parseFloat(styles.marginBottom) || 0;
+        return rect.height + marginTop + marginBottom;
+      };
+      if (playerEl && actionsEl) {
+        lockedCourtAreaHeight = Math.ceil(getOuterHeight(playerEl) + getOuterHeight(actionsEl) + gap);
+      } else {
+        lockedCourtAreaHeight = courtArea.offsetHeight || null;
+      }
+    }
+    if (lockedCourtAreaHeight) {
+      courtArea.style.height = `${lockedCourtAreaHeight}px`;
+      courtArea.style.minHeight = `${lockedCourtAreaHeight}px`;
+      courtArea.style.maxHeight = `${lockedCourtAreaHeight}px`;
+    }
+  } else {
+    courtArea.style.height = "";
+    courtArea.style.minHeight = "";
+    courtArea.style.maxHeight = "";
+    lockedCourtAreaHeight = null;
+  }
+}
+function setModalOpenState(isOpen, forcePopup = false) {
+  const useCourt = isDesktopCourtModalLayout() && !forcePopup;
+  if (typeof document !== "undefined" && document.body) {
+    document.body.classList.toggle("desktop-court-modal-open", isOpen && useCourt);
+  }
+  setCourtAreaLocked(isOpen && useCourt);
+  if (useCourt) return;
+  if (isOpen) {
+    document.body.style.overflow = "hidden";
+    document.body.classList.add("modal-open");
+  } else {
+    document.body.style.overflow = "";
+    document.body.classList.remove("modal-open");
+  }
+}
 function isBackRowZone(z) {
   return z === 5 || z === 6 || z === 1;
 }
@@ -475,14 +667,18 @@ function openMobileLineupModal() {
   lineupModalCourt = cloneCourt(baseCourt);
   renderLineupModal();
   if (elLineupModal) {
+    if (isDesktopCourtModalLayout()) {
+      setCourtAreaLocked(true);
+    }
+    updateCourtModalPlacement();
     elLineupModal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
+    setModalOpenState(true);
   }
 }
 function closeLineupModal() {
   if (elLineupModal) {
     elLineupModal.classList.add("hidden");
-    document.body.classList.remove("modal-open");
+    setModalOpenState(false);
   }
   lineupDragName = "";
   lineupSelectedName = "";
@@ -644,7 +840,8 @@ function resizeTrajectoryCanvas() {
   canvas.style.width = rect.width + "px";
   canvas.style.height = height + "px";
   if (canvas.parentElement) {
-    canvas.parentElement.style.height = height + "px";
+    const inCourtModal = !!(elAttackTrajectoryModal && elAttackTrajectoryModal.classList.contains("court-modal"));
+    canvas.parentElement.style.height = inCourtModal ? "" : height + "px";
   }
   drawTrajectory();
 }
@@ -817,6 +1014,20 @@ function openAttackTrajectoryModal(prefill = null) {
       resolve(null);
       return;
     }
+    const forcePopup = !!(prefill && prefill.forcePopup);
+    attackTrajectoryForcePopup = forcePopup;
+    if (!forcePopup) {
+      elAttackTrajectoryModal.classList.remove("force-popup");
+      if (isDesktopCourtModalLayout()) {
+        setCourtAreaLocked(true);
+        setAttackTrajectoryCourtSizing(true);
+      }
+      updateCourtModalPlacement();
+    } else {
+      elAttackTrajectoryModal.classList.add("force-popup");
+      setAttackTrajectoryCourtSizing(false);
+      restoreModalToPopup(elAttackTrajectoryModal);
+    }
     const mode = (prefill && prefill.mode) || "attack";
     trajectoryMode = mode;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
@@ -866,7 +1077,7 @@ function openAttackTrajectoryModal(prefill = null) {
       serveTypeKeyHandler = null;
     }
     elAttackTrajectoryModal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
+    setModalOpenState(true, forcePopup);
     const applyPrefill = () => {
       if (!elAttackTrajectoryCanvas || elAttackTrajectoryCanvas.width === 0 || elAttackTrajectoryCanvas.height === 0) {
         return;
@@ -917,7 +1128,10 @@ function openAttackTrajectoryModal(prefill = null) {
 function closeAttackTrajectoryModal(result = null) {
   if (!elAttackTrajectoryModal) return;
   elAttackTrajectoryModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setModalOpenState(false, attackTrajectoryForcePopup);
+  setAttackTrajectoryCourtSizing(false);
+  elAttackTrajectoryModal.classList.remove("force-popup");
+  attackTrajectoryForcePopup = false;
   trajectoryBaseZone = null;
   trajectorySetType = null;
   trajectoryMode = "attack";
@@ -930,11 +1144,12 @@ function closeAttackTrajectoryModal(result = null) {
     trajectoryResolver = null;
   }
 }
-async function captureServeTrajectory(event) {
+async function captureServeTrajectory(event, { forcePopup = false } = {}) {
   try {
     const startRes = await openAttackTrajectoryModal({
       mode: "serve-start",
-      start: event.serveStart || null
+      start: event.serveStart || null,
+      forcePopup
     });
     if (startRes && startRes.serveType) {
       event.serveType = startRes.serveType;
@@ -944,7 +1159,8 @@ async function captureServeTrajectory(event) {
     }
     const endRes = await openAttackTrajectoryModal({
       mode: "serve-end",
-      end: event.serveEnd || null
+      end: event.serveEnd || null,
+      forcePopup
     });
     if (endRes && endRes.point) {
       event.serveEnd = endRes.point;
@@ -1630,25 +1846,35 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
 }
 function openSkillModal(playerIdx, playerName) {
   if (!elSkillModal || !elSkillModalBody) return;
+  if (isDesktopCourtModalLayout()) {
+    setCourtAreaLocked(true);
+  }
+  updateCourtModalPlacement();
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
   if (isNaN(idx) || !state.players[idx]) return;
   renderSkillChoice(idx, playerName);
   elSkillModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  document.body.classList.add("modal-open");
+  setModalOpenState(true);
 }
 function openSkillCodesModal(playerIdx, playerName, skillId) {
   if (!elSkillModal || !elSkillModalBody) return;
+  if (isDesktopCourtModalLayout()) {
+    setCourtAreaLocked(true);
+  }
+  updateCourtModalPlacement();
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
   if (isNaN(idx) || !state.players[idx]) return;
   if (!skillId) return;
   renderSkillCodes(idx, playerName, skillId);
   elSkillModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  document.body.classList.add("modal-open");
+  setModalOpenState(true);
 }
 function openSubModal(posIdx) {
   if (!elSkillModal || !elSkillModalBody) return;
+  if (isDesktopCourtModalLayout()) {
+    setCourtAreaLocked(true);
+  }
+  updateCourtModalPlacement();
   modalMode = "sub";
   modalSubPosIdx = posIdx;
   elSkillModalBody.innerHTML = "";
@@ -1684,14 +1910,12 @@ function openSubModal(posIdx) {
     });
   }
   elSkillModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  document.body.classList.add("modal-open");
+  setModalOpenState(true);
 }
 function closeSkillModal() {
   if (!elSkillModal) return;
   elSkillModal.classList.add("hidden");
-  document.body.style.overflow = "";
-  document.body.classList.remove("modal-open");
+  setModalOpenState(false);
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
@@ -1737,15 +1961,17 @@ function renderErrorModal() {
 function openErrorModal() {
   if (!elErrorModal) return;
   renderErrorModal();
+  if (isDesktopCourtModalLayout()) {
+    setCourtAreaLocked(true);
+  }
+  updateCourtModalPlacement();
   elErrorModal.classList.remove("hidden");
-  document.body.style.overflow = "hidden";
-  document.body.classList.add("modal-open");
+  setModalOpenState(true);
 }
 function closeErrorModal() {
   if (!elErrorModal) return;
   elErrorModal.classList.add("hidden");
-  document.body.style.overflow = "";
-  document.body.classList.remove("modal-open");
+  setModalOpenState(false);
 }
 function attachModalCloseHandlers() {
   const closeHandler = e => {
@@ -4177,7 +4403,7 @@ function renderEventTableRows(target, events, options = {}) {
         classes: ["traj-cell"],
         onClick: e => {
           e.stopPropagation();
-          captureServeTrajectory(ev).then(() => {
+          captureServeTrajectory(ev, { forcePopup: true }).then(() => {
             renderEventTableRows(target, events, options);
           });
         }
@@ -4187,7 +4413,7 @@ function renderEventTableRows(target, events, options = {}) {
         classes: ["traj-cell"],
         onClick: e => {
           e.stopPropagation();
-          captureServeTrajectory(ev).then(() => {
+          captureServeTrajectory(ev, { forcePopup: true }).then(() => {
             renderEventTableRows(target, events, options);
           });
         }
@@ -4246,7 +4472,7 @@ function renderEventTableRows(target, events, options = {}) {
                   setType: ev.setType || null
                 }
               : { baseZone: baseZonePrefill, setType: ev.setType || null };
-          openAttackTrajectoryModal(prefill).then(coords => {
+          openAttackTrajectoryModal(Object.assign({ forcePopup: true }, prefill)).then(coords => {
             if (!coords || !coords.start || !coords.end) return;
             const mapZone = z => mapBackRowZone(z, baseZonePrefill);
             const trajectoryPayload = {
@@ -8078,8 +8304,10 @@ function init() {
   const applyForceMobileLayout = enabled => {
     document.body.classList.toggle("force-mobile", !!enabled);
     renderPlayers();
+    updateCourtModalPlacement();
   };
   applyForceMobileLayout(!!state.forceMobileLayout);
+  updateCourtModalPlacement();
   if (!state.players || state.players.length === 0) {
     applyTemplateTeam({ askReset: false });
   } else {
@@ -8501,6 +8729,9 @@ function init() {
       loadSelectedMatch();
     });
   }
+  window.addEventListener("resize", () => {
+    updateCourtModalPlacement();
+  });
   if (elBtnRotateCw) {
     elBtnRotateCw.addEventListener("click", () => rotateCourt("cw"));
   }
