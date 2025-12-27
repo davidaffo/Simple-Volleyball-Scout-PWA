@@ -2677,7 +2677,24 @@ function buildSelectedSegments() {
     .sort((a, b) => a.start - b.start);
   return segments;
 }
-function buildFfmpegConcatCommand(segments) {
+function getFileBasename(name) {
+  if (!name) return "";
+  const cleaned = String(name).split(/[\\/]/).pop();
+  return cleaned || "";
+}
+function getFileExtension(name) {
+  const base = getFileBasename(name);
+  const idx = base.lastIndexOf(".");
+  if (idx > 0 && idx < base.length - 1) return base.slice(idx);
+  return "";
+}
+function stripFileExtension(name) {
+  const base = getFileBasename(name);
+  const idx = base.lastIndexOf(".");
+  if (idx > 0) return base.slice(0, idx);
+  return base;
+}
+function buildFfmpegConcatCommand(segments, inputName, outputName) {
   if (!segments || !segments.length) return "";
   const trims = segments
     .map((seg, idx) => {
@@ -2688,7 +2705,9 @@ function buildFfmpegConcatCommand(segments) {
     })
     .join(";");
   const concat = segments.map((_, idx) => `[v${idx}][a${idx}]`).join("") + `concat=n=${segments.length}:v=1:a=1[outv][outa]`;
-  return `ffmpeg -i input.mp4 -filter_complex "${trims};${concat}" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac output.mp4`;
+  const input = inputName || "input.mp4";
+  const output = outputName || "output.mp4";
+  return `ffmpeg -i "${input}" -filter_complex "${trims};${concat}" -map "[outv]" -map "[outa]" -c:v libx264 -c:a aac "${output}"`;
 }
 async function copyFfmpegFromSelection() {
   const segments = buildSelectedSegments();
@@ -2696,7 +2715,18 @@ async function copyFfmpegFromSelection() {
     alert("Seleziona uno o più eventi per generare il comando ffmpeg.");
     return;
   }
-  const cmd = buildFfmpegConcatCommand(segments);
+  const inputName = state.video && state.video.youtubeId ? "" : getFileBasename(state.video && state.video.fileName);
+  if (!inputName) {
+    alert("Carica un file video locale per usare il comando ffmpeg.");
+    return;
+  }
+  const ext = getFileExtension(inputName);
+  const defaultBase = stripFileExtension(inputName) || "output";
+  const outputBase = prompt("Nome file output (senza estensione):", defaultBase + "_clip");
+  if (!outputBase) return;
+  const sanitizedBase = stripFileExtension(outputBase.trim()) || "output";
+  const outputName = sanitizedBase + ext;
+  const cmd = buildFfmpegConcatCommand(segments, inputName, outputName);
   try {
     await navigator.clipboard.writeText(cmd);
   } catch (_) {
@@ -2707,7 +2737,7 @@ async function copyFfmpegFromSelection() {
     document.execCommand("copy");
     ta.remove();
   }
-  alert("Comando ffmpeg copiato negli appunti. Sostituisci input.mp4/output.mp4 a piacere.");
+  alert("Comando ffmpeg copiato negli appunti.");
 }
 function renderEventsLog(options = {}) {
   if (elEventsLog) elEventsLog.innerHTML = "";
@@ -4833,6 +4863,57 @@ function isTypingTarget(el) {
   if (editable) return true;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
   return false;
+}
+function getActiveVideoElement() {
+  if (activeTab === "video") return elAnalysisVideo || null;
+  if (activeTab === "scout" && state.videoScoutMode) return elAnalysisVideoScout || null;
+  return null;
+}
+function handleVideoShortcut(e) {
+  if (e.defaultPrevented) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (isTypingTarget(e.target)) return;
+  if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
+  const video = getActiveVideoElement();
+  if (!video) return;
+  const duration = Number.isFinite(video.duration) ? video.duration : null;
+  const clampTime = next => {
+    if (duration == null) return Math.max(0, next);
+    return Math.max(0, Math.min(duration, next));
+  };
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+    return;
+  }
+  if (e.shiftKey && e.key === "ArrowRight") {
+    e.preventDefault();
+    video.pause();
+    video.currentTime = clampTime(video.currentTime + 1 / 30);
+    return;
+  }
+  if (e.shiftKey && e.key === "ArrowLeft") {
+    e.preventDefault();
+    video.pause();
+    video.currentTime = clampTime(video.currentTime - 1 / 30);
+    return;
+  }
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    video.pause();
+    video.currentTime = clampTime(video.currentTime + 5);
+    return;
+  }
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    video.pause();
+    video.currentTime = clampTime(video.currentTime - 5);
+    return;
+  }
 }
 function handleSetTypeHotkeys(e) {
   if (e.defaultPrevented) return;
@@ -7555,6 +7636,7 @@ function init() {
   isLoadingMatch = true;
   initTabs();
   initSwipeTabs();
+  document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
