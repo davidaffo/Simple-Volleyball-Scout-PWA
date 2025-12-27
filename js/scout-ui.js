@@ -12,7 +12,9 @@ function isSkillEnabled(skillId) {
 const selectedSkillPerPlayer = {};
 const serveMetaByPlayer = {};
 const attackMetaByPlayer = {};
+const blockConfirmByPlayer = {};
 const serveTypeSelectHandlers = {};
+let blockInlinePlayer = null;
 const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
@@ -528,9 +530,22 @@ function setSelectedSkill(playerIdx, skillId) {
     if (skillId !== "serve") {
       delete serveMetaByPlayer[playerIdx];
     }
+    if (skillId === "block") {
+      blockConfirmByPlayer[playerIdx] = false;
+      blockInlinePlayer = playerIdx;
+    } else {
+      delete blockConfirmByPlayer[playerIdx];
+      if (blockInlinePlayer === playerIdx) {
+        blockInlinePlayer = null;
+      }
+    }
   } else {
     delete selectedSkillPerPlayer[playerIdx];
     delete serveMetaByPlayer[playerIdx];
+    delete blockConfirmByPlayer[playerIdx];
+    if (blockInlinePlayer === playerIdx) {
+      blockInlinePlayer = null;
+    }
   }
 }
 function getSelectedSkill(playerIdx) {
@@ -1837,6 +1852,38 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   if (isCompactMobile) {
     const pickedSkillId = nextSkillId || null;
+    if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+      return;
+    }
+    if (pickedSkillId === "block" && blockConfirmByPlayer[playerIdx] !== true) {
+      const grid = document.createElement("div");
+      grid.className = "code-grid block-confirm-grid";
+      const skipBtn = document.createElement("button");
+      skipBtn.type = "button";
+      skipBtn.className = "event-btn block-confirm-skip";
+      skipBtn.textContent = "No muro";
+      skipBtn.addEventListener("click", () => {
+        delete blockConfirmByPlayer[playerIdx];
+        if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
+        setSelectedSkill(playerIdx, null);
+        const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
+        if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
+        renderPlayers();
+      });
+      const goBtn = document.createElement("button");
+      goBtn.type = "button";
+      goBtn.className = "event-btn block-confirm-go";
+      goBtn.textContent = "Muro";
+      goBtn.addEventListener("click", () => {
+        blockInlinePlayer = playerIdx;
+        blockConfirmByPlayer[playerIdx] = true;
+        renderPlayers();
+      });
+      grid.appendChild(skipBtn);
+      grid.appendChild(goBtn);
+      targetEl.appendChild(grid);
+      return;
+    }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "skill-picker-btn skill-single-btn" + (pickedSkillId ? " skill-" + pickedSkillId : "");
@@ -1872,6 +1919,9 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const grid = document.createElement("div");
     grid.className = "skill-grid";
     enabledSkills.forEach(skill => {
+      if (skill.id === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+        return;
+      }
       const colors = getSkillColors(skill.id);
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1974,6 +2024,45 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
     return;
   }
+  if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+    return;
+  }
+  if (pickedSkillId === "block" && blockConfirmByPlayer[playerIdx] !== true) {
+    const grid = document.createElement("div");
+    grid.className = "code-grid block-confirm-grid";
+    const title = document.createElement("div");
+    title.className = "skill-header";
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "skill-title skill-block";
+    titleSpan.textContent = "Muro";
+    title.appendChild(titleSpan);
+    grid.appendChild(title);
+    const skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "event-btn block-confirm-skip";
+    skipBtn.textContent = "No muro";
+    skipBtn.addEventListener("click", () => {
+      delete blockConfirmByPlayer[playerIdx];
+      if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
+      setSelectedSkill(playerIdx, null);
+      const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
+      if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
+      renderPlayers();
+    });
+    const goBtn = document.createElement("button");
+    goBtn.type = "button";
+    goBtn.className = "event-btn block-confirm-go";
+    goBtn.textContent = "Muro";
+    goBtn.addEventListener("click", () => {
+      blockInlinePlayer = playerIdx;
+      blockConfirmByPlayer[playerIdx] = true;
+      renderPlayers();
+    });
+    grid.appendChild(skipBtn);
+    grid.appendChild(goBtn);
+    targetEl.appendChild(grid);
+    return;
+  }
   const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
   const codes = (state.metricsConfig[pickedSkillId]?.activeCodes || RESULT_CODES).slice();
   if (!codes.includes("/")) codes.push("/");
@@ -2017,6 +2106,10 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       }
       if (pickedSkillId === "attack") {
         clearAttackSelection(playerIdx);
+      }
+      if (pickedSkillId === "block") {
+        delete blockConfirmByPlayer[playerIdx];
+        if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
       }
       setSelectedSkill(playerIdx, null);
       if (closeAfterAction) closeSkillModal();

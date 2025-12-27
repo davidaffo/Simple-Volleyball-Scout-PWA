@@ -1778,6 +1778,28 @@ body[data-theme="light"] .skill-row {
 .event-btn.code-positive:hover { border-color: #22c55e; }
 .event-btn.code-neutral:hover { border-color: #eab308; }
 .event-btn.code-negative:hover { border-color: #ef4444; }
+.event-btn.block-confirm-skip {
+  background: #374151;
+  border-color: #4b5563;
+}
+.event-btn.block-confirm-go {
+  background: #16a34a;
+  border-color: #15803d;
+}
+.event-btn.block-confirm-skip:hover {
+  background: #4b5563;
+}
+.event-btn.block-confirm-go:hover {
+  background: #22c55e;
+}
+.block-confirm-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.block-confirm-grid .event-btn {
+  width: 100%;
+}
 .event-btn.danger {
   background: #b3261e;
   border-color: #b3261e;
