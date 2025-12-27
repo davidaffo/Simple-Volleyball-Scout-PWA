@@ -5107,6 +5107,13 @@ function handleVideoShortcut(e) {
     if (duration == null) return Math.max(0, next);
     return Math.max(0, Math.min(duration, next));
   };
+  const seekBy = delta => {
+    const wasPaused = video.paused;
+    video.currentTime = clampTime(video.currentTime + delta);
+    if (!wasPaused) {
+      video.play().catch(() => {});
+    }
+  };
   if (e.code === "Space") {
     e.preventDefault();
     if (video.paused) {
@@ -5118,26 +5125,22 @@ function handleVideoShortcut(e) {
   }
   if (e.shiftKey && e.key === "ArrowRight") {
     e.preventDefault();
-    video.pause();
-    video.currentTime = clampTime(video.currentTime + 1 / 30);
+    seekBy(1 / 30);
     return;
   }
   if (e.shiftKey && e.key === "ArrowLeft") {
     e.preventDefault();
-    video.pause();
-    video.currentTime = clampTime(video.currentTime - 1 / 30);
+    seekBy(-1 / 30);
     return;
   }
   if (e.key === "ArrowRight") {
     e.preventDefault();
-    video.pause();
-    video.currentTime = clampTime(video.currentTime + 5);
+    seekBy(3);
     return;
   }
   if (e.key === "ArrowLeft") {
     e.preventDefault();
-    video.pause();
-    video.currentTime = clampTime(video.currentTime - 5);
+    seekBy(-3);
     return;
   }
 }
