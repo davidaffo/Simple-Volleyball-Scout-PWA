@@ -5144,6 +5144,33 @@ function handleVideoShortcut(e) {
     return;
   }
 }
+function syncMatchInfoInputs(match) {
+  if (!match) return;
+  const opponent = document.getElementById("match-opponent");
+  const category = document.getElementById("match-category");
+  const date = document.getElementById("match-date");
+  const matchType = document.getElementById("match-type");
+  const leg = document.getElementById("match-leg");
+  if (opponent) opponent.value = match.opponent || "";
+  if (category) category.value = match.category || "";
+  if (date) date.value = match.date || "";
+  if (matchType) matchType.value = match.matchType || "amichevole";
+  if (leg) leg.value = match.leg || "";
+}
+function getMatchInfoFromInputs() {
+  const opponent = document.getElementById("match-opponent");
+  const category = document.getElementById("match-category");
+  const date = document.getElementById("match-date");
+  const matchType = document.getElementById("match-type");
+  const leg = document.getElementById("match-leg");
+  return {
+    opponent: (opponent && opponent.value ? opponent.value.trim() : "") || "",
+    category: (category && category.value ? category.value.trim() : "") || "",
+    date: (date && date.value) || "",
+    matchType: (matchType && matchType.value) || "amichevole",
+    leg: (leg && leg.value) || ""
+  };
+}
 function handleSetTypeHotkeys(e) {
   if (e.defaultPrevented) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -7920,6 +7947,9 @@ function ensureBaseRotationDefault() {
 }
 function init() {
   isLoadingMatch = true;
+  if (typeof window !== "undefined") {
+    window.isLoadingMatch = true;
+  }
   initTabs();
   initSwipeTabs();
   document.addEventListener("keydown", handleVideoShortcut, true);
@@ -7988,7 +8018,11 @@ function init() {
   });
   [elOpponent, elCategory, elDate, elLeg, elMatchType].forEach(input => {
     if (!input) return;
-    const handler = () => saveMatchInfoFromUI();
+    const handler = () => {
+      saveMatchInfoFromUI();
+      if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+      if (typeof renderMatchSummary === "function") renderMatchSummary();
+    };
     input.addEventListener("change", handler);
     input.addEventListener("blur", handler);
   });
@@ -8245,6 +8279,119 @@ function init() {
       const input = e.target;
       const file = input && input.files && input.files[0];
       if (file) handleImportDatabaseFile(file);
+    });
+  }
+  const openMatchManager = () => {
+    if (!elMatchManagerModal) return;
+    elMatchManagerModal.classList.remove("hidden");
+    document.body.classList.add("modal-open");
+    if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+    if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
+    if (typeof renderMatchSummary === "function") renderMatchSummary();
+  };
+  const closeMatchManager = () => {
+    if (!elMatchManagerModal) return;
+    elMatchManagerModal.classList.add("hidden");
+    document.body.classList.remove("modal-open");
+  };
+  if (elBtnOpenMatchManager) {
+    elBtnOpenMatchManager.addEventListener("click", openMatchManager);
+  }
+  if (elMatchManagerClose) {
+    elMatchManagerClose.addEventListener("click", closeMatchManager);
+  }
+  if (elMatchManagerModal) {
+    elMatchManagerModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeMatchManager !== undefined) {
+        closeMatchManager();
+      }
+    });
+  }
+  if (elSavedMatchesList) {
+    elSavedMatchesList.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".match-list-open");
+      if (!btn) return;
+      const name = btn.dataset.matchName || "";
+      if (elSavedMatchesSelect) {
+        elSavedMatchesSelect.value = name;
+      }
+      if (name) {
+        state.selectedMatch = name;
+      }
+      const cached = state.savedMatches && state.savedMatches[name];
+      if (cached && cached.state && cached.state.match) {
+        state.match = Object.assign({}, cached.state.match);
+        syncMatchInfoInputs(cached.state.match);
+      }
+      if (typeof loadMatchFromStorage === "function") {
+        const data = loadMatchFromStorage(name);
+        if (!data || !data.state) {
+          alert("Match non trovato o corrotto.");
+          return;
+        }
+        if (typeof applyMatchPayload === "function") {
+          isLoadingMatch = true;
+          if (typeof window !== "undefined") {
+            window.isLoadingMatch = true;
+          }
+          applyMatchPayload(data, { selectedName: name, silent: true });
+          isLoadingMatch = false;
+          if (typeof window !== "undefined") {
+            window.isLoadingMatch = false;
+          }
+        }
+        if (data.state.match) {
+          state.match = Object.assign({}, data.state.match);
+          syncMatchInfoInputs(data.state.match);
+          requestAnimationFrame(() => {
+            syncMatchInfoInputs(data.state.match);
+          });
+        }
+      }
+      if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
+      if (typeof renderMatchSummary === "function") renderMatchSummary();
+      updateMatchButtonsState();
+    });
+  }
+  if (elBtnSaveMatchInfo) {
+    elBtnSaveMatchInfo.addEventListener("click", () => {
+      const selectedName = (elSavedMatchesSelect && elSavedMatchesSelect.value) || state.selectedMatch || "";
+      if (selectedName) {
+        state.selectedMatch = selectedName;
+      }
+      saveMatchInfoFromUI();
+      if (typeof saveMatchToStorage === "function" && typeof buildMatchExportPayload === "function") {
+        const matchInfo = getMatchInfoFromInputs();
+        const desiredName =
+          state.selectedMatch ||
+          (typeof generateMatchName === "function" ? generateMatchName("") : "") ||
+          "Match";
+        const payload = buildMatchExportPayload();
+        payload.name = desiredName;
+        payload.state.match = Object.assign({}, payload.state.match || {}, matchInfo);
+        state.match = Object.assign({}, payload.state.match);
+        state.selectedMatch = desiredName;
+        state.savedMatches = state.savedMatches || {};
+        state.savedMatches[desiredName] = payload;
+        saveMatchToStorage(desiredName, payload);
+        syncMatchInfoInputs(payload.state.match);
+      } else if (typeof persistCurrentMatch === "function") {
+        persistCurrentMatch();
+      }
+      if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+      if (typeof renderMatchSummary === "function") renderMatchSummary();
+      alert("Info match salvate.");
+    });
+  }
+  if (elBtnNewMatch) {
+    elBtnNewMatch.addEventListener("click", () => {
+      if (!elSavedMatchesSelect) return;
+      elSavedMatchesSelect.value = "";
+      loadSelectedMatch();
     });
   }
   if (elTeamsSelect) {
@@ -9041,6 +9188,9 @@ function init() {
   attachModalCloseHandlers();
   registerServiceWorker();
   isLoadingMatch = false;
+  if (typeof window !== "undefined") {
+    window.isLoadingMatch = false;
+  }
   if (linkImport && linkImport.imported) {
     saveState();
     if (linkImport.name) {

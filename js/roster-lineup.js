@@ -72,6 +72,9 @@ const FRONT_ROW_INDEXES = new Set([1, 2, 3]); // pos2, pos3, pos4
 const BACK_ROW_INDEXES = new Set([0, 4, 5]); // pos1, pos5, pos6
 const AUTO_LIBERO_ROLE_OPTIONS = ["", "P", "S", "C", "O"];
 let isLoadingMatch = false;
+if (typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined") {
+  isLoadingMatch = !!window.isLoadingMatch;
+}
 const lineupCore = (typeof window !== "undefined" && window.LineupCore) || null;
 const autoRoleCore =
   (typeof window !== "undefined" &&
@@ -118,7 +121,14 @@ const elBtnExportMatch = document.getElementById("btn-export-match");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
 const elSavedMatchesSelect = document.getElementById("saved-matches");
+const elSavedMatchesList = document.getElementById("saved-matches-list");
 const elBtnDeleteMatch = document.getElementById("btn-delete-match");
+const elBtnNewMatch = document.getElementById("btn-new-match");
+const elBtnOpenMatchManager = document.getElementById("btn-open-match-manager");
+const elMatchManagerModal = document.getElementById("match-manager-modal");
+const elMatchManagerClose = document.getElementById("match-manager-close");
+const elBtnSaveMatchInfo = document.getElementById("btn-save-match-info");
+const elMatchSummary = document.getElementById("match-summary");
 const elBtnOpenTeamManager = document.getElementById("btn-open-team-manager");
 const elTeamManagerModal = document.getElementById("team-manager-modal");
 const elTeamManagerClose = document.getElementById("team-manager-close");
@@ -417,7 +427,11 @@ function saveState() {
     syncTeamsFromStorage();
     syncOpponentTeamsFromStorage();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if (!isLoadingMatch) {
+    const loading =
+      typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
+        ? !!window.isLoadingMatch
+        : isLoadingMatch;
+    if (!loading) {
       persistCurrentMatch();
     }
   } catch (e) {
@@ -1223,6 +1237,7 @@ window.applyMatchInfoToUI = applyMatchInfoToUI;
 window.saveMatchInfoFromUI = saveMatchInfoFromUI;
 window.applyPlayersFromStateToTextarea = applyPlayersFromStateToTextarea;
 window.applyOpponentPlayersFromStateToTextarea = applyOpponentPlayersFromStateToTextarea;
+window.renderMatchSummary = renderMatchSummary;
 
 const opponentSettings =
   (typeof window !== "undefined" &&
@@ -1652,9 +1667,14 @@ function renderMatchesSelect() {
   placeholder.textContent = "Nuovo match (vuoto)";
   elSavedMatchesSelect.appendChild(placeholder);
   names.forEach(name => {
+    const payload = state.savedMatches && state.savedMatches[name];
+    const label =
+      payload && payload.state && payload.state.match
+        ? buildMatchDisplayName(payload.state.match)
+        : name;
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = name;
+    opt.textContent = label || name;
     elSavedMatchesSelect.appendChild(opt);
   });
   if (prev && names.includes(prev)) {
@@ -1664,7 +1684,40 @@ function renderMatchesSelect() {
     elSavedMatchesSelect.value = "";
     state.selectedMatch = "";
   }
+  renderMatchesList(names, elSavedMatchesSelect.value || "");
+  renderMatchSummary();
   updateMatchButtonsState();
+}
+function renderMatchesList(names, selected) {
+  if (!elSavedMatchesList) return;
+  elSavedMatchesList.innerHTML = "";
+  if (!names || names.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "match-list-empty";
+    empty.textContent = "Nessun match salvato.";
+    elSavedMatchesList.appendChild(empty);
+    return;
+  }
+  names.forEach(name => {
+    const payload = state.savedMatches && state.savedMatches[name];
+    const label =
+      payload && payload.state && payload.state.match
+        ? buildMatchDisplayName(payload.state.match)
+        : name;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "match-list-item match-list-open" + (name === selected ? " active" : "");
+    btn.dataset.matchName = name;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", name === selected ? "true" : "false");
+    btn.textContent = label || name;
+    elSavedMatchesList.appendChild(btn);
+  });
+}
+function renderMatchSummary() {
+  if (!elMatchSummary) return;
+  const label = buildMatchDisplayName(state.match);
+  elMatchSummary.textContent = label || "—";
 }
 function getCurrentTeamPayload(name = "") {
   const safeName = (name || state.selectedTeam || state.match.opponent || "squadra").trim();
@@ -1864,12 +1917,18 @@ function loadSelectedMatch() {
     return;
   }
   isLoadingMatch = true;
+  if (typeof window !== "undefined") {
+    window.isLoadingMatch = true;
+  }
   applyMatchPayload(data, { selectedName: name, silent: true });
   isLoadingMatch = false;
+  if (typeof window !== "undefined") {
+    window.isLoadingMatch = false;
+  }
 }
 function deleteSelectedMatch() {
-  if (!elSavedMatchesSelect) return;
-  const name = elSavedMatchesSelect.value;
+  if (!elSavedMatchesSelect && !elSavedMatchesList) return;
+  const name = elSavedMatchesSelect ? elSavedMatchesSelect.value : "";
   if (!name) return;
   const ok = confirm('Eliminare il match "' + name + '"?');
   if (!ok) return;
@@ -2436,8 +2495,8 @@ function updateOpponentTeamButtonsState() {
   }
 }
 function updateMatchButtonsState() {
-  if (!elSavedMatchesSelect) return;
-  const selected = elSavedMatchesSelect.value || "";
+  if (!elSavedMatchesSelect && !elSavedMatchesList) return;
+  const selected = elSavedMatchesSelect ? elSavedMatchesSelect.value || "" : "";
   if (elBtnDeleteMatch) {
     elBtnDeleteMatch.disabled = !selected;
   }
@@ -2449,13 +2508,9 @@ function generateMatchName(base = "") {
 function persistCurrentMatch() {
   if (typeof buildMatchExportPayload !== "function") return;
   state.savedMatches = state.savedMatches || {};
-  const desiredName = generateMatchName(state.selectedMatch);
-  const currentName = state.selectedMatch || desiredName;
+  const currentName = (state.selectedMatch || "").trim();
+  const desiredName = currentName || generateMatchName(state.selectedMatch);
   const payload = getCurrentMatchPayload(desiredName);
-  if (currentName && currentName !== desiredName && state.savedMatches[currentName]) {
-    delete state.savedMatches[currentName];
-    deleteMatchFromStorage(currentName);
-  }
   state.selectedMatch = desiredName;
   state.savedMatches[desiredName] = payload;
   saveMatchToStorage(desiredName, payload);
