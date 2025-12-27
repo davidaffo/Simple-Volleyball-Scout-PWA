@@ -2668,6 +2668,30 @@ function adjustSelectedVideoTimes(deltaSeconds) {
   renderEventsLog();
   handleSeekForSelection(getActiveEventContextKey());
 }
+function adjustCurrentRowVideoTime(deltaSeconds) {
+  const ctxKey = getActiveEventContextKey();
+  if (!ctxKey || !eventTableContexts[ctxKey]) return;
+  const rows = eventTableContexts[ctxKey].rows || [];
+  if (!rows.length) return;
+  const currentKey =
+    (selectedEventIds.size && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
+      ? lastSelectedEventId
+      : selectedEventIds.values().next().value) || rows[0].key;
+  const target = rows.find(r => r.key === currentKey);
+  if (!target || !target.ev) return;
+  const baseMs = getVideoBaseTimeMs(getVideoSkillEvents());
+  const current =
+    typeof target.ev.videoTime === "number"
+      ? target.ev.videoTime
+      : typeof target.videoTime === "number"
+        ? target.videoTime
+        : computeEventVideoTime(target.ev, baseMs);
+  target.ev.videoTime = Math.max(0, current + deltaSeconds);
+  saveState();
+  renderEventsLog();
+  renderVideoAnalysis();
+  handleSeekForSelection(ctxKey);
+}
 function buildSelectedSegments() {
   const rows = getSelectedRows("video");
   const baseRows = rows.length ? rows : getSelectedRows(getActiveEventContextKey());
@@ -8839,6 +8863,12 @@ function init() {
     } else if (e.key === "]" || (e.key === "ArrowRight" && e.altKey)) {
       e.preventDefault();
       adjustSelectedVideoTimes(0.2);
+    } else if (e.key === "q" || e.key === "Q") {
+      e.preventDefault();
+      adjustCurrentRowVideoTime(-0.5);
+    } else if (e.key === "w" || e.key === "W") {
+      e.preventDefault();
+      adjustCurrentRowVideoTime(0.5);
     }
   });
   document.addEventListener("click", e => {
