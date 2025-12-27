@@ -704,6 +704,7 @@ Bianchi 18"></textarea>
             <input id="video-file-input" type="file" accept="video/*" hidden />
             <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
             <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
+            <button id="btn-offset-skills" class="secondary">Offset skill</button>
             <div class="youtube-input">
               <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
               <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
@@ -966,6 +967,22 @@ Bianchi 18"></textarea>
                     <option value="alta">Alta (A)</option>
                   </select>
                 </label>
+      </div>
+    </div>
+  </div>
+  <div id="offset-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="offset-modal-title">
+    <div class="settings-modal__backdrop" data-close-offset></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="offset-modal-title">Offset video per skill (secondi)</h3>
+        <button id="offset-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <div id="offset-skill-grid" class="offset-skill-grid"></div>
+        <div class="offset-actions">
+          <button id="offset-apply" class="small">Applica</button>
+          <button class="small secondary" data-close-offset>Annulla</button>
+        </div>
       </div>
     </div>
   </div>

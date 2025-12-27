@@ -870,6 +870,33 @@ body[data-theme="light"] .settings-modal__content {
   display: grid;
   gap: 0.35rem;
 }
+.offset-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.4rem 0.6rem;
+}
+.offset-skill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+}
+.offset-skill-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.offset-skill-row input[type="number"] {
+  width: 4.5rem;
+  padding: 0.25rem 0.4rem;
+  text-align: right;
+}
+.offset-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
 .lineup-modal__content {
   max-width: 900px;
   width: 90vw;

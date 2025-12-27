@@ -956,6 +956,11 @@ let videoSnapshotTimer = null;
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
+const elBtnOffsetSkills = document.getElementById("btn-offset-skills");
+const elOffsetModal = document.getElementById("offset-modal");
+const elOffsetSkillGrid = document.getElementById("offset-skill-grid");
+const elOffsetClose = document.getElementById("offset-close");
+const elOffsetApply = document.getElementById("offset-apply");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -2495,6 +2500,12 @@ function clearEventSelection({ clearContexts = true } = {}) {
 function updateSelectionStyles() {
   pruneEventSelection();
   Object.values(eventTableContexts).forEach(ctx => {
+    if (ctx.selectAllCheckbox) {
+      const total = ctx.rows ? ctx.rows.length : 0;
+      const selectedCount = ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)).length : 0;
+      ctx.selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < total;
+      ctx.selectAllCheckbox.checked = total > 0 && selectedCount === total;
+    }
     ctx.rows.forEach(r => {
       const selected = selectedEventIds.has(r.key);
       r.tr.dataset.selected = selected ? "true" : "false";
@@ -2807,7 +2818,7 @@ function renderEventsLog(options = {}) {
   const baseMs = getVideoBaseTimeMs(skillEvents);
   renderEventTableRows(elEventsLog, recent, {
     showSeek: false,
-    showVideoTime: false,
+    showVideoTime: true,
     baseMs,
     showIndex: false,
     enableSelection: true,
@@ -2826,6 +2837,69 @@ function renderEventsLog(options = {}) {
   if (elUndoLastSummary) {
     elUndoLastSummary.textContent = compactSummary || "—";
   }
+}
+function openOffsetModal() {
+  if (!elOffsetModal || !elOffsetSkillGrid) return;
+  elOffsetSkillGrid.innerHTML = "";
+  SKILLS.forEach(skill => {
+    const row = document.createElement("div");
+    row.className = "offset-skill-row";
+    const label = document.createElement("label");
+    label.textContent = skill.label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "1";
+    input.value = "0";
+    input.dataset.skillId = skill.id;
+    row.appendChild(label);
+    row.appendChild(input);
+    elOffsetSkillGrid.appendChild(row);
+  });
+  elOffsetModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeOffsetModal() {
+  if (!elOffsetModal) return;
+  elOffsetModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+function applyOffsetsToSelectedSkills() {
+  const ctxKey = getActiveEventContextKey();
+  const rows = ctxKey ? getSelectedRows(ctxKey) : [];
+  if (!rows.length) {
+    alert("Seleziona una o più skill da modificare.");
+    return;
+  }
+  if (!elOffsetSkillGrid) return;
+  const offsets = {};
+  elOffsetSkillGrid.querySelectorAll("input[data-skill-id]").forEach(input => {
+    const id = input.dataset.skillId;
+    const value = parseFloat(input.value || "0");
+    if (id && !isNaN(value) && value !== 0) offsets[id] = value;
+  });
+  if (!Object.keys(offsets).length) {
+    alert("Inserisci almeno un offset diverso da 0.");
+    return;
+  }
+  const baseMs = getVideoBaseTimeMs(getVideoSkillEvents());
+  rows.forEach(r => {
+    const ev = r.ev;
+    if (!ev || !ev.skillId) return;
+    const delta = offsets[ev.skillId];
+    if (!delta) return;
+    const current =
+      typeof ev.videoTime === "number"
+        ? ev.videoTime
+        : typeof r.videoTime === "number"
+          ? r.videoTime
+          : computeEventVideoTime(ev, baseMs);
+    ev.videoTime = Math.max(0, current + delta);
+  });
+  saveState();
+  renderEventsLog();
+  renderVideoAnalysis();
+  handleSeekForSelection(ctxKey);
+  closeOffsetModal();
 }
 function getVideoSkillEvents() {
   return (state.events || [])
@@ -3744,9 +3818,27 @@ function renderEventTableRows(target, events, options = {}) {
     ];
     if (showVideoTime) headers.push("Video");
     headers.push("Elimina");
-    headers.forEach(h => {
+    headers.forEach((h, idx) => {
       const th = document.createElement("th");
-      th.textContent = h;
+      if (enableSelection && showCheckbox && idx === 0) {
+        const selectAll = document.createElement("input");
+        selectAll.type = "checkbox";
+        selectAll.title = "Seleziona tutto";
+        selectAll.addEventListener("change", () => {
+          const ctx = eventTableContexts[contextKey];
+          if (!ctx || !ctx.rows) return;
+          if (selectAll.checked) {
+            const all = new Set(ctx.rows.map(r => r.key));
+            setSelectionForContext(contextKey, all, ctx.rows[0]?.key || null);
+          } else {
+            setSelectionForContext(contextKey, new Set(), null);
+          }
+        });
+        th.appendChild(selectAll);
+        if (ctxRef) ctxRef.selectAllCheckbox = selectAll;
+      } else {
+        th.textContent = h;
+      }
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
@@ -4111,7 +4203,7 @@ function renderVideoAnalysis() {
     filteredEvents,
     {
       showSeek: false,
-      showVideoTime: false,
+      showVideoTime: true,
       baseMs,
       tableClass: "video-skills-table event-edit-table",
       enableSelection: true,
@@ -8322,6 +8414,9 @@ function init() {
     });
     syncFreeballActive();
   }
+  if (elBtnOffsetSkills) {
+    elBtnOffsetSkills.addEventListener("click", openOffsetModal);
+  }
   if (elBtnOpenSettings) {
     elBtnOpenSettings.addEventListener("click", () => {
       if (typeof openSettingsModal === "function") openSettingsModal();
@@ -8340,6 +8435,21 @@ function init() {
         if (typeof closeSettingsModal === "function") closeSettingsModal();
       }
     });
+  }
+  if (elOffsetModal) {
+    elOffsetModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeOffset !== undefined || target.classList.contains("settings-modal__backdrop")) {
+        closeOffsetModal();
+      }
+    });
+  }
+  if (elOffsetClose) {
+    elOffsetClose.addEventListener("click", closeOffsetModal);
+  }
+  if (elOffsetApply) {
+    elOffsetApply.addEventListener("click", applyOffsetsToSelectedSkills);
   }
   if (elAttackTrajectoryModal) {
     const handleCloseTrajectory = () => closeAttackTrajectoryModal(null);
