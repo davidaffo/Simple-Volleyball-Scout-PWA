@@ -349,6 +349,12 @@ button.danger {
 body[data-theme="light"] button.danger {
   background: #dc2626;
 }
+button.success {
+  background: #15803d;
+}
+body[data-theme="light"] button.success {
+  background: #16a34a;
+}
 button.danger:focus,
 button.danger:focus-visible {
   outline: 2px solid #fca5a5;
@@ -1035,6 +1041,25 @@ body[data-theme="light"] .match-list {
   justify-content: flex-end;
   gap: 0.4rem;
   margin-top: 0.4rem;
+}
+.video-time-input {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+.video-time-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.video-time-part input {
+  width: 64px;
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.9rem;
 }
 .lineup-modal__content {
   max-width: 900px;

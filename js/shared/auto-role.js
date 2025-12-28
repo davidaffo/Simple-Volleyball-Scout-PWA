@@ -71,6 +71,9 @@ const INTELLISCOUT_RECEIVE_ASSIGNMENTS = Object.freeze({
       const roleItems = buildRoleItems(lineup, rotation);
       const opposite = roleItems.find(r => r.role === "O");
       const outsides = roleItems.filter(r => r.role === "S1" || r.role === "S2");
+      const libero1 = roleItems.find(r => r.role === "C1");
+      const outside1 = roleItems.find(r => r.role === "S1");
+      const outside2 = roleItems.find(r => r.role === "S2");
       if (!opposite || outsides.length === 0) return null;
       const targetOutside =
         outsides.find(r => frontRowIndexes.has(r.idx)) ||
@@ -88,6 +91,10 @@ const INTELLISCOUT_RECEIVE_ASSIGNMENTS = Object.freeze({
         slot: { main: "", replaced: "" },
         idx: -1
       }));
+      // P1 americana: back-row receive positions
+      placeEntry(0, libero1 ? libero1.entry : null, next); // zona 1 = C1
+      placeEntry(5, outside2 ? outside2.entry : null, next); // zona 6 = S2
+      placeEntry(4, outside1 ? outside1.entry : null, next); // zona 5 = S1
       placeEntry(1, opposite.entry, next); // OP in pos2
       placeEntry(3, targetOutside.entry, next); // OH in pos4
       base.forEach((entry, idx) => {
@@ -119,9 +126,12 @@ const INTELLISCOUT_RECEIVE_ASSIGNMENTS = Object.freeze({
       return lineup;
     }
 
-    function applySwitchPattern(lineup, rotation, isServing) {
+    function applySwitchPattern(lineup, rotation, isServing, options = {}) {
       const rot = clampRot(rotation);
       const assignments = [];
+      if (rot === 1 && options.autoRoleP1American) {
+        assignments.push([1, 3], [3, 1]);
+      }
       if (rot === 4) {
         assignments.push([4, 5], [5, 4], [1, 3], [3, 1]);
       } else if (rot === 1 && !isServing) {
@@ -154,7 +164,7 @@ const INTELLISCOUT_RECEIVE_ASSIGNMENTS = Object.freeze({
       if (phaseKey === "receive") {
         return applyReceivePattern(working, rotation, { autoRoleP1American });
       }
-      return applySwitchPattern(working, rotation, !!isServing);
+      return applySwitchPattern(working, rotation, !!isServing, { autoRoleP1American });
     }
 
     function applyPhasePermutation(options) {

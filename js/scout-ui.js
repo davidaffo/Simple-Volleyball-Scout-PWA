@@ -80,6 +80,7 @@ let trajectoryNetPointId = null;
 let trajectorySetType = null;
 let trajectoryMode = "attack";
 let attackTrajectoryForcePopup = false;
+let trajectoryEscapeHandler = null;
 const attackTrajectoryCourtSizingEls = {
   content: null,
   body: null,
@@ -400,12 +401,12 @@ async function startAttackSelection(playerIdx, setTypeChoice, onDone) {
       baseZone: baseZone || null,
       setType: setTypeChoice || null
     });
-    if (!coords) {
-      clearAttackSelection(playerIdx);
-      if (typeof onDone === "function") onDone();
-      return;
+    if (coords) {
+      meta.trajectory = coords;
+      meta.trajectorySkipped = false;
+    } else {
+      meta.trajectorySkipped = true;
     }
-    meta.trajectory = coords;
   }
   attackMetaByPlayer[playerIdx] = meta;
   if (typeof onDone === "function") {
@@ -750,6 +751,20 @@ function getSelectedSkill(playerIdx) {
 function isAnySelectedSkill(skillId) {
   return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
 }
+function isSetterPlayer(playerIdx) {
+  if (typeof getRoleLabel !== "function") return false;
+  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return false;
+  const name = state.players[playerIdx];
+  const baseCourt =
+    state.autoRolePositioning && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(state.court);
+  const idx = (baseCourt || []).findIndex(
+    slot => slot && (slot.main === name || slot.replaced === name)
+  );
+  if (idx === -1) return false;
+  return String(getRoleLabel(idx + 1)).toUpperCase() === "P";
+}
 function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
@@ -796,6 +811,18 @@ function getPredictedSkillId() {
   const possessionServe = !!state.isServing;
   const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
+  if (last.skillId === "pass" && (last.code === "/" || last.receiveEvaluation === "/")) {
+    return resolveEnabledSkill("block") || fallback;
+  }
+  if (last.skillId === "attack" && last.code === "!") {
+    return resolveEnabledSkill("defense") || fallback;
+  }
+  if (last.skillId === "defense" && (last.code === "-" || last.code === "/")) {
+    return resolveEnabledSkill("block") || fallback;
+  }
+  if (last.skillId === "block" && last.code === "-") {
+    return resolveEnabledSkill("block") || fallback;
+  }
   const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
   if (dir === "for") return resolveEnabledSkill("serve") || fallback;
   if (dir === "against") return resolveEnabledSkill("pass") || fallback;
@@ -1065,6 +1092,10 @@ function openAttackTrajectoryModal(prefill = null) {
     if (serveTypeKeyHandler) {
       window.removeEventListener("keydown", serveTypeKeyHandler);
     }
+    if (trajectoryEscapeHandler) {
+      window.removeEventListener("keydown", trajectoryEscapeHandler);
+      trajectoryEscapeHandler = null;
+    }
     if (mode === "serve-start") {
       serveTypeKeyHandler = e => {
         const key = (e.key || "").toUpperCase();
@@ -1076,6 +1107,13 @@ function openAttackTrajectoryModal(prefill = null) {
     } else {
       serveTypeKeyHandler = null;
     }
+    trajectoryEscapeHandler = e => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeAttackTrajectoryModal(null);
+    };
+    window.addEventListener("keydown", trajectoryEscapeHandler);
     elAttackTrajectoryModal.classList.remove("hidden");
     setModalOpenState(true, forcePopup);
     const applyPrefill = () => {
@@ -1138,6 +1176,10 @@ function closeAttackTrajectoryModal(result = null) {
   if (serveTypeKeyHandler) {
     window.removeEventListener("keydown", serveTypeKeyHandler);
     serveTypeKeyHandler = null;
+  }
+  if (trajectoryEscapeHandler) {
+    window.removeEventListener("keydown", trajectoryEscapeHandler);
+    trajectoryEscapeHandler = null;
   }
   if (trajectoryResolver) {
     trajectoryResolver(result);
@@ -1212,6 +1254,7 @@ let youtubeScoutFallback = false;
 let lastVideoSnapshotMs = 0;
 let videoSnapshotTimer = null;
 const elBtnFreeball = document.getElementById("btn-freeball");
+const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
 const elBtnOffsetSkills = document.getElementById("btn-offset-skills");
@@ -1220,7 +1263,9 @@ const elOffsetSkillGrid = document.getElementById("offset-skill-grid");
 const elOffsetClose = document.getElementById("offset-close");
 const elOffsetApply = document.getElementById("offset-apply");
 const elBtnTimeout = document.getElementById("btn-timeout");
+const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elTimeoutCount = document.getElementById("timeout-count");
+const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
@@ -1597,6 +1642,7 @@ function buildBaseEventPayload(base) {
     videoSeconds = 0;
   }
   const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
+  const scoreSnapshot = computePointsSummary(state.currentSet || 1);
   const zone =
     typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx, base.skillId) : null;
   const lastEvent = state.events && state.events.length > 0 ? state.events[state.events.length - 1] : null;
@@ -1646,8 +1692,8 @@ function buildBaseEventPayload(base) {
     playerOut: base.playerOut || null,
     relatedEvents: base.relatedEvents || [],
     teamName: state.selectedTeam || (state.match && state.match.teamName) || null,
-    homeScore: null,
-    visitorScore: null,
+    homeScore: scoreSnapshot.totalFor || 0,
+    visitorScore: scoreSnapshot.totalAgainst || 0,
     actionType: base.actionType || null,
     prevSet: base.prevSet || null,
     nextSet: base.nextSet || null,
@@ -1768,7 +1814,10 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     if (shouldPromptAttackSetType()) {
       const wrap = document.createElement("div");
       wrap.className = "modal-skill-codes";
-      DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
+      const setTypeOptions = isSetterPlayer(playerIdx)
+        ? [{ value: "Damp", label: "Damp" }]
+        : DEFAULT_SET_TYPE_OPTIONS;
+      setTypeOptions.forEach(opt => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "event-btn";
@@ -2212,7 +2261,10 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       titleSpan.textContent = "Attacco";
       title.appendChild(titleSpan);
       grid.appendChild(title);
-      DEFAULT_SET_TYPE_OPTIONS.forEach(opt => {
+      const setTypeOptions = isSetterPlayer(playerIdx)
+        ? [{ value: "Damp", label: "Damp" }]
+        : DEFAULT_SET_TYPE_OPTIONS;
+      setTypeOptions.forEach(opt => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "event-btn";
@@ -2512,6 +2564,17 @@ function animateFreeballButton() {
   elBtnFreeball.classList.add("freeball-pulse");
   setTimeout(() => elBtnFreeball.classList.remove("freeball-pulse"), 420);
 }
+function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null } = {}) {
+  state.freeballPending = true;
+  state.predictiveSkillFlow = true;
+  state.skillFlowOverride = startSkill || null;
+  animateFreeballButton();
+  if (persist) saveState();
+  if (rerender) {
+    renderPlayers();
+    updateNextSkillIndicator(getPredictedSkillId());
+  }
+}
 function rememberReceiveContext(ev) {
   if (!ev) return;
   const zone = ev.zone || ev.playerPosition || null;
@@ -2617,12 +2680,20 @@ async function handleEventClick(
   }
   state.stats[playerIdx][skillId][code] =
     (state.stats[playerIdx][skillId][code] || 0) + 1;
+  if (skillId === "serve" && code === "/") {
+    triggerFreeballFlow({ persist: false, rerender: false });
+  }
   animateEventToLog(sourceEl, skillId, code);
   saveState();
   updateSkillStatsUI(playerIdx, skillId);
   renderEventsLog();
   renderPlayers();
-  if (state.attackTrajectoryEnabled && skillId === "attack" && !(attackMeta && attackMeta.trajectory)) {
+  if (
+    state.attackTrajectoryEnabled &&
+    skillId === "attack" &&
+    !(attackMeta && attackMeta.trajectory) &&
+    !(attackMeta && attackMeta.trajectorySkipped)
+  ) {
     const baseZoneForMapping = event.originZone || event.zone || event.playerPosition || null;
     openAttackTrajectoryModal({ baseZone: baseZoneForMapping, setType: event.setType || null }).then(coords => {
       if (coords && coords.start && coords.end) {
@@ -2911,13 +2982,13 @@ function setSelectionForContext(contextKey, keysSet, anchorKey = null, opts = {}
     ctx.onSelectionChange(getSelectedRows(contextKey), contextKey, opts);
   }
 }
-function toggleSelectionForContext(contextKey, key) {
+function toggleSelectionForContext(contextKey, key, opts = {}) {
   const next = new Set(selectedEventIds);
   if (next.has(key)) next.delete(key);
   else next.add(key);
-  setSelectionForContext(contextKey, next, key);
+  setSelectionForContext(contextKey, next, key, opts);
 }
-function selectRangeForContext(contextKey, anchorKey, targetKey) {
+function selectRangeForContext(contextKey, anchorKey, targetKey, opts = {}) {
   const rows = getRowsForContext(contextKey);
   if (!rows.length) return;
   const anchorIdx = Math.max(0, rows.findIndex(r => r.key === anchorKey));
@@ -2925,7 +2996,7 @@ function selectRangeForContext(contextKey, anchorKey, targetKey) {
   const start = Math.min(anchorIdx, targetIdx);
   const end = Math.max(anchorIdx, targetIdx);
   const range = new Set(rows.slice(start, end + 1).map(r => r.key));
-  setSelectionForContext(contextKey, range, anchorKey);
+  setSelectionForContext(contextKey, range, anchorKey, opts);
 }
 function getActiveEventContextKey() {
   if (lastEventContextKey && eventTableContexts[lastEventContextKey]) return lastEventContextKey;
@@ -2944,7 +3015,8 @@ function scrollRowIntoView(record) {
   if (!record || !record.tr || typeof record.tr.scrollIntoView !== "function") return;
   record.tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
-function handleSeekForSelection(contextKey) {
+function handleSeekForSelection(contextKey, opts = {}) {
+  if (!opts || !opts.userAction) return;
   const activeTab = document && document.body ? document.body.dataset.activeTab : "";
   if (contextKey === "log" && !state.videoScoutMode && activeTab !== "video") {
     return;
@@ -2979,10 +3051,10 @@ function moveSelection(contextKey, delta, extendRange = false) {
         : rows[selectedIdx[0]].key;
     let targetIdx = Math.min(rows.length - 1, Math.max(0, edgeIdx + delta));
     const targetKey = rows[targetIdx].key;
-    selectRangeForContext(contextKey, anchorKey, targetKey);
+    selectRangeForContext(contextKey, anchorKey, targetKey, { userAction: true });
     const targetRow = rows.find(r => r.key === targetKey);
     scrollRowIntoView(targetRow);
-    handleSeekForSelection(contextKey);
+    handleSeekForSelection(contextKey, { userAction: true });
     return;
   }
   let anchorKey = currentKey;
@@ -2993,10 +3065,10 @@ function moveSelection(contextKey, delta, extendRange = false) {
   }
   let targetIdx = Math.min(rows.length - 1, Math.max(0, anchorIdx + delta));
   const targetKey = rows[targetIdx].key;
-  setSelectionForContext(contextKey, new Set([targetKey]), targetKey);
+  setSelectionForContext(contextKey, new Set([targetKey]), targetKey, { userAction: true });
   const targetRow = rows.find(r => r.key === targetKey);
   scrollRowIntoView(targetRow);
-  handleSeekForSelection(contextKey);
+  handleSeekForSelection(contextKey, { userAction: true });
 }
 function adjustSelectedVideoTimes(deltaSeconds) {
   const rows = getSelectedRows(getActiveEventContextKey());
@@ -3015,7 +3087,7 @@ function adjustSelectedVideoTimes(deltaSeconds) {
   });
   refreshAfterVideoEdit(false);
   renderEventsLog();
-  handleSeekForSelection(getActiveEventContextKey());
+  handleSeekForSelection(getActiveEventContextKey(), { userAction: true });
 }
 function adjustCurrentRowVideoTime(deltaSeconds) {
   const ctxKey = getActiveEventContextKey();
@@ -3039,7 +3111,7 @@ function adjustCurrentRowVideoTime(deltaSeconds) {
   saveState();
   renderEventsLog();
   renderVideoAnalysis();
-  handleSeekForSelection(ctxKey);
+  handleSeekForSelection(ctxKey, { userAction: true });
 }
 function buildSelectedSegments() {
   const rows = getSelectedRows("video");
@@ -3208,7 +3280,7 @@ function renderEventsLog(options = {}) {
     enableSelection: true,
     showCheckbox: false,
     contextKey: "log",
-    onSelectionChange: () => handleSeekForSelection("log")
+    onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts)
   });
   if (elEventsLog && !suppressScroll) {
     requestAnimationFrame(() => {
@@ -3225,7 +3297,15 @@ function renderEventsLog(options = {}) {
 }
 function getTimeoutCountForSet(setNum) {
   const set = Number(setNum) || 1;
-  return (state.events || []).filter(ev => ev && ev.actionType === "timeout" && ev.set === set).length;
+  return (state.events || []).filter(
+    ev => ev && ev.actionType === "timeout" && ev.set === set && ev.code !== "TOA"
+  ).length;
+}
+function getTimeoutOppCountForSet(setNum) {
+  const set = Number(setNum) || 1;
+  return (state.events || []).filter(
+    ev => ev && ev.actionType === "timeout" && ev.set === set && ev.code === "TOA"
+  ).length;
 }
 function getSubstitutionCountForSet(setNum) {
   const set = Number(setNum) || 1;
@@ -3238,6 +3318,11 @@ function updateTeamCounters() {
     const remaining = Math.max(0, 2 - used);
     elTimeoutCount.textContent = String(remaining);
   }
+  if (elTimeoutOppCount) {
+    const used = getTimeoutOppCountForSet(setNum);
+    const remaining = Math.max(0, 2 - used);
+    elTimeoutOppCount.textContent = String(remaining);
+  }
   if (elSubstitutionRemaining) {
     const used = getSubstitutionCountForSet(setNum);
     const remaining = Math.max(0, 6 - used);
@@ -3246,6 +3331,16 @@ function updateTeamCounters() {
 }
 function recordTimeoutEvent() {
   recordSetAction("timeout", { playerName: "Timeout", code: "TO" });
+  saveState();
+  renderEventsLog();
+  renderPlayers();
+  renderBenchChips();
+  renderLiberoChipsInline();
+  renderLineupChips();
+  updateRotationDisplay();
+}
+function recordOpponentTimeoutEvent() {
+  recordSetAction("timeout", { playerName: "Timeout Avv.", code: "TOA" });
   saveState();
   renderEventsLog();
   renderPlayers();
@@ -3330,7 +3425,7 @@ function applyOffsetsToSelectedSkills() {
   saveState();
   renderEventsLog();
   renderVideoAnalysis();
-  handleSeekForSelection(ctxKey);
+  handleSeekForSelection(ctxKey, { userAction: true });
   closeOffsetModal();
 }
 function getVideoSkillEvents() {
@@ -4115,23 +4210,58 @@ function createZoneInput(ev, onDone) {
   return input;
 }
 function createVideoTimeInput(ev, videoTime, onDone) {
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "0";
-  input.step = "0.1";
-  input.value = videoTime.toFixed(1);
-  input.addEventListener("change", () => {
-    const val = parseFloat(input.value || "");
-    if (!isNaN(val) && val >= 0) {
-      ev.videoTime = val;
-      refreshAfterVideoEdit(false);
-    }
+  const totalSeconds = Math.max(0, Number.isFinite(videoTime) ? videoTime : 0);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const wrapper = document.createElement("div");
+  wrapper.className = "video-time-input";
+  const makePart = (label, value, max) => {
+    const block = document.createElement("label");
+    block.className = "video-time-part";
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    if (typeof max === "number") input.max = String(max);
+    input.step = "1";
+    input.value = String(value);
+    block.appendChild(span);
+    block.appendChild(input);
+    return { block, input };
+  };
+  const hh = makePart("H", hours, 23);
+  const mm = makePart("M", minutes, 59);
+  const ss = makePart("S", seconds, 59);
+  wrapper.appendChild(hh.block);
+  wrapper.appendChild(mm.block);
+  wrapper.appendChild(ss.block);
+
+  const commit = () => {
+    const h = Math.max(0, parseInt(hh.input.value || "0", 10) || 0);
+    const m = Math.max(0, parseInt(mm.input.value || "0", 10) || 0);
+    const s = Math.max(0, parseInt(ss.input.value || "0", 10) || 0);
+    const next = h * 3600 + m * 60 + s;
+    ev.videoTime = Math.max(0, next);
+    refreshAfterVideoEdit(false);
+  };
+  [hh.input, mm.input, ss.input].forEach(input => {
+    input.addEventListener("change", commit);
+    input.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      commit();
+      if (typeof onDone === "function") onDone();
+      renderVideoAnalysis();
+    });
+    input.addEventListener("blur", () => {
+      commit();
+      if (typeof onDone === "function") onDone();
+      renderVideoAnalysis();
+    });
   });
-  input.addEventListener("blur", () => {
-    if (typeof onDone === "function") onDone();
-    renderVideoAnalysis();
-  });
-  return input;
+  return wrapper;
 }
 function makeEditableCell(td, _title, factory, guard = null) {
   const startEdit = () => {
@@ -4203,14 +4333,14 @@ function renderEventTableRows(target, events, options = {}) {
     const isMeta = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
     if (isShift && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)) {
-      selectRangeForContext(contextKey, lastSelectedEventId, key);
+      selectRangeForContext(contextKey, lastSelectedEventId, key, { userAction: true });
       scrollRowIntoView(record);
       return;
     }
     if (isMeta) {
-      toggleSelectionForContext(contextKey, key);
+      toggleSelectionForContext(contextKey, key, { userAction: true });
     } else {
-      setSelectionForContext(contextKey, new Set([key]), key);
+      setSelectionForContext(contextKey, new Set([key]), key, { userAction: true });
     }
     scrollRowIntoView(record);
   };
@@ -4223,6 +4353,9 @@ function renderEventTableRows(target, events, options = {}) {
       ...(enableSelection && showCheckbox ? ["✓"] : []),
       ...(showVideoTime ? ["Tempo"] : []),
       ...(showIndex ? ["#"] : []),
+      "Pt N",
+      "Pt A",
+      "FB N",
       "Giocatrice",
       "Fondamentale",
       "Codice",
@@ -4261,9 +4394,9 @@ function renderEventTableRows(target, events, options = {}) {
           if (!ctx || !ctx.rows) return;
           if (selectAll.checked) {
             const all = new Set(ctx.rows.map(r => r.key));
-            setSelectionForContext(contextKey, all, ctx.rows[0]?.key || null);
+            setSelectionForContext(contextKey, all, ctx.rows[0]?.key || null, { userAction: true });
           } else {
-            setSelectionForContext(contextKey, new Set(), null);
+            setSelectionForContext(contextKey, new Set(), null, { userAction: true });
           }
         });
         th.appendChild(selectAll);
@@ -4296,8 +4429,7 @@ function renderEventTableRows(target, events, options = {}) {
     const traj = ev.attackTrajectory || {};
     const trajStartPt = traj.start || ev.attackStart || null;
     const trajEndPt = traj.end || ev.attackEnd || null;
-    const receiveEvalDisplay =
-      ev.fromFreeball && !ev.receiveEvaluation ? "FB" : valueToString(ev.receiveEvaluation);
+    const receiveEvalDisplay = valueToString(ev.receiveEvaluation);
     const attackPhaseDisplay = formatAttackPhaseLabel(ev.attackBp);
     const formatAttackDir = () => {
       const dir = ev.attackDirection || traj || null;
@@ -4336,6 +4468,9 @@ function renderEventTableRows(target, events, options = {}) {
           ]
         : []),
       ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
+      { text: valueToString(ev.homeScore) },
+      { text: valueToString(ev.visitorScore) },
+      { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
@@ -4645,7 +4780,7 @@ function renderVideoAnalysis() {
       tableClass: "video-skills-table event-edit-table",
       enableSelection: true,
       contextKey: "video",
-      onSelectionChange: () => handleSeekForSelection("video")
+      onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("video", opts)
     }
   );
   if (updatedZones) {
@@ -5120,6 +5255,11 @@ function handleManualScore(direction, delta) {
 function handleTeamPoint() {
   addManualPoint("for", 1, "for", null, "Squadra");
 }
+function handleOpponentErrorPoint() {
+  state.skillFlowOverride = null;
+  addManualPoint("for", 1, "opp-error", null, "Avversari");
+  updateNextSkillIndicator(getPredictedSkillId());
+}
 function addPlayerError(playerIdx, playerName) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
@@ -5129,6 +5269,11 @@ function addPlayerError(playerIdx, playerName) {
 }
 function handleTeamError() {
   addManualPoint("against", 1, "team-error", null, "Squadra");
+}
+function handleOpponentPoint() {
+  state.skillFlowOverride = null;
+  addManualPoint("against", 1, "opp-point", null, "Avversari");
+  updateNextSkillIndicator(getPredictedSkillId());
 }
 function snapshotSkillClock() {
   ensureSkillClock();
@@ -9032,24 +9177,23 @@ function init() {
     });
   }
   if (elBtnFreeball) {
-    const syncFreeballActive = () => {
-      elBtnFreeball.classList.toggle("active", !!state.freeballPending);
-    };
     elBtnFreeball.addEventListener("click", () => {
-      const willActivate = !state.freeballPending;
-      state.freeballPending = willActivate;
-      if (willActivate) {
-        animateFreeballButton();
-      }
-      syncFreeballActive();
-      saveState();
-      renderPlayers();
+      triggerFreeballFlow();
     });
-    syncFreeballActive();
+  }
+  if (elBtnFreeballOpp) {
+    elBtnFreeballOpp.addEventListener("click", () => {
+      triggerFreeballFlow({ startSkill: "block" });
+    });
   }
   if (elBtnTimeout) {
     elBtnTimeout.addEventListener("click", () => {
       recordTimeoutEvent();
+    });
+  }
+  if (elBtnTimeoutOpp) {
+    elBtnTimeoutOpp.addEventListener("click", () => {
+      recordOpponentTimeoutEvent();
     });
   }
   if (elBtnOffsetSkills) {
@@ -9411,8 +9555,14 @@ function init() {
   if (elBtnScoreTeamPoint) {
     elBtnScoreTeamPoint.addEventListener("click", handleTeamPoint);
   }
+  if (elBtnScoreOppError) {
+    elBtnScoreOppError.addEventListener("click", handleOpponentErrorPoint);
+  }
   if (elBtnScoreTeamError) {
     elBtnScoreTeamError.addEventListener("click", openErrorModal);
+  }
+  if (elBtnScoreOppPoint) {
+    elBtnScoreOppPoint.addEventListener("click", handleOpponentPoint);
   }
   if (elBtnNextSet) {
     elBtnNextSet.addEventListener("click", goToNextSet);
