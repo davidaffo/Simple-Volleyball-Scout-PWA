@@ -393,6 +393,7 @@ function loadState() {
       : "";
     state.preferredLibero = typeof parsed.preferredLibero === "string" ? parsed.preferredLibero : "";
     state.autoRoleP1American = !!parsed.autoRoleP1American;
+    state.courtViewMirrored = !!parsed.courtViewMirrored;
     state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
     state.autoRotatePending = false;
     state.freeballPending = !!parsed.freeballPending;

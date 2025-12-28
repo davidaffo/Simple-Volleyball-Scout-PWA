@@ -61,16 +61,10 @@ function getTrajectoryImageForZone(zone, isFarSide) {
     }
     return TRAJECTORY_IMG_NEAR;
   }
-  switch (zone) {
-    case 5:
-      return "images/trajectory/attack_4_far.png";
-    case 6:
-      return "images/trajectory/attack_3_far.png";
-    case 1:
-      return "images/trajectory/attack_2_far.png";
-    default:
-      return TRAJECTORY_IMG_FAR;
-  }
+  if (zone === 4 || zone === 5) return "images/trajectory/attack_4_far.png";
+  if (zone === 3 || zone === 6) return "images/trajectory/attack_3_far.png";
+  if (zone === 2 || zone === 1) return "images/trajectory/attack_2_far.png";
+  return TRAJECTORY_IMG_FAR;
 }
 let trajectoryStart = null;
 let trajectoryEnd = null;
@@ -80,6 +74,7 @@ let trajectoryNetPointId = null;
 let trajectorySetType = null;
 let trajectoryMode = "attack";
 let attackTrajectoryForcePopup = false;
+let trajectoryMirror = false;
 let trajectoryEscapeHandler = null;
 const attackTrajectoryCourtSizingEls = {
   content: null,
@@ -951,6 +946,13 @@ function normalizeTrajectoryPoint(pt) {
     y: clamp01(relY)
   };
 }
+function mirrorTrajectoryPoint(norm) {
+  if (!norm) return norm;
+  return {
+    x: 1 - clamp01(norm.x),
+    y: 1 - clamp01(norm.y)
+  };
+}
 function computeAttackDirectionDeg(start, end) {
   if (!start || !end) return null;
   const dx = end.x - start.x;
@@ -1017,7 +1019,7 @@ function updateTrajectoryImageFromStart() {
   const startNorm = normalizeTrajectoryPoint(trajectoryStart);
   if (!startNorm) return;
   const startZoneRaw = getAttackZone(startNorm, false);
-  const imgSrc = getTrajectoryImageForZone(startZoneRaw, false);
+  const imgSrc = getTrajectoryImageForZone(startZoneRaw, trajectoryMirror);
   if (elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
     elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
     elAttackTrajectoryImage.src = imgSrc;
@@ -1030,7 +1032,11 @@ function applyTrajectoryStartFromNetPoint() {
   const box = getTrajectoryDisplayBox();
   const canvas = elAttackTrajectoryCanvas;
   const x = box ? box.offsetX + point.x * box.width : point.x * canvas.width;
-  const fixedY = box ? box.offsetY + box.height - 0.5 : canvas.height - 0.5;
+  const fixedY = box
+    ? box.offsetY + (trajectoryMirror ? 0.5 : box.height - 0.5)
+    : trajectoryMirror
+      ? 0.5
+      : canvas.height - 0.5;
   trajectoryStart = { x, y: fixedY };
   updateTrajectoryImageFromStart();
   drawTrajectory();
@@ -1055,6 +1061,7 @@ function openAttackTrajectoryModal(prefill = null) {
       setAttackTrajectoryCourtSizing(false);
       restoreModalToPopup(elAttackTrajectoryModal);
     }
+    trajectoryMirror = !forcePopup && !!state.courtViewMirrored;
     const mode = (prefill && prefill.mode) || "attack";
     trajectoryMode = mode;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
@@ -1083,9 +1090,9 @@ function openAttackTrajectoryModal(prefill = null) {
       elAttackTrajectoryInstructions.classList.toggle("hidden", hideInstructions);
     }
     const getInitialImage = () => {
-      if (mode === "serve-start") return SERVE_START_IMG_NEAR;
-      if (mode === "serve-end") return SERVE_END_IMG_NEAR;
-      return TRAJECTORY_IMG_NEAR;
+      if (mode === "serve-start") return trajectoryMirror ? SERVE_START_IMG_FAR : SERVE_START_IMG_NEAR;
+      if (mode === "serve-end") return trajectoryMirror ? SERVE_END_IMG_FAR : SERVE_END_IMG_NEAR;
+      return trajectoryMirror ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR;
     };
     elAttackTrajectoryImage.dataset.activeSrc = getInitialImage();
     elAttackTrajectoryImage.src = getInitialImage();
@@ -1121,28 +1128,32 @@ function openAttackTrajectoryModal(prefill = null) {
         return;
       }
       if (prefill && prefill.start && prefill.end) {
-        const startPx = denormalizeTrajectoryPoint(prefill.start);
-        const endPx = denormalizeTrajectoryPoint(prefill.end);
+        const startNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
+        const endNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
+        const startPx = denormalizeTrajectoryPoint(startNorm);
+        const endPx = denormalizeTrajectoryPoint(endNorm);
         if (!startPx || !endPx) return;
         trajectoryStart = startPx;
         trajectoryEnd = endPx;
         if (simplified) {
-        const inferredNetPoint = getNearestTrajectoryNetPointId(prefill.start);
-        setTrajectoryNetPointId(inferredNetPoint || getDefaultTrajectoryNetPointId(trajectoryBaseZone, trajectorySetType));
+          const inferredNetPoint = getNearestTrajectoryNetPointId(startNorm);
+          setTrajectoryNetPointId(inferredNetPoint || getDefaultTrajectoryNetPointId(trajectoryBaseZone, trajectorySetType));
         }
         updateTrajectoryImageFromStart();
         drawTrajectory();
         return;
       }
       if (mode === "serve-start" && prefill && prefill.start) {
-        const startPx = denormalizeTrajectoryPoint(prefill.start);
+        const startNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
+        const startPx = denormalizeTrajectoryPoint(startNorm);
         if (startPx) {
           trajectoryStart = startPx;
           drawTrajectory();
         }
       }
       if (mode === "serve-end" && prefill && prefill.end) {
-        const endPx = denormalizeTrajectoryPoint(prefill.end);
+        const endNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
+        const endPx = denormalizeTrajectoryPoint(endNorm);
         if (endPx) {
           trajectoryEnd = endPx;
           drawTrajectory();
@@ -1170,6 +1181,7 @@ function closeAttackTrajectoryModal(result = null) {
   setAttackTrajectoryCourtSizing(false);
   elAttackTrajectoryModal.classList.remove("force-popup");
   attackTrajectoryForcePopup = false;
+  trajectoryMirror = false;
   trajectoryBaseZone = null;
   trajectorySetType = null;
   trajectoryMode = "attack";
@@ -1220,6 +1232,10 @@ function forceNextSkill(skillId) {
   if (!skillId) return;
   state.predictiveSkillFlow = true;
   state.skillFlowOverride = skillId;
+  if (skillId === "serve" && !state.isServing) {
+    state.isServing = true;
+    state.autoRotatePending = false;
+  }
   saveState();
   renderPlayers();
   updateNextSkillIndicator(skillId);
@@ -1255,6 +1271,7 @@ let lastVideoSnapshotMs = 0;
 let videoSnapshotTimer = null;
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
+const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
 const elBtnOffsetSkills = document.getElementById("btn-offset-skills");
@@ -2413,6 +2430,7 @@ function renderPlayers() {
   if (!elPlayersContainer) return;
   elPlayersContainer.innerHTML = "";
   elPlayersContainer.classList.add("court-layout");
+  elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
   ensureCourtShape();
   ensureMetricsConfigDefaults();
   const predictedSkillId = getPredictedSkillId();
@@ -4355,11 +4373,11 @@ function renderEventTableRows(target, events, options = {}) {
       ...(showIndex ? ["#"] : []),
       "Pt N",
       "Pt A",
+      "Set",
       "FB N",
       "Giocatrice",
       "Fondamentale",
       "Codice",
-      "Set",
       "Rot",
       "Zona",
       "Pos Palleggio",
@@ -4470,6 +4488,10 @@ function renderEventTableRows(target, events, options = {}) {
       ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
       { text: valueToString(ev.homeScore) },
       { text: valueToString(ev.visitorScore) },
+      {
+        text: ev.set || "1",
+        editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
+      },
       { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
@@ -4487,10 +4509,6 @@ function renderEventTableRows(target, events, options = {}) {
       {
         text: ev.code || "",
         editable: td => makeEditableCell(td, "Codice", done => createCodeSelect(ev, done), editGuard)
-      },
-      {
-        text: ev.set || "1",
-        editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
       },
       {
         text: ev.rotation || "-",
@@ -7485,7 +7503,8 @@ function buildMatchExportPayload() {
       autoLiberoRole: state.autoLiberoRole,
       liberoAutoMap: state.liberoAutoMap,
       preferredLibero: state.preferredLibero,
-      nextSetType: state.nextSetType
+      nextSetType: state.nextSetType,
+      courtViewMirrored: !!state.courtViewMirrored
     }
   };
 }
@@ -7597,6 +7616,7 @@ function applyImportedMatch(nextState, options = {}) {
   }
   merged.video.youtubeId = merged.video.youtubeId || "";
   merged.video.youtubeUrl = merged.video.youtubeUrl || "";
+  merged.courtViewMirrored = !!nextState.courtViewMirrored;
   state = merged;
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
@@ -9186,6 +9206,13 @@ function init() {
       triggerFreeballFlow({ startSkill: "block" });
     });
   }
+  if (elBtnToggleCourtView) {
+    elBtnToggleCourtView.addEventListener("click", () => {
+      state.courtViewMirrored = !state.courtViewMirrored;
+      saveState();
+      renderPlayers();
+    });
+  }
   if (elBtnTimeout) {
     elBtnTimeout.addEventListener("click", () => {
       recordTimeoutEvent();
@@ -9280,14 +9307,16 @@ function init() {
         const box = getTrajectoryDisplayBox();
         const w = box ? box.width : elAttackTrajectoryCanvas.clientWidth || elAttackTrajectoryCanvas.width || 1;
         const fixedY = box
-          ? box.offsetY + box.height - 0.5
-          : elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
+          ? box.offsetY + (trajectoryMirror ? 0.5 : box.height - 0.5)
+          : trajectoryMirror
+            ? 0.5
+            : elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
         trajectoryStart = { x: pos.x, y: fixedY };
         trajectoryEnd = null;
         const xWithinStage = box ? pos.x - box.offsetX : pos.x;
         const third = xWithinStage < w / 3 ? 0 : xWithinStage < (2 * w) / 3 ? 1 : 2;
         const zoneFromClickRaw = third === 0 ? 4 : third === 1 ? 3 : 2;
-        const imgSrc = getTrajectoryImageForZone(zoneFromClickRaw, false); // mostra il campo della zona front-row
+        const imgSrc = getTrajectoryImageForZone(zoneFromClickRaw, trajectoryMirror); // mostra il campo della zona front-row
         if (elAttackTrajectoryImage && elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
           elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
           elAttackTrajectoryImage.src = imgSrc;
@@ -9360,20 +9389,24 @@ function init() {
     const confirmCurrentTrajectory = () => {
       if (trajectoryMode === "serve-start") {
         if (!trajectoryStart) return;
-        const point = normalizeTrajectoryPoint(trajectoryStart);
+        const rawPoint = normalizeTrajectoryPoint(trajectoryStart);
+        const point = trajectoryMirror ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
         closeAttackTrajectoryModal({ point, serveType: serveTrajectoryType });
         return;
       }
       if (trajectoryMode === "serve-end") {
         const pt = trajectoryEnd || trajectoryStart;
         if (!pt) return;
-        const point = normalizeTrajectoryPoint(pt);
+        const rawPoint = normalizeTrajectoryPoint(pt);
+        const point = trajectoryMirror ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
         closeAttackTrajectoryModal({ point });
         return;
       }
       if (!trajectoryStart || !trajectoryEnd) return;
-      const start = normalizeTrajectoryPoint(trajectoryStart);
-      const end = normalizeTrajectoryPoint(trajectoryEnd);
+      const rawStart = normalizeTrajectoryPoint(trajectoryStart);
+      const rawEnd = normalizeTrajectoryPoint(trajectoryEnd);
+      const start = trajectoryMirror ? mirrorTrajectoryPoint(rawStart) : rawStart;
+      const end = trajectoryMirror ? mirrorTrajectoryPoint(rawEnd) : rawEnd;
       const isFar = false;
       const startZone = mapBackRowZone(getAttackZone(start, isFar), trajectoryBaseZone);
       const endZone = mapBackRowZone(getAttackZone(end, isFar), trajectoryBaseZone);

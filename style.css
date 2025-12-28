@@ -1458,6 +1458,11 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
     "pos4 pos3 pos2"
     "pos5 pos6 pos1";
 }
+.court-layout.court-layout--mirror {
+  grid-template-areas:
+    "pos1 pos6 pos5"
+    "pos2 pos3 pos4";
+}
 .player-card {
   background: #181818;
   border-radius: 0.8rem;
