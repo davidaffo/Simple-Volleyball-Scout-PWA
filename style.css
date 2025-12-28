@@ -1030,6 +1030,20 @@ body[data-theme="light"] .match-list {
   font-size: 0.85rem;
   opacity: 0.75;
 }
+.match-code-panel {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.match-code-panel textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.match-code-panel .controls-row {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
 .offset-skill-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -3301,6 +3315,36 @@ body[data-theme="light"] .agg-table td {
   overflow-y: auto;
   padding-bottom: 0.8rem;
   padding-right: 0.2rem;
+}
+.qr-modal__content {
+  width: min(420px, 94vw);
+}
+.qr-modal__body {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: center;
+  text-align: center;
+}
+#qr-code-canvas {
+  width: 280px;
+  height: 280px;
+  background: #fff;
+  border-radius: 0.5rem;
+}
+.qr-scan-wrap {
+  width: min(360px, 90vw);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  border: 1px solid #1f2937;
+}
+.qr-scan-wrap.hidden {
+  display: none;
+}
+#qr-scan-video {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #000;
 }
 .attack-trajectory-content {
   width: min(1100px, 96vw);

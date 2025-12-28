@@ -1453,6 +1453,12 @@ const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elTimeoutCount = document.getElementById("timeout-count");
 const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
+const elQrModal = document.getElementById("qr-modal");
+const elQrModalClose = document.getElementById("qr-modal-close");
+const elQrModalStatus = document.getElementById("qr-modal-status");
+const elQrCodeCanvas = document.getElementById("qr-code-canvas");
+const elQrScanWrap = document.getElementById("qr-scan-wrap");
+const elQrScanVideo = document.getElementById("qr-scan-video");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -8474,6 +8480,185 @@ function decodePayloadFromLink(encoded) {
     return null;
   }
 }
+function buildMatchShareCode() {
+  const payload = buildMatchExportPayload();
+  return encodePayloadForLink(payload);
+}
+function setMatchCodeInputValue(code) {
+  if (!elMatchCodeInput) return;
+  elMatchCodeInput.value = code || "";
+}
+async function copyMatchCode() {
+  const code = buildMatchShareCode();
+  if (!code) {
+    alert("Impossibile generare il codice match.");
+    return;
+  }
+  setMatchCodeInputValue(code);
+  const shared = await shareText("Codice match Simple Volleyball Scout", code);
+  if (shared) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(code);
+      alert("Codice match copiato negli appunti.");
+      return;
+    } catch (err) {
+      logError("copy-match-code", err);
+    }
+  }
+  window.prompt("Copia il codice match seguente", code);
+}
+function importMatchCodeString(code, options = {}) {
+  const trimmed = (code || "").trim();
+  if (!trimmed) {
+    alert("Inserisci un codice match valido.");
+    return false;
+  }
+  const parsed = decodePayloadFromLink(trimmed);
+  if (!parsed) {
+    alert("Codice match non valido o corrotto.");
+    return false;
+  }
+  const nextState = parsed.state || parsed;
+  applyImportedMatch(nextState, options);
+  return true;
+}
+function importMatchCodeFromInput() {
+  const code = elMatchCodeInput ? elMatchCodeInput.value : "";
+  importMatchCodeString(code);
+}
+let qrScanStream = null;
+let qrScanActive = false;
+let qrScanFrame = null;
+function updateQrStatus(message) {
+  if (elQrModalStatus) elQrModalStatus.textContent = message || "";
+}
+function renderQrCodeFromText(text) {
+  if (!elQrCodeCanvas) return false;
+  if (typeof qrcode !== "function") {
+    updateQrStatus("Generatore QR non disponibile.");
+    return false;
+  }
+  const ctx = elQrCodeCanvas.getContext("2d");
+  if (!ctx) return false;
+  try {
+    const qr = qrcode(0, "M");
+    qr.addData(text);
+    qr.make();
+    const count = qr.getModuleCount();
+    if (!count) return false;
+    const size = elQrCodeCanvas.width;
+    const scale = Math.floor(size / count);
+    if (scale <= 0) {
+      updateQrStatus("Codice troppo lungo per il QR.");
+      return false;
+    }
+    const offset = Math.floor((size - count * scale) / 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = "#000000";
+    for (let row = 0; row < count; row += 1) {
+      for (let col = 0; col < count; col += 1) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(offset + col * scale, offset + row * scale, scale, scale);
+        }
+      }
+    }
+    return true;
+  } catch (err) {
+    logError("render-qr", err);
+    updateQrStatus("Codice troppo lungo per il QR.");
+    return false;
+  }
+}
+function stopQrScan() {
+  qrScanActive = false;
+  if (qrScanFrame) {
+    cancelAnimationFrame(qrScanFrame);
+    qrScanFrame = null;
+  }
+  if (qrScanStream) {
+    qrScanStream.getTracks().forEach(track => track.stop());
+    qrScanStream = null;
+  }
+  if (elQrScanVideo) {
+    elQrScanVideo.srcObject = null;
+  }
+}
+async function startQrScan() {
+  if (!elQrScanVideo || typeof BarcodeDetector === "undefined") {
+    updateQrStatus("Scanner QR non supportato su questo dispositivo.");
+    return;
+  }
+  try {
+    qrScanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+    elQrScanVideo.srcObject = qrScanStream;
+    updateQrStatus("Inquadra il QR del match.");
+  } catch (err) {
+    logError("qr-scan-camera", err);
+    updateQrStatus("Permesso fotocamera negato.");
+    return;
+  }
+  const detector = new BarcodeDetector({ formats: ["qr_code"] });
+  qrScanActive = true;
+  const scanLoop = async () => {
+    if (!qrScanActive) return;
+    if (elQrScanVideo.readyState >= 2) {
+      try {
+        const codes = await detector.detect(elQrScanVideo);
+        if (codes && codes.length) {
+          const code = codes[0].rawValue || "";
+          if (code) {
+            setMatchCodeInputValue(code);
+            const imported = importMatchCodeString(code, { silent: false });
+            if (imported) {
+              closeQrModal();
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        logError("qr-scan-detect", err);
+      }
+    }
+    qrScanFrame = requestAnimationFrame(scanLoop);
+  };
+  qrScanFrame = requestAnimationFrame(scanLoop);
+}
+function openQrModal(mode) {
+  if (!elQrModal) return;
+  elQrModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  if (elQrScanWrap) elQrScanWrap.classList.add("hidden");
+  if (elQrCodeCanvas) elQrCodeCanvas.classList.remove("hidden");
+  updateQrStatus("");
+  stopQrScan();
+  if (mode === "scan") {
+    if (elQrScanWrap) elQrScanWrap.classList.remove("hidden");
+    if (elQrCodeCanvas) elQrCodeCanvas.classList.add("hidden");
+    startQrScan();
+    return;
+  }
+  const code = buildMatchShareCode();
+  if (!code) {
+    updateQrStatus("Impossibile generare il codice match.");
+    return;
+  }
+  setMatchCodeInputValue(code);
+  const rendered = renderQrCodeFromText(code);
+  if (rendered) {
+    updateQrStatus("Scansiona il QR per importare il match.");
+  }
+}
+function closeQrModal() {
+  if (!elQrModal) return;
+  stopQrScan();
+  elQrModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
 function buildMatchShareUrl() {
   if (typeof window === "undefined") return "";
   const payload = buildMatchExportPayload();
@@ -8483,25 +8668,6 @@ function buildMatchShareUrl() {
   url.searchParams.set("match", encoded);
   url.hash = "";
   return url.toString();
-}
-async function shareMatchLink() {
-  const url = buildMatchShareUrl();
-  if (!url) {
-    alert("Impossibile generare il link del match.");
-    return;
-  }
-  const shared = await shareText("Link partita Simple Volleyball Scout", url);
-  if (shared) return;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(url);
-      alert("Link partita copiato negli appunti.");
-      return;
-    } catch (err) {
-      logError("copy-match-link", err);
-    }
-  }
-  window.prompt("Copia il link seguente", url);
 }
 function applyImportedMatch(nextState, options = {}) {
   const silent = options && options.silent;
@@ -10476,7 +10642,7 @@ async function init() {
   if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
   if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
-  if (elBtnShareMatchLink) elBtnShareMatchLink.addEventListener("click", shareMatchLink);
+  if (elBtnCopyMatchCode) elBtnCopyMatchCode.addEventListener("click", copyMatchCode);
   if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
   if (elBtnImportMatch && elMatchFileInput) {
     elBtnImportMatch.addEventListener("click", () => elMatchFileInput.click());
@@ -10484,6 +10650,14 @@ async function init() {
       const file = e.target && e.target.files && e.target.files[0];
       if (file) handleImportMatchFile(file);
     });
+  }
+  if (elBtnImportMatchCode) elBtnImportMatchCode.addEventListener("click", importMatchCodeFromInput);
+  if (elBtnShowMatchQr) elBtnShowMatchQr.addEventListener("click", () => openQrModal("show"));
+  if (elBtnScanMatchQr) elBtnScanMatchQr.addEventListener("click", () => openQrModal("scan"));
+  if (elQrModal) {
+    const closeBtn = elQrModal.querySelector("[data-close-qr]");
+    if (closeBtn) closeBtn.addEventListener("click", closeQrModal);
+    if (elQrModalClose) elQrModalClose.addEventListener("click", closeQrModal);
   }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
