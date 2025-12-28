@@ -760,6 +760,30 @@ function isSetterPlayer(playerIdx) {
   if (idx === -1) return false;
   return String(getRoleLabel(idx + 1)).toUpperCase() === "P";
 }
+function getSetterFromCourt() {
+  if (typeof getRoleLabel !== "function") return { idx: null, name: null };
+  const court = getCourtShape(state.court);
+  for (let i = 0; i < court.length; i += 1) {
+    const role = String(getRoleLabel(i + 1)).toUpperCase();
+    if (role !== "P") continue;
+    const name = court[i] && court[i].main ? court[i].main : "";
+    if (!name) continue;
+    const idx = Array.isArray(state.players) ? state.players.indexOf(name) : -1;
+    return { idx: idx >= 0 ? idx : null, name };
+  }
+  return { idx: null, name: null };
+}
+function getSetterFromLastSetEvent() {
+  if (!isSkillEnabled("second")) return null;
+  const last = state.events && state.events.length ? state.events[state.events.length - 1] : null;
+  if (!last || last.skillId !== "second") return null;
+  const idx = typeof last.playerIdx === "number" ? last.playerIdx : null;
+  const name =
+    last.playerName ||
+    (idx !== null && state.players && state.players[idx]) ||
+    null;
+  return { idx, name };
+}
 function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
@@ -985,6 +1009,7 @@ function getTrajectoryNetPoint(id) {
 }
 function getDefaultTrajectoryNetPointId(baseZone, setType) {
   if (setType === "fast") return "6-F";
+  if ((setType || "").toLowerCase() === "damp") return "4";
   if (baseZone === 4 || baseZone === 5) return "5";
   if (baseZone === 3 || baseZone === 6) return "3";
   if (baseZone === 2 || baseZone === 1) return "6-F";
@@ -2785,6 +2810,15 @@ async function handleEventClick(
     if (attackMeta && attackMeta.trajectory) {
       applyAttackTrajectoryToEvent(event, attackMeta.trajectory);
     }
+    const setterFromSet = getSetterFromLastSetEvent();
+    if (setterFromSet && (setterFromSet.idx !== null || setterFromSet.name)) {
+      event.setterIdx = setterFromSet.idx;
+      event.setterName = setterFromSet.name;
+    } else {
+      const setterFromCourt = getSetterFromCourt();
+      event.setterIdx = setterFromCourt.idx;
+      event.setterName = setterFromCourt.name;
+    }
     // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
     event.attackBp = true;
   }
@@ -3574,17 +3608,12 @@ function computeEventVideoTime(ev, baseMs) {
   return Math.max(0, offset + delta);
 }
 function formatVideoTimestamp(seconds) {
-  if (!isFinite(seconds)) return "0:00";
-  const total = Math.max(0, seconds);
-  let minutes = Math.floor(total / 60);
-  let secRounded = Math.round((total - minutes * 60) * 10) / 10;
-  if (secRounded >= 60) {
-    minutes += 1;
-    secRounded = 0;
-  }
-  const [secIntStr, decimals] = secRounded.toFixed(1).split(".");
-  const secStr = secIntStr.padStart(2, "0");
-  return minutes + ":" + secStr + "." + (decimals || "0");
+  if (!isFinite(seconds)) return "00:00:00";
+  const total = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
 }
 function parseYoutubeId(url) {
   if (!url) return "";
@@ -4033,7 +4062,7 @@ function refreshAfterVideoEdit(shouldRecalcStats) {
 }
   renderVideoAnalysis();
 }
-function createPlayerSelect(ev, onDone) {
+function createPlayerSelect(ev, onDone, options = {}) {
   const select = document.createElement("select");
   const emptyOpt = document.createElement("option");
   emptyOpt.value = "";
@@ -4045,13 +4074,37 @@ function createPlayerSelect(ev, onDone) {
     opt.textContent = formatNameWithNumber(name);
     select.appendChild(opt);
   });
-  const playerIdx = resolvePlayerIdx(ev);
+  const isSetterTarget = options && options.target === "setter";
+  const playerIdx = isSetterTarget
+    ? typeof ev.setterIdx === "number"
+      ? ev.setterIdx
+      : typeof ev.setterName === "string"
+        ? state.players.indexOf(ev.setterName)
+        : -1
+    : resolvePlayerIdx(ev);
   select.value = playerIdx >= 0 ? String(playerIdx) : "";
   select.addEventListener("change", () => {
-    const val = parseInt(select.value, 10);
+    const raw = select.value;
+    const val = parseInt(raw, 10);
+    if (!raw) {
+      if (isSetterTarget) {
+        ev.setterIdx = null;
+        ev.setterName = null;
+      } else {
+        ev.playerIdx = null;
+        ev.playerName = null;
+      }
+      refreshAfterVideoEdit(true);
+      return;
+    }
     if (!isNaN(val) && state.players[val]) {
-      ev.playerIdx = val;
-      ev.playerName = state.players[val];
+      if (isSetterTarget) {
+        ev.setterIdx = val;
+        ev.setterName = state.players[val];
+      } else {
+        ev.playerIdx = val;
+        ev.playerName = state.players[val];
+      }
       refreshAfterVideoEdit(true);
     }
   });
@@ -4478,6 +4531,7 @@ function renderEventTableRows(target, events, options = {}) {
       "Set",
       "FB N",
       "Giocatrice",
+      "Alzatore",
       "Fondamentale",
       "Codice",
       "Rot",
@@ -4598,6 +4652,11 @@ function renderEventTableRows(target, events, options = {}) {
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
+      },
+      {
+        text: formatNameWithNumber(ev.setterName || (typeof ev.setterIdx === "number" ? state.players[ev.setterIdx] : "")) || "",
+        editable: td =>
+          makeEditableCell(td, "Alzatore", done => createPlayerSelect(ev, done, { target: "setter" }), editGuard)
       },
       {
         text:
@@ -7078,9 +7137,11 @@ function resetSecondFilters() {
 }
 function renderSecondFilters() {
   if (!elSecondFilterSetters) return;
-  const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
+  const secondEvents = (state.events || []).filter(ev => ev && ev.skillId === "second");
+  const attackEvents = (state.events || []).filter(ev => ev && ev.skillId === "attack");
+  const setTypeEvents = secondEvents.concat(attackEvents);
   const playerLabels = new Map();
-  events.forEach(ev => {
+  secondEvents.forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
     const label =
       formatNameWithNumber(ev.playerName || state.players[ev.playerIdx]) ||
@@ -7089,33 +7150,43 @@ function renderSecondFilters() {
       "Alzatrice " + (ev.playerIdx + 1);
     playerLabels.set(ev.playerIdx, label);
   });
+  attackEvents.forEach(ev => {
+    const setterIdx = getSetterFromEvent(ev);
+    if (typeof setterIdx !== "number") return;
+    const label =
+      formatNameWithNumber(ev.setterName || state.players[setterIdx]) ||
+      ev.setterName ||
+      state.players[setterIdx] ||
+      "Alzatrice " + (setterIdx + 1);
+    playerLabels.set(setterIdx, label);
+  });
   const playersOpts = Array.from(playerLabels.entries()).map(([idx, label]) => ({
     value: idx,
     label
   }));
   const setTypeOpts = buildUniqueOptions(
-    events.map(ev =>
+    setTypeEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
     ),
     { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
   const baseOpts = buildUniqueOptions(
-    events.map(ev => normalizeBaseValue(ev.base)),
+    secondEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
   const phaseOpts = buildUniqueOptions(
-    events.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
+    secondEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
     { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
   );
   const recvEvalOpts = buildUniqueOptions(
-    events.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    secondEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
   );
   const recvZoneOpts = buildUniqueOptions(
-    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    secondEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
     { asNumber: true, labelFn: val => "Z" + val }
   );
-  const setOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
+  const setOpts = buildUniqueOptions(secondEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
   });
@@ -7178,7 +7249,7 @@ function renderSecondFilters() {
       onChange: handleSecondFilterChange
     })
   );
-  toggleFilterVisibility(elSecondFilterPrev, events.length > 0);
+  toggleFilterVisibility(elSecondFilterPrev, secondEvents.length > 0);
   toggleFilterVisibility(elSecondFilterReset, visibleFilters.some(Boolean));
   if (elSecondFilterPrev) {
     elSecondFilterPrev.value = secondFilterState.prevSkill || "any";
@@ -7198,7 +7269,13 @@ function getFilteredSecondEvents() {
 }
 function getFilteredAttacksForSecondDistribution() {
   const attacks = (state.events || []).filter(ev => ev && ev.skillId === "attack");
-  return attacks.filter(ev => matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true }));
+  return attacks.filter(ev => {
+    const setType = normalizeSetTypeValue(
+      ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
+    );
+    if (setType && setType.toLowerCase() === "damp") return false;
+    return matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true });
+  });
 }
 function renderSecondTable() {
   if (!elAggSecondBody) return;
@@ -8529,6 +8606,28 @@ function initSwipeTabs() {
   document.addEventListener("touchstart", onStart, { passive: true });
   document.addEventListener("touchend", onEnd, { passive: true });
 }
+function setupFocusGuards() {
+  const shouldBlurElement = el => {
+    if (!(el instanceof HTMLElement)) return false;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "button") return true;
+    if (tag === "input") {
+      const type = (el.type || "").toLowerCase();
+      return ["checkbox", "radio", "button", "submit", "reset"].includes(type);
+    }
+    return el.getAttribute("role") === "button";
+  };
+  document.addEventListener(
+    "click",
+    () => {
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (shouldBlurElement(active)) active.blur();
+      }, 0);
+    },
+    true
+  );
+}
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
   if (!rot || rot < 1 || rot > 6) {
@@ -8544,6 +8643,7 @@ function init() {
   }
   initTabs();
   initSwipeTabs();
+  setupFocusGuards();
   document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
