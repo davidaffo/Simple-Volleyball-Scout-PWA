@@ -36,7 +36,7 @@ const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-ove
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
 const courtModalElements = [];
 let courtOverlayEl = null;
-courtModalElements.push(elSkillModal, elLineupModal, elErrorModal, elAttackTrajectoryModal);
+courtModalElements.push(elSkillModal, elLineupModal, elErrorModal, elPointModal, elAttackTrajectoryModal);
 const elServeTypeButtons = document.getElementById("serve-type-buttons");
 const SERVE_START_IMG_NEAR = "images/trajectory/service_start_near.png";
 const SERVE_START_IMG_FAR = "images/trajectory/service_start_far.png";
@@ -2028,6 +2028,45 @@ function renderErrorModal() {
   });
   elErrorModalBody.appendChild(grid);
 }
+function renderPointModal() {
+  if (!elPointModalBody) return;
+  elPointModalBody.innerHTML = "";
+  const note = document.createElement("p");
+  note.className = "section-note";
+  note.textContent = "Seleziona la giocatrice a cui assegnare il punto oppure applicalo alla squadra.";
+  elPointModalBody.appendChild(note);
+  const grid = document.createElement("div");
+  grid.className = "error-choice-grid";
+  const teamBtn = document.createElement("button");
+  teamBtn.type = "button";
+  teamBtn.className = "error-choice-btn success";
+  teamBtn.textContent = "Assegna alla squadra";
+  teamBtn.addEventListener("click", () => {
+    handleTeamPoint();
+    closePointModal();
+  });
+  grid.appendChild(teamBtn);
+  if (!state.players || state.players.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Aggiungi giocatrici per assegnare il punto.";
+    elPointModalBody.appendChild(empty);
+    elPointModalBody.appendChild(grid);
+    return;
+  }
+  state.players.forEach((name, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "error-choice-btn";
+    btn.textContent = formatNameWithNumber(name);
+    btn.addEventListener("click", () => {
+      addPlayerPoint(idx, name);
+      closePointModal();
+    });
+    grid.appendChild(btn);
+  });
+  elPointModalBody.appendChild(grid);
+}
 function openErrorModal() {
   if (!elErrorModal) return;
   renderErrorModal();
@@ -2041,6 +2080,21 @@ function openErrorModal() {
 function closeErrorModal() {
   if (!elErrorModal) return;
   elErrorModal.classList.add("hidden");
+  setModalOpenState(false);
+}
+function openPointModal() {
+  if (!elPointModal) return;
+  renderPointModal();
+  if (isDesktopCourtModalLayout()) {
+    setCourtAreaLocked(true);
+  }
+  updateCourtModalPlacement();
+  elPointModal.classList.remove("hidden");
+  setModalOpenState(true);
+}
+function closePointModal() {
+  if (!elPointModal) return;
+  elPointModal.classList.add("hidden");
   setModalOpenState(false);
 }
 function attachModalCloseHandlers() {
@@ -2072,6 +2126,13 @@ function attachModalCloseHandlers() {
     }
     closeErrorModal();
   };
+  const closePointHandler = e => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closePointModal();
+  };
   const errorCloseButtons = [elErrorModalClose];
   errorCloseButtons.forEach(btn => {
     if (!btn) return;
@@ -2083,6 +2144,19 @@ function attachModalCloseHandlers() {
   if (elErrorModalBackdrop) {
     events.forEach(evt =>
       elErrorModalBackdrop.addEventListener(evt, closeErrorHandler, { passive: false })
+    );
+  }
+  const pointCloseButtons = [elPointModalClose];
+  pointCloseButtons.forEach(btn => {
+    if (!btn) return;
+    events.forEach(evt => {
+      btn.addEventListener(evt, closePointHandler, { passive: false, capture: true });
+    });
+    btn.onclick = closePointHandler;
+  });
+  if (elPointModalBackdrop) {
+    events.forEach(evt =>
+      elPointModalBackdrop.addEventListener(evt, closePointHandler, { passive: false })
     );
   }
   if (elSkillModal) {
@@ -2106,6 +2180,19 @@ function attachModalCloseHandlers() {
         if (!(target instanceof HTMLElement)) return;
         if (target.closest("[data-close-error]")) {
           closeErrorHandler(e);
+        }
+      },
+      true
+    );
+  }
+  if (elPointModal) {
+    elPointModal.addEventListener(
+      "click",
+      e => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("[data-close-point]")) {
+          closePointHandler(e);
         }
       },
       true
@@ -5288,6 +5375,13 @@ function addPlayerError(playerIdx, playerName) {
     return;
   }
   addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice");
+}
+function addPlayerPoint(playerIdx, playerName) {
+  if (state.matchFinished) {
+    alert("Partita in pausa. Riprendi per continuare lo scout.");
+    return;
+  }
+  addManualPoint("for", 1, "for", playerIdx, playerName || "Giocatrice");
 }
 function handleTeamError() {
   addManualPoint("against", 1, "team-error", null, "Squadra");
@@ -9512,7 +9606,7 @@ function init() {
   if (elBtnScoreAgainstPlusModal) elBtnScoreAgainstPlusModal.addEventListener("click", () => handleManualScore("against", 1));
   if (elBtnScoreAgainstMinusModal) elBtnScoreAgainstMinusModal.addEventListener("click", () => handleManualScore("against", -1));
   if (elBtnScoreTeamPointModal) {
-    elBtnScoreTeamPointModal.addEventListener("click", handleTeamPoint);
+    elBtnScoreTeamPointModal.addEventListener("click", openPointModal);
   }
   if (elVideoFileInput) {
     elVideoFileInput.addEventListener("change", e => {
@@ -9600,7 +9694,7 @@ function init() {
     elBtnScoreAgainstMinus.addEventListener("click", () => handleManualScore("against", -1));
   }
   if (elBtnScoreTeamPoint) {
-    elBtnScoreTeamPoint.addEventListener("click", handleTeamPoint);
+    elBtnScoreTeamPoint.addEventListener("click", openPointModal);
   }
   if (elBtnScoreOppError) {
     elBtnScoreOppError.addEventListener("click", handleOpponentErrorPoint);
