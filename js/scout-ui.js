@@ -1018,7 +1018,10 @@ function updateTrajectoryImageFromStart() {
   if (!trajectoryStart || !elAttackTrajectoryImage) return;
   const startNorm = normalizeTrajectoryPoint(trajectoryStart);
   if (!startNorm) return;
-  const startZoneRaw = getAttackZone(startNorm, false);
+  const zoneNorm = trajectoryMirror
+    ? { x: 1 - clamp01(startNorm.x), y: clamp01(startNorm.y) }
+    : startNorm;
+  const startZoneRaw = getAttackZone(zoneNorm, false);
   const imgSrc = getTrajectoryImageForZone(startZoneRaw, trajectoryMirror);
   if (elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
     elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
@@ -1031,7 +1034,8 @@ function applyTrajectoryStartFromNetPoint() {
   if (!point || !elAttackTrajectoryCanvas) return;
   const box = getTrajectoryDisplayBox();
   const canvas = elAttackTrajectoryCanvas;
-  const x = box ? box.offsetX + point.x * box.width : point.x * canvas.width;
+  const normX = trajectoryMirror ? 1 - point.x : point.x;
+  const x = box ? box.offsetX + normX * box.width : normX * canvas.width;
   const fixedY = box
     ? box.offsetY + (trajectoryMirror ? 0.5 : box.height - 0.5)
     : trajectoryMirror
@@ -9315,7 +9319,17 @@ function init() {
         trajectoryEnd = null;
         const xWithinStage = box ? pos.x - box.offsetX : pos.x;
         const third = xWithinStage < w / 3 ? 0 : xWithinStage < (2 * w) / 3 ? 1 : 2;
-        const zoneFromClickRaw = third === 0 ? 4 : third === 1 ? 3 : 2;
+        const zoneFromClickRaw = trajectoryMirror
+          ? third === 0
+            ? 2
+            : third === 1
+              ? 3
+              : 4
+          : third === 0
+            ? 4
+            : third === 1
+              ? 3
+              : 2;
         const imgSrc = getTrajectoryImageForZone(zoneFromClickRaw, trajectoryMirror); // mostra il campo della zona front-row
         if (elAttackTrajectoryImage && elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
           elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
