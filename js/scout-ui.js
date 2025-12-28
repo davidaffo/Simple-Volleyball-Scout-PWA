@@ -1319,7 +1319,8 @@ const playByPlayState = {
   active: false,
   index: -1,
   key: null,
-  endTime: null
+  endTime: null,
+  endAtMs: null
 };
 let bulkEditActive = false;
 let bulkEditSession = null;
@@ -5347,6 +5348,7 @@ function stopPlayByPlay() {
   playByPlayState.index = -1;
   playByPlayState.key = null;
   playByPlayState.endTime = null;
+  playByPlayState.endAtMs = null;
 }
 function ensurePlayByPlayMonitor() {
   if (playByPlayTimer) return;
@@ -5371,8 +5373,11 @@ function ensurePlayByPlayMonitor() {
     }
     if (!isFinite(playByPlayState.endTime)) return;
     const current = getActiveVideoPlaybackSeconds();
-    if (typeof current !== "number") return;
-    if (current + 0.03 < playByPlayState.endTime) return;
+    if (typeof current !== "number") {
+      if (playByPlayState.endAtMs && Date.now() < playByPlayState.endAtMs) return;
+    } else if (current + 0.03 < playByPlayState.endTime) {
+      return;
+    }
     const nextIndex = playByPlayState.index + 1;
     if (nextIndex >= rows.length) {
       stopPlayByPlay();
@@ -5408,6 +5413,7 @@ function startPlayByPlayAtIndex(idx) {
   }
   const duration = getPlayByPlayDurationSeconds(row.ev || {});
   playByPlayState.endTime = start + duration;
+  playByPlayState.endAtMs = Date.now() + duration * 1000;
   setSelectionForContext("video", new Set([row.key]), row.key, { userAction: false });
   scrollRowIntoView(row);
   seekVideoToTime(start);
@@ -5539,6 +5545,7 @@ function seekVideoToTime(seconds, options = {}) {
       : isVideoElementPlaying(preferScout ? elAnalysisVideoScout : elAnalysisVideo) ||
         isVideoElementPlaying(elAnalysisVideoScout) ||
         isVideoElementPlaying(elAnalysisVideo);
+  const controlPlayback = !preservePlayback;
   const wantPlay = preservePlayback ? wasPlaying : true;
   if (state.video && state.video.youtubeId) {
     if (preferScout) {
@@ -5549,10 +5556,12 @@ function seekVideoToTime(seconds, options = {}) {
               JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
               "*"
             );
-            elYoutubeFrameScout.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
-              "*"
-            );
+            if (controlPlayback) {
+              elYoutubeFrameScout.contentWindow.postMessage(
+                JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+                "*"
+              );
+            }
             return;
           } catch (_) {
             // ignore postMessage errors and fall back to src update
@@ -5563,10 +5572,12 @@ function seekVideoToTime(seconds, options = {}) {
       }
       if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
         ytPlayerScout.seekTo(target, true);
-        if (wantPlay && typeof ytPlayerScout.playVideo === "function") {
-          ytPlayerScout.playVideo();
-        } else if (!wantPlay && typeof ytPlayerScout.pauseVideo === "function") {
-          ytPlayerScout.pauseVideo();
+        if (controlPlayback) {
+          if (wantPlay && typeof ytPlayerScout.playVideo === "function") {
+            ytPlayerScout.playVideo();
+          } else if (typeof ytPlayerScout.pauseVideo === "function") {
+            ytPlayerScout.pauseVideo();
+          }
         }
       } else if (elYoutubeFrameScout) {
         if (elYoutubeFrameScout.contentWindow) {
@@ -5575,14 +5586,9 @@ function seekVideoToTime(seconds, options = {}) {
               JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
               "*"
             );
-            if (wantPlay) {
+            if (controlPlayback) {
               elYoutubeFrameScout.contentWindow.postMessage(
-                JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-                "*"
-              );
-            } else {
-              elYoutubeFrameScout.contentWindow.postMessage(
-                JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+                JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
                 "*"
               );
             }
@@ -5607,10 +5613,12 @@ function seekVideoToTime(seconds, options = {}) {
             JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
             "*"
           );
-          elYoutubeFrame.contentWindow.postMessage(
-            JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
-            "*"
-          );
+          if (controlPlayback) {
+            elYoutubeFrame.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+              "*"
+            );
+          }
           return;
         } catch (_) {
           // ignore postMessage errors and fall back to src update
@@ -5620,8 +5628,8 @@ function seekVideoToTime(seconds, options = {}) {
       return;
     }
     if (ytPlayer && typeof ytPlayer.seekTo === "function") {
-      queueYoutubeSeek(target, wantPlay);
-      if (!wantPlay && typeof ytPlayer.pauseVideo === "function") {
+      queueYoutubeSeek(target, controlPlayback ? wantPlay : false);
+      if (controlPlayback && !wantPlay && typeof ytPlayer.pauseVideo === "function") {
         ytPlayer.pauseVideo();
       }
     } else if (elYoutubeFrame) {
@@ -5631,14 +5639,9 @@ function seekVideoToTime(seconds, options = {}) {
             JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
             "*"
           );
-          if (wantPlay) {
+          if (controlPlayback) {
             elYoutubeFrame.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-              "*"
-            );
-          } else {
-            elYoutubeFrame.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
               "*"
             );
           }
