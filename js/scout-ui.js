@@ -1529,6 +1529,11 @@ function startVideoPlaybackSnapshotTimer() {
   }, 2000);
 }
 function getEventVideoSeconds(baseVideoTime = null) {
+  if (typeof baseVideoTime === "number") return Math.max(0, baseVideoTime);
+  if (state.videoScoutMode) {
+    const playback = getActiveVideoPlaybackSeconds();
+    if (typeof playback === "number") return Math.max(0, playback);
+  }
   if (!state.events || state.events.length === 0) {
     ensureVideoClock();
     if (
@@ -1542,11 +1547,6 @@ function getEventVideoSeconds(baseVideoTime = null) {
       state.videoClock.pausedAtMs = null;
     }
     return 0;
-  }
-  if (typeof baseVideoTime === "number") return Math.max(0, baseVideoTime);
-  if (state.videoScoutMode) {
-    const playback = getActiveVideoPlaybackSeconds();
-    if (typeof playback === "number") return Math.max(0, playback);
   }
   return getVideoClockSeconds();
 }
@@ -8257,8 +8257,7 @@ function initSwipeTabs() {
 }
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
-  const noHistory = !state.events || state.events.length === 0;
-  if (!rot || rot < 1 || rot > 6 || noHistory) {
+  if (!rot || rot < 1 || rot > 6) {
     state.rotation = 1;
     updateRotationDisplay();
     saveState();
