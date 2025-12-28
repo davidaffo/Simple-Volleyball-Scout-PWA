@@ -5532,14 +5532,14 @@ function seekVideoToTime(seconds, options = {}) {
   updateVideoPlaybackSnapshot(target, true);
   const activeTab = document && document.body ? document.body.dataset.activeTab : "";
   const preferScout = !!state.videoScoutMode && activeTab !== "video";
-  const wantPlay =
-    !preservePlayback ||
-    (state.video && state.video.youtubeId
+  const wasPlaying =
+    state.video && state.video.youtubeId
       ? (preferScout ? isYoutubePlayerPlaying(ytPlayerScout, ytPlayerScoutReady) : false) ||
         isYoutubePlayerPlaying(ytPlayer, ytPlayerReady)
       : isVideoElementPlaying(preferScout ? elAnalysisVideoScout : elAnalysisVideo) ||
         isVideoElementPlaying(elAnalysisVideoScout) ||
-        isVideoElementPlaying(elAnalysisVideo));
+        isVideoElementPlaying(elAnalysisVideo);
+  const wantPlay = preservePlayback ? wasPlaying : true;
   if (state.video && state.video.youtubeId) {
     if (preferScout) {
       if (youtubeScoutFallback && elYoutubeFrameScout) {
@@ -5547,15 +5547,15 @@ function seekVideoToTime(seconds, options = {}) {
           state.video.youtubeId,
           target,
           false,
-          preservePlayback ? false : true
+          wantPlay
         );
         return;
       }
       if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
         ytPlayerScout.seekTo(target, true);
-        if (!preservePlayback && typeof ytPlayerScout.playVideo === "function") {
+        if (wantPlay && typeof ytPlayerScout.playVideo === "function") {
           ytPlayerScout.playVideo();
-        } else if (preservePlayback && typeof ytPlayerScout.pauseVideo === "function" && !wantPlay) {
+        } else if (!wantPlay && typeof ytPlayerScout.pauseVideo === "function") {
           ytPlayerScout.pauseVideo();
         }
       } else if (elYoutubeFrameScout) {
@@ -5565,9 +5565,14 @@ function seekVideoToTime(seconds, options = {}) {
               JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
               "*"
             );
-            if (!preservePlayback || wantPlay) {
+            if (wantPlay) {
               elYoutubeFrameScout.contentWindow.postMessage(
                 JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+                "*"
+              );
+            } else {
+              elYoutubeFrameScout.contentWindow.postMessage(
+                JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
                 "*"
               );
             }
@@ -5580,7 +5585,7 @@ function seekVideoToTime(seconds, options = {}) {
           state.video.youtubeId,
           target,
           true,
-          preservePlayback ? false : true
+          wantPlay
         );
       }
       return;
@@ -5590,13 +5595,13 @@ function seekVideoToTime(seconds, options = {}) {
         state.video.youtubeId,
         target,
         false,
-        preservePlayback ? false : true
+        wantPlay
       );
       return;
     }
     if (ytPlayer && typeof ytPlayer.seekTo === "function") {
-      queueYoutubeSeek(target, true);
-      if (preservePlayback && !wantPlay && typeof ytPlayer.pauseVideo === "function") {
+      queueYoutubeSeek(target, wantPlay);
+      if (!wantPlay && typeof ytPlayer.pauseVideo === "function") {
         ytPlayer.pauseVideo();
       }
     } else if (elYoutubeFrame) {
@@ -5606,9 +5611,14 @@ function seekVideoToTime(seconds, options = {}) {
             JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
             "*"
           );
-          if (!preservePlayback || wantPlay) {
+          if (wantPlay) {
             elYoutubeFrame.contentWindow.postMessage(
               JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+              "*"
+            );
+          } else {
+            elYoutubeFrame.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
               "*"
             );
           }
@@ -5621,7 +5631,7 @@ function seekVideoToTime(seconds, options = {}) {
         state.video.youtubeId,
         target,
         true,
-        preservePlayback ? false : true
+        wantPlay
       );
     }
     return;
