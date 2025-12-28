@@ -20,6 +20,7 @@ let lastSelectedEventId = null;
 const eventTableContexts = {};
 let lastEventContextKey = null;
 let lastReceiveContext = null;
+let lastLogRenderedKey = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -1588,6 +1589,64 @@ function getActiveVideoPlaybackSeconds() {
   }
   return null;
 }
+function isVideoElementPlaying(videoEl) {
+  return !!(videoEl && !videoEl.paused && !videoEl.ended && videoEl.readyState >= 2);
+}
+function isYoutubePlayerPlaying(player, readyFlag) {
+  if (!readyFlag || !player || typeof player.getPlayerState !== "function") return false;
+  try {
+    return player.getPlayerState() === 1;
+  } catch (_) {
+    return false;
+  }
+}
+function isVideoPlaybackActive() {
+  if (state.video && state.video.youtubeId) {
+    if (isYoutubePlayerPlaying(ytPlayerScout, ytPlayerScoutReady)) return true;
+    if (isYoutubePlayerPlaying(ytPlayer, ytPlayerReady)) return true;
+    return false;
+  }
+  return isVideoElementPlaying(elAnalysisVideoScout) || isVideoElementPlaying(elAnalysisVideo);
+}
+function scheduleVideoSafeRender(task) {
+  if (typeof task !== "function") return;
+  if (!state.videoScoutMode || !isVideoPlaybackActive()) {
+    task();
+    return;
+  }
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(task, { timeout: 200 });
+    return;
+  }
+  setTimeout(task, 60);
+}
+function scheduleRenderPlayers() {
+  scheduleVideoSafeRender(renderPlayers);
+}
+function schedulePostEventUpdates({
+  suppressScroll = false,
+  includeAggregates = true,
+  playerIdx = null,
+  skillId = null,
+  persistLocal = false
+} = {}) {
+  scheduleVideoSafeRender(() => {
+    saveState({ persistLocal });
+    if (typeof playerIdx === "number" && skillId) {
+      updateSkillStatsUI(playerIdx, skillId);
+    }
+    renderPlayers();
+    renderEventsLog({ suppressScroll, append: true });
+    if (includeAggregates) {
+      renderLiveScore();
+      renderScoreAndRotations(computePointsSummary());
+      renderAggregatedTable();
+      renderVideoAnalysis();
+      renderTrajectoryAnalysis();
+      renderServeTrajectoryAnalysis();
+    }
+  });
+}
 function applySavedPlaybackToVideo(videoEl) {
   if (!videoEl || !state.video) return;
   const saved = state.video.lastPlaybackSeconds;
@@ -2287,7 +2346,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         setSelectedSkill(playerIdx, null);
         const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
         if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
-        renderPlayers();
+        scheduleRenderPlayers();
       });
       const goBtn = document.createElement("button");
       goBtn.type = "button";
@@ -2296,7 +2355,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       goBtn.addEventListener("click", () => {
         blockInlinePlayer = playerIdx;
         blockConfirmByPlayer[playerIdx] = true;
-        renderPlayers();
+        scheduleRenderPlayers();
       });
       grid.appendChild(skipBtn);
       grid.appendChild(goBtn);
@@ -2350,7 +2409,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.textContent = skill.label;
       btn.addEventListener("click", () => {
         setSelectedSkill(playerIdx, skill.id);
-        renderPlayers();
+        scheduleRenderPlayers();
       });
       grid.appendChild(btn);
     });
@@ -2469,7 +2528,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       setSelectedSkill(playerIdx, null);
       const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
       if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
-      renderPlayers();
+      scheduleRenderPlayers();
     });
     const goBtn = document.createElement("button");
     goBtn.type = "button";
@@ -2478,7 +2537,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     goBtn.addEventListener("click", () => {
       blockInlinePlayer = playerIdx;
       blockConfirmByPlayer[playerIdx] = true;
-      renderPlayers();
+      scheduleRenderPlayers();
     });
     grid.appendChild(skipBtn);
     grid.appendChild(goBtn);
@@ -2838,10 +2897,13 @@ async function handleEventClick(
     triggerFreeballFlow({ persist: false, rerender: false });
   }
   animateEventToLog(sourceEl, skillId, code);
-  saveState();
-  updateSkillStatsUI(playerIdx, skillId);
-  renderEventsLog();
-  renderPlayers();
+  const persistLocal = typeof getPointDirection === "function" && !!getPointDirection(event);
+  schedulePostEventUpdates({
+    includeAggregates: !state.predictiveSkillFlow,
+    playerIdx,
+    skillId,
+    persistLocal
+  });
   if (
     state.attackTrajectoryEnabled &&
     skillId === "attack" &&
@@ -2872,7 +2934,7 @@ async function handleEventClick(
           event.zone = trajectoryPayload.startZone;
           event.playerPosition = trajectoryPayload.startZone;
         }
-        saveState();
+        saveState({ persistLocal });
         renderEventsLog({ suppressScroll: true });
         renderVideoAnalysis();
         renderTrajectoryAnalysis();
@@ -2882,14 +2944,6 @@ async function handleEventClick(
   }
   if (state.serveTrajectoryEnabled && skillId === "serve" && !serveMeta) {
     captureServeTrajectory(event);
-  }
-  if (!state.predictiveSkillFlow) {
-    renderLiveScore();
-    renderScoreAndRotations(computePointsSummary());
-    renderAggregatedTable();
-    renderVideoAnalysis();
-    renderTrajectoryAnalysis();
-    renderServeTrajectoryAnalysis();
   }
   return true;
 }
@@ -3363,14 +3417,16 @@ async function copyFfmpegFromSelection() {
   alert("Comando ffmpeg copiato negli appunti.");
 }
 function renderEventsLog(options = {}) {
-  if (elEventsLog) elEventsLog.innerHTML = "";
+  const append = !!options.append;
   let summaryText = "Nessun evento";
   let compactSummary = "";
   const suppressScroll = !!options.suppressScroll;
   if (!state.events || state.events.length === 0) {
+    if (elEventsLog) elEventsLog.innerHTML = "";
     if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
     if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
+    lastLogRenderedKey = null;
     return;
   }
   const recent = state.events.slice(-40).sort((a, b) => {
@@ -3380,6 +3436,7 @@ function renderEventsLog(options = {}) {
     return (a.eventId || 0) - (b.eventId || 0);
   });
   const latest = recent[recent.length - 1];
+  const latestKey = getEventKey(latest, recent.length - 1);
   const getEventSkillLabel = ev => {
     if (ev.actionType === "timeout") return "Timeout";
     if (ev.actionType === "substitution") return "Cambio";
@@ -3426,16 +3483,55 @@ function renderEventsLog(options = {}) {
   compactSummary = latestFmt.compact;
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
-  renderEventTableRows(elEventsLog, recent, {
-    showSeek: false,
-    showVideoTime: true,
-    baseMs,
-    showIndex: false,
-    enableSelection: true,
-    showCheckbox: false,
-    contextKey: "log",
-    onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts)
-  });
+  let didAppend = false;
+  if (append && elEventsLog && lastLogRenderedKey) {
+    const lastIdx = recent.findIndex(ev => getEventKey(ev) === lastLogRenderedKey);
+    if (lastIdx !== -1) {
+      const toAppend = recent.slice(lastIdx + 1);
+      if (toAppend.length > 0) {
+        renderEventTableRows(elEventsLog, toAppend, {
+          showSeek: false,
+          showVideoTime: true,
+          baseMs,
+          showIndex: false,
+          enableSelection: true,
+          showCheckbox: false,
+          contextKey: "log",
+          onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts),
+          append: true
+        });
+        const table = elEventsLog.querySelector("table");
+        const tbody = table ? table.querySelector("tbody") : null;
+        const ctxRef = eventTableContexts.log;
+        if (tbody && ctxRef && ctxRef.rows) {
+          const overflow = tbody.rows.length - recent.length;
+          if (overflow > 0) {
+            for (let i = 0; i < overflow; i += 1) {
+              const first = tbody.rows[0];
+              if (first) first.remove();
+            }
+            ctxRef.rows.splice(0, overflow);
+            pruneEventSelection();
+          }
+        }
+        didAppend = true;
+      }
+    }
+  }
+  if (!didAppend) {
+    if (elEventsLog) elEventsLog.innerHTML = "";
+    renderEventTableRows(elEventsLog, recent, {
+      showSeek: false,
+      showVideoTime: true,
+      baseMs,
+      showIndex: false,
+      enableSelection: true,
+      showCheckbox: false,
+      contextKey: "log",
+      onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts)
+    });
+  }
+  lastLogRenderedKey = latestKey;
   if (elEventsLog && !suppressScroll) {
     requestAnimationFrame(() => {
       elEventsLog.scrollTop = elEventsLog.scrollHeight;
@@ -3485,7 +3581,7 @@ function updateTeamCounters() {
 }
 function recordTimeoutEvent() {
   recordSetAction("timeout", { playerName: "Timeout", code: "TO" });
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderPlayers();
   renderBenchChips();
@@ -3495,7 +3591,7 @@ function recordTimeoutEvent() {
 }
 function recordOpponentTimeoutEvent() {
   recordSetAction("timeout", { playerName: "Timeout Avv.", code: "TOA" });
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderPlayers();
   renderBenchChips();
@@ -3511,7 +3607,7 @@ function recordSubstitutionEvent({ playerIn, playerOut }) {
     playerOut: playerOut || null,
     code: "SUB"
   });
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderPlayers();
   renderBenchChips();
@@ -4481,23 +4577,44 @@ function makeEditableCell(td, _title, factory, guard = null) {
 }
 function renderEventTableRows(target, events, options = {}) {
   if (!target) return;
+  const append = !!options.append;
   const contextKey = options.contextKey || target.id || (target.closest && target.closest("[data-context-key]")?.dataset.contextKey) || "events";
   const enableSelection = options.enableSelection !== false;
   const showCheckbox = options.showCheckbox !== false;
   if (!enableSelection) removeEventTableContext(contextKey);
-  target.innerHTML = "";
   const showVideoTime = options.showVideoTime;
   const showSeek = options.showSeek;
   const showIndex = options.showIndex !== false;
   const baseMs = options.baseMs || null;
   const targetIsTbody = target.tagName && target.tagName.toLowerCase() === "tbody";
-  const table = targetIsTbody ? null : document.createElement("table");
-  const tbody = targetIsTbody ? target : document.createElement("tbody");
+  let table = targetIsTbody ? null : null;
+  let tbody = targetIsTbody ? target : null;
+  let usingExisting = false;
+  if (append) {
+    if (targetIsTbody) {
+      usingExisting = true;
+    } else {
+      table = target.querySelector("table");
+      tbody = table ? table.querySelector("tbody") : null;
+      usingExisting = !!tbody;
+    }
+  }
+  if (!usingExisting) {
+    target.innerHTML = "";
+    table = targetIsTbody ? null : document.createElement("table");
+    tbody = targetIsTbody ? target : document.createElement("tbody");
+  }
   const rowRecords = [];
   let ctxRef = null;
   if (enableSelection) {
-    ctxRef = { rows: [], onSelectionChange: options.onSelectionChange || null, baseMs };
-    eventTableContexts[contextKey] = ctxRef;
+    if (append && eventTableContexts[contextKey]) {
+      ctxRef = eventTableContexts[contextKey];
+      ctxRef.onSelectionChange = options.onSelectionChange || ctxRef.onSelectionChange || null;
+      ctxRef.baseMs = baseMs;
+    } else {
+      ctxRef = { rows: [], onSelectionChange: options.onSelectionChange || null, baseMs };
+      eventTableContexts[contextKey] = ctxRef;
+    }
   }
 
   const handleRowClick = (record, e, fromCheckbox = false) => {
@@ -4518,7 +4635,7 @@ function renderEventTableRows(target, events, options = {}) {
     scrollRowIntoView(record);
   };
 
-  if (!targetIsTbody) {
+  if (!targetIsTbody && !usingExisting) {
     table.className = options.tableClass || "event-edit-table";
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
@@ -4584,7 +4701,9 @@ function renderEventTableRows(target, events, options = {}) {
     table.appendChild(thead);
     table.appendChild(tbody);
   }
-  events.forEach((ev, displayIdx) => {
+  const startIdx = append && ctxRef && ctxRef.rows ? ctxRef.rows.length : 0;
+  events.forEach((ev, index) => {
+    const displayIdx = append ? startIdx + index : index;
     const tr = document.createElement("tr");
     const videoTime = showVideoTime ? computeEventVideoTime(ev, baseMs) : null;
     const zoneDisplay = ev.zone || ev.playerPosition || "";
@@ -4878,11 +4997,15 @@ function renderEventTableRows(target, events, options = {}) {
     tbody.appendChild(tr);
   });
   if (enableSelection && ctxRef) {
-    ctxRef.rows = rowRecords;
+    if (append) {
+      ctxRef.rows = (ctxRef.rows || []).concat(rowRecords);
+    } else {
+      ctxRef.rows = rowRecords;
+    }
     registerEventTableContext(contextKey, ctxRef);
     handleSeekForSelection(contextKey);
   }
-  if (!targetIsTbody) {
+  if (!targetIsTbody && !usingExisting) {
     target.appendChild(table);
   }
 }
@@ -5400,7 +5523,7 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
   clearReceiveContext();
   state.events.push(event);
   handleAutoRotationFromEvent(event);
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   recalcAllStatsAndUpdateUI();
   renderPlayers();
@@ -5425,7 +5548,7 @@ function handleManualScore(direction, delta) {
     next.against = Math.max(next.against, -(baseSummary.totalAgainst || 0));
   }
   state.scoreOverrides[setNum] = next;
-  saveState();
+  saveState({ persistLocal: true });
   renderLiveScore();
   renderScoreAndRotations(computePointsSummary());
   renderAggregatedTable();
@@ -5545,7 +5668,7 @@ function applySetChange(nextSet, options = {}) {
     pauseVideoClock();
     state.matchFinished = true;
     setCurrentSet(nextSet);
-    saveState();
+    saveState({ persistLocal: true });
     renderEventsLog();
     renderLiveScore();
     updateMatchStatusUI();
@@ -5571,7 +5694,7 @@ function applySetChange(nextSet, options = {}) {
     prevVideoClock,
     nextVideoClock: snapshotVideoClock()
   });
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderLiveScore();
   updateMatchStatusUI();
@@ -8636,7 +8759,7 @@ function ensureBaseRotationDefault() {
     saveState();
   }
 }
-function init() {
+async function init() {
   isLoadingMatch = true;
   if (typeof window !== "undefined") {
     window.isLoadingMatch = true;
@@ -8648,6 +8771,9 @@ function init() {
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
   loadState();
+  if (typeof loadStateFromIndexedDb === "function") {
+    await loadStateFromIndexedDb();
+  }
   setActiveTab(state.uiActiveTab || activeTab || "info");
   setActiveAggTab(state.uiAggTab || activeAggTab || "summary");
   ensureBaseRotationDefault();

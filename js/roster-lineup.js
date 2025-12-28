@@ -317,124 +317,146 @@ const SKILL_COLUMN_MAP = {
   defense: [22, 23, 24],
   second: []
 };
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return;
-    state = Object.assign(state, parsed);
-    state.theme = parsed.theme || "dark";
-    state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
-    state.captains = normalizePlayers(Array.isArray(parsed.captains) ? parsed.captains : []).slice(0, 1);
-    ensureCourtShape();
-    cleanCourtPlayers();
-    state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
-    state.autoRolePositioning = !!parsed.autoRolePositioning;
-    state.isServing = !!parsed.isServing;
-    state.rotation = parsed.rotation || 1;
-    state.matchFinished = !!parsed.matchFinished;
-    state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
-    state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
-    state.videoScoutMode = !!parsed.videoScoutMode;
-    state.nextSetType = parsed.nextSetType || "";
-    state.forceMobileLayout = !!parsed.forceMobileLayout;
-    state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
-    state.liberoAutoMap = parsed.liberoAutoMap || {};
-    state.savedTeams = parsed.savedTeams || {};
-    state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
-    state.savedMatches = parsed.savedMatches || {};
-    state.scoreOverrides = normalizeScoreOverrides(parsed.scoreOverrides);
-    state.selectedTeam = parsed.selectedTeam || "";
-    state.selectedOpponentTeam = parsed.selectedOpponentTeam || "";
-    state.opponentPlayers = normalizePlayers(parsed.opponentPlayers || state.opponentPlayers || []);
-    state.opponentPlayerNumbers = parsed.opponentPlayerNumbers || {};
-    state.opponentLiberos = Array.isArray(parsed.opponentLiberos) ? normalizePlayers(parsed.opponentLiberos) : [];
-    state.opponentCaptains = normalizePlayers(
-      Array.isArray(parsed.opponentCaptains) ? parsed.opponentCaptains : []
-    ).slice(0, 1);
-    state.selectedMatch = parsed.selectedMatch || "";
-    if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
-      const selectedTeamData = state.savedTeams[state.selectedTeam];
-      if (selectedTeamData) {
-        const roster = extractRosterFromTeam(selectedTeamData);
-        state.captains = normalizePlayers(roster.captains || []).filter(name =>
-          (state.players || []).includes(name)
-        ).slice(0, 1);
-      }
+function applyStateSnapshot(parsed, options = {}) {
+  if (!parsed || typeof parsed !== "object") return false;
+  const { skipStorageSync = false } = options;
+  state = Object.assign(state, parsed);
+  state.theme = parsed.theme || "dark";
+  state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
+  state.captains = normalizePlayers(Array.isArray(parsed.captains) ? parsed.captains : []).slice(0, 1);
+  ensureCourtShape();
+  cleanCourtPlayers();
+  state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
+  state.autoRolePositioning = !!parsed.autoRolePositioning;
+  state.isServing = !!parsed.isServing;
+  state.rotation = parsed.rotation || 1;
+  state.matchFinished = !!parsed.matchFinished;
+  state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
+  state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
+  state.videoScoutMode = !!parsed.videoScoutMode;
+  state.nextSetType = parsed.nextSetType || "";
+  state.forceMobileLayout = !!parsed.forceMobileLayout;
+  state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
+  state.liberoAutoMap = parsed.liberoAutoMap || {};
+  state.savedTeams = parsed.savedTeams || {};
+  state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
+  state.savedMatches = parsed.savedMatches || {};
+  state.scoreOverrides = normalizeScoreOverrides(parsed.scoreOverrides);
+  state.selectedTeam = parsed.selectedTeam || "";
+  state.selectedOpponentTeam = parsed.selectedOpponentTeam || "";
+  state.opponentPlayers = normalizePlayers(parsed.opponentPlayers || state.opponentPlayers || []);
+  state.opponentPlayerNumbers = parsed.opponentPlayerNumbers || {};
+  state.opponentLiberos = Array.isArray(parsed.opponentLiberos) ? normalizePlayers(parsed.opponentLiberos) : [];
+  state.opponentCaptains = normalizePlayers(
+    Array.isArray(parsed.opponentCaptains) ? parsed.opponentCaptains : []
+  ).slice(0, 1);
+  state.selectedMatch = parsed.selectedMatch || "";
+  if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
+    const selectedTeamData = state.savedTeams[state.selectedTeam];
+    if (selectedTeamData) {
+      const roster = extractRosterFromTeam(selectedTeamData);
+      state.captains = normalizePlayers(roster.captains || []).filter(name =>
+        (state.players || []).includes(name)
+      ).slice(0, 1);
     }
-    state.opponentCaptains = (state.opponentCaptains || [])
-      .filter(name => (state.opponentPlayers || []).includes(name))
-      .slice(0, 1);
-    state.metricsConfig = parsed.metricsConfig || {};
-    state.video =
-      parsed.video ||
-      state.video || {
-        offsetSeconds: 0,
-        fileName: "",
-        youtubeId: "",
-        youtubeUrl: "",
-        lastPlaybackSeconds: 0
-      };
-    if (typeof state.video.offsetSeconds !== "number") {
-      state.video.offsetSeconds = 0;
-    }
-    state.video.fileName = state.video.fileName || "";
-    state.video.youtubeId = state.video.youtubeId || "";
-    state.video.youtubeUrl = state.video.youtubeUrl || "";
-    if (typeof state.video.lastPlaybackSeconds !== "number") {
-      state.video.lastPlaybackSeconds = 0;
-    }
-    state.autoRotate = parsed.autoRotate !== false;
-    state.autoLiberoBackline = parsed.autoLiberoBackline !== false;
-    const parsedLiberoRole = typeof parsed.autoLiberoRole === "string" ? parsed.autoLiberoRole : "";
-    state.autoLiberoRole = AUTO_LIBERO_ROLE_OPTIONS.includes(parsedLiberoRole)
-      ? parsedLiberoRole
-      : "";
-    state.preferredLibero = typeof parsed.preferredLibero === "string" ? parsed.preferredLibero : "";
-    state.autoRoleP1American = !!parsed.autoRoleP1American;
-    state.courtViewMirrored = !!parsed.courtViewMirrored;
-    state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
-    state.autoRotatePending = false;
-    state.freeballPending = !!parsed.freeballPending;
-    state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
-    state.skillClock = parsed.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
-    autoRoleBaseCourt =
-      state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6
-        ? cloneCourtLineup(state.autoRoleBaseCourt)
-        : null;
-    state.pointRules = parsed.pointRules || state.pointRules || {};
-    ensureMatchDefaults();
-    syncPlayerNumbers(state.players || []);
-    syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
-    cleanOpponentLiberos();
-    cleanLiberos();
-    ensureMetricsConfigDefaults();
-    ensurePointRulesDefaults();
+  }
+  state.opponentCaptains = (state.opponentCaptains || [])
+    .filter(name => (state.opponentPlayers || []).includes(name))
+    .slice(0, 1);
+  state.metricsConfig = parsed.metricsConfig || {};
+  state.video =
+    parsed.video ||
+    state.video || {
+      offsetSeconds: 0,
+      fileName: "",
+      youtubeId: "",
+      youtubeUrl: "",
+      lastPlaybackSeconds: 0
+    };
+  if (typeof state.video.offsetSeconds !== "number") {
+    state.video.offsetSeconds = 0;
+  }
+  state.video.fileName = state.video.fileName || "";
+  state.video.youtubeId = state.video.youtubeId || "";
+  state.video.youtubeUrl = state.video.youtubeUrl || "";
+  if (typeof state.video.lastPlaybackSeconds !== "number") {
+    state.video.lastPlaybackSeconds = 0;
+  }
+  state.autoRotate = parsed.autoRotate !== false;
+  state.autoLiberoBackline = parsed.autoLiberoBackline !== false;
+  const parsedLiberoRole = typeof parsed.autoLiberoRole === "string" ? parsed.autoLiberoRole : "";
+  state.autoLiberoRole = AUTO_LIBERO_ROLE_OPTIONS.includes(parsedLiberoRole)
+    ? parsedLiberoRole
+    : "";
+  state.preferredLibero = typeof parsed.preferredLibero === "string" ? parsed.preferredLibero : "";
+  state.autoRoleP1American = !!parsed.autoRoleP1American;
+  state.courtViewMirrored = !!parsed.courtViewMirrored;
+  state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
+  state.autoRotatePending = false;
+  state.freeballPending = !!parsed.freeballPending;
+  state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
+  state.skillClock = parsed.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  autoRoleBaseCourt =
+    state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6
+      ? cloneCourtLineup(state.autoRoleBaseCourt)
+      : null;
+  state.pointRules = parsed.pointRules || state.pointRules || {};
+  ensureMatchDefaults();
+  syncPlayerNumbers(state.players || []);
+  syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
+  cleanOpponentLiberos();
+  cleanLiberos();
+  ensureMetricsConfigDefaults();
+  ensurePointRulesDefaults();
+  if (!skipStorageSync) {
     migrateTeamsToPersistent();
     migrateOpponentTeamsToPersistent();
     migrateMatchesToPersistent();
     syncTeamsFromStorage();
     syncOpponentTeamsFromStorage();
     syncMatchesFromStorage();
+  }
+  enforceAutoLiberoForState({ skipServerOnServe: true });
+  return true;
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return applyStateSnapshot(parsed);
   } catch (e) {
     logError("Error loading state", e);
   }
-  syncTeamsFromStorage();
-  syncOpponentTeamsFromStorage();
-  syncMatchesFromStorage();
-  enforceAutoLiberoForState({ skipServerOnServe: true });
+  return false;
 }
-function saveState() {
+async function loadStateFromIndexedDb() {
   try {
-    syncTeamsFromStorage();
-    syncOpponentTeamsFromStorage();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const parsed = await readStateFromIndexedDb();
+    if (!parsed) return false;
+    return applyStateSnapshot(parsed, { skipStorageSync: true });
+  } catch (e) {
+    logError("Error loading state from indexeddb", e);
+  }
+  return false;
+}
+function saveState(options = {}) {
+  const { persistLocal = false } = options || {};
+  try {
+    if (persistLocal) {
+      syncTeamsFromStorage();
+      syncOpponentTeamsFromStorage();
+    }
+    writeStateToIndexedDb(state);
+    const shouldPersistLocal = persistLocal || typeof indexedDB === "undefined";
+    if (shouldPersistLocal) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
     const loading =
       typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
         ? !!window.isLoadingMatch
         : isLoadingMatch;
-    if (!loading) {
+    if (!loading && shouldPersistLocal) {
       persistCurrentMatch();
     }
   } catch (e) {
@@ -582,7 +604,7 @@ function formatNameWithNumber(name, options = {}) {
   const base = num ? num + " - " + baseName : baseName;
   const includeCaptain = options.includeCaptain !== false;
   if (includeCaptain && isCaptain(name)) {
-    return base + " (C)";
+    return base + " (K)";
   }
   return base;
 }
@@ -2503,6 +2525,51 @@ function updateMatchButtonsState() {
   if (elBtnDeleteMatch) {
     elBtnDeleteMatch.disabled = !selected;
   }
+}
+const STATE_DB_NAME = "volleyScoutStateDb";
+const STATE_DB_VERSION = 1;
+const STATE_DB_STORE = "state";
+let stateDbPromise = null;
+function getStateDb() {
+  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  if (stateDbPromise) return stateDbPromise;
+  stateDbPromise = new Promise(resolve => {
+    const request = indexedDB.open(STATE_DB_NAME, STATE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STATE_DB_STORE)) {
+        db.createObjectStore(STATE_DB_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+  return stateDbPromise;
+}
+function readStateFromIndexedDb() {
+  return getStateDb().then(db => {
+    if (!db) return null;
+    return new Promise(resolve => {
+      const tx = db.transaction(STATE_DB_STORE, "readonly");
+      const store = tx.objectStore(STATE_DB_STORE);
+      const request = store.get(STORAGE_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+  });
+}
+function writeStateToIndexedDb(snapshot) {
+  return getStateDb().then(db => {
+    if (!db) return false;
+    return new Promise(resolve => {
+      const tx = db.transaction(STATE_DB_STORE, "readwrite");
+      const store = tx.objectStore(STATE_DB_STORE);
+      store.put(snapshot, STORAGE_KEY);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    });
+  });
 }
 function generateMatchName(base = "") {
   if (base) return base;
