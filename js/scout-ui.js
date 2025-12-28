@@ -8059,9 +8059,20 @@ function maybeImportMatchFromUrl() {
 function exportDatabaseToFile() {
   const payload = buildDatabaseBackupPayload();
   const json = JSON.stringify(payload, null, 2);
-  const name = safeMatchSlug() || "database";
   const blob = new Blob([json], { type: "application/json" });
-  downloadBlob(blob, "backup_" + name + ".json");
+  const now = new Date();
+  const pad2 = num => String(num).padStart(2, "0");
+  const stamp =
+    now.getFullYear() +
+    ":" +
+    pad2(now.getMonth() + 1) +
+    ":" +
+    pad2(now.getDate()) +
+    "-" +
+    pad2(now.getHours()) +
+    ":" +
+    pad2(now.getMinutes());
+  downloadBlob(blob, "backup_" + stamp + ".json");
 }
 function handleImportDatabaseFile(file) {
   if (!file) return;
