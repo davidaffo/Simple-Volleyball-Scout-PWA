@@ -722,6 +722,7 @@ Bianchi 18"></textarea>
             <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
             <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
             <button id="btn-offset-skills" class="secondary">Offset skill</button>
+            <button id="btn-video-undo" class="secondary">Annulla ultima</button>
             <label class="auto-rotate-toggle">
               <input type="checkbox" id="video-playbyplay-toggle" />
               Play by play
@@ -814,6 +815,23 @@ Bianchi 18"></textarea>
         <button id="skill-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-skill="true" onclick="window._closeSkillModal && window._closeSkillModal()">✕</button>
       </div>
       <div id="skill-modal-body" class="skill-modal__body"></div>
+    </div>
+  </div>
+  <div id="bulk-edit-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-bulk></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div id="bulk-edit-title" class="skill-modal__title">Modifica multipla</div>
+        <button id="bulk-edit-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <p id="bulk-edit-hint" class="section-note"></p>
+        <div id="bulk-edit-body"></div>
+        <div class="settings-actions">
+          <button id="bulk-edit-cancel" class="secondary" type="button">Annulla</button>
+          <button id="bulk-edit-apply" class="primary" type="button">Salva</button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="lineup-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="lineup-modal-title">

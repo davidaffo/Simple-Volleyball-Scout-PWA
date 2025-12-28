@@ -833,6 +833,21 @@ button.danger:hover {
   width: 16px;
   height: 16px;
 }
+.event-edit-table th.bulk-editable {
+  cursor: default;
+}
+.event-edit-table.bulk-edit-active th.bulk-editable {
+  cursor: pointer;
+  color: #93c5fd;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2rem;
+}
+.event-edit-table.bulk-edit-active th.bulk-editable::after {
+  content: "✎";
+  margin-left: 0.25rem;
+  font-size: 0.75em;
+  opacity: 0.7;
+}
 .settings-actions {
   display: flex;
   gap: 0.5rem;

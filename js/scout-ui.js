@@ -466,7 +466,8 @@ async function startServeTypeSelection(playerIdx, type, onDone) {
 async function collectServeTrajectory(prefill = {}) {
   const startRes = await openAttackTrajectoryModal({
     mode: "serve-start",
-    start: prefill.serveStart || null
+    start: prefill.serveStart || null,
+    serveType: prefill.serveType || null
   });
   const serveType = (startRes && startRes.serveType) || prefill.serveType || "JF";
   const serveStart = startRes && startRes.point ? startRes.point : prefill.serveStart || null;
@@ -1134,6 +1135,9 @@ function openAttackTrajectoryModal(prefill = null) {
       trajectoryEscapeHandler = null;
     }
     if (mode === "serve-start") {
+      if (prefill && prefill.serveType) {
+        setServeTypeSelection(prefill.serveType);
+      }
       serveTypeKeyHandler = e => {
         const key = (e.key || "").toUpperCase();
         if (key === "F" || key === "J" || key === "S") {
@@ -1317,12 +1321,115 @@ const playByPlayState = {
   key: null,
   endTime: null
 };
+let bulkEditActive = false;
+let bulkEditSession = null;
+const videoUndoStack = [];
+const VIDEO_UNDO_LIMIT = 30;
+const BULK_EDIT_CONFIG = {
+  videoTime: {
+    label: "Tempo video",
+    build: ({ proxy, context }) => {
+      const baseMs = context && typeof context.baseMs === "number" ? context.baseMs : null;
+      const first = proxy && proxy.t ? computeEventVideoTime(proxy, baseMs) : 0;
+      return createVideoTimeInput(proxy, first, () => {});
+    }
+  },
+  set: {
+    label: "Set",
+    build: ({ proxy }) => createNumberSelect(proxy, "set", 1, 5, () => {})
+  },
+  player: {
+    label: "Giocatrice",
+    build: ({ proxy }) => createPlayerSelect(proxy, () => {})
+  },
+  setter: {
+    label: "Alzatore",
+    build: ({ proxy }) => createPlayerSelect(proxy, () => {}, { target: "setter" })
+  },
+  skill: {
+    label: "Fondamentale",
+    build: ({ proxy }) => createSkillSelect(proxy, () => {})
+  },
+  code: {
+    label: "Codice",
+    build: ({ proxy }) => createCodeSelect(proxy, () => {})
+  },
+  rotation: {
+    label: "Rotazione",
+    build: ({ proxy }) => createNumberSelect(proxy, "rotation", 1, 6, () => {})
+  },
+  zone: {
+    label: "Zona",
+    build: ({ proxy }) => createNumberSelect(proxy, "zone", 1, 6, () => {})
+  },
+  setterPosition: {
+    label: "Posizione palleggio",
+    build: ({ proxy }) => createNumberSelect(proxy, "setterPosition", 1, 6, () => {})
+  },
+  opponentSetterPosition: {
+    label: "Posizione palleggio avv",
+    build: ({ proxy }) => createNumberSelect(proxy, "opponentSetterPosition", 1, 6, () => {})
+  },
+  receivePosition: {
+    label: "Zona ricezione",
+    build: ({ proxy }) => createNumberSelect(proxy, "receivePosition", 1, 6, () => {})
+  },
+  base: {
+    label: "Base",
+    build: ({ proxy }) => createBaseSelect(proxy, () => {})
+  },
+  setType: {
+    label: "Tipo alzata",
+    build: ({ proxy }) => createSetTypeSelect(proxy, () => {})
+  },
+  combination: {
+    label: "Combinazione",
+    build: ({ proxy }) => createTextInput(proxy, "combination", () => {})
+  },
+  serveType: {
+    label: "Tipo servizio",
+    build: ({ proxy }) => createServeTypeSelect(proxy, () => {})
+  },
+  receiveEvaluation: {
+    label: "Valutazione ricezione",
+    build: ({ proxy }) => createEvalSelect(proxy, "receiveEvaluation", () => {}, { includeFb: true })
+  },
+  attackEvaluation: {
+    label: "Valutazione attacco",
+    build: ({ proxy }) => createEvalSelect(proxy, "attackEvaluation", () => {})
+  },
+  attackBp: {
+    label: "Fase attacco",
+    build: ({ proxy }) => createPhaseSelect(proxy, () => {})
+  },
+  attackType: {
+    label: "Tipo attacco",
+    build: ({ proxy }) => createTextInput(proxy, "attackType", () => {})
+  },
+  blockNumber: {
+    label: "Numero muro",
+    build: ({ proxy }) => createNumberInput(proxy, "blockNumber", 0, undefined, () => {})
+  },
+  playerIn: {
+    label: "In",
+    build: ({ proxy }) => createPlayerNameSelect(proxy, "playerIn", () => {})
+  },
+  playerOut: {
+    label: "Out",
+    build: ({ proxy }) => createPlayerNameSelect(proxy, "playerOut", () => {})
+  },
+  durationMs: {
+    label: "Durata (ms)",
+    build: ({ proxy }) => createNumberInput(proxy, "durationMs", 0, undefined, () => {})
+  }
+};
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
 const elBtnOffsetSkills = document.getElementById("btn-offset-skills");
+const elBtnVideoUndo = document.getElementById("btn-video-undo");
 const elOffsetModal = document.getElementById("offset-modal");
 const elOffsetSkillGrid = document.getElementById("offset-skill-grid");
 const elOffsetClose = document.getElementById("offset-close");
@@ -1436,6 +1543,7 @@ function createNumberInput(ev, field, min, max, onDone) {
   if (max !== undefined) input.max = String(max);
   input.value = ev[field] === null || ev[field] === undefined ? "" : String(ev[field]);
   input.addEventListener("change", () => {
+    markVideoUndoCapture(input);
     const val = parseFloat(input.value);
     if (!Number.isNaN(val) && (min === undefined || val >= min) && (max === undefined || val <= max)) {
       ev[field] = val;
@@ -1454,6 +1562,7 @@ function createTextInput(ev, field, onDone) {
   input.type = "text";
   input.value = valueToString(ev[field]);
   input.addEventListener("change", () => {
+    markVideoUndoCapture(input);
     ev[field] = parseInputValue(input.value);
     refreshAfterVideoEdit(false);
   });
@@ -2300,6 +2409,39 @@ function attachModalCloseHandlers() {
       true
     );
   }
+  const closeBulkHandler = e => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closeBulkEditModal();
+  };
+  const bulkCloseButtons = [elBulkEditClose, elBulkEditCancel];
+  bulkCloseButtons.forEach(btn => {
+    if (!btn) return;
+    events.forEach(evt => {
+      btn.addEventListener(evt, closeBulkHandler, { passive: false, capture: true });
+    });
+    btn.onclick = closeBulkHandler;
+  });
+  if (elBulkEditBackdrop) {
+    events.forEach(evt =>
+      elBulkEditBackdrop.addEventListener(evt, closeBulkHandler, { passive: false })
+    );
+  }
+  if (elBulkEditModal) {
+    elBulkEditModal.addEventListener(
+      "click",
+      e => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.closest("[data-close-bulk]")) {
+          closeBulkHandler(e);
+        }
+      },
+      true
+    );
+  }
 }
 function applyPlayersFromTextarea() {
   if (!elPlayersInput) return;
@@ -3135,11 +3277,14 @@ function clearEventSelection({ clearContexts = true } = {}) {
 function updateSelectionStyles() {
   pruneEventSelection();
   Object.values(eventTableContexts).forEach(ctx => {
+    const total = ctx.rows ? ctx.rows.length : 0;
+    const selectedCount = ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)).length : 0;
     if (ctx.selectAllCheckbox) {
-      const total = ctx.rows ? ctx.rows.length : 0;
-      const selectedCount = ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)).length : 0;
       ctx.selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < total;
       ctx.selectAllCheckbox.checked = total > 0 && selectedCount === total;
+    }
+    if (ctx.table) {
+      ctx.table.classList.toggle("bulk-edit-active", selectedCount > 1);
     }
     ctx.rows.forEach(r => {
       const selected = selectedEventIds.has(r.key);
@@ -3290,6 +3435,7 @@ function moveSelection(contextKey, delta, extendRange = false) {
 function adjustSelectedVideoTimes(deltaSeconds) {
   const rows = getSelectedRows(getActiveEventContextKey());
   if (!rows.length) return;
+  pushVideoUndoSnapshot();
   rows.forEach(r => {
     const ev = r.ev;
     if (!ev) return;
@@ -3311,6 +3457,7 @@ function adjustCurrentRowVideoTime(deltaSeconds) {
   if (!ctxKey || !eventTableContexts[ctxKey]) return;
   const rows = eventTableContexts[ctxKey].rows || [];
   if (!rows.length) return;
+  pushVideoUndoSnapshot();
   const currentKey =
     (selectedEventIds.size && lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
       ? lastSelectedEventId
@@ -3667,6 +3814,7 @@ function applyOffsetsToSelectedSkills() {
     alert("Inserisci almeno un offset diverso da 0.");
     return;
   }
+  pushVideoUndoSnapshot();
   const baseMs = getVideoBaseTimeMs(getVideoSkillEvents());
   rows.forEach(r => {
     const ev = r.ev;
@@ -4153,6 +4301,41 @@ function updateVideoSyncLabel() {
   elVideoSyncLabel.textContent =
     offset > 0 ? "Prima skill allineata a " + formatVideoTimestamp(offset) : "La prima skill parte da 0:00";
 }
+function shouldTrackVideoUndo() {
+  return document && document.body && document.body.dataset.activeTab === "video";
+}
+function pushVideoUndoSnapshot(force = false) {
+  if ((!force && !shouldTrackVideoUndo()) || (!force && bulkEditActive)) return;
+  const snapshot = {
+    events: JSON.parse(JSON.stringify(state.events || [])),
+    video: Object.assign({}, state.video || {})
+  };
+  videoUndoStack.push(snapshot);
+  if (videoUndoStack.length > VIDEO_UNDO_LIMIT) {
+    videoUndoStack.shift();
+  }
+}
+function markVideoUndoCapture(el) {
+  if (!el || !el.dataset) return;
+  if (el.dataset.undoCaptured === "true") return;
+  pushVideoUndoSnapshot();
+  el.dataset.undoCaptured = "true";
+}
+function undoLastVideoEdit() {
+  const snapshot = videoUndoStack.pop();
+  if (!snapshot) {
+    alert("Non ci sono modifiche video da annullare.");
+    return;
+  }
+  state.events = Array.isArray(snapshot.events) ? snapshot.events : [];
+  state.video = Object.assign({}, state.video || {}, snapshot.video || {});
+  saveState();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog({ suppressScroll: true });
+  renderServeTrajectoryAnalysis();
+  renderTrajectoryAnalysis();
+  renderPlayers();
+}
 function resolvePlayerIdx(ev) {
   if (typeof ev.playerIdx === "number" && state.players[ev.playerIdx]) {
     return ev.playerIdx;
@@ -4160,6 +4343,7 @@ function resolvePlayerIdx(ev) {
   return state.players.findIndex(name => name === ev.playerName);
 }
 function refreshAfterVideoEdit(shouldRecalcStats) {
+  if (bulkEditActive) return;
   saveState();
   if (shouldRecalcStats) {
     recalcAllStatsAndUpdateUI();
@@ -4189,6 +4373,7 @@ function createPlayerSelect(ev, onDone, options = {}) {
     : resolvePlayerIdx(ev);
   select.value = playerIdx >= 0 ? String(playerIdx) : "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     const raw = select.value;
     const val = parseInt(raw, 10);
     if (!raw) {
@@ -4250,6 +4435,7 @@ function createCodeSelect(ev, onDone) {
   });
   select.value = ev.code || RESULT_CODES[0];
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev.code = select.value;
     refreshAfterVideoEdit(true);
   });
@@ -4273,6 +4459,7 @@ function createNumberSelect(ev, field, min, max, onDone) {
   }
   select.value = ev[field] != null ? String(ev[field]) : "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     const val = parseInt(select.value, 10);
     if (!isNaN(val) && val >= min && val <= max) {
       ev[field] = val;
@@ -4299,6 +4486,7 @@ function createBaseSelect(ev, onDone) {
   });
   select.value = ev.base || "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev.base = select.value || null;
     refreshAfterVideoEdit(true);
   });
@@ -4322,6 +4510,7 @@ function createSetTypeSelect(ev, onDone) {
   });
   select.value = ev.setType || "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev.setType = select.value || null;
     refreshAfterVideoEdit(true);
   });
@@ -4350,6 +4539,7 @@ function createServeTypeSelect(ev, onDone) {
   });
   select.value = ev.serveType || "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev.serveType = select.value || null;
     refreshAfterVideoEdit(true);
   });
@@ -4375,6 +4565,7 @@ function createEvalSelect(ev, field, onDone, { includeFb = false } = {}) {
   });
   select.value = ev[field] || "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev[field] = select.value || null;
     refreshAfterVideoEdit(true);
   });
@@ -4395,6 +4586,7 @@ function createPhaseSelect(ev, onDone) {
   const val = normalizePhaseValue(ev.attackBp);
   select.value = val || "bp";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     const choice = select.value;
     ev.attackBp = choice === "bp";
     refreshAfterVideoEdit(true);
@@ -4419,6 +4611,7 @@ function createPlayerNameSelect(ev, field, onDone) {
   });
   select.value = ev[field] || "";
   select.addEventListener("change", () => {
+    markVideoUndoCapture(select);
     ev[field] = select.value || null;
     refreshAfterVideoEdit(true);
   });
@@ -4517,6 +4710,7 @@ function createVideoTimeInput(ev, videoTime, onDone) {
   wrapper.appendChild(ss.block);
 
   const commit = () => {
+    markVideoUndoCapture(wrapper);
     const h = Math.max(0, parseInt(hh.input.value || "0", 10) || 0);
     const m = Math.max(0, parseInt(mm.input.value || "0", 10) || 0);
     const s = Math.max(0, parseInt(ss.input.value || "0", 10) || 0);
@@ -4649,40 +4843,41 @@ function renderEventTableRows(target, events, options = {}) {
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
     const headers = [
-      ...(enableSelection && showCheckbox ? ["✓"] : []),
-      ...(showVideoTime ? ["Tempo"] : []),
-      ...(showIndex ? ["#"] : []),
-      "Pt N",
-      "Pt A",
-      "Set",
-      "FB N",
-      "Giocatrice",
-      "Alzatore",
-      "Fondamentale",
-      "Codice",
-      "Rot",
-      "Zona",
-      "Pos Palleggio",
-      "Pos Palleggio Avv",
-      "Zona Rice",
-      "Base",
-      "Tipo Alzata",
-      "Combinazione",
-      "Servizio Start",
-      "Servizio End",
-      "Tipo Servizio",
-      "Valut Rice",
-      "Valut Att",
-      "Att BP",
-      "Tipo Att",
-      "Direzione Att",
-      "Muro N",
-      "In",
-      "Out",
-      "Dur (ms)"
+      ...(enableSelection && showCheckbox ? [{ label: "✓" }] : []),
+      ...(showVideoTime ? [{ label: "Tempo", bulkKey: "videoTime" }] : []),
+      ...(showIndex ? [{ label: "#" }] : []),
+      { label: "Pt N" },
+      { label: "Pt A" },
+      { label: "Set", bulkKey: "set" },
+      { label: "FB N" },
+      { label: "Giocatrice", bulkKey: "player" },
+      { label: "Alzatore", bulkKey: "setter" },
+      { label: "Fondamentale", bulkKey: "skill" },
+      { label: "Codice", bulkKey: "code" },
+      { label: "Rot", bulkKey: "rotation" },
+      { label: "Zona", bulkKey: "zone" },
+      { label: "Pos Palleggio", bulkKey: "setterPosition" },
+      { label: "Pos Palleggio Avv", bulkKey: "opponentSetterPosition" },
+      { label: "Zona Rice", bulkKey: "receivePosition" },
+      { label: "Base", bulkKey: "base" },
+      { label: "Tipo Alzata", bulkKey: "setType" },
+      { label: "Combinazione", bulkKey: "combination" },
+      { label: "Servizio Start" },
+      { label: "Servizio End" },
+      { label: "Tipo Servizio", bulkKey: "serveType" },
+      { label: "Valut Rice", bulkKey: "receiveEvaluation" },
+      { label: "Valut Att", bulkKey: "attackEvaluation" },
+      { label: "Att BP", bulkKey: "attackBp" },
+      { label: "Tipo Att", bulkKey: "attackType" },
+      { label: "Direzione Att" },
+      { label: "Muro N", bulkKey: "blockNumber" },
+      { label: "In", bulkKey: "playerIn" },
+      { label: "Out", bulkKey: "playerOut" },
+      { label: "Dur (ms)", bulkKey: "durationMs" }
     ];
-    if (showVideoTime) headers.push("Video");
-    headers.push("Elimina");
+    if (showVideoTime) headers.push({ label: "Video" });
+    headers.push({ label: "Elimina" });
+    const bulkHeaders = [];
     headers.forEach((h, idx) => {
       const th = document.createElement("th");
       if (enableSelection && showCheckbox && idx === 0) {
@@ -4702,13 +4897,34 @@ function renderEventTableRows(target, events, options = {}) {
         th.appendChild(selectAll);
         if (ctxRef) ctxRef.selectAllCheckbox = selectAll;
       } else {
-        th.textContent = h;
+        th.textContent = h.label;
+        if (h.bulkKey && BULK_EDIT_CONFIG[h.bulkKey]) {
+          th.classList.add("bulk-editable");
+          th.dataset.bulkKey = h.bulkKey;
+          th.title = "Modifica tutte le skill selezionate";
+          th.addEventListener("click", () => {
+            const ctx = eventTableContexts[contextKey];
+            if (!ctx || !ctx.rows) return;
+            const selected = ctx.rows.filter(r => selectedEventIds.has(r.key));
+            if (selected.length < 2) return;
+            openBulkEditModal(contextKey, h.bulkKey);
+          });
+          bulkHeaders.push(th);
+        }
       }
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
     table.appendChild(thead);
     table.appendChild(tbody);
+    if (ctxRef) {
+      ctxRef.table = table;
+      ctxRef.bulkHeaders = bulkHeaders;
+    }
+  }
+  if (append && usingExisting && ctxRef && table) {
+    ctxRef.table = table;
+    ctxRef.bulkHeaders = Array.from(table.querySelectorAll("th.bulk-editable"));
   }
   const startIdx = append && ctxRef && ctxRef.rows ? ctxRef.rows.length : 0;
   events.forEach((ev, index) => {
@@ -5017,6 +5233,82 @@ function renderEventTableRows(target, events, options = {}) {
   if (!targetIsTbody && !usingExisting) {
     target.appendChild(table);
   }
+}
+function closeBulkEditModal() {
+  if (!elBulkEditModal) return;
+  elBulkEditModal.classList.add("hidden");
+  if (elBulkEditBody) elBulkEditBody.innerHTML = "";
+  if (elBulkEditHint) elBulkEditHint.textContent = "";
+  setModalOpenState(false);
+  bulkEditActive = false;
+  bulkEditSession = null;
+}
+function shouldRecalcForBulkKey(bulkKey) {
+  const noRecalc = new Set(["videoTime", "durationMs", "combination", "attackType"]);
+  return !noRecalc.has(bulkKey);
+}
+function openBulkEditModal(contextKey, bulkKey) {
+  if (!elBulkEditModal || !elBulkEditBody) return;
+  const config = BULK_EDIT_CONFIG[bulkKey];
+  if (!config) return;
+  const rows = getSelectedRows(contextKey);
+  if (!rows || rows.length < 2) return;
+  const events = rows.map(r => r.ev).filter(Boolean);
+  if (!events.length) return;
+  const seed = Object.assign({}, events[0]);
+  const pending = {};
+  bulkEditSession = {
+    pending,
+    events,
+    shouldRecalc: shouldRecalcForBulkKey(bulkKey)
+  };
+  bulkEditActive = true;
+  const proxy = new Proxy(seed, {
+    set: (_obj, prop, value) => {
+      pending[prop] = value;
+      seed[prop] = value;
+      return true;
+    },
+    get: (_obj, prop) => seed[prop]
+  });
+  const ctx = eventTableContexts[contextKey] || {};
+  const control = config.build({ proxy, events, context: ctx });
+  elBulkEditBody.innerHTML = "";
+  elBulkEditBody.appendChild(control);
+  if (elBulkEditTitle) {
+    elBulkEditTitle.textContent = "Modifica multipla: " + config.label;
+  }
+  if (elBulkEditHint) {
+    elBulkEditHint.textContent = "Applica a " + events.length + " skill selezionate.";
+  }
+  elBulkEditModal.classList.remove("hidden");
+  setModalOpenState(true);
+  if (elBulkEditApply) {
+    elBulkEditApply.onclick = () => {
+      if (!bulkEditSession) {
+        closeBulkEditModal();
+        return;
+      }
+      const entries = Object.entries(bulkEditSession.pending || {});
+      if (entries.length === 0) {
+        closeBulkEditModal();
+        return;
+      }
+      pushVideoUndoSnapshot(true);
+      bulkEditActive = false;
+      bulkEditSession.events.forEach(ev => {
+        entries.forEach(([key, value]) => {
+          ev[key] = value;
+        });
+      });
+      const shouldRecalc = bulkEditSession.shouldRecalc;
+      closeBulkEditModal();
+      refreshAfterVideoEdit(shouldRecalc);
+      renderEventsLog({ suppressScroll: true });
+    };
+  }
+  const focusable = control && typeof control.querySelector === "function" ? control.querySelector("input,select") : null;
+  if (focusable && typeof focusable.focus === "function") focusable.focus();
 }
 function getVideoPlayByPlayRows() {
   const ctx = eventTableContexts.video;
@@ -5398,6 +5690,7 @@ function syncFirstSkillToVideo() {
     alert("Registra almeno una skill per poter sincronizzare.");
     return;
   }
+  pushVideoUndoSnapshot();
   const baseMs = getVideoBaseTimeMs(skillEvents);
   let currentVideoTime = getActiveVideoPlaybackSeconds();
   if (typeof currentVideoTime !== "number" || !isFinite(currentVideoTime)) {
@@ -9802,6 +10095,9 @@ async function init() {
   }
   if (elBtnOffsetSkills) {
     elBtnOffsetSkills.addEventListener("click", openOffsetModal);
+  }
+  if (elBtnVideoUndo) {
+    elBtnVideoUndo.addEventListener("click", undoLastVideoEdit);
   }
   if (elBtnOpenSettings) {
     elBtnOpenSettings.addEventListener("click", () => {
