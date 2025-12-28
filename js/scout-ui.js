@@ -1239,6 +1239,17 @@ function forceNextSkill(skillId) {
   if (skillId === "serve" && !state.isServing) {
     state.isServing = true;
     state.autoRotatePending = false;
+    if (typeof enforceAutoLiberoForState === "function") {
+      enforceAutoLiberoForState({ skipServerOnServe: true });
+    }
+  }
+  if (skillId === "pass") {
+    state.isServing = false;
+    state.autoRotatePending = true;
+    state.freeballPending = false;
+    if (typeof enforceAutoLiberoForState === "function") {
+      enforceAutoLiberoForState({ skipServerOnServe: true });
+    }
   }
   saveState();
   renderPlayers();
