@@ -1281,7 +1281,7 @@ function forceNextSkill(skillId) {
       enforceAutoLiberoForState({ skipServerOnServe: true });
     }
   }
-  saveState();
+  saveState({ persistLocal: true });
   renderPlayers();
   updateNextSkillIndicator(skillId);
   const toggle = document.getElementById("predictive-skill-toggle");
@@ -1796,7 +1796,7 @@ function updateVideoPlaybackSnapshot(forcedSeconds = null, force = false) {
   if (typeof playback !== "number" || !isFinite(playback)) return;
   lastVideoSnapshotMs = now;
   state.video.lastPlaybackSeconds = Math.max(0, playback);
-  saveState();
+  saveState({ persistLocal: true });
 }
 function startVideoPlaybackSnapshotTimer() {
   if (videoSnapshotTimer) return;
@@ -3472,7 +3472,7 @@ function adjustCurrentRowVideoTime(deltaSeconds) {
         ? target.videoTime
         : computeEventVideoTime(target.ev, baseMs);
   target.ev.videoTime = Math.max(0, current + deltaSeconds);
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderVideoAnalysis();
   handleSeekForSelection(ctxKey, { userAction: true });
@@ -3829,7 +3829,7 @@ function applyOffsetsToSelectedSkills() {
           : computeEventVideoTime(ev, baseMs);
     ev.videoTime = Math.max(0, current + delta);
   });
-  saveState();
+  saveState({ persistLocal: true });
   renderEventsLog();
   renderVideoAnalysis();
   handleSeekForSelection(ctxKey, { userAction: true });
@@ -4344,7 +4344,7 @@ function resolvePlayerIdx(ev) {
 }
 function refreshAfterVideoEdit(shouldRecalcStats) {
   if (bulkEditActive) return;
-  saveState();
+  saveState({ persistLocal: shouldTrackVideoUndo() });
   if (shouldRecalcStats) {
     recalcAllStatsAndUpdateUI();
   renderEventsLog();
@@ -5690,8 +5690,14 @@ function syncFirstSkillToVideo() {
     alert("Registra almeno una skill per poter sincronizzare.");
     return;
   }
-  pushVideoUndoSnapshot();
+  const selected = getSelectedRows("video");
+  const selectedRow = selected.length ? selected[selected.length - 1] : null;
+  if (!selectedRow) {
+    alert("Seleziona una skill per sincronizzare.");
+    return;
+  }
   const baseMs = getVideoBaseTimeMs(skillEvents);
+  const selectedTime = computeEventVideoTime(selectedRow.ev, baseMs);
   let currentVideoTime = getActiveVideoPlaybackSeconds();
   if (typeof currentVideoTime !== "number" || !isFinite(currentVideoTime)) {
     if (state.video && state.video.youtubeId) {
@@ -5700,23 +5706,20 @@ function syncFirstSkillToVideo() {
     }
     currentVideoTime = 0;
   }
-  state.video = state.video || {
-    offsetSeconds: 0,
-    fileName: "",
-    youtubeId: "",
-    youtubeUrl: "",
-    lastPlaybackSeconds: 0
-  };
-  state.video.offsetSeconds = Math.max(0, currentVideoTime);
-  const base = typeof baseMs === "number" ? baseMs : null;
-  if (base !== null) {
-    skillEvents.forEach(({ ev }) => {
-      const evMs = new Date(ev.t).getTime();
-      const delta = isNaN(evMs) ? 0 : (evMs - base) / 1000;
-      ev.videoTime = Math.max(0, state.video.offsetSeconds + delta);
-    });
+  const delta = currentVideoTime - selectedTime;
+  const selectedKey = selectedRow.key;
+  const selectedIdx = skillEvents.findIndex(({ ev }, idx) => getEventKey(ev, idx) === selectedKey);
+  if (selectedIdx === -1) {
+    alert("Skill selezionata non trovata.");
+    return;
   }
-  saveState();
+  pushVideoUndoSnapshot();
+  skillEvents.forEach(({ ev }, idx) => {
+    if (!ev || idx < selectedIdx) return;
+    const current = computeEventVideoTime(ev, baseMs);
+    ev.videoTime = Math.max(0, current + delta);
+  });
+  saveState({ persistLocal: true });
   renderVideoAnalysis();
 }
 function ensureScoreOverrides() {
