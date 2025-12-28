@@ -3962,7 +3962,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
   currentYoutubeId = id;
   youtubeFallback = isFileOrigin;
   if (youtubeFallback) {
-    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, true);
     return;
   }
   try {
@@ -3996,7 +3996,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
           ytPlayer = null;
           pendingYoutubeSeek = null;
           if (elYoutubeFrame) {
-            elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+            elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, true);
           }
         }
       }
@@ -4004,7 +4004,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
   } catch (_) {
     youtubeFallback = true;
     pendingYoutubeSeek = null;
-    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, false);
+    elYoutubeFrame.src = buildYoutubeEmbedSrc(id, start, true);
   }
 }
 async function renderYoutubePlayerScout(startSeconds = 0) {
@@ -4029,7 +4029,7 @@ async function renderYoutubePlayerScout(startSeconds = 0) {
   currentYoutubeIdScout = id;
   youtubeScoutFallback = isFileOrigin;
   if (youtubeScoutFallback) {
-    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, true);
     return;
   }
   try {
@@ -4060,14 +4060,14 @@ async function renderYoutubePlayerScout(startSeconds = 0) {
           youtubeScoutFallback = true;
           ytPlayerScout = null;
           if (elYoutubeFrameScout) {
-            elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+            elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, true);
           }
         }
       }
     });
   } catch (_) {
     youtubeScoutFallback = true;
-    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, false);
+    elYoutubeFrameScout.src = buildYoutubeEmbedSrc(id, start, true);
   }
 }
 function syncYoutubeUrlInputs(value) {
@@ -5543,12 +5543,22 @@ function seekVideoToTime(seconds, options = {}) {
   if (state.video && state.video.youtubeId) {
     if (preferScout) {
       if (youtubeScoutFallback && elYoutubeFrameScout) {
-        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(
-          state.video.youtubeId,
-          target,
-          false,
-          wantPlay
-        );
+        if (elYoutubeFrameScout.contentWindow) {
+          try {
+            elYoutubeFrameScout.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+              "*"
+            );
+            elYoutubeFrameScout.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+              "*"
+            );
+            return;
+          } catch (_) {
+            // ignore postMessage errors and fall back to src update
+          }
+        }
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, wantPlay);
         return;
       }
       if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
@@ -5591,12 +5601,22 @@ function seekVideoToTime(seconds, options = {}) {
       return;
     }
     if (youtubeFallback && elYoutubeFrame) {
-      elYoutubeFrame.src = buildYoutubeEmbedSrc(
-        state.video.youtubeId,
-        target,
-        false,
-        wantPlay
-      );
+      if (elYoutubeFrame.contentWindow) {
+        try {
+          elYoutubeFrame.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+            "*"
+          );
+          elYoutubeFrame.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+            "*"
+          );
+          return;
+        } catch (_) {
+          // ignore postMessage errors and fall back to src update
+        }
+      }
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, wantPlay);
       return;
     }
     if (ytPlayer && typeof ytPlayer.seekTo === "function") {
