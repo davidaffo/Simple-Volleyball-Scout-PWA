@@ -334,6 +334,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
   state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
   state.videoScoutMode = !!parsed.videoScoutMode;
+  state.videoPlayByPlay = !!parsed.videoPlayByPlay;
   state.nextSetType = parsed.nextSetType || "";
   state.forceMobileLayout = !!parsed.forceMobileLayout;
   state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];

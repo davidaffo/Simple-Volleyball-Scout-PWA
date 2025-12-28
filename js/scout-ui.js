@@ -1310,6 +1310,13 @@ let currentYoutubeIdScout = "";
 let youtubeScoutFallback = false;
 let lastVideoSnapshotMs = 0;
 let videoSnapshotTimer = null;
+let playByPlayTimer = null;
+const playByPlayState = {
+  active: false,
+  index: -1,
+  key: null,
+  endTime: null
+};
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
@@ -3237,7 +3244,9 @@ function handleSeekForSelection(contextKey, opts = {}) {
   if (!target) return;
   const t = typeof target.videoTime === "number" ? target.videoTime : null;
   if (isFinite(t)) {
-    seekVideoToTime(t);
+    const preservePlayback =
+      typeof opts.preservePlayback === "boolean" ? opts.preservePlayback : contextKey === "log";
+    seekVideoToTime(t, { preservePlayback });
   }
 }
 function moveSelection(contextKey, delta, extendRange = false) {
@@ -5009,6 +5018,138 @@ function renderEventTableRows(target, events, options = {}) {
     target.appendChild(table);
   }
 }
+function getVideoPlayByPlayRows() {
+  const ctx = eventTableContexts.video;
+  return ctx && Array.isArray(ctx.rows) ? ctx.rows : [];
+}
+function getPlayByPlayStartIndex(rows) {
+  if (!rows.length) return -1;
+  const preferredKey =
+    lastSelectedEventId && selectedEventIds.has(lastSelectedEventId)
+      ? lastSelectedEventId
+      : selectedEventIds.values().next().value;
+  if (preferredKey) {
+    const idx = rows.findIndex(r => r.key === preferredKey);
+    if (idx !== -1) return idx;
+  }
+  return 0;
+}
+function getPlayByPlayStartTime(row, baseMs) {
+  if (!row) return null;
+  if (typeof row.videoTime === "number" && isFinite(row.videoTime)) return row.videoTime;
+  const ev = row.ev || {};
+  if (typeof ev.videoTime === "number" && isFinite(ev.videoTime)) return ev.videoTime;
+  return computeEventVideoTime(ev, baseMs);
+}
+function getPlayByPlayDurationSeconds(ev) {
+  const durationMs = ev && typeof ev.durationMs === "number" && isFinite(ev.durationMs) ? ev.durationMs : null;
+  const seconds = durationMs != null ? durationMs / 1000 : 5;
+  return Math.max(0.1, seconds);
+}
+function stopPlayByPlay() {
+  if (playByPlayTimer) {
+    clearInterval(playByPlayTimer);
+    playByPlayTimer = null;
+  }
+  playByPlayState.active = false;
+  playByPlayState.index = -1;
+  playByPlayState.key = null;
+  playByPlayState.endTime = null;
+}
+function ensurePlayByPlayMonitor() {
+  if (playByPlayTimer) return;
+  playByPlayTimer = setInterval(() => {
+    if (!state.videoPlayByPlay) {
+      stopPlayByPlay();
+      return;
+    }
+    const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+    if (activeTab !== "video") {
+      stopPlayByPlay();
+      return;
+    }
+    const rows = getVideoPlayByPlayRows();
+    if (!rows.length || !playByPlayState.active) {
+      stopPlayByPlay();
+      return;
+    }
+    if (playByPlayState.index < 0 || playByPlayState.index >= rows.length) {
+      stopPlayByPlay();
+      return;
+    }
+    if (!isFinite(playByPlayState.endTime)) return;
+    const current = getActiveVideoPlaybackSeconds();
+    if (typeof current !== "number") return;
+    if (current + 0.03 < playByPlayState.endTime) return;
+    const nextIndex = playByPlayState.index + 1;
+    if (nextIndex >= rows.length) {
+      stopPlayByPlay();
+      return;
+    }
+    startPlayByPlayAtIndex(nextIndex);
+  }, 150);
+}
+function startPlayByPlayFromSelection() {
+  const rows = getVideoPlayByPlayRows();
+  if (!rows.length) {
+    stopPlayByPlay();
+    return;
+  }
+  const idx = getPlayByPlayStartIndex(rows);
+  startPlayByPlayAtIndex(idx);
+}
+function startPlayByPlayAtIndex(idx) {
+  const rows = getVideoPlayByPlayRows();
+  if (!rows.length || idx < 0 || idx >= rows.length) {
+    stopPlayByPlay();
+    return;
+  }
+  const row = rows[idx];
+  playByPlayState.active = true;
+  playByPlayState.index = idx;
+  playByPlayState.key = row.key;
+  const baseMs = eventTableContexts.video ? eventTableContexts.video.baseMs : getVideoBaseTimeMs(getVideoSkillEvents());
+  const start = getPlayByPlayStartTime(row, baseMs);
+  if (!isFinite(start)) {
+    stopPlayByPlay();
+    return;
+  }
+  const duration = getPlayByPlayDurationSeconds(row.ev || {});
+  playByPlayState.endTime = start + duration;
+  setSelectionForContext("video", new Set([row.key]), row.key, { userAction: false });
+  scrollRowIntoView(row);
+  seekVideoToTime(start);
+  ensurePlayByPlayMonitor();
+}
+function syncPlayByPlayAfterRender() {
+  if (!state.videoPlayByPlay) {
+    stopPlayByPlay();
+    return;
+  }
+  if (!playByPlayState.active) return;
+  const rows = getVideoPlayByPlayRows();
+  if (!rows.length) {
+    stopPlayByPlay();
+    return;
+  }
+  const idx = playByPlayState.key ? rows.findIndex(r => r.key === playByPlayState.key) : -1;
+  if (idx === -1) {
+    stopPlayByPlay();
+    return;
+  }
+  playByPlayState.index = idx;
+  playByPlayState.key = rows[idx].key;
+}
+function handleVideoSelectionChange(_rows, _ctx, opts) {
+  if (!opts || !opts.userAction) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (state.videoPlayByPlay) {
+    if (activeTab !== "video") return;
+    startPlayByPlayFromSelection();
+    return;
+  }
+  handleSeekForSelection("video", { preservePlayback: true, userAction: true });
+}
 function renderVideoAnalysis() {
   if (!elVideoSkillsContainer) return;
   const skillEvents = getVideoSkillEvents();
@@ -5022,6 +5163,7 @@ function renderVideoAnalysis() {
     elVideoFileLabel.textContent = label;
   }
   if (!skillEvents.length) {
+    if (state.videoPlayByPlay) stopPlayByPlay();
     try {
       renderVideoFilters([]);
     } catch (err) {
@@ -5058,6 +5200,7 @@ function renderVideoAnalysis() {
     .map(item => item.ev)
     .filter(ev => matchesVideoFilters(ev, videoFilterState));
   if (!filteredEvents.length) {
+    if (state.videoPlayByPlay) stopPlayByPlay();
     elVideoSkillsContainer.innerHTML = "";
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -5082,29 +5225,46 @@ function renderVideoAnalysis() {
       tableClass: "video-skills-table event-edit-table",
       enableSelection: true,
       contextKey: "video",
-      onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("video", opts)
+      onSelectionChange: handleVideoSelectionChange
     }
   );
+  syncPlayByPlayAfterRender();
   if (updatedZones) {
     saveState();
   }
 }
-function seekVideoToTime(seconds) {
+function seekVideoToTime(seconds, options = {}) {
   if (!isFinite(seconds)) return;
+  const preservePlayback = !!options.preservePlayback;
   const target = Math.max(0, seconds);
   updateVideoPlaybackSnapshot(target, true);
   const activeTab = document && document.body ? document.body.dataset.activeTab : "";
   const preferScout = !!state.videoScoutMode && activeTab !== "video";
+  const wantPlay =
+    !preservePlayback ||
+    (state.video && state.video.youtubeId
+      ? (preferScout ? isYoutubePlayerPlaying(ytPlayerScout, ytPlayerScoutReady) : false) ||
+        isYoutubePlayerPlaying(ytPlayer, ytPlayerReady)
+      : isVideoElementPlaying(preferScout ? elAnalysisVideoScout : elAnalysisVideo) ||
+        isVideoElementPlaying(elAnalysisVideoScout) ||
+        isVideoElementPlaying(elAnalysisVideo));
   if (state.video && state.video.youtubeId) {
     if (preferScout) {
       if (youtubeScoutFallback && elYoutubeFrameScout) {
-        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, false, true);
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(
+          state.video.youtubeId,
+          target,
+          false,
+          preservePlayback ? false : true
+        );
         return;
       }
       if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
         ytPlayerScout.seekTo(target, true);
-        if (typeof ytPlayerScout.playVideo === "function") {
+        if (!preservePlayback && typeof ytPlayerScout.playVideo === "function") {
           ytPlayerScout.playVideo();
+        } else if (preservePlayback && typeof ytPlayerScout.pauseVideo === "function" && !wantPlay) {
+          ytPlayerScout.pauseVideo();
         }
       } else if (elYoutubeFrameScout) {
         if (elYoutubeFrameScout.contentWindow) {
@@ -5113,25 +5273,40 @@ function seekVideoToTime(seconds) {
               JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
               "*"
             );
-            elYoutubeFrameScout.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-              "*"
-            );
+            if (!preservePlayback || wantPlay) {
+              elYoutubeFrameScout.contentWindow.postMessage(
+                JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+                "*"
+              );
+            }
             return;
           } catch (_) {
             // ignore postMessage errors and fall back to src update
           }
         }
-        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, true);
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(
+          state.video.youtubeId,
+          target,
+          true,
+          preservePlayback ? false : true
+        );
       }
       return;
     }
     if (youtubeFallback && elYoutubeFrame) {
-      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, false, true);
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(
+        state.video.youtubeId,
+        target,
+        false,
+        preservePlayback ? false : true
+      );
       return;
     }
     if (ytPlayer && typeof ytPlayer.seekTo === "function") {
       queueYoutubeSeek(target, true);
+      if (preservePlayback && !wantPlay && typeof ytPlayer.pauseVideo === "function") {
+        ytPlayer.pauseVideo();
+      }
     } else if (elYoutubeFrame) {
       if (elYoutubeFrame.contentWindow) {
         try {
@@ -5139,23 +5314,33 @@ function seekVideoToTime(seconds) {
             JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
             "*"
           );
-          elYoutubeFrame.contentWindow.postMessage(
-            JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-            "*"
-          );
+          if (!preservePlayback || wantPlay) {
+            elYoutubeFrame.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+              "*"
+            );
+          }
           return;
         } catch (_) {
           // ignore postMessage errors and fall back to src update
         }
       }
-      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, true);
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(
+        state.video.youtubeId,
+        target,
+        true,
+        preservePlayback ? false : true
+      );
     }
     return;
   }
   if (preferScout && elAnalysisVideoScout) {
     try {
+      const wasPaused = elAnalysisVideoScout.paused;
       elAnalysisVideoScout.currentTime = target;
-      elAnalysisVideoScout.play().catch(() => {});
+      if (!preservePlayback || !wasPaused) {
+        elAnalysisVideoScout.play().catch(() => {});
+      }
     } catch (_) {
       // ignore errors when seeking
     }
@@ -5163,8 +5348,11 @@ function seekVideoToTime(seconds) {
   }
   if (!elAnalysisVideo) return;
   try {
+    const wasPaused = elAnalysisVideo.paused;
     elAnalysisVideo.currentTime = target;
-    elAnalysisVideo.play().catch(() => {});
+    if (!preservePlayback || !wasPaused) {
+      elAnalysisVideo.play().catch(() => {});
+    }
   } catch (_) {
     // ignore errors when seeking
   }
@@ -6204,6 +6392,10 @@ function matchesVideoFilters(ev, filters) {
     const idx = resolvePlayerIdx(ev);
     if (idx === -1 || !filters.players.has(idx)) return false;
   }
+  if (filters.setters && filters.setters.size) {
+    const setterIdx = getSetterFromEvent(ev);
+    if (setterIdx === null || !filters.setters.has(setterIdx)) return false;
+  }
   if (filters.skills && filters.skills.size) {
     if (!ev.skillId || !filters.skills.has(ev.skillId)) return false;
   }
@@ -6288,6 +6480,7 @@ const secondFilterState = {
 };
 const videoFilterState = {
   players: new Set(),
+  setters: new Set(),
   skills: new Set(),
   codes: new Set(),
   sets: new Set(),
@@ -6349,6 +6542,7 @@ function syncVideoFilterState() {
   const els = getVideoFilterElements();
   if (!els) return;
   videoFilterState.players = new Set(getCheckedValues(els.players, { asNumber: true }));
+  videoFilterState.setters = new Set(getCheckedValues(els.setters, { asNumber: true }));
   videoFilterState.skills = new Set(getCheckedValues(els.skills));
   videoFilterState.codes = new Set(getCheckedValues(els.codes));
   videoFilterState.sets = new Set(getCheckedValues(els.sets, { asNumber: true }));
@@ -6403,6 +6597,7 @@ function resetServeTrajectoryFilters() {
 }
 function resetVideoFilters() {
   videoFilterState.players.clear();
+  videoFilterState.setters.clear();
   videoFilterState.skills.clear();
   videoFilterState.codes.clear();
   videoFilterState.sets.clear();
@@ -6423,6 +6618,7 @@ function getVideoFilterElements() {
   return {
     wrap,
     players,
+    setters: document.getElementById("video-filter-setters"),
     skills: document.getElementById("video-filter-skills"),
     codes: document.getElementById("video-filter-codes"),
     sets: document.getElementById("video-filter-sets"),
@@ -6724,6 +6920,14 @@ function renderVideoFilters(events) {
         formatNameWithNumber(state.players[idx]) || state.players[idx] || "#" + (Number(idx) + 1)
     }
   );
+  const setterOpts = buildUniqueOptions(
+    list.map(ev => getSetterFromEvent(ev)),
+    {
+      asNumber: true,
+      labelFn: idx =>
+        formatNameWithNumber(state.players[idx]) || state.players[idx] || "Alzatore " + (Number(idx) + 1)
+    }
+  );
   const skillOpts = buildUniqueOptions(list.map(ev => ev.skillId), {
     labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
   });
@@ -6773,6 +6977,9 @@ function renderVideoFilters(events) {
   videoFilterState.players = new Set(
     [...videoFilterState.players].filter(idx => playerOpts.some(p => Number(p.value) === idx))
   );
+  videoFilterState.setters = new Set(
+    [...videoFilterState.setters].filter(idx => setterOpts.some(p => Number(p.value) === idx))
+  );
   videoFilterState.skills = new Set(
     [...videoFilterState.skills].filter(val => skillOpts.some(o => o.value === val))
   );
@@ -6808,6 +7015,10 @@ function renderVideoFilters(events) {
   );
 
   renderDynamicFilter(els.players, playerOpts, videoFilterState.players, {
+    onChange: handleVideoFilterChange
+  });
+  renderDynamicFilter(els.setters, setterOpts, videoFilterState.setters, {
+    asNumber: true,
     onChange: handleVideoFilterChange
   });
   renderDynamicFilter(els.skills, skillOpts, videoFilterState.skills, {
@@ -6846,6 +7057,7 @@ function renderVideoFilters(events) {
 
   const visibleFilters = [
     playerOpts.length,
+    setterOpts.length,
     skillOpts.length,
     codeOpts.length,
     setOpts.length,
@@ -8676,6 +8888,7 @@ function setActiveAggTab(target) {
 }
 function setActiveTab(target) {
   if (!target) return;
+  const prevTab = activeTab;
   activeTab = target;
   state.uiActiveTab = target;
   if (!isLoadingMatch) saveState();
@@ -8686,6 +8899,9 @@ function setActiveTab(target) {
   tabPanels.forEach(panel => {
     panel.classList.toggle("active", panel.dataset.tab === target);
   });
+  if (prevTab === "video" && target !== "video") {
+    stopPlayByPlay();
+  }
 }
 function initTabs() {
   if (!tabButtons || !tabPanels) return;
@@ -9499,6 +9715,21 @@ async function init() {
       state.videoScoutMode = nextValue;
       saveState();
       updateVideoScoutModeLayout();
+    });
+  }
+  if (elVideoPlayByPlayToggle) {
+    elVideoPlayByPlayToggle.checked = !!state.videoPlayByPlay;
+    elVideoPlayByPlayToggle.addEventListener("change", () => {
+      state.videoPlayByPlay = !!elVideoPlayByPlayToggle.checked;
+      saveState();
+      if (state.videoPlayByPlay) {
+        const active = document && document.body ? document.body.dataset.activeTab : "";
+        if (active === "video") {
+          startPlayByPlayFromSelection();
+        }
+      } else {
+        stopPlayByPlay();
+      }
     });
   }
   if (elDefaultSetTypeSelect) {
