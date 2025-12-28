@@ -1326,6 +1326,19 @@ let bulkEditActive = false;
 let bulkEditSession = null;
 const videoUndoStack = [];
 const VIDEO_UNDO_LIMIT = 30;
+function openMatchManagerModal() {
+  if (!elMatchManagerModal) return;
+  elMatchManagerModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+  if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
+  if (typeof renderMatchSummary === "function") renderMatchSummary();
+}
+function closeMatchManagerModal() {
+  if (!elMatchManagerModal) return;
+  elMatchManagerModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
 const BULK_EDIT_CONFIG = {
   videoTime: {
     label: "Tempo video",
@@ -3947,6 +3960,7 @@ async function renderYoutubePlayer(startSeconds = 0) {
   }
   if (!elYoutubeFrame) return;
   elYoutubeFrame.style.display = hasYoutube ? "block" : "none";
+  elYoutubeFrame.classList.toggle("active", hasYoutube);
   // se stiamo servendo da file:// o senza origin valido, forziamo il fallback embed per evitare errori 153
   const isFileOrigin = window.location && window.location.protocol === "file:";
   if (!hasYoutube) {
@@ -4016,6 +4030,7 @@ async function renderYoutubePlayerScout(startSeconds = 0) {
   }
   if (!elYoutubeFrameScout) return;
   elYoutubeFrameScout.style.display = hasYoutube ? "block" : "none";
+  elYoutubeFrameScout.classList.toggle("active", hasYoutube);
   const isFileOrigin = window.location && window.location.protocol === "file:";
   if (!hasYoutube) {
     if (ytPlayerScout && ytPlayerScout.stopVideo) {
@@ -5417,6 +5432,31 @@ function startPlayByPlayAtIndex(idx) {
   setSelectionForContext("video", new Set([row.key]), row.key, { userAction: false });
   scrollRowIntoView(row);
   seekVideoToTime(start);
+  if (state.video && state.video.youtubeId) {
+    if (ytPlayer && typeof ytPlayer.playVideo === "function") {
+      ytPlayer.playVideo();
+    } else if (ytPlayerScout && typeof ytPlayerScout.playVideo === "function") {
+      ytPlayerScout.playVideo();
+    } else if (elYoutubeFrame && elYoutubeFrame.contentWindow) {
+      try {
+        elYoutubeFrame.contentWindow.postMessage(
+          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+          "*"
+        );
+      } catch (_) {
+        // ignore
+      }
+    } else if (elYoutubeFrameScout && elYoutubeFrameScout.contentWindow) {
+      try {
+        elYoutubeFrameScout.contentWindow.postMessage(
+          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+          "*"
+        );
+      } catch (_) {
+        // ignore
+      }
+    }
+  }
   ensurePlayByPlayMonitor();
 }
 function syncPlayByPlayAfterRender() {
@@ -5545,8 +5585,7 @@ function seekVideoToTime(seconds, options = {}) {
       : isVideoElementPlaying(preferScout ? elAnalysisVideoScout : elAnalysisVideo) ||
         isVideoElementPlaying(elAnalysisVideoScout) ||
         isVideoElementPlaying(elAnalysisVideo);
-  const controlPlayback = !preservePlayback;
-  const wantPlay = preservePlayback ? wasPlaying : true;
+  const playbackCommand = preservePlayback ? (wasPlaying ? "play" : "none") : "play";
   if (state.video && state.video.youtubeId) {
     if (preferScout) {
       if (youtubeScoutFallback && elYoutubeFrameScout) {
@@ -5556,39 +5595,9 @@ function seekVideoToTime(seconds, options = {}) {
               JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
               "*"
             );
-            if (controlPlayback) {
+            if (playbackCommand !== "none") {
               elYoutubeFrameScout.contentWindow.postMessage(
-                JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
-                "*"
-              );
-            }
-            return;
-          } catch (_) {
-            // ignore postMessage errors and fall back to src update
-          }
-        }
-        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, wantPlay);
-        return;
-      }
-      if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
-        ytPlayerScout.seekTo(target, true);
-        if (controlPlayback) {
-          if (wantPlay && typeof ytPlayerScout.playVideo === "function") {
-            ytPlayerScout.playVideo();
-          } else if (typeof ytPlayerScout.pauseVideo === "function") {
-            ytPlayerScout.pauseVideo();
-          }
-        }
-      } else if (elYoutubeFrameScout) {
-        if (elYoutubeFrameScout.contentWindow) {
-          try {
-            elYoutubeFrameScout.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
-              "*"
-            );
-            if (controlPlayback) {
-              elYoutubeFrameScout.contentWindow.postMessage(
-                JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+                JSON.stringify({ event: "command", func: "playVideo", args: [] }),
                 "*"
               );
             }
@@ -5601,7 +5610,38 @@ function seekVideoToTime(seconds, options = {}) {
           state.video.youtubeId,
           target,
           true,
-          wantPlay
+          playbackCommand === "play"
+        );
+        return;
+      }
+      if (ytPlayerScout && typeof ytPlayerScout.seekTo === "function") {
+        ytPlayerScout.seekTo(target, true);
+        if (playbackCommand === "play" && typeof ytPlayerScout.playVideo === "function") {
+          ytPlayerScout.playVideo();
+        }
+      } else if (elYoutubeFrameScout) {
+        if (elYoutubeFrameScout.contentWindow) {
+          try {
+            elYoutubeFrameScout.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+              "*"
+            );
+            if (playbackCommand !== "none") {
+              elYoutubeFrameScout.contentWindow.postMessage(
+                JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+                "*"
+              );
+            }
+            return;
+          } catch (_) {
+            // ignore postMessage errors and fall back to src update
+          }
+        }
+        elYoutubeFrameScout.src = buildYoutubeEmbedSrc(
+          state.video.youtubeId,
+          target,
+          true,
+          playbackCommand === "play"
         );
       }
       return;
@@ -5613,35 +5653,9 @@ function seekVideoToTime(seconds, options = {}) {
             JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
             "*"
           );
-          if (controlPlayback) {
+          if (playbackCommand !== "none") {
             elYoutubeFrame.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
-              "*"
-            );
-          }
-          return;
-        } catch (_) {
-          // ignore postMessage errors and fall back to src update
-        }
-      }
-      elYoutubeFrame.src = buildYoutubeEmbedSrc(state.video.youtubeId, target, true, wantPlay);
-      return;
-    }
-    if (ytPlayer && typeof ytPlayer.seekTo === "function") {
-      queueYoutubeSeek(target, controlPlayback ? wantPlay : false);
-      if (controlPlayback && !wantPlay && typeof ytPlayer.pauseVideo === "function") {
-        ytPlayer.pauseVideo();
-      }
-    } else if (elYoutubeFrame) {
-      if (elYoutubeFrame.contentWindow) {
-        try {
-          elYoutubeFrame.contentWindow.postMessage(
-            JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
-            "*"
-          );
-          if (controlPlayback) {
-            elYoutubeFrame.contentWindow.postMessage(
-              JSON.stringify({ event: "command", func: wantPlay ? "playVideo" : "pauseVideo", args: [] }),
+              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
               "*"
             );
           }
@@ -5654,7 +5668,35 @@ function seekVideoToTime(seconds, options = {}) {
         state.video.youtubeId,
         target,
         true,
-        wantPlay
+        playbackCommand === "play"
+      );
+      return;
+    }
+    if (ytPlayer && typeof ytPlayer.seekTo === "function") {
+      queueYoutubeSeek(target, playbackCommand === "play");
+    } else if (elYoutubeFrame) {
+      if (elYoutubeFrame.contentWindow) {
+        try {
+          elYoutubeFrame.contentWindow.postMessage(
+            JSON.stringify({ event: "command", func: "seekTo", args: [target, true] }),
+            "*"
+          );
+          if (playbackCommand !== "none") {
+            elYoutubeFrame.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+              "*"
+            );
+          }
+          return;
+        } catch (_) {
+          // ignore postMessage errors and fall back to src update
+        }
+      }
+      elYoutubeFrame.src = buildYoutubeEmbedSrc(
+        state.video.youtubeId,
+        target,
+        true,
+        playbackCommand === "play"
       );
     }
     return;
@@ -6385,19 +6427,57 @@ function getActiveVideoElement() {
   if (activeTab === "scout" && state.videoScoutMode) return elAnalysisVideoScout || null;
   return null;
 }
+function getActiveYoutubeController() {
+  if (!state.video || !state.video.youtubeId) return null;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  const preferScout = !!state.videoScoutMode && activeTab !== "video";
+  if (preferScout && ytPlayerScout && ytPlayerScoutReady) {
+    return { player: ytPlayerScout, ready: ytPlayerScoutReady };
+  }
+  if (ytPlayer && ytPlayerReady) {
+    return { player: ytPlayer, ready: ytPlayerReady };
+  }
+  return null;
+}
+function toggleYoutubePlayback() {
+  const ctrl = getActiveYoutubeController();
+  if (!ctrl || !ctrl.player) return false;
+  const playing = isYoutubePlayerPlaying(ctrl.player, ctrl.ready);
+  if (playing && typeof ctrl.player.pauseVideo === "function") {
+    ctrl.player.pauseVideo();
+    return true;
+  }
+  if (!playing && typeof ctrl.player.playVideo === "function") {
+    ctrl.player.playVideo();
+    return true;
+  }
+  return false;
+}
 function handleVideoShortcut(e) {
   if (e.defaultPrevented) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (isTypingTarget(e.target)) return;
   if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
   const video = getActiveVideoElement();
-  if (!video) return;
-  const duration = Number.isFinite(video.duration) ? video.duration : null;
+  const ytCtrl = getActiveYoutubeController();
+  if (!video && !ytCtrl) return;
+  const duration = video && Number.isFinite(video.duration) ? video.duration : null;
   const clampTime = next => {
     if (duration == null) return Math.max(0, next);
     return Math.max(0, Math.min(duration, next));
   };
   const seekBy = delta => {
+    if (ytCtrl && ytCtrl.player && typeof ytCtrl.player.getCurrentTime === "function") {
+      const wasPlaying = isYoutubePlayerPlaying(ytCtrl.player, ytCtrl.ready);
+      const current = ytCtrl.player.getCurrentTime();
+      if (!isFinite(current)) return;
+      ytCtrl.player.seekTo(Math.max(0, current + delta), true);
+      if (wasPlaying && typeof ytCtrl.player.playVideo === "function") {
+        ytCtrl.player.playVideo();
+      }
+      return;
+    }
+    if (!video) return;
     const wasPaused = video.paused;
     video.currentTime = clampTime(video.currentTime + delta);
     if (!wasPaused) {
@@ -6406,6 +6486,8 @@ function handleVideoShortcut(e) {
   };
   if (e.code === "Space") {
     e.preventDefault();
+    if (ytCtrl && toggleYoutubePlayback()) return;
+    if (!video) return;
     if (video.paused) {
       video.play().catch(() => {});
     } else {
@@ -9306,6 +9388,42 @@ function setupFocusGuards() {
     },
     true
   );
+  const blurIframeFocus = () => {
+    const active = document.activeElement;
+    if (active && active.tagName && active.tagName.toLowerCase() === "iframe") {
+      if (document.body) document.body.focus();
+      active.blur();
+    }
+  };
+  if (elYoutubeFrame) {
+    elYoutubeFrame.addEventListener("pointerdown", blurIframeFocus, true);
+    elYoutubeFrame.addEventListener("click", blurIframeFocus, true);
+  }
+  if (elYoutubeFrameScout) {
+    elYoutubeFrameScout.addEventListener("pointerdown", blurIframeFocus, true);
+    elYoutubeFrameScout.addEventListener("click", blurIframeFocus, true);
+  }
+  document.querySelectorAll("[data-youtube-guard]").forEach(guard => {
+    guard.addEventListener(
+      "pointerdown",
+      e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (document.body) document.body.focus();
+      },
+      true
+    );
+    guard.addEventListener(
+      "click",
+      e => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleYoutubePlayback();
+        if (document.body) document.body.focus();
+      },
+      true
+    );
+  });
 }
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
@@ -9319,6 +9437,10 @@ async function init() {
   isLoadingMatch = true;
   if (typeof window !== "undefined") {
     window.isLoadingMatch = true;
+  }
+  if (typeof window !== "undefined") {
+    window.openMatchManagerModal = openMatchManagerModal;
+    window.closeMatchManagerModal = closeMatchManagerModal;
   }
   initTabs();
   initSwipeTabs();
@@ -9657,31 +9779,18 @@ async function init() {
       if (file) handleImportDatabaseFile(file);
     });
   }
-  const openMatchManager = () => {
-    if (!elMatchManagerModal) return;
-    elMatchManagerModal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
-    if (typeof renderMatchesSelect === "function") renderMatchesSelect();
-    if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
-    if (typeof renderMatchSummary === "function") renderMatchSummary();
-  };
-  const closeMatchManager = () => {
-    if (!elMatchManagerModal) return;
-    elMatchManagerModal.classList.add("hidden");
-    document.body.classList.remove("modal-open");
-  };
   if (elBtnOpenMatchManager) {
-    elBtnOpenMatchManager.addEventListener("click", openMatchManager);
+    elBtnOpenMatchManager.addEventListener("click", openMatchManagerModal);
   }
   if (elMatchManagerClose) {
-    elMatchManagerClose.addEventListener("click", closeMatchManager);
+    elMatchManagerClose.addEventListener("click", closeMatchManagerModal);
   }
   if (elMatchManagerModal) {
     elMatchManagerModal.addEventListener("click", e => {
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.closeMatchManager !== undefined) {
-        closeMatchManager();
+        closeMatchManagerModal();
       }
     });
   }

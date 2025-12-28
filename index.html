@@ -34,7 +34,7 @@
         </div>
         <div class="col col-auto">
           <label class="spacer-label">&nbsp;</label>
-          <button id="btn-open-match-manager" class="secondary">Gestione match</button>
+          <button id="btn-open-match-manager" class="secondary" type="button" onclick="window.openMatchManagerModal && window.openMatchManagerModal()">Gestione match</button>
         </div>
         <div class="col col-auto">
           <label>Tema</label>
@@ -256,14 +256,18 @@ Bianchi 18"></textarea>
               </div>
             </div>
             <div class="video-player-wrap video-player-wrap--scout">
-              <video id="analysis-video-scout" controls preload="metadata"></video>
-              <iframe
-                id="youtube-frame-scout"
-                class="youtube-frame"
-                title="YouTube player"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowfullscreen
-              ></iframe>
+              <div class="video-media">
+                <video id="analysis-video-scout" controls preload="metadata"></video>
+                <iframe
+                  id="youtube-frame-scout"
+                  class="youtube-frame"
+                  title="YouTube player"
+                  tabindex="-1"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowfullscreen
+                ></iframe>
+                <div class="youtube-focus-guard" data-youtube-guard></div>
+              </div>
             </div>
           </div>
         </div>
@@ -732,14 +736,18 @@ Bianchi 18"></textarea>
               <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
             </div>
           </div>
-          <video id="analysis-video" controls preload="metadata"></video>
-          <iframe
-            id="youtube-frame"
-            class="youtube-frame"
-            title="YouTube player"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen
-          ></iframe>
+          <div class="video-media">
+            <video id="analysis-video" controls preload="metadata"></video>
+            <iframe
+              id="youtube-frame"
+              class="youtube-frame"
+              title="YouTube player"
+              tabindex="-1"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+            ></iframe>
+            <div class="youtube-focus-guard" data-youtube-guard></div>
+          </div>
           <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato. Puoi usare un file o un link YouTube.
             <br>Shortcuts:
             <ul>

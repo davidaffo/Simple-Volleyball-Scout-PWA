@@ -3072,6 +3072,9 @@ body[data-theme="light"] .rotation-table td {
   gap: 0.35rem;
   align-self: stretch;
 }
+.video-media {
+  position: relative;
+}
 .video-player-wrap video {
   width: 100%;
   border-radius: 0.8rem;
@@ -3089,6 +3092,16 @@ body[data-theme="light"] .rotation-table td {
   border-radius: 0.8rem;
   background: #000;
   aspect-ratio: 16 / 9;
+}
+.youtube-focus-guard {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  cursor: default;
+}
+.youtube-frame.active + .youtube-focus-guard {
+  display: block;
 }
 body[data-theme="light"] .video-skills-table th,
 body[data-theme="light"] .video-skills-table td {
