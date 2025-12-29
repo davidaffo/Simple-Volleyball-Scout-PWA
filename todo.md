@@ -13,4 +13,5 @@ Specializza gli errori
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
 Tema chiaro non coerente
+nel tema chiaro non ci sono i colori alternati del tabellino
 Stampa battute non è ottimale

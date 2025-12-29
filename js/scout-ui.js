@@ -3159,6 +3159,31 @@ function getSkillLabel(skillId) {
   const skill = SKILLS.find(s => s.id === skillId);
   return (skill && skill.label) || skillId || "Fondamentale";
 }
+function ensurePlayerAnalysisState() {
+  if (!state.uiPlayerAnalysis || typeof state.uiPlayerAnalysis !== "object") {
+    state.uiPlayerAnalysis = { playerIdx: null, showAttack: true, showServe: true, showSecond: false };
+  }
+  const prefs = state.uiPlayerAnalysis;
+  prefs.showAttack = prefs.showAttack !== false;
+  prefs.showServe = prefs.showServe !== false;
+  prefs.showSecond = prefs.showSecond === true;
+  if (typeof prefs.playerIdx !== "number") {
+    prefs.playerIdx = null;
+  }
+  return prefs;
+}
+function getPlayerAnalysisPlayerIdx() {
+  const prefs = ensurePlayerAnalysisState();
+  const players = state.players || [];
+  if (!players.length) {
+    prefs.playerIdx = null;
+    return null;
+  }
+  if (typeof prefs.playerIdx !== "number" || prefs.playerIdx < 0 || prefs.playerIdx >= players.length) {
+    prefs.playerIdx = 0;
+  }
+  return prefs.playerIdx;
+}
 function getAggTableElements() {
   const table = elAggTableBody ? elAggTableBody.closest("table") : null;
   const thead = table ? table.querySelector("thead") : null;
@@ -3395,6 +3420,172 @@ function getAggSkillPlayerLabel(playerIdx) {
   if (isNaN(idx) || !state.players || !state.players[idx]) return "Giocatrice";
   return formatNameWithNumber(state.players[idx]);
 }
+function renderPlayerAnalysisControls() {
+  if (!elPlayerAnalysisSelect) return;
+  const prefs = ensurePlayerAnalysisState();
+  const players = state.players || [];
+  elPlayerAnalysisSelect.innerHTML = "";
+  if (!players.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Nessuna giocatrice";
+    elPlayerAnalysisSelect.appendChild(opt);
+    elPlayerAnalysisSelect.disabled = true;
+  } else {
+    players.forEach((name, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = formatNameWithNumber(name) || name || "Giocatrice " + (idx + 1);
+      elPlayerAnalysisSelect.appendChild(opt);
+    });
+    elPlayerAnalysisSelect.disabled = false;
+    const selectedIdx = getPlayerAnalysisPlayerIdx();
+    elPlayerAnalysisSelect.value = selectedIdx !== null ? String(selectedIdx) : "0";
+  }
+  if (!elPlayerAnalysisSelect._playerAnalysisBound) {
+    elPlayerAnalysisSelect.addEventListener("change", () => {
+      const idx = parseInt(elPlayerAnalysisSelect.value, 10);
+      prefs.playerIdx = isNaN(idx) ? null : idx;
+      saveState();
+      renderPlayerAnalysis();
+    });
+    elPlayerAnalysisSelect._playerAnalysisBound = true;
+  }
+  if (elPlayerAnalysisShowAttack) {
+    elPlayerAnalysisShowAttack.checked = !!prefs.showAttack;
+    if (!elPlayerAnalysisShowAttack._bound) {
+      elPlayerAnalysisShowAttack.addEventListener("change", () => {
+        prefs.showAttack = !!elPlayerAnalysisShowAttack.checked;
+        saveState();
+        renderPlayerAnalysis();
+      });
+      elPlayerAnalysisShowAttack._bound = true;
+    }
+  }
+  if (elPlayerAnalysisShowServe) {
+    elPlayerAnalysisShowServe.checked = !!prefs.showServe;
+    if (!elPlayerAnalysisShowServe._bound) {
+      elPlayerAnalysisShowServe.addEventListener("change", () => {
+        prefs.showServe = !!elPlayerAnalysisShowServe.checked;
+        saveState();
+        renderPlayerAnalysis();
+      });
+      elPlayerAnalysisShowServe._bound = true;
+    }
+  }
+  if (elPlayerAnalysisShowSecond) {
+    elPlayerAnalysisShowSecond.checked = !!prefs.showSecond;
+    if (!elPlayerAnalysisShowSecond._bound) {
+      elPlayerAnalysisShowSecond.addEventListener("change", () => {
+        prefs.showSecond = !!elPlayerAnalysisShowSecond.checked;
+        saveState();
+        renderPlayerAnalysis();
+      });
+      elPlayerAnalysisShowSecond._bound = true;
+    }
+  }
+}
+function renderPlayerAnalysisTable() {
+  if (!elPlayerAnalysisBody) return;
+  elPlayerAnalysisBody.innerHTML = "";
+  const idx = getPlayerAnalysisPlayerIdx();
+  if (idx === null || !state.players || !state.players[idx]) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 26;
+    td.textContent = "Seleziona una giocatrice per vedere il tabellino.";
+    tr.appendChild(td);
+    elPlayerAnalysisBody.appendChild(tr);
+    return;
+  }
+  const name = state.players[idx];
+  const serveCounts = normalizeCounts(state.stats[idx] && state.stats[idx].serve);
+  const passCounts = normalizeCounts(state.stats[idx] && state.stats[idx].pass);
+  const attackCounts = normalizeCounts(state.stats[idx] && state.stats[idx].attack);
+  const blockCounts = normalizeCounts(state.stats[idx] && state.stats[idx].block);
+  const defenseCounts = normalizeCounts(state.stats[idx] && state.stats[idx].defense);
+
+  const serveMetrics = computeMetrics(serveCounts, "serve");
+  const passMetrics = computeMetrics(passCounts, "pass");
+  const attackMetrics = computeMetrics(attackCounts, "attack");
+  const defenseMetrics = computeMetrics(defenseCounts, "defense");
+
+  const playerPoints = computePlayerPointsMap();
+  const playerErrors = computePlayerErrorsMap();
+  const points = playerPoints[idx] || { for: 0, against: 0 };
+  const personalErrors = playerErrors[idx] || 0;
+  const attackTotal = totalFromCounts(attackCounts);
+
+  const row = document.createElement("tr");
+  const cells = [
+    { text: formatNameWithNumber(name) },
+    { text: points.for || 0 },
+    { text: points.against || 0 },
+    { text: formatDelta((points.for || 0) - (points.against || 0)) },
+    { text: personalErrors || 0 },
+
+    { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
+    { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
+    { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
+    { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
+    { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
+
+    { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
+    { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+    { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
+    { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
+    { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
+
+    { text: attackTotal, className: "skill-col skill-attack" },
+    { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
+    { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
+    { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
+    { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
+    { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
+
+    { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
+    { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
+
+    { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
+    { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+    { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
+  ];
+  cells.forEach(cell => {
+    const td = document.createElement("td");
+    td.textContent = cell.text;
+    if (cell.className) td.className = cell.className;
+    row.appendChild(td);
+  });
+  elPlayerAnalysisBody.appendChild(row);
+}
+function updatePlayerAnalysisVisibility() {
+  const prefs = ensurePlayerAnalysisState();
+  if (elPlayerAnalysisAttack) {
+    elPlayerAnalysisAttack.classList.toggle("hidden", !prefs.showAttack);
+  }
+  if (elPlayerAnalysisServe) {
+    elPlayerAnalysisServe.classList.toggle("hidden", !prefs.showServe);
+  }
+  if (elPlayerAnalysisSecond) {
+    elPlayerAnalysisSecond.classList.toggle("hidden", !prefs.showSecond);
+  }
+}
+function renderPlayerAnalysis() {
+  if (!elPlayerAnalysisBody) return;
+  renderPlayerAnalysisControls();
+  renderPlayerAnalysisTable();
+  updatePlayerAnalysisVisibility();
+  const prefs = ensurePlayerAnalysisState();
+  if (prefs.showAttack) {
+    renderPlayerTrajectoryAnalysis();
+  }
+  if (prefs.showServe) {
+    renderPlayerServeTrajectoryAnalysis();
+  }
+  if (prefs.showSecond) {
+    renderPlayerSecondTable();
+  }
+}
 function renderAggSkillModal(skillId, playerIdx) {
   if (!elAggSkillModalBody) return;
   const skillLabel = getSkillLabel(skillId);
@@ -3601,6 +3792,9 @@ function recalcAllStatsAndUpdateUI() {
   });
   renderLiveScore();
   renderAggregatedTable();
+  if (activeAggTab === "player") {
+    renderPlayerAnalysis();
+  }
   renderVideoAnalysis();
 }
 function getEventKey(ev, fallbackIdx = 0) {
@@ -7256,8 +7450,38 @@ const serveTrajectoryFilterState = {
   receiveEvaluations: new Set(),
   receiveZones: new Set()
 };
+const playerTrajectoryFilterState = {
+  sets: new Set(),
+  codes: new Set(),
+  zones: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  prevSkill: "any"
+};
+const playerServeTrajectoryFilterState = {
+  sets: new Set(),
+  codes: new Set(),
+  zones: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set()
+};
 const secondFilterState = {
   setters: new Set(),
+  setTypes: new Set(),
+  bases: new Set(),
+  phases: new Set(),
+  receiveEvaluations: new Set(),
+  receiveZones: new Set(),
+  sets: new Set(),
+  prevSkill: "any"
+};
+const playerSecondFilterState = {
   setTypes: new Set(),
   bases: new Set(),
   phases: new Set(),
@@ -7695,6 +7919,776 @@ function renderServeTrajectoryFilters() {
     elServeTrajFilterReset.addEventListener("click", resetServeTrajectoryFilters);
     elServeTrajFilterReset._serveTrajResetBound = true;
   }
+}
+function syncPlayerTrajectoryFilterState() {
+  playerTrajectoryFilterState.sets = new Set(getCheckedValues(elPlayerTrajFilterSets, { asNumber: true }));
+  playerTrajectoryFilterState.codes = new Set(getCheckedValues(elPlayerTrajFilterCodes));
+  playerTrajectoryFilterState.zones = new Set(getCheckedValues(elPlayerTrajFilterZones, { asNumber: true }));
+  playerTrajectoryFilterState.setTypes = new Set(getCheckedValues(elPlayerTrajFilterSetTypes));
+  playerTrajectoryFilterState.bases = new Set(getCheckedValues(elPlayerTrajFilterBases));
+  playerTrajectoryFilterState.phases = new Set(getCheckedValues(elPlayerTrajFilterPhases));
+  playerTrajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elPlayerTrajFilterReceiveEvals));
+  playerTrajectoryFilterState.receiveZones = new Set(getCheckedValues(elPlayerTrajFilterReceiveZones, { asNumber: true }));
+  playerTrajectoryFilterState.prevSkill = (elPlayerTrajFilterPrev && elPlayerTrajFilterPrev.value) || "any";
+}
+function handlePlayerTrajectoryFilterChange() {
+  syncPlayerTrajectoryFilterState();
+  renderPlayerTrajectoryAnalysis();
+}
+function resetPlayerTrajectoryFilters() {
+  playerTrajectoryFilterState.sets.clear();
+  playerTrajectoryFilterState.codes.clear();
+  playerTrajectoryFilterState.zones.clear();
+  playerTrajectoryFilterState.setTypes.clear();
+  playerTrajectoryFilterState.bases.clear();
+  playerTrajectoryFilterState.phases.clear();
+  playerTrajectoryFilterState.receiveEvaluations.clear();
+  playerTrajectoryFilterState.receiveZones.clear();
+  playerTrajectoryFilterState.prevSkill = "any";
+  if (elPlayerTrajFilterPrev) elPlayerTrajFilterPrev.value = "any";
+  renderPlayerTrajectoryFilters();
+  renderPlayerTrajectoryAnalysis();
+}
+function renderPlayerTrajectoryFilters() {
+  if (!elPlayerTrajectoryGrid) return;
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    const dir = ev.attackDirection || ev.attackTrajectory;
+    if (!dir || !dir.start || !dir.end) return false;
+    if (playerIdx === null) return false;
+    return ev.playerIdx === playerIdx;
+  });
+  const setsOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const codesOpts = buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val });
+  const zonesOpts = buildUniqueOptions(
+    events.map(ev => {
+      const traj = ev.attackDirection || ev.attackTrajectory || {};
+      return ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    }),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+  const setTypeOpts = buildUniqueOptions(
+    events.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
+  );
+  const baseOpts = buildUniqueOptions(
+    events.map(ev => normalizeBaseValue(ev.base)),
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
+  );
+  const phaseOpts = buildUniqueOptions(events.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
+  const recvEvalOpts = buildUniqueOptions(
+    events.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    { labelFn: val => val }
+  );
+  const recvZoneOpts = buildUniqueOptions(
+    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+
+  playerTrajectoryFilterState.sets = new Set(
+    [...playerTrajectoryFilterState.sets].filter(setNum => setsOpts.some(o => Number(o.value) === setNum))
+  );
+  playerTrajectoryFilterState.codes = new Set(
+    [...playerTrajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  playerTrajectoryFilterState.zones = new Set(
+    [...playerTrajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
+  );
+  playerTrajectoryFilterState.setTypes = new Set(
+    [...playerTrajectoryFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  playerTrajectoryFilterState.bases = new Set(
+    [...playerTrajectoryFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  playerTrajectoryFilterState.phases = new Set(
+    [...playerTrajectoryFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  playerTrajectoryFilterState.receiveEvaluations = new Set(
+    [...playerTrajectoryFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  playerTrajectoryFilterState.receiveZones = new Set(
+    [...playerTrajectoryFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === playerTrajectoryFilterState.prevSkill)) {
+    playerTrajectoryFilterState.prevSkill = "any";
+  }
+
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterSets, setsOpts, playerTrajectoryFilterState.sets, {
+      asNumber: true,
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterSetTypes, setTypeOpts, playerTrajectoryFilterState.setTypes, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterBases, baseOpts, playerTrajectoryFilterState.bases, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterPhases, phaseOpts, playerTrajectoryFilterState.phases, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterReceiveEvals, recvEvalOpts, playerTrajectoryFilterState.receiveEvaluations, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterReceiveZones, recvZoneOpts, playerTrajectoryFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterCodes, codesOpts, playerTrajectoryFilterState.codes, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterZones, zonesOpts, playerTrajectoryFilterState.zones, {
+      asNumber: true,
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  toggleFilterVisibility(elPlayerTrajFilterPrev, true);
+  toggleFilterVisibility(elPlayerTrajFilterReset, visibleFilters.some(Boolean));
+  if (elPlayerTrajFilterPrev) {
+    elPlayerTrajFilterPrev.value = playerTrajectoryFilterState.prevSkill || "any";
+    if (!elPlayerTrajFilterPrev._playerTrajPrevBound) {
+      elPlayerTrajFilterPrev.addEventListener("change", handlePlayerTrajectoryFilterChange);
+      elPlayerTrajFilterPrev._playerTrajPrevBound = true;
+    }
+  }
+  if (elPlayerTrajFilterReset && !elPlayerTrajFilterReset._playerTrajResetBound) {
+    elPlayerTrajFilterReset.addEventListener("click", resetPlayerTrajectoryFilters);
+    elPlayerTrajFilterReset._playerTrajResetBound = true;
+  }
+}
+function getFilteredPlayerTrajectoryEvents() {
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    const dir = ev.attackDirection || ev.attackTrajectory;
+    if (!dir || !dir.start || !dir.end) return false;
+    if (playerIdx === null) return false;
+    return ev.playerIdx === playerIdx;
+  });
+  return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory;
+    const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
+    if (!matchesAdvancedFilters(ev, playerTrajectoryFilterState)) return false;
+    if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(ev.set)) return false;
+    if (playerTrajectoryFilterState.codes.size && !playerTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (playerTrajectoryFilterState.zones.size && !playerTrajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
+function renderPlayerTrajectoryAnalysis() {
+  if (!elPlayerTrajectoryGrid) return;
+  renderPlayerTrajectoryFilters();
+  const canvases = elPlayerTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
+  if (!canvases || canvases.length === 0) return;
+  const events = getFilteredPlayerTrajectoryEvents();
+  const grouped = {};
+  events.forEach(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const zone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    if (!zone) return;
+    if (!grouped[zone]) grouped[zone] = [];
+    grouped[zone].push(ev);
+  });
+  canvases.forEach(canvas => {
+    const zone = parseInt(canvas.dataset.trajCanvas, 10);
+    const card = canvas.closest(".trajectory-card");
+    const list = grouped[zone] || [];
+    const img = getTrajectoryBg(zone, () => renderPlayerTrajectoryAnalysis());
+    const ratio = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.65;
+    const width = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 320;
+    const height = Math.max(120, Math.round(width * ratio || width * 0.65));
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, width, height);
+    if (img && img.complete && img.naturalWidth) {
+      ctx.drawImage(img, 0, 0, width, height);
+    }
+    if (!list.length) {
+      if (card) card.classList.add("empty");
+      return;
+    }
+    if (card) card.classList.remove("empty");
+    list.forEach(ev => {
+      const traj = ev.attackDirection || ev.attackTrajectory || {};
+      const start = traj.start || ev.attackStart;
+      const end = traj.end || ev.attackEnd;
+      if (!start || !end) return;
+      const sx = clamp01Val(start.x) * width;
+      const sy = clamp01Val(start.y) * height;
+      const ex = clamp01Val(end.x) * width;
+      const ey = clamp01Val(end.y) * height;
+      ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "attack");
+      ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    });
+  });
+}
+function syncPlayerServeTrajectoryFilterState() {
+  playerServeTrajectoryFilterState.sets = new Set(getCheckedValues(elPlayerServeTrajFilterSets, { asNumber: true }));
+  playerServeTrajectoryFilterState.codes = new Set(getCheckedValues(elPlayerServeTrajFilterCodes));
+  playerServeTrajectoryFilterState.zones = new Set(getCheckedValues(elPlayerServeTrajFilterZones, { asNumber: true }));
+  playerServeTrajectoryFilterState.setTypes = new Set(getCheckedValues(elPlayerServeTrajFilterSetTypes));
+  playerServeTrajectoryFilterState.bases = new Set(getCheckedValues(elPlayerServeTrajFilterBases));
+  playerServeTrajectoryFilterState.phases = new Set(getCheckedValues(elPlayerServeTrajFilterPhases));
+  playerServeTrajectoryFilterState.receiveEvaluations = new Set(getCheckedValues(elPlayerServeTrajFilterReceiveEvals));
+  playerServeTrajectoryFilterState.receiveZones = new Set(getCheckedValues(elPlayerServeTrajFilterReceiveZones, { asNumber: true }));
+}
+function handlePlayerServeTrajectoryFilterChange() {
+  syncPlayerServeTrajectoryFilterState();
+  renderPlayerServeTrajectoryAnalysis();
+}
+function resetPlayerServeTrajectoryFilters() {
+  playerServeTrajectoryFilterState.sets.clear();
+  playerServeTrajectoryFilterState.codes.clear();
+  playerServeTrajectoryFilterState.zones.clear();
+  playerServeTrajectoryFilterState.setTypes.clear();
+  playerServeTrajectoryFilterState.bases.clear();
+  playerServeTrajectoryFilterState.phases.clear();
+  playerServeTrajectoryFilterState.receiveEvaluations.clear();
+  playerServeTrajectoryFilterState.receiveZones.clear();
+  renderPlayerServeTrajectoryFilters();
+  renderPlayerServeTrajectoryAnalysis();
+}
+function renderPlayerServeTrajectoryFilters() {
+  if (!elPlayerServeTrajectoryGrid) return;
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "serve") return false;
+    if (!ev.serveStart || !ev.serveEnd) return false;
+    if (playerIdx === null) return false;
+    return ev.playerIdx === playerIdx;
+  });
+  const setsOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const codesOpts = buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val });
+  const zonesOpts = buildUniqueOptions(events.map(ev => getServeStartZone(ev)), {
+    asNumber: true,
+    labelFn: val => "Z" + val
+  });
+  const setTypeOpts = buildUniqueOptions(
+    events.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
+  );
+  const baseOpts = buildUniqueOptions(
+    events.map(ev => normalizeBaseValue(ev.base)),
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
+  );
+  const phaseOpts = buildUniqueOptions(events.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
+  const recvEvalOpts = buildUniqueOptions(
+    events.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    { labelFn: val => val }
+  );
+  const recvZoneOpts = buildUniqueOptions(
+    events.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+
+  playerServeTrajectoryFilterState.sets = new Set(
+    [...playerServeTrajectoryFilterState.sets].filter(setNum => setsOpts.some(o => Number(o.value) === setNum))
+  );
+  playerServeTrajectoryFilterState.codes = new Set(
+    [...playerServeTrajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  playerServeTrajectoryFilterState.zones = new Set(
+    [...playerServeTrajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
+  );
+  playerServeTrajectoryFilterState.setTypes = new Set(
+    [...playerServeTrajectoryFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  playerServeTrajectoryFilterState.bases = new Set(
+    [...playerServeTrajectoryFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  playerServeTrajectoryFilterState.phases = new Set(
+    [...playerServeTrajectoryFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  playerServeTrajectoryFilterState.receiveEvaluations = new Set(
+    [...playerServeTrajectoryFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  playerServeTrajectoryFilterState.receiveZones = new Set(
+    [...playerServeTrajectoryFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterSets, setsOpts, playerServeTrajectoryFilterState.sets, {
+      asNumber: true,
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterSetTypes, setTypeOpts, playerServeTrajectoryFilterState.setTypes, {
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterBases, baseOpts, playerServeTrajectoryFilterState.bases, {
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterPhases, phaseOpts, playerServeTrajectoryFilterState.phases, {
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(
+      elPlayerServeTrajFilterReceiveEvals,
+      recvEvalOpts,
+      playerServeTrajectoryFilterState.receiveEvaluations,
+      { onChange: handlePlayerServeTrajectoryFilterChange }
+    )
+  );
+  visibleFilters.push(
+    renderDynamicFilter(
+      elPlayerServeTrajFilterReceiveZones,
+      recvZoneOpts,
+      playerServeTrajectoryFilterState.receiveZones,
+      { asNumber: true, onChange: handlePlayerServeTrajectoryFilterChange }
+    )
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterCodes, codesOpts, playerServeTrajectoryFilterState.codes, {
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerServeTrajFilterZones, zonesOpts, playerServeTrajectoryFilterState.zones, {
+      asNumber: true,
+      onChange: handlePlayerServeTrajectoryFilterChange
+    })
+  );
+  toggleFilterVisibility(elPlayerServeTrajFilterReset, visibleFilters.some(Boolean));
+  if (elPlayerServeTrajFilterReset && !elPlayerServeTrajFilterReset._playerServeResetBound) {
+    elPlayerServeTrajFilterReset.addEventListener("click", resetPlayerServeTrajectoryFilters);
+    elPlayerServeTrajFilterReset._playerServeResetBound = true;
+  }
+}
+function getFilteredPlayerServeTrajectoryEvents() {
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "serve") return false;
+    if (!ev.serveStart || !ev.serveEnd) return false;
+    if (playerIdx === null) return false;
+    return ev.playerIdx === playerIdx;
+  });
+  return events.filter(ev => {
+    const startZone = getServeStartZone(ev);
+    if (!matchesAdvancedFilters(ev, playerServeTrajectoryFilterState)) return false;
+    if (playerServeTrajectoryFilterState.sets.size && !playerServeTrajectoryFilterState.sets.has(ev.set)) return false;
+    if (playerServeTrajectoryFilterState.codes.size && !playerServeTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (playerServeTrajectoryFilterState.zones.size && !playerServeTrajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
+function renderPlayerServeTrajectoryAnalysis() {
+  if (!elPlayerServeTrajectoryGrid) return;
+  renderPlayerServeTrajectoryFilters();
+  const events = getFilteredPlayerServeTrajectoryEvents();
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  elPlayerServeTrajectoryGrid.innerHTML = "";
+  if (playerIdx === null) return;
+  const card = document.createElement("div");
+  card.className = "trajectory-card serve-trajectory-card";
+  card.dataset.playerIdx = String(playerIdx);
+  const title = document.createElement("div");
+  title.className = "trajectory-card__title";
+  title.textContent = formatNameWithNumber(state.players[playerIdx]) || state.players[playerIdx] || "—";
+  const canvas = document.createElement("canvas");
+  canvas.dataset.serveTrajCanvas = String(playerIdx);
+  const empty = document.createElement("div");
+  empty.className = "trajectory-card__empty";
+  empty.textContent = "Nessuna traiettoria";
+  card.appendChild(title);
+  card.appendChild(canvas);
+  card.appendChild(empty);
+  elPlayerServeTrajectoryGrid.appendChild(card);
+  const imgs = getServeTrajectoryImages(() => renderPlayerServeTrajectoryAnalysis());
+  const startImg = imgs && imgs.start;
+  const endImg = imgs && imgs.end;
+  const startRatio = startImg && startImg.naturalWidth ? startImg.naturalHeight / startImg.naturalWidth : 0.65;
+  const endRatio = endImg && endImg.naturalWidth ? endImg.naturalHeight / endImg.naturalWidth : 0.65;
+  const width =
+    (canvas.parentElement && canvas.parentElement.clientWidth) ||
+    (startImg && startImg.naturalWidth) ||
+    (endImg && endImg.naturalWidth) ||
+    320;
+  const startHeight = Math.max(80, Math.round(width * startRatio));
+  const endHeight = Math.max(80, Math.round(width * endRatio));
+  const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
+  const height = startHeight + gapHeight + endHeight;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, width, height);
+  if (endImg && endImg.complete && endImg.naturalWidth) {
+    ctx.drawImage(endImg, 0, 0, width, endHeight);
+  }
+  if (gapHeight > 0) {
+    ctx.fillStyle = "#ffb142";
+    ctx.fillRect(0, endHeight, width, gapHeight);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, endHeight, width, gapHeight);
+  }
+  if (startImg && startImg.complete && startImg.naturalWidth) {
+    ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
+  }
+  const netY = endHeight;
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 8;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, netY);
+  ctx.lineTo(width, netY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (!events.length) {
+    card.classList.add("empty");
+    return;
+  }
+  card.classList.remove("empty");
+  events.forEach(ev => {
+    const start = ev.serveStart;
+    const end = ev.serveEnd;
+    if (!start || !end) return;
+    const sx = clamp01Val(start.x) * width;
+    const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
+    const ex = clamp01Val(end.x) * width;
+    const ey = clamp01Val(end.y) * endHeight;
+    ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
+    ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+  });
+}
+function syncPlayerSecondFilterState() {
+  playerSecondFilterState.setTypes = new Set(getCheckedValues(elPlayerSecondFilterSetTypes));
+  playerSecondFilterState.bases = new Set(getCheckedValues(elPlayerSecondFilterBases));
+  playerSecondFilterState.phases = new Set(getCheckedValues(elPlayerSecondFilterPhases));
+  playerSecondFilterState.receiveEvaluations = new Set(getCheckedValues(elPlayerSecondFilterReceiveEvals));
+  playerSecondFilterState.receiveZones = new Set(getCheckedValues(elPlayerSecondFilterReceiveZones, { asNumber: true }));
+  playerSecondFilterState.sets = new Set(getCheckedValues(elPlayerSecondFilterSets, { asNumber: true }));
+  playerSecondFilterState.prevSkill = (elPlayerSecondFilterPrev && elPlayerSecondFilterPrev.value) || "any";
+}
+function handlePlayerSecondFilterChange() {
+  syncPlayerSecondFilterState();
+  renderPlayerSecondTable();
+}
+function resetPlayerSecondFilters() {
+  playerSecondFilterState.setTypes.clear();
+  playerSecondFilterState.bases.clear();
+  playerSecondFilterState.phases.clear();
+  playerSecondFilterState.receiveEvaluations.clear();
+  playerSecondFilterState.receiveZones.clear();
+  playerSecondFilterState.sets.clear();
+  playerSecondFilterState.prevSkill = "any";
+  if (elPlayerSecondFilterPrev) elPlayerSecondFilterPrev.value = "any";
+  renderPlayerSecondFilters();
+  renderPlayerSecondTable();
+}
+function renderPlayerSecondFilters() {
+  if (!elPlayerSecondFilterSetTypes) return;
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const secondEvents = (state.events || []).filter(
+    ev => ev && ev.skillId === "second" && playerIdx !== null && ev.playerIdx === playerIdx
+  );
+  const attackEvents = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    if (playerIdx === null) return false;
+    return getSetterFromEvent(ev) === playerIdx;
+  });
+  const setTypeEvents = secondEvents.concat(attackEvents);
+  const setTypeOpts = buildUniqueOptions(
+    setTypeEvents.map(ev =>
+      normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
+    ),
+    { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
+  );
+  const baseOpts = buildUniqueOptions(
+    secondEvents.map(ev => normalizeBaseValue(ev.base)),
+    { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
+  );
+  const phaseOpts = buildUniqueOptions(secondEvents.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
+  const recvEvalOpts = buildUniqueOptions(
+    secondEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    { labelFn: val => val }
+  );
+  const recvZoneOpts = buildUniqueOptions(
+    secondEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
+  const setOpts = buildUniqueOptions(secondEvents.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+
+  playerSecondFilterState.setTypes = new Set(
+    [...playerSecondFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
+  );
+  playerSecondFilterState.bases = new Set(
+    [...playerSecondFilterState.bases].filter(val => baseOpts.some(o => o.value === val))
+  );
+  playerSecondFilterState.phases = new Set(
+    [...playerSecondFilterState.phases].filter(val => phaseOpts.some(o => o.value === val))
+  );
+  playerSecondFilterState.receiveEvaluations = new Set(
+    [...playerSecondFilterState.receiveEvaluations].filter(val => recvEvalOpts.some(o => o.value === val))
+  );
+  playerSecondFilterState.receiveZones = new Set(
+    [...playerSecondFilterState.receiveZones].filter(val => recvZoneOpts.some(o => Number(o.value) === val))
+  );
+  playerSecondFilterState.sets = new Set(
+    [...playerSecondFilterState.sets].filter(val => setOpts.some(o => Number(o.value) === val))
+  );
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === playerSecondFilterState.prevSkill)) {
+    playerSecondFilterState.prevSkill = "any";
+  }
+
+  const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterSetTypes, setTypeOpts, playerSecondFilterState.setTypes, {
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterBases, baseOpts, playerSecondFilterState.bases, {
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterPhases, phaseOpts, playerSecondFilterState.phases, {
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterReceiveEvals, recvEvalOpts, playerSecondFilterState.receiveEvaluations, {
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterReceiveZones, recvZoneOpts, playerSecondFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerSecondFilterSets, setOpts, playerSecondFilterState.sets, {
+      asNumber: true,
+      onChange: handlePlayerSecondFilterChange
+    })
+  );
+  toggleFilterVisibility(elPlayerSecondFilterPrev, secondEvents.length > 0);
+  toggleFilterVisibility(elPlayerSecondFilterReset, visibleFilters.some(Boolean));
+  if (elPlayerSecondFilterPrev) {
+    elPlayerSecondFilterPrev.value = playerSecondFilterState.prevSkill || "any";
+    if (!elPlayerSecondFilterPrev._playerSecondPrevBound) {
+      elPlayerSecondFilterPrev.addEventListener("change", handlePlayerSecondFilterChange);
+      elPlayerSecondFilterPrev._playerSecondPrevBound = true;
+    }
+  }
+  if (elPlayerSecondFilterReset && !elPlayerSecondFilterReset._playerSecondResetBound) {
+    elPlayerSecondFilterReset.addEventListener("click", resetPlayerSecondFilters);
+    elPlayerSecondFilterReset._playerSecondResetBound = true;
+  }
+}
+function getFilteredPlayerSecondEvents() {
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const events = (state.events || []).filter(
+    ev => ev && ev.skillId === "second" && playerIdx !== null && ev.playerIdx === playerIdx
+  );
+  return events.filter(ev => matchesAdvancedFilters(ev, playerSecondFilterState));
+}
+function getFilteredPlayerAttacksForSecondDistribution() {
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  const attacks = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    if (playerIdx === null) return false;
+    return getSetterFromEvent(ev) === playerIdx;
+  });
+  return attacks.filter(ev => {
+    const setType = normalizeSetTypeValue(
+      ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
+    );
+    if (setType && setType.toLowerCase() === "damp") return false;
+    return matchesAdvancedFilters(ev, playerSecondFilterState);
+  });
+}
+function renderDistributionGrid(targetEl, events) {
+  if (!targetEl) return;
+  targetEl.innerHTML = "";
+  const dist = computeAttackDistribution(events);
+  targetEl.classList.add("distribution-grid", "distribution-grid-layout");
+  const layout = [
+    { key: 4, area: "r4" },
+    { key: 3, area: "r3" },
+    { key: 2, area: "r2" },
+    { key: 5, area: "r5" },
+    { key: 6, area: "r6" },
+    { key: 1, area: "r1" },
+    { key: "all", area: "all" }
+  ];
+  const zoneOrder = [4, 3, 2, 5, 6, 1];
+  layout.forEach(item => {
+    const rot = item.key;
+    const data =
+      dist[rot] ||
+      {
+        zones: { 1: emptyCounts(), 2: emptyCounts(), 3: emptyCounts(), 4: emptyCounts(), 5: emptyCounts(), 6: emptyCounts() },
+        total: 0
+      };
+    const totalAttacks = data.total || 0;
+    const card = document.createElement("div");
+    card.className = "distribution-card";
+    card.style.gridArea = item.area;
+    const title = document.createElement("h4");
+    title.textContent = rot === "all" ? "Tutte le rotazioni" : "P" + rot;
+    card.appendChild(title);
+    const court = document.createElement("div");
+    court.className = "distribution-court";
+    let bestVolumeZone = null;
+    let bestVolumeCount = -1;
+    let bestEffZone = null;
+    let bestEffValue = -Infinity;
+    Object.keys(data.zones).forEach(zKey => {
+      const zoneNum = parseInt(zKey, 10);
+      const zoneCounts = data.zones[zoneNum] || emptyCounts();
+      const total = totalFromCounts(zoneCounts);
+      if (total > bestVolumeCount) {
+        bestVolumeCount = total;
+        bestVolumeZone = zoneNum;
+      }
+      const metrics = computeMetrics(zoneCounts, "attack");
+      const eff = metrics.eff;
+      if (eff !== null && eff > bestEffValue) {
+        bestEffValue = eff;
+        bestEffZone = zoneNum;
+      }
+    });
+    zoneOrder.forEach(zoneNum => {
+      const counts = data.zones[zoneNum] || emptyCounts();
+      const zoneTotal = totalFromCounts(counts);
+      const metrics = computeMetrics(counts, "attack");
+      const perc = totalAttacks ? Math.round((zoneTotal / totalAttacks) * 100) : 0;
+      const cell = document.createElement("div");
+      cell.className = "court-cell";
+      if (bestVolumeZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
+        cell.classList.add("best-volume");
+      }
+      if (bestEffZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
+        cell.classList.add("best-eff");
+      }
+      const label = document.createElement("div");
+      label.className = "cell-label";
+      label.textContent = "Z" + zoneNum;
+      const main = document.createElement("div");
+      main.className = "cell-main";
+      main.textContent = perc ? perc + "%" : "0%";
+      const sub = document.createElement("div");
+      sub.className = "cell-sub";
+      sub.textContent = "Eff " + (metrics.eff === null ? "-" : formatPercent(metrics.eff));
+      cell.appendChild(label);
+      cell.appendChild(main);
+      cell.appendChild(sub);
+      court.appendChild(cell);
+    });
+    card.appendChild(court);
+    targetEl.appendChild(card);
+  });
+}
+function renderPlayerSecondTable() {
+  if (!elPlayerSecondBody) return;
+  elPlayerSecondBody.innerHTML = "";
+  renderPlayerSecondFilters();
+  const playerIdx = getPlayerAnalysisPlayerIdx();
+  if (playerIdx === null) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Seleziona una giocatrice per vedere la distribuzione.";
+    tr.appendChild(td);
+    elPlayerSecondBody.appendChild(tr);
+    renderDistributionGrid(elPlayerSecondDistribution, []);
+    return;
+  }
+  const totals = emptyCounts();
+  const counts = emptyCounts();
+  getFilteredPlayerSecondEvents().forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    counts[code] = (counts[code] || 0) + 1;
+  });
+  mergeCounts(totals, counts);
+  const total = totalFromCounts(counts);
+  if (!total) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Registra alzate per vedere il dettaglio.";
+    tr.appendChild(td);
+    elPlayerSecondBody.appendChild(tr);
+    renderDistributionGrid(elPlayerSecondDistribution, getFilteredPlayerAttacksForSecondDistribution());
+    return;
+  }
+  const metrics = computeMetrics(counts, "second");
+  const tr = document.createElement("tr");
+  const cells = [
+    { text: formatNameWithNumber(state.players[playerIdx]) },
+    { text: total, className: "skill-col skill-second" },
+    { text: counts["#"] || 0, className: "skill-col skill-second" },
+    { text: counts["+"] || 0, className: "skill-col skill-second" },
+    { text: counts["!"] || 0, className: "skill-col skill-second" },
+    { text: counts["-"] || 0, className: "skill-col skill-second" },
+    { text: counts["="] || 0, className: "skill-col skill-second" },
+    { text: counts["/"] || 0, className: "skill-col skill-second" },
+    { text: metrics.pos === null ? "-" : formatPercent(metrics.pos), className: "skill-col skill-second" },
+    { text: metrics.prf === null ? "-" : formatPercent(metrics.prf), className: "skill-col skill-second" },
+    { text: metrics.eff === null ? "-" : formatPercent(metrics.eff), className: "skill-col skill-second" }
+  ];
+  cells.forEach(cell => {
+    const td = document.createElement("td");
+    td.textContent = cell.text;
+    if (cell.className) td.className = cell.className;
+    tr.appendChild(td);
+  });
+  elPlayerSecondBody.appendChild(tr);
+  renderDistributionGrid(elPlayerSecondDistribution, getFilteredPlayerAttacksForSecondDistribution());
 }
 function renderVideoFilters(events) {
   const els = getVideoFilterElements();
@@ -8566,86 +9560,7 @@ function computeAttackDistribution(events = state.events || []) {
 }
 function renderSecondDistribution() {
   if (!elSecondDistribution) return;
-  elSecondDistribution.innerHTML = "";
-  const dist = computeAttackDistribution(getFilteredAttacksForSecondDistribution());
-  elSecondDistribution.classList.add("distribution-grid", "distribution-grid-layout");
-  const layout = [
-    { key: 4, area: "r4" },
-    { key: 3, area: "r3" },
-    { key: 2, area: "r2" },
-    { key: 5, area: "r5" },
-    { key: 6, area: "r6" },
-    { key: 1, area: "r1" },
-    { key: "all", area: "all" }
-  ];
-  const zoneOrder = [4, 3, 2, 5, 6, 1]; // layout order
-  layout.forEach(item => {
-    const rot = item.key;
-    const data =
-      dist[rot] ||
-      {
-        zones: { 1: emptyCounts(), 2: emptyCounts(), 3: emptyCounts(), 4: emptyCounts(), 5: emptyCounts(), 6: emptyCounts() },
-        total: 0
-      };
-    const totalAttacks = data.total || 0;
-    const card = document.createElement("div");
-    card.className = "distribution-card";
-    card.style.gridArea = item.area;
-    const title = document.createElement("h4");
-    title.textContent = rot === "all" ? "Tutte le rotazioni" : "P" + rot;
-    card.appendChild(title);
-    const court = document.createElement("div");
-    court.className = "distribution-court";
-    // find best volume and efficiency
-    let bestVolumeZone = null;
-    let bestVolumeCount = -1;
-    let bestEffZone = null;
-    let bestEffValue = -Infinity;
-    Object.keys(data.zones).forEach(zKey => {
-      const zoneNum = parseInt(zKey, 10);
-      const zoneCounts = data.zones[zoneNum] || emptyCounts();
-      const total = totalFromCounts(zoneCounts);
-      if (total > bestVolumeCount) {
-        bestVolumeCount = total;
-        bestVolumeZone = zoneNum;
-      }
-      const metrics = computeMetrics(zoneCounts, "attack");
-      const eff = metrics.eff;
-      if (eff !== null && eff > bestEffValue) {
-        bestEffValue = eff;
-        bestEffZone = zoneNum;
-      }
-    });
-    zoneOrder.forEach(zoneNum => {
-      const counts = data.zones[zoneNum] || emptyCounts();
-      const zoneTotal = totalFromCounts(counts);
-      const metrics = computeMetrics(counts, "attack");
-      const perc = totalAttacks ? Math.round((zoneTotal / totalAttacks) * 100) : 0;
-      const cell = document.createElement("div");
-      cell.className = "court-cell";
-      if (bestVolumeZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
-        cell.classList.add("best-volume");
-      }
-      if (bestEffZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
-        cell.classList.add("best-eff");
-      }
-      const label = document.createElement("div");
-      label.className = "cell-label";
-      label.textContent = "Z" + zoneNum;
-      const main = document.createElement("div");
-      main.className = "cell-main";
-      main.textContent = perc ? perc + "%" : "0%";
-      const sub = document.createElement("div");
-      sub.className = "cell-sub";
-      sub.textContent = "Eff " + (metrics.eff === null ? "-" : formatPercent(metrics.eff));
-      cell.appendChild(label);
-      cell.appendChild(main);
-      cell.appendChild(sub);
-      court.appendChild(cell);
-    });
-    card.appendChild(court);
-    elSecondDistribution.appendChild(card);
-  });
+  renderDistributionGrid(elSecondDistribution, getFilteredAttacksForSecondDistribution());
 }
 function buildCsvString() {
   if (!state.events || state.events.length === 0) return "";
@@ -8864,6 +9779,25 @@ async function ensureTrajectoryAssetsLoaded(activeSubtab) {
     await waitForImages([imgs && imgs.start, imgs && imgs.end].filter(Boolean));
     if (typeof renderServeTrajectoryAnalysis === "function") {
       renderServeTrajectoryAnalysis();
+    }
+  }
+  if (activeSubtab === "player") {
+    const canvases = elPlayerTrajectoryGrid
+      ? elPlayerTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]")
+      : [];
+    const imgs = [];
+    canvases.forEach(canvas => {
+      const zone = parseInt(canvas.dataset.trajCanvas, 10);
+      if (!isNaN(zone)) imgs.push(getTrajectoryBg(zone));
+    });
+    const serveImgs = getServeTrajectoryImages();
+    imgs.push(serveImgs && serveImgs.start, serveImgs && serveImgs.end);
+    await waitForImages(imgs.filter(Boolean));
+    if (typeof renderPlayerTrajectoryAnalysis === "function") {
+      renderPlayerTrajectoryAnalysis();
+    }
+    if (typeof renderPlayerServeTrajectoryAnalysis === "function") {
+      renderPlayerServeTrajectoryAnalysis();
     }
   }
 }
@@ -9857,6 +10791,15 @@ function setActiveAggTab(target) {
     requestAnimationFrame(refreshServe);
     setTimeout(refreshServe, 0);
   }
+  if (desired === "player") {
+    const refreshPlayer = () => {
+      if (typeof renderPlayerAnalysis === "function") {
+        renderPlayerAnalysis();
+      }
+    };
+    requestAnimationFrame(refreshPlayer);
+    setTimeout(refreshPlayer, 0);
+  }
 }
 function setActiveTab(target) {
   if (!target) return;
@@ -9871,15 +10814,19 @@ function setActiveTab(target) {
   tabPanels.forEach(panel => {
     panel.classList.toggle("active", panel.dataset.tab === target);
   });
-  if (target === "aggregated" && (activeAggTab === "trajectory" || activeAggTab === "serve")) {
+  if (
+    target === "aggregated" &&
+    (activeAggTab === "trajectory" || activeAggTab === "serve" || activeAggTab === "player")
+  ) {
     const refresh = () => {
-      if (typeof renderTrajectoryAnalysis === "function") {
-        if (activeAggTab === "trajectory") {
-          renderTrajectoryAnalysis();
-        }
+      if (typeof renderTrajectoryAnalysis === "function" && activeAggTab === "trajectory") {
+        renderTrajectoryAnalysis();
       }
-      if (typeof renderServeTrajectoryAnalysis === "function") {
+      if (typeof renderServeTrajectoryAnalysis === "function" && activeAggTab === "serve") {
         renderServeTrajectoryAnalysis();
+      }
+      if (typeof renderPlayerAnalysis === "function" && activeAggTab === "player") {
+        renderPlayerAnalysis();
       }
     };
     requestAnimationFrame(refresh);

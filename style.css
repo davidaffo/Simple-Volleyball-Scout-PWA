@@ -2801,6 +2801,15 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
   gap: 0.6rem;
   align-items: start;
 }
+.player-second-layout {
+  grid-template-columns: 1fr;
+}
+.player-analysis-column .trajectory-layout,
+.player-analysis-column .serve-trajectory-layout,
+.player-analysis-column .second-layout {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+}
 .analysis-filters,
 .trajectory-filters {
   display: grid;
@@ -2855,6 +2864,66 @@ body[data-theme="light"] .analysis-filter select {
 .analysis-filter.filter-actions,
 .trajectory-filter--actions {
   align-self: end;
+}
+.player-analysis {
+  display: grid;
+  gap: 0.7rem;
+}
+.player-analysis-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.8rem;
+  align-items: start;
+}
+.player-analysis-columns > .player-analysis-section {
+  border-left: 2px solid rgba(59, 130, 246, 0.35);
+  padding-left: 0.8rem;
+}
+.player-analysis-columns > .player-analysis-section:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
+  border-left-color: rgba(37, 99, 235, 0.45);
+}
+.player-analysis-column {
+  display: grid;
+  gap: 0.6rem;
+}
+.player-analysis-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1rem;
+  align-items: flex-end;
+}
+.player-analysis-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: center;
+}
+.analysis-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.player-analysis-section {
+  display: block;
+}
+.player-analysis-section.hidden {
+  display: none;
+}
+@media (max-width: 1200px) {
+  .player-analysis-columns {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .player-analysis-columns {
+    grid-template-columns: 1fr;
+  }
 }
 .trajectory-grid {
   display: grid;

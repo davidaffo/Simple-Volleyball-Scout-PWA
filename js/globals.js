@@ -132,6 +132,12 @@ let state = {
     youtubeId: "",
     youtubeUrl: "",
     lastPlaybackSeconds: 0
+  },
+  uiPlayerAnalysis: {
+    playerIdx: null,
+    showAttack: true,
+    showServe: true,
+    showSecond: false
   }
 };
 function canUseShare() {
