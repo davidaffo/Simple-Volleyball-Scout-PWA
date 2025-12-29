@@ -21,6 +21,8 @@ const eventTableContexts = {};
 let lastEventContextKey = null;
 let lastReceiveContext = null;
 let lastLogRenderedKey = null;
+let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
+let aggTableHeadCache = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -2089,7 +2091,7 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
 
   const codesWrap = document.createElement("div");
   codesWrap.className = "modal-skill-codes";
-  const codes = (state.metricsConfig[skillId]?.activeCodes || RESULT_CODES).slice();
+  const codes = (state.metricsConfig?.[skillId]?.activeCodes || RESULT_CODES).slice();
   if (!codes.includes("/")) codes.push("/");
   if (!codes.includes("=")) codes.push("=");
   const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
@@ -2343,6 +2345,27 @@ function attachModalCloseHandlers() {
   if (elSkillModalBackdrop) {
     events.forEach(evt =>
       elSkillModalBackdrop.addEventListener(evt, closeHandler, { passive: false })
+    );
+  }
+  const closeAggSkillHandler = e => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closeAggSkillModal();
+  };
+  if (elAggSkillModalClose) {
+    events.forEach(evt => {
+      elAggSkillModalClose.addEventListener(evt, closeAggSkillHandler, {
+        passive: false,
+        capture: true
+      });
+    });
+    elAggSkillModalClose.onclick = closeAggSkillHandler;
+  }
+  if (elAggSkillModalBackdrop) {
+    events.forEach(evt =>
+      elAggSkillModalBackdrop.addEventListener(evt, closeAggSkillHandler, { passive: false })
     );
   }
   const closeErrorHandler = e => {
@@ -3132,6 +3155,328 @@ function computeMetrics(counts, skillId) {
   const prf = ((counts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
 }
+function getSkillLabel(skillId) {
+  const skill = SKILLS.find(s => s.id === skillId);
+  return (skill && skill.label) || skillId || "Fondamentale";
+}
+function getAggTableElements() {
+  const table = elAggTableBody ? elAggTableBody.closest("table") : null;
+  const thead = table ? table.querySelector("thead") : null;
+  return { table, thead };
+}
+function ensureAggTableHeadCache(thead) {
+  if (!thead || aggTableHeadCache !== null) return;
+  aggTableHeadCache = thead.innerHTML;
+}
+function resetAggTableView() {
+  aggTableView = { mode: "summary", skillId: null, playerIdx: null };
+}
+function getSkillIdFromHeader(th) {
+  if (!th || !th.classList) return null;
+  if (th.classList.contains("skill-serve")) return "serve";
+  if (th.classList.contains("skill-pass")) return "pass";
+  if (th.classList.contains("skill-attack")) return "attack";
+  if (th.classList.contains("skill-block")) return "block";
+  if (th.classList.contains("skill-defense")) return "defense";
+  return null;
+}
+function renderAggDetailHeader(thead, columns) {
+  if (!thead) return;
+  thead.innerHTML = "";
+  const tr = document.createElement("tr");
+  columns.forEach((col, idx) => {
+    const th = document.createElement("th");
+    th.textContent = col.label;
+    if (col.className) th.className = col.className;
+    if (col.onClick) {
+      th.classList.add("agg-table-back");
+      th.addEventListener("click", col.onClick);
+    }
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
+}
+function applySkillClassToCells(cells, skillId, startIndex = 0) {
+  if (!skillId) return;
+  cells.forEach((td, idx) => {
+    if (idx < startIndex) return;
+    td.classList.add("skill-col", "skill-" + skillId);
+  });
+}
+function bindAggSummaryInteractions(thead) {
+  if (!thead) return;
+  const headerRow = thead.querySelector("tr");
+  if (!headerRow) return;
+  const skillHeaders = headerRow.querySelectorAll("th.skill-col");
+  skillHeaders.forEach(th => {
+    const skillId = getSkillIdFromHeader(th);
+    if (!skillId) return;
+    th.classList.add("agg-skill-header");
+    th.title = "Dettagli " + getSkillLabel(skillId);
+    th.addEventListener("click", () => {
+      aggTableView = { mode: "skill", skillId, playerIdx: null };
+      renderAggregatedTable();
+    });
+  });
+}
+function renderAggSkillDetailTable(summaryAll) {
+  const { thead } = getAggTableElements();
+  if (!elAggTableBody || !thead) return;
+  const skillId = aggTableView.skillId;
+  const skillLabel = getSkillLabel(skillId);
+  const skillHeaderClass = "skill-col skill-" + skillId;
+  renderAggDetailHeader(thead, [
+    {
+      label: "Atleta · " + skillLabel + " <- Tabellino",
+      onClick: () => {
+        resetAggTableView();
+        renderAggregatedTable();
+      }
+    },
+    { label: "Tot", className: skillHeaderClass },
+    { label: "#", className: skillHeaderClass },
+    { label: "+", className: skillHeaderClass },
+    { label: "!", className: skillHeaderClass },
+    { label: "-", className: skillHeaderClass },
+    { label: "=", className: skillHeaderClass },
+    { label: "/", className: skillHeaderClass },
+    { label: "Pos", className: skillHeaderClass },
+    { label: "Prf", className: skillHeaderClass },
+    { label: "Eff", className: skillHeaderClass }
+  ]);
+  elAggTableBody.innerHTML = "";
+  if (!state.players || state.players.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Aggiungi giocatrici per vedere il dettaglio " + skillLabel + ".";
+    tr.appendChild(td);
+    elAggTableBody.appendChild(tr);
+    renderScoreAndRotations(summaryAll);
+    renderSecondTable();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+    return;
+  }
+  const totals = emptyCounts();
+  const buildRow = (label, counts, playerIdx, isTotal = false) => {
+    const metrics = computeMetrics(counts, skillId);
+    const row = document.createElement("tr");
+    if (isTotal) row.className = "rotation-row total";
+    const cells = [
+      label,
+      metrics.total,
+      counts["#"] || 0,
+      counts["+"] || 0,
+      counts["!"] || 0,
+      counts["-"] || 0,
+      counts["="] || 0,
+      counts["/"] || 0,
+      metrics.pos === null ? "-" : formatPercent(metrics.pos),
+      metrics.prf === null ? "-" : formatPercent(metrics.prf),
+      metrics.eff === null ? "-" : formatPercent(metrics.eff)
+    ];
+    const tdList = [];
+    cells.forEach((text, idx) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (idx === 0 && !isTotal) {
+        td.classList.add("agg-player-cell");
+        td.addEventListener("click", () => {
+          aggTableView = { mode: "player", skillId: null, playerIdx };
+          renderAggregatedTable();
+        });
+      }
+      tdList.push(td);
+      row.appendChild(td);
+    });
+    applySkillClassToCells(tdList, skillId, 0);
+    elAggTableBody.appendChild(row);
+  };
+  state.players.forEach((name, idx) => {
+    const counts = getAggSkillCounts(skillId, idx);
+    mergeCounts(totals, counts);
+    buildRow(formatNameWithNumber(name), counts, idx, false);
+  });
+  buildRow("Totale squadra", totals, null, true);
+  renderScoreAndRotations(summaryAll);
+  renderSecondTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+}
+function renderAggPlayerDetailTable(summaryAll) {
+  const { thead } = getAggTableElements();
+  if (!elAggTableBody || !thead) return;
+  const playerIdx = aggTableView.playerIdx;
+  const playerLabel = getAggSkillPlayerLabel(playerIdx);
+  renderAggDetailHeader(thead, [
+    {
+      label: "Fondamentale · " + playerLabel + " <- Tabellino",
+      onClick: () => {
+        resetAggTableView();
+        renderAggregatedTable();
+      }
+    },
+    { label: "Tot" },
+    { label: "#" },
+    { label: "+" },
+    { label: "!" },
+    { label: "-" },
+    { label: "=" },
+    { label: "/" },
+    { label: "Pos" },
+    { label: "Prf" },
+    { label: "Eff" }
+  ]);
+  elAggTableBody.innerHTML = "";
+  if (!state.players || state.players.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "Aggiungi giocatrici per vedere il dettaglio.";
+    tr.appendChild(td);
+    elAggTableBody.appendChild(tr);
+    renderScoreAndRotations(summaryAll);
+    renderSecondTable();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+    return;
+  }
+  const skillOrder = ["serve", "pass", "attack", "block", "defense"];
+  skillOrder.forEach(skillId => {
+    const counts = getAggSkillCounts(skillId, playerIdx);
+    const metrics = computeMetrics(counts, skillId);
+    const row = document.createElement("tr");
+    const cells = [
+      getSkillLabel(skillId),
+      metrics.total,
+      counts["#"] || 0,
+      counts["+"] || 0,
+      counts["!"] || 0,
+      counts["-"] || 0,
+      counts["="] || 0,
+      counts["/"] || 0,
+      metrics.pos === null ? "-" : formatPercent(metrics.pos),
+      metrics.prf === null ? "-" : formatPercent(metrics.prf),
+      metrics.eff === null ? "-" : formatPercent(metrics.eff)
+    ];
+    const tdList = [];
+    cells.forEach(text => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tdList.push(td);
+      row.appendChild(td);
+    });
+    applySkillClassToCells(tdList, skillId, 0);
+    elAggTableBody.appendChild(row);
+  });
+  renderScoreAndRotations(summaryAll);
+  renderSecondTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+}
+function getAggSkillCounts(skillId, playerIdx) {
+  if (!skillId) return emptyCounts();
+  if (playerIdx === "team") {
+    const totals = emptyCounts();
+    (state.stats || []).forEach(playerStats => {
+      const counts = normalizeCounts(playerStats && playerStats[skillId]);
+      mergeCounts(totals, counts);
+    });
+    return totals;
+  }
+  const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
+  if (isNaN(idx) || !state.stats || !state.stats[idx]) return emptyCounts();
+  return normalizeCounts(state.stats[idx][skillId]);
+}
+function getAggSkillPlayerLabel(playerIdx) {
+  if (playerIdx === "team") return "Totale squadra";
+  const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
+  if (isNaN(idx) || !state.players || !state.players[idx]) return "Giocatrice";
+  return formatNameWithNumber(state.players[idx]);
+}
+function renderAggSkillModal(skillId, playerIdx) {
+  if (!elAggSkillModalBody) return;
+  const skillLabel = getSkillLabel(skillId);
+  const playerLabel = getAggSkillPlayerLabel(playerIdx);
+  if (elAggSkillModalTitle) {
+    elAggSkillModalTitle.textContent = skillLabel + " · " + playerLabel;
+  }
+  const counts = getAggSkillCounts(skillId, playerIdx);
+  const metrics = computeMetrics(counts, skillId);
+  elAggSkillModalBody.innerHTML = "";
+  const summary = document.createElement("div");
+  summary.className = "agg-skill-summary";
+  const summaryItems = [
+    { label: "Totale", value: metrics.total },
+    { label: "Positivi", value: metrics.positiveCount },
+    { label: "Negativi", value: metrics.negativeCount }
+  ];
+  if (metrics.prf !== null) {
+    summaryItems.push({ label: "Prf", value: formatPercent(metrics.prf) });
+  }
+  if (metrics.pos !== null) {
+    summaryItems.push({ label: "Pos", value: formatPercent(metrics.pos) });
+  }
+  if (metrics.eff !== null) {
+    summaryItems.push({ label: "Eff", value: formatPercent(metrics.eff) });
+  }
+  summaryItems.forEach(item => {
+    const card = document.createElement("div");
+    card.className = "agg-skill-summary-card";
+    const label = document.createElement("div");
+    label.className = "agg-skill-summary-label";
+    label.textContent = item.label;
+    const value = document.createElement("div");
+    value.className = "agg-skill-summary-value";
+    value.textContent = item.value;
+    card.appendChild(label);
+    card.appendChild(value);
+    summary.appendChild(card);
+  });
+  elAggSkillModalBody.appendChild(summary);
+  const codesTable = document.createElement("table");
+  codesTable.className = "agg-skill-codes";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Codice", "Tot", "%"].forEach(text => {
+    const th = document.createElement("th");
+    th.textContent = text;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  codesTable.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  const codes = (state.metricsConfig[skillId]?.activeCodes || RESULT_CODES).slice();
+  if (!codes.includes("/")) codes.push("/");
+  if (!codes.includes("=")) codes.push("=");
+  const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
+  ordered.forEach(code => {
+    const tr = document.createElement("tr");
+    const count = counts[code] || 0;
+    const cells = [code, count, formatPercentValue(count, metrics.total)];
+    cells.forEach(text => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  codesTable.appendChild(tbody);
+  elAggSkillModalBody.appendChild(codesTable);
+}
+function openAggSkillModal(skillId, playerIdx) {
+  if (!elAggSkillModal || !elAggSkillModalBody) return;
+  renderAggSkillModal(skillId, playerIdx);
+  elAggSkillModal.classList.remove("hidden");
+  setModalOpenState(true);
+}
+function closeAggSkillModal() {
+  if (!elAggSkillModal) return;
+  elAggSkillModal.classList.add("hidden");
+  setModalOpenState(false);
+}
+window._closeAggSkillModal = closeAggSkillModal;
 function emptyCounts() {
   return { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
 }
@@ -6319,6 +6664,15 @@ function renderScoreAndRotations(summary) {
     }
   }
   const rotationSummary = scoreSummary;
+  const rotationWrapper = document.querySelector(".rotation-wrapper");
+  if (aggTableView.mode !== "summary") {
+    if (rotationWrapper) rotationWrapper.classList.add("hidden");
+    if (elRotationTableBody) {
+      elRotationTableBody.innerHTML = "";
+    }
+    return;
+  }
+  if (rotationWrapper) rotationWrapper.classList.remove("hidden");
   const hasRotationEvents =
     rotationSummary.hasRotationEvents !== undefined
       ? rotationSummary.hasRotationEvents
@@ -6335,8 +6689,11 @@ function renderScoreAndRotations(summary) {
     elRotationTableBody.appendChild(tr);
     return;
   }
+  const allowHighlights = aggTableView.mode === "summary";
   const highlightEnabled =
-    rotationSummary.bestRotation !== null && rotationSummary.worstRotation !== null;
+    allowHighlights &&
+    rotationSummary.bestRotation !== null &&
+    rotationSummary.worstRotation !== null;
   rotationSummary.rotations.forEach(rot => {
     const tr = document.createElement("tr");
     tr.className = "rotation-row";
@@ -7736,8 +8093,21 @@ function renderServeTrajectoryAnalysis() {
 }
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
-  elAggTableBody.innerHTML = "";
+  const { thead } = getAggTableElements();
+  ensureAggTableHeadCache(thead);
   const summaryAll = computePointsSummary(null, { excludeOpponentErrors: true });
+  if (aggTableView.mode === "skill" && aggTableView.skillId) {
+    renderAggSkillDetailTable(summaryAll);
+    return;
+  }
+  if (aggTableView.mode === "player" && aggTableView.playerIdx !== null) {
+    renderAggPlayerDetailTable(summaryAll);
+    return;
+  }
+  if (thead && aggTableHeadCache !== null) {
+    thead.innerHTML = aggTableHeadCache;
+  }
+  elAggTableBody.innerHTML = "";
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -7747,6 +8117,8 @@ function renderAggregatedTable() {
     elAggTableBody.appendChild(tr);
     renderScoreAndRotations(summaryAll);
     renderSecondTable();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
     applyAggColumnsVisibility();
     return;
   }
@@ -7784,7 +8156,7 @@ function renderAggregatedTable() {
     const attackTotal = totalFromCounts(attackCounts);
     const row = document.createElement("tr");
     const cells = [
-      { text: formatNameWithNumber(name) },
+      { text: formatNameWithNumber(name), isPlayer: true, playerIdx: idx },
       { text: points.for || 0 },
       { text: points.against || 0 },
       { text: formatDelta((points.for || 0) - (points.against || 0)) },
@@ -7820,6 +8192,14 @@ function renderAggregatedTable() {
       const td = document.createElement("td");
       td.textContent = cell.text;
       if (cell.className) td.className = cell.className;
+      if (cell.isPlayer) {
+        td.classList.add("agg-player-cell");
+        td.title = "Dettagli giocatrice";
+        td.addEventListener("click", () => {
+          aggTableView = { mode: "player", skillId: null, playerIdx: cell.playerIdx };
+          renderAggregatedTable();
+        });
+      }
       row.appendChild(td);
     });
     elAggTableBody.appendChild(row);
@@ -7876,6 +8256,7 @@ function renderAggregatedTable() {
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
+  bindAggSummaryInteractions(thead);
   applyAggColumnsVisibility();
 }
 function syncSecondFilterState() {
@@ -10858,6 +11239,23 @@ async function init() {
       }
     });
   }
+  if (elAggSkillModalClose) {
+    elAggSkillModalClose.addEventListener("click", closeAggSkillModal);
+  }
+  if (elAggSkillModal) {
+    elAggSkillModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose =
+        target.dataset.closeAggSkill ||
+        !!target.closest("[data-close-agg-skill]") ||
+        target === elAggSkillModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeAggSkillModal();
+      }
+    });
+  }
   window.addEventListener("resize", () => {
     renderPlayers();
   });
@@ -10865,6 +11263,7 @@ async function init() {
     if (e.key === "Escape") {
       closeSkillModal();
       closeSettingsModal();
+      closeAggSkillModal();
     }
   });
   document.addEventListener("mousedown", e => {
@@ -10904,6 +11303,11 @@ async function init() {
     if (closer && !elSkillModal?.classList.contains("hidden")) {
       e.preventDefault();
       closeSkillModal();
+    }
+    const aggCloser = target.closest("[data-close-agg-skill]");
+    if (aggCloser && !elAggSkillModal?.classList.contains("hidden")) {
+      e.preventDefault();
+      closeAggSkillModal();
     }
   });
   const snapshotPlayback = () => {

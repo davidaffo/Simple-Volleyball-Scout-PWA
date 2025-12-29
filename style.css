@@ -3331,6 +3331,85 @@ body[data-theme="light"] .agg-table th,
 body[data-theme="light"] .agg-table td {
   border-color: #d6d6d6;
 }
+.agg-table th.agg-skill-header,
+.agg-table td.agg-player-cell,
+.agg-table th.agg-table-back {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.agg-table th.agg-skill-header:hover,
+.agg-table td.agg-player-cell:hover,
+.agg-table th.agg-table-back:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+.agg-skill-modal__content {
+  width: min(640px, 94vw);
+  max-height: 80vh;
+}
+.agg-skill-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+.agg-skill-summary-card {
+  background: #141414;
+  border: 1px solid #262626;
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.55rem;
+}
+.agg-skill-summary-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+}
+.agg-skill-summary-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.agg-skill-codes {
+  width: 100%;
+  border-collapse: collapse;
+}
+.agg-skill-codes th,
+.agg-skill-codes td {
+  border: 1px solid #2a2a2a;
+  padding: 0.35rem 0.45rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+.agg-skill-codes th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+  background: #111111;
+}
+body[data-theme="light"] .agg-table th.agg-skill-header:hover,
+body[data-theme="light"] .agg-table td.agg-player-cell:hover,
+body[data-theme="light"] .agg-table th.agg-table-back:hover {
+  background: rgba(37, 99, 235, 0.16);
+}
+body[data-theme="light"] .agg-skill-summary-card {
+  background: #f8fafc;
+  border-color: #d7d9e0;
+}
+body[data-theme="light"] .agg-skill-summary-label {
+  color: #475569;
+}
+body[data-theme="light"] .agg-skill-summary-value {
+  color: #0f172a;
+}
+body[data-theme="light"] .agg-skill-codes th,
+body[data-theme="light"] .agg-skill-codes td {
+  border-color: #d6d6d6;
+}
+body[data-theme="light"] .agg-skill-codes th {
+  background: #eef2f7;
+  color: #475569;
+}
 .skill-modal {
   position: fixed;
   inset: 0;
