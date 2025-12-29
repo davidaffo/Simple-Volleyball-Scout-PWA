@@ -1457,6 +1457,7 @@ const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
+const TAB_ORDER = ["info", "scout", "aggregated", "video"];
 function buildReceiveDisplayMapping(court, rotation) {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -9309,25 +9310,55 @@ function initSwipeTabs() {
   let startX = 0;
   let startY = 0;
   let startTime = 0;
-  const minDistance = 90;
-  const maxOffset = 50;
-  const maxTime = 700;
+  let startTarget = null;
+  let startedInSwipeZone = false;
+  let lastX = null;
+  let lastY = null;
+  const minDistance = 140;
+  const maxOffset = 35;
+  const maxTime = 600;
+  const swipeZoneRatio = 0.25;
   const tabsOrder = ["info", "scout", "aggregated", "video"];
   const onStart = e => {
-    const t = (e.changedTouches && e.changedTouches[0]) || e;
+    if (!e.touches || e.touches.length === 0) {
+      startedInSwipeZone = false;
+      return;
+    }
+    const t = e.touches[0];
     startX = t.clientX;
     startY = t.clientY;
     startTime = Date.now();
+    startTarget = e.target;
+    const height = window.innerHeight || document.documentElement.clientHeight || 0;
+    const zoneTop = height * (1 - swipeZoneRatio);
+    startedInSwipeZone = startY >= zoneTop;
+    lastX = startX;
+    lastY = startY;
+  };
+  const onMove = e => {
+    if (!startedInSwipeZone) return;
+    if (!e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    lastX = t.clientX;
+    lastY = t.clientY;
   };
   const onEnd = e => {
     if (elSkillModal && !elSkillModal.classList.contains("hidden")) return;
-    const t = (e.changedTouches && e.changedTouches[0]) || e;
-    const dx = t.clientX - startX;
-    const dy = t.clientY - startY;
+    if (!startedInSwipeZone) return;
+    if (lastX === null || lastY === null) return;
+    const dx = lastX - startX;
+    const dy = lastY - startY;
     const dt = Date.now() - startTime;
     if (dt > maxTime) return;
     if (Math.abs(dy) > maxOffset) return;
     if (Math.abs(dx) < minDistance) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (activeTab === "aggregated" && startTarget instanceof Element) {
+      const scrollable = startTarget.closest(
+        ".table-wrapper, .trajectory-layout, .trajectory-grid, .serve-trajectory-grid, .video-analysis__grid, .video-table-wrapper"
+      );
+      if (scrollable && scrollable.scrollWidth > scrollable.clientWidth) return;
+    }
     if (document.body.classList.contains("drawer-menu-open")) {
       if (dx < 0) document.body.classList.remove("drawer-menu-open");
       return;
@@ -9341,8 +9372,12 @@ function initSwipeTabs() {
     if (idx === -1) return;
     const nextIdx = dir === "left" ? Math.min(tabsOrder.length - 1, idx + 1) : Math.max(0, idx - 1);
     if (nextIdx !== idx) setActiveTab(tabsOrder[nextIdx]);
+    startedInSwipeZone = false;
+    lastX = null;
+    lastY = null;
   };
   document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchmove", onMove, { passive: true });
   document.addEventListener("touchend", onEnd, { passive: true });
 }
 function setupFocusGuards() {

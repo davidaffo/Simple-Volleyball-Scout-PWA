@@ -188,6 +188,16 @@ body[data-theme="light"] .tab-btn.active {
   z-index: 35;
   backdrop-filter: blur(6px);
 }
+.tab-swipe-hint {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  margin-left: 0.2rem;
+}
+body[data-theme="light"] .tab-swipe-hint {
+  color: rgba(15, 23, 42, 0.75);
+}
 .tab-dot {
   flex: 0 0 auto;
   width: 8px;
@@ -2859,6 +2869,35 @@ body[data-theme="light"] .analysis-filter select {
 }
 .trajectory-card.empty canvas {
   opacity: 0.35;
+}
+.analysis-filters {
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .tab-panel[data-tab="aggregated"] .table-wrapper,
+  .tab-panel[data-tab="aggregated"] .trajectory-layout,
+  .tab-panel[data-tab="aggregated"] .second-layout,
+  .tab-panel[data-tab="aggregated"] .video-analysis__grid,
+  .tab-panel[data-tab="aggregated"] .trajectory-grid,
+  .tab-panel[data-tab="aggregated"] .serve-trajectory-grid {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab-panel[data-tab="aggregated"] .agg-table {
+    width: max-content;
+    min-width: 100%;
+  }
+  .tab-panel[data-tab="aggregated"] .trajectory-layout,
+  .tab-panel[data-tab="aggregated"] .second-layout {
+    min-width: 720px;
+  }
+  .tab-panel[data-tab="aggregated"] .video-analysis__grid {
+    min-width: 780px;
+  }
+  .tab-panel[data-tab="aggregated"] .trajectory-grid,
+  .tab-panel[data-tab="aggregated"] .serve-trajectory-grid {
+    min-width: 520px;
+  }
 }
 .event-time-cell {
   min-width: 92px;
