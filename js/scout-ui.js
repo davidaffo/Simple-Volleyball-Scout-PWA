@@ -5843,8 +5843,12 @@ function getPointDirection(ev) {
   if (cfg.against.includes(code)) return "against";
   return null;
 }
+function isOpponentErrorPoint(ev) {
+  return !!(ev && ev.skillId === "manual" && ev.code === "opp-error");
+}
 function computePointsSummary(targetSet, options = {}) {
   const includeOverrides = options.includeOverrides !== false;
+  const excludeOpponentErrors = !!options.excludeOpponentErrors;
   const target = targetSet ? parseInt(targetSet, 10) : null;
   const rotations = {};
   for (let r = 1; r <= 6; r++) {
@@ -5857,6 +5861,7 @@ function computePointsSummary(targetSet, options = {}) {
     return ev.set === target;
   });
   filteredEvents.forEach(ev => {
+    if (excludeOpponentErrors && isOpponentErrorPoint(ev)) return;
     const direction = getPointDirection(ev);
     if (!direction) return;
     const value = typeof ev.value === "number" ? ev.value : 1;
@@ -7730,7 +7735,7 @@ function renderServeTrajectoryAnalysis() {
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
   elAggTableBody.innerHTML = "";
-  const summaryAll = computePointsSummary();
+  const summaryAll = computePointsSummary(null, { excludeOpponentErrors: true });
   if (!state.players || state.players.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
