@@ -23,6 +23,18 @@ let lastReceiveContext = null;
 let lastLogRenderedKey = null;
 let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
 let aggTableHeadCache = null;
+const ERROR_TYPES = [
+  { id: "Double", label: "Doppia" },
+  { id: "Carry", label: "Accompagnata" },
+  { id: "Position", label: "Posizione" },
+  { id: "Invasion", label: "Invasione" },
+  { id: "Invasion_Back", label: "Invasione di seconda linea" },
+  { id: "Reconstruction", label: "Ricostruzione" },
+  { id: "Generic", label: "Generico" },
+  { id: "Red_Card", label: "Cartellino Rosso" }
+];
+let selectedErrorType = "Generic";
+let errorModalPrefillPlayer = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -1937,6 +1949,7 @@ function buildBaseEventPayload(base) {
     attackEnd: null,
     attackDirection: null,
     blockNumber: null,
+    errorType: base.errorType || null,
     playerIn: base.playerIn || null,
     playerOut: base.playerOut || null,
     relatedEvents: base.relatedEvents || [],
@@ -2136,7 +2149,7 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
   errorBtn.className = "small event-btn danger full-width";
   errorBtn.textContent = "Errore/Fallo";
   errorBtn.addEventListener("click", () => {
-    addPlayerError(playerIdx, playerName || state.players[playerIdx]);
+    openErrorModal({ playerIdx, playerName: playerName || state.players[playerIdx] });
     closeSkillModal();
   });
   extraRow.appendChild(errorBtn);
@@ -2220,18 +2233,55 @@ window._closeSkillModal = closeSkillModal;
 function renderErrorModal() {
   if (!elErrorModalBody) return;
   elErrorModalBody.innerHTML = "";
+  const typeSection = document.createElement("div");
+  typeSection.className = "error-type-section";
+  const typeLabel = document.createElement("p");
+  typeLabel.className = "section-note";
+  typeLabel.textContent = "Tipo errore:";
+  typeSection.appendChild(typeLabel);
+  const typeGrid = document.createElement("div");
+  typeGrid.className = "error-choice-grid error-type-grid";
+  ERROR_TYPES.forEach(item => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "error-choice-btn error-type-btn";
+    btn.textContent = item.label;
+    btn.dataset.errorType = item.id;
+    btn.addEventListener("click", () => setSelectedErrorType(item.id, typeGrid));
+    typeGrid.appendChild(btn);
+  });
+  typeSection.appendChild(typeGrid);
+  elErrorModalBody.appendChild(typeSection);
+  setSelectedErrorType(selectedErrorType || "Generic", typeGrid);
   const note = document.createElement("p");
   note.className = "section-note";
   note.textContent = "Seleziona la giocatrice a cui assegnare l'errore/fallo oppure applicalo alla squadra.";
   elErrorModalBody.appendChild(note);
   const grid = document.createElement("div");
   grid.className = "error-choice-grid";
+  if (errorModalPrefillPlayer && typeof errorModalPrefillPlayer.playerIdx === "number") {
+    const prefillName =
+      errorModalPrefillPlayer.playerName ||
+      (state.players && state.players[errorModalPrefillPlayer.playerIdx]) ||
+      "Giocatrice";
+    const preBtn = document.createElement("button");
+    preBtn.type = "button";
+    preBtn.className = "error-choice-btn";
+    preBtn.textContent = "Applica a " + formatNameWithNumber(prefillName);
+    preBtn.addEventListener("click", () => {
+      addPlayerError(errorModalPrefillPlayer.playerIdx, prefillName, selectedErrorType);
+      errorModalPrefillPlayer = null;
+      closeErrorModal();
+    });
+    grid.appendChild(preBtn);
+  }
   const teamBtn = document.createElement("button");
   teamBtn.type = "button";
   teamBtn.className = "error-choice-btn danger";
   teamBtn.textContent = "Assegna alla squadra";
   teamBtn.addEventListener("click", () => {
-    handleTeamError();
+    handleTeamError(selectedErrorType);
+    errorModalPrefillPlayer = null;
     closeErrorModal();
   });
   grid.appendChild(teamBtn);
@@ -2249,7 +2299,8 @@ function renderErrorModal() {
     btn.className = "error-choice-btn";
     btn.textContent = formatNameWithNumber(name);
     btn.addEventListener("click", () => {
-      addPlayerError(idx, name);
+      addPlayerError(idx, name, selectedErrorType);
+      errorModalPrefillPlayer = null;
       closeErrorModal();
     });
     grid.appendChild(btn);
@@ -2295,8 +2346,9 @@ function renderPointModal() {
   });
   elPointModalBody.appendChild(grid);
 }
-function openErrorModal() {
+function openErrorModal(prefill = null) {
   if (!elErrorModal) return;
+  errorModalPrefillPlayer = prefill;
   renderErrorModal();
   if (isDesktopCourtModalLayout()) {
     setCourtAreaLocked(true);
@@ -3158,6 +3210,18 @@ function computeMetrics(counts, skillId) {
 function getSkillLabel(skillId) {
   const skill = SKILLS.find(s => s.id === skillId);
   return (skill && skill.label) || skillId || "Fondamentale";
+}
+function getErrorTypeLabel(typeId) {
+  const item = ERROR_TYPES.find(t => t.id === typeId);
+  return (item && item.label) || "Generico";
+}
+function setSelectedErrorType(typeId, container) {
+  selectedErrorType = typeId || "Generic";
+  if (!container) return;
+  const buttons = container.querySelectorAll("[data-error-type]");
+  buttons.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.errorType === selectedErrorType);
+  });
 }
 function ensurePlayerAnalysisState() {
   if (!state.uiPlayerAnalysis || typeof state.uiPlayerAnalysis !== "object") {
@@ -4167,6 +4231,10 @@ function renderEventsLog(options = {}) {
           minute: "2-digit",
           second: "2-digit"
         });
+    const errorTypeLabel =
+      ev.errorType && (ev.code === "error" || ev.code === "team-error")
+        ? getErrorTypeLabel(ev.errorType)
+        : "";
     const leftText =
       "[S" +
       ev.set +
@@ -4175,7 +4243,8 @@ function renderEventsLog(options = {}) {
       " - " +
       getEventSkillLabel(ev) +
       " " +
-      ev.code;
+      ev.code +
+      (errorTypeLabel ? " · " + errorTypeLabel : "");
     const shortSkill = getEventShortLabel(ev);
     const num = getPlayerNumber(ev.playerName);
     const initials = getInitials(ev.playerName);
@@ -4184,7 +4253,8 @@ function renderEventsLog(options = {}) {
       " " +
       shortSkill +
       " " +
-      (ev.code || "");
+      (ev.code || "") +
+      (errorTypeLabel ? " " + errorTypeLabel : "");
     const compactClean = compact.trim();
     return { leftText, timeStr, compact: compactClean };
   };
@@ -4392,7 +4462,7 @@ function applyOffsetsToSelectedSkills() {
 function getVideoSkillEvents() {
   return (state.events || [])
     .map((ev, idx) => ({ ev, idx }))
-    .filter(item => item.ev && item.ev.skillId && item.ev.skillId !== "manual");
+    .filter(item => item.ev && item.ev.skillId);
 }
 function getVideoBaseTimeMs(eventsList) {
   const list = eventsList || getVideoSkillEvents();
@@ -5410,6 +5480,7 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Alzatore", bulkKey: "setter" },
       { label: "Fondamentale", bulkKey: "skill" },
       { label: "Codice", bulkKey: "code" },
+      { label: "Tipo errore" },
       { label: "Rot", bulkKey: "rotation" },
       { label: "Zona", bulkKey: "zone" },
       { label: "Pos Palleggio", bulkKey: "setterPosition" },
@@ -5570,6 +5641,12 @@ function renderEventTableRows(target, events, options = {}) {
       {
         text: ev.code || "",
         editable: td => makeEditableCell(td, "Codice", done => createCodeSelect(ev, done), editGuard)
+      },
+      {
+        text:
+          ev.errorType && (ev.code === "error" || ev.code === "team-error")
+            ? getErrorTypeLabel(ev.errorType)
+            : ""
       },
       {
         text: ev.rotation || "-",
@@ -6611,7 +6688,7 @@ function recomputeServeFlagsFromHistory() {
     enforceAutoLiberoForState({ skipServerOnServe: true });
   }
 }
-function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra") {
+function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra", errorType = null) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
@@ -6623,7 +6700,8 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
     skillId: "manual",
     code: codeLabel || direction,
     pointDirection: direction,
-    value: value
+    value: value,
+    errorType: errorType || null
   });
   clearReceiveContext();
   state.events.push(event);
@@ -6667,12 +6745,12 @@ function handleOpponentErrorPoint() {
   addManualPoint("for", 1, "opp-error", null, "Avversari");
   updateNextSkillIndicator(getPredictedSkillId());
 }
-function addPlayerError(playerIdx, playerName) {
+function addPlayerError(playerIdx, playerName, errorType = null) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
-  addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice");
+  addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice", errorType);
 }
 function addPlayerPoint(playerIdx, playerName) {
   if (state.matchFinished) {
@@ -6681,8 +6759,8 @@ function addPlayerPoint(playerIdx, playerName) {
   }
   addManualPoint("for", 1, "for", playerIdx, playerName || "Giocatrice");
 }
-function handleTeamError() {
-  addManualPoint("against", 1, "team-error", null, "Squadra");
+function handleTeamError(errorType = null) {
+  addManualPoint("against", 1, "team-error", null, "Squadra", errorType);
 }
 function handleOpponentPoint() {
   state.skillFlowOverride = null;
