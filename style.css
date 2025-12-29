@@ -895,6 +895,8 @@ button.danger:hover {
   border-radius: 10px;
   padding: 1rem 1.1rem;
   width: min(420px, calc(100% - 1.5rem));
+  max-height: min(90vh, 720px);
+  overflow: hidden;
   box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
   z-index: 1;
 }
@@ -915,6 +917,9 @@ body[data-theme="light"] .settings-modal__content {
 .settings-modal__body {
   display: grid;
   gap: 0.35rem;
+  max-height: calc(90vh - 160px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 body.desktop-court-modal .court-modal {
   position: absolute;
@@ -977,9 +982,14 @@ body[data-theme="light"] .match-summary {
 }
 .match-manager__content {
   width: min(920px, calc(100% - 1.5rem));
+  max-height: min(90vh, 760px);
+  overflow: hidden;
 }
 .match-manager__body {
   gap: 0.8rem;
+  max-height: calc(90vh - 160px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .match-manager-grid {
   display: grid;
@@ -3779,7 +3789,7 @@ body[data-theme="light"] .error-choice-btn.danger {
   padding: 1rem;
   width: min(960px, 95vw);
   max-height: 90vh;
-  overflow: auto;
+  overflow: hidden;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
 .team-modal__head {
@@ -3793,6 +3803,9 @@ body[data-theme="light"] .error-choice-btn.danger {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  max-height: calc(90vh - 140px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .team-meta-grid {
   display: grid;
