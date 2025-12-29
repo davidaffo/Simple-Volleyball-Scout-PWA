@@ -3292,6 +3292,16 @@ body[data-theme="light"] .rotation-table td {
 .agg-table td {
   border: 1px solid #303030;
 }
+.agg-table tbody tr:nth-child(even) td {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+}
+.agg-table tbody tr:nth-child(even) td.skill-col {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.12));
+}
+.agg-table tbody tr:hover td {
+  background-image: linear-gradient(rgba(59, 130, 246, 0.26), rgba(59, 130, 246, 0.26));
+  border-color: rgba(59, 130, 246, 0.6);
+}
 .agg-table th:first-child,
 .agg-table td:first-child {
   border-left: 1px solid #303030;
@@ -3325,6 +3335,16 @@ body[data-theme="light"] .agg-table thead tr:nth-child(2) th {
 body[data-theme="light"] .agg-table td {
   background: #ffffff;
   color: #0f172a;
+}
+body[data-theme="light"] .agg-table tbody tr:nth-child(even) td {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.1));
+}
+body[data-theme="light"] .agg-table tbody tr:nth-child(even) td.skill-col {
+  background-image: linear-gradient(rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.1));
+}
+body[data-theme="light"] .agg-table tbody tr:hover td {
+  background-image: linear-gradient(rgba(37, 99, 235, 0.2), rgba(37, 99, 235, 0.2));
+  border-color: rgba(37, 99, 235, 0.6);
 }
 body[data-theme="light"] .agg-table,
 body[data-theme="light"] .agg-table th,

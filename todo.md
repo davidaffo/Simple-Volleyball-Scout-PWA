@@ -14,5 +14,3 @@ Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset 
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
 Tema chiaro non coerente
 Stampa battute non è ottimale
-over tabellino piu evidentee colori alternati
-calcolo errori personali sbagliato
