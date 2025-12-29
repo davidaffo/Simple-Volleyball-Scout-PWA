@@ -9275,6 +9275,27 @@ function setActiveAggTab(target) {
       panel.classList.toggle("active", panel.dataset.aggTab === desired);
     });
   }
+  if (desired === "trajectory") {
+    const refresh = () => {
+      if (typeof renderTrajectoryAnalysis === "function") {
+        renderTrajectoryAnalysis();
+      }
+      if (typeof renderServeTrajectoryAnalysis === "function") {
+        renderServeTrajectoryAnalysis();
+      }
+    };
+    requestAnimationFrame(refresh);
+    setTimeout(refresh, 0);
+  }
+  if (desired === "serve") {
+    const refreshServe = () => {
+      if (typeof renderServeTrajectoryAnalysis === "function") {
+        renderServeTrajectoryAnalysis();
+      }
+    };
+    requestAnimationFrame(refreshServe);
+    setTimeout(refreshServe, 0);
+  }
 }
 function setActiveTab(target) {
   if (!target) return;
@@ -9289,6 +9310,20 @@ function setActiveTab(target) {
   tabPanels.forEach(panel => {
     panel.classList.toggle("active", panel.dataset.tab === target);
   });
+  if (target === "aggregated" && (activeAggTab === "trajectory" || activeAggTab === "serve")) {
+    const refresh = () => {
+      if (typeof renderTrajectoryAnalysis === "function") {
+        if (activeAggTab === "trajectory") {
+          renderTrajectoryAnalysis();
+        }
+      }
+      if (typeof renderServeTrajectoryAnalysis === "function") {
+        renderServeTrajectoryAnalysis();
+      }
+    };
+    requestAnimationFrame(refresh);
+    setTimeout(refresh, 0);
+  }
   if (prevTab === "video" && target !== "video") {
     stopPlayByPlay();
   }
@@ -10463,8 +10498,6 @@ async function init() {
     });
   }
   // elementi mobile rimossi
-  if (elBtnExportCsv) elBtnExportCsv.addEventListener("click", exportCsv);
-  if (elBtnCopyCsv) elBtnCopyCsv.addEventListener("click", copyCsvToClipboard);
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
   if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
   if (elBtnImportMatch && elMatchFileInput) {
