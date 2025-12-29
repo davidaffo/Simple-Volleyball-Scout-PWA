@@ -6,7 +6,6 @@ Trasforma tutte le immagini in svg
 Modifica immagine battuta per mettere il campo fuori
 Cambio set migliorato
 Aggregare dati di piu partite
-tab analisi giocatore singolo con tutti i dati e traiettorie, con flag per scegliere cosa mostrare
 Specializza gli errori
 
 # Bugfix
