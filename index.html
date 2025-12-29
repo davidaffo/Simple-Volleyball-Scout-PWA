@@ -47,54 +47,22 @@
       </div>
     </div>
     <div class="section">
-      <h2>Giocatrici</h2>
-      <p class="section-note">Gestisci l'elenco con i pulsanti. Cambiare la lista azzera le statistiche del match.</p>
-      <div class="player-management our-team">
-        <div class="add-player-row">
-          <div class="col">
-            <label for="new-player-name">Nuova giocatrice</label>
-            <div class="add-player-inline">
-              <input id="new-player-name" type="text" placeholder="Es: Martina Rossi" />
-              <button id="btn-add-player">+ Aggiungi</button>
-            </div>
-          </div>
-          <div class="col col-auto">
-            <label class="spacer-label">&nbsp;</label>
-            <button id="btn-clear-players" class="secondary">Svuota elenco</button>
-          </div>
+      <h2>Squadra</h2>
+      <p class="section-note">Seleziona, rinomina o elimina le squadre salvate. La gestione roster resta nella finestra dedicata.</p>
+      <div class="team-manage">
+        <label for="saved-teams">Squadre salvate</label>
+        <div class="team-row">
+          <select id="saved-teams">
+            <option value="">Nuova squadra (vuota)</option>
+          </select>
+          <button id="btn-delete-team" class="danger">Elimina</button>
+          <button id="btn-new-team" class="secondary">Nuova squadra</button>
+          <button id="btn-duplicate-team" class="secondary">Duplica squadra</button>
+          <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
         </div>
-        <div id="players-list" class="players-list"></div>
-        <div class="team-manage">
-          <label for="saved-teams">Squadre salvate</label>
-          <div class="team-row">
-            <select id="saved-teams">
-              <option value="">Nuova squadra (vuota)</option>
-            </select>
-            <button id="btn-delete-team" class="danger">Elimina</button>
-            <button id="btn-rename-team" class="secondary">Rinomina</button>
-            <button id="btn-save-team">Salva squadra</button>
-            <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
-          </div>
-          <div class="team-row">
-            <button id="btn-export-team" class="secondary">Esporta su file</button>
-            <button id="btn-import-team" class="secondary">Importa da file</button>
-            <input id="team-file-input" type="file" accept="application/json,text/plain" hidden />
-          </div>
-        </div>
-        <details class="import-panel">
-          <summary>Incolla un elenco (opzionale)</summary>
-          <label for="players-input">Formato: Nome;Numero;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
-          <textarea id="players-input" placeholder="Esempi:
-Rossi;12;L
-Verdi;7
-Bianchi 18"></textarea>
-          <div class="controls-row">
-            <button id="btn-apply-players">Sostituisci elenco (resetta le statistiche)</button>
-          </div>
-        </details>
-        <div class="libero-manage">
-          <label for="libero-tags">Seleziona i liberi</label>
-          <div id="libero-tags" class="libero-tags"></div>
+        <div class="team-row">
+          <button id="btn-import-team" class="secondary">Importa da file</button>
+          <input id="team-file-input" type="file" accept="application/json,text/plain" hidden />
         </div>
       </div>
     </div>
@@ -1048,7 +1016,7 @@ Bianchi 18"></textarea>
         <h3>Gestione squadra</h3>
         <button id="team-manager-close" aria-label="Chiudi" class="icon-button">✕</button>
       </div>
-        <div class="team-modal__content">
+      <div class="team-modal__content">
         <div class="team-meta-grid">
           <label>Nome squadra
             <input type="text" id="team-meta-name" placeholder="Nome squadra" />
@@ -1059,36 +1027,69 @@ Bianchi 18"></textarea>
           <label>Vice
             <input type="text" id="team-meta-assistant" placeholder="Assistente" />
           </label>
-          <label>Team manager
-            <input type="text" id="team-meta-manager" placeholder="Manager" />
+          <label>Dirigente
+            <input type="text" id="team-meta-manager" placeholder="Dirigente" />
           </label>
         </div>
-        <p class="section-note">Imposta staff, capitana (K), liberi (L) e chi è fuori rosa. La prima riga definisce la lineup di default. I ruoli in campo sono sempre inferiti automaticamente dalla posizione del palleggiatore nella rotazione reale.</p>
+        <p class="section-note">Imposta staff, capitana (K), liberi (L) e chi è fuori rosa. La formazione di default si gestisce dal pannello a destra. I ruoli in campo sono sempre inferiti automaticamente dalla posizione del palleggiatore nella rotazione reale.</p>
         <div class="team-manager-actions">
           <button id="team-manager-add" class="secondary">Aggiungi giocatrice</button>
-          <button id="team-manager-duplicate" class="secondary">Duplica elenco</button>
-          <button id="team-manager-lineup" class="secondary">Imposta formazione</button>
+          <button id="btn-open-players-paste" class="secondary">Incolla elenco</button>
           <button id="team-manager-template" class="secondary hidden">Genera squadra di default</button>
         </div>
-        <div class="table-wrapper team-manager-tablewrap">
-          <table class="team-manager-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Cognome</th>
-                <th>Nome</th>
-                <th>Capitano</th>
-                <th>Libero</th>
-                <th>Fuori rosa</th>
-                <th>Azioni</th>
-              </tr>
-            </thead>
-            <tbody id="team-manager-body"></tbody>
-          </table>
+        <div class="team-manager-roster-layout">
+          <div class="team-manager-roster">
+            <div class="table-wrapper team-manager-tablewrap">
+              <table class="team-manager-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Cognome</th>
+                    <th>Nome</th>
+                    <th>Capitano</th>
+                    <th>Libero</th>
+                    <th>Fuori rosa</th>
+                    <th>ID</th>
+                    <th>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody id="team-manager-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="team-manager-default">
+            <h4>Formazione di default</h4>
+            <div id="default-lineup-grid" class="default-lineup-grid"></div>
+            <div class="default-lineup-bench">
+              <div class="default-lineup-bench__title">Giocatrici disponibili</div>
+              <div id="default-lineup-bench" class="default-lineup-bench__list"></div>
+            </div>
+          </div>
         </div>
         <div class="team-manager-footer">
+          <button id="btn-export-team" class="secondary">Esporta su file</button>
           <button id="team-manager-cancel" class="secondary">Annulla</button>
           <button id="team-manager-save" class="primary">Salva</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="paste-players-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="paste-players-title">
+    <div class="settings-modal__backdrop" data-close-paste></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="paste-players-title">Incolla elenco giocatrici</h3>
+        <button class="pill-remove" aria-label="Chiudi" data-close-paste>✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <label for="players-input">Formato: Cognome Nome;Numero;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
+        <textarea id="players-input" placeholder="Esempi:
+Rossi Martina;12;L
+Verdi Sara;7
+Bianchi Laura 18"></textarea>
+        <div class="controls-row">
+          <button id="btn-apply-players">Aggiungi elenco</button>
+          <button class="secondary" data-close-paste>Annulla</button>
         </div>
       </div>
     </div>

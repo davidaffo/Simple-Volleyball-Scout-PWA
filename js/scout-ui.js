@@ -49,6 +49,7 @@ const elLineupModalClose = document.getElementById("lineup-modal-close");
 const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
 const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-override");
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
+const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const courtModalElements = [];
 let courtOverlayEl = null;
 courtModalElements.push(elSkillModal, elLineupModal, elErrorModal, elPointModal, elAttackTrajectoryModal);
@@ -311,6 +312,91 @@ function cloneCourt(court) {
   if (typeof cloneCourtLineup === "function") return cloneCourtLineup(court);
   return getCourtShape(court).map(slot => ({ main: slot.main, replaced: slot.replaced }));
 }
+function getLineupModalPlayers() {
+  return state.players || [];
+}
+function getLineupModalLiberos() {
+  return state.liberos || [];
+}
+function getLineupModalNumbers() {
+  return state.playerNumbers || {};
+}
+function formatLineupModalName(name, options = {}) {
+  return formatNameWithNumber(name, options);
+}
+function getBenchForLineupWithRoster(court, rosterNames, liberos, numbersMap) {
+  const libSet = new Set(liberos || []);
+  const used = new Set();
+  getCourtShape(court).forEach(slot => {
+    const name = slot.main || "";
+    if (name) used.add(name);
+  });
+  const bench = (rosterNames || []).filter(name => name && !libSet.has(name) && !used.has(name));
+  if (typeof sortNamesByNumber === "function") {
+    return sortNamesByNumber(bench, numbersMap || {});
+  }
+  return bench;
+}
+function updateLineupModalControls() {
+  if (elLineupModalSaveOverride) elLineupModalSaveOverride.classList.remove("hidden");
+  if (elLineupModalSaveSubstitution) elLineupModalSaveSubstitution.classList.remove("hidden");
+  if (elLineupModalTitle) {
+    elLineupModalTitle.textContent = "Imposta formazione";
+  }
+}
+function getSortedPlayerEntries() {
+  const players = state.players || [];
+  const numbers = state.playerNumbers || {};
+  const names = typeof sortNamesByNumber === "function" ? sortNamesByNumber(players, numbers) : players.slice();
+  const idxMap = new Map(players.map((name, idx) => [name, idx]));
+  return names
+    .map(name => ({ name, idx: idxMap.get(name) }))
+    .filter(entry => typeof entry.idx === "number");
+}
+function sortPlayerOptionsByNumber(options) {
+  const players = state.players || [];
+  const numbers = state.playerNumbers || {};
+  const getNum = idx => {
+    const name = players[idx];
+    if (!name) return null;
+    const raw = numbers[name];
+    const parsed = raw !== undefined && raw !== null && raw !== "" ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return options.slice().sort((a, b) => {
+    const idxA = Number(a.value);
+    const idxB = Number(b.value);
+    const numA = getNum(idxA);
+    const numB = getNum(idxB);
+    if (numA === null && numB === null) {
+      return String(a.label || "").localeCompare(String(b.label || ""), "it", { sensitivity: "base" });
+    }
+    if (numA === null) return 1;
+    if (numB === null) return -1;
+    if (numA !== numB) return numA - numB;
+    return String(a.label || "").localeCompare(String(b.label || ""), "it", { sensitivity: "base" });
+  });
+}
+function sortPlayerIndexesByNumber(indices) {
+  const players = state.players || [];
+  const numbers = state.playerNumbers || {};
+  const getNum = idx => {
+    const name = players[idx];
+    if (!name) return null;
+    const raw = numbers[name];
+    const parsed = raw !== undefined && raw !== null && raw !== "" ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return indices.slice().sort((a, b) => {
+    const numA = getNum(a);
+    const numB = getNum(b);
+    if (numA === null && numB === null) return a - b;
+    if (numA === null) return 1;
+    if (numB === null) return -1;
+    if (numA !== numB) return numA - numB;
+    return a - b;
+  });
+}
 function setServeTypeSelection(type) {
   const t = (type || "").toUpperCase();
   const normalized = t === "F" || t === "S" ? t : "JF";
@@ -499,7 +585,11 @@ function getBenchForLineup(court) {
     const name = slot.main || "";
     if (name) used.add(name);
   });
-  return (state.players || []).filter(name => name && !libSet.has(name) && !used.has(name));
+  const bench = (state.players || []).filter(name => name && !libSet.has(name) && !used.has(name));
+  if (typeof sortNamesByNumber === "function") {
+    return sortNamesByNumber(bench, state.playerNumbers || {});
+  }
+  return bench;
 }
 function getLineupBaseCourtFromState() {
   const libSet = new Set(state.liberos || []);
@@ -529,7 +619,7 @@ function assignPlayerToLineup(name, posIdx) {
       court: lineupModalCourt,
       posIdx,
       playerName: name,
-      liberos: state.liberos || []
+      liberos: getLineupModalLiberos()
     });
   } else {
     lineupModalCourt = getCourtShape(lineupModalCourt).map((slot, idx) => {
@@ -547,7 +637,7 @@ function clearLineupSlot(posIdx) {
     lineupModalCourt = core.clearCourtSlot({
       court: lineupModalCourt,
       posIdx,
-      liberos: state.liberos || []
+      liberos: getLineupModalLiberos()
     });
   } else {
     lineupModalCourt = getCourtShape(lineupModalCourt).map((slot, idx) =>
@@ -618,13 +708,18 @@ function renderLineupModal() {
     body.className = "slot-body";
     const nameLabel = document.createElement("div");
     nameLabel.className = "slot-name";
-    nameLabel.textContent = slot.main ? formatNameWithNumber(slot.main, { compactCourt: true }) : "Trascina qui";
+    nameLabel.textContent = slot.main ? formatLineupModalName(slot.main, { compactCourt: true }) : "Trascina qui";
     body.appendChild(nameLabel);
     card.appendChild(head);
     card.appendChild(body);
     elLineupModalCourt.appendChild(card);
   });
-  const benchNames = getBenchForLineup(court);
+  const benchNames = getBenchForLineupWithRoster(
+    court,
+    getLineupModalPlayers(),
+    getLineupModalLiberos(),
+    getLineupModalNumbers()
+  );
   elLineupModalBench.innerHTML = "";
   if (benchNames.length === 0) {
     const empty = document.createElement("div");
@@ -662,7 +757,7 @@ function renderLineupModal() {
         renderLineupModal();
       });
       const span = document.createElement("span");
-      span.textContent = formatNameWithNumber(name, { compactCourt: true });
+      span.textContent = formatLineupModalName(name, { compactCourt: true });
       chip.appendChild(span);
       elLineupModalBench.appendChild(chip);
     });
@@ -678,6 +773,7 @@ function openMobileLineupModal() {
   });
   lineupModalCourt = cloneCourt(baseCourt);
   renderLineupModal();
+  updateLineupModalControls();
   if (elLineupModal) {
     if (isDesktopCourtModalLayout()) {
       setCourtAreaLocked(true);
@@ -2293,7 +2389,7 @@ function renderErrorModal() {
     elErrorModalBody.appendChild(grid);
     return;
   }
-  state.players.forEach((name, idx) => {
+  getSortedPlayerEntries().forEach(({ name, idx }) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "error-choice-btn";
@@ -2333,7 +2429,7 @@ function renderPointModal() {
     elPointModalBody.appendChild(grid);
     return;
   }
-  state.players.forEach((name, idx) => {
+  getSortedPlayerEntries().forEach(({ name, idx }) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "error-choice-btn";
@@ -2537,19 +2633,36 @@ function applyPlayersFromTextarea() {
   if (!elPlayersInput) return;
   const raw = elPlayersInput.value;
   const parsed = parseDelimitedTeamText(raw);
-  if (parsed && parsed.players && parsed.players.length > 0) {
-    updatePlayersList(parsed.players, {
-      askReset: true,
-      liberos: parsed.liberos,
-      playerNumbers: parsed.numbers
-    });
+  const currentPlayers = normalizePlayers(state.players || []);
+  const appendPlayers = parsed && parsed.players && parsed.players.length > 0
+    ? normalizePlayers(parsed.players)
+    : raw
+        .split("\n")
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+  const mergedPlayers = currentPlayers.concat(
+    appendPlayers.filter(name => !currentPlayers.some(p => p.toLowerCase() === name.toLowerCase()))
+  );
+  if (mergedPlayers.length === 0) {
+    alert("Nessuna giocatrice valida trovata.");
     return;
   }
-  const lines = raw
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
-  updatePlayersList(lines, { askReset: true });
+  if (parsed && parsed.players && parsed.players.length > 0) {
+    updatePlayersList(mergedPlayers, {
+      askReset: false,
+      preserveCourt: true,
+      liberos: [...new Set([...(state.liberos || []), ...(parsed.liberos || [])])],
+      playerNumbers: Object.assign({}, state.playerNumbers || {}, parsed.numbers || {})
+    });
+    if (typeof refreshTeamManagerPlayersFromState === "function") {
+      refreshTeamManagerPlayersFromState();
+    }
+    return;
+  }
+  updatePlayersList(mergedPlayers, { askReset: false, preserveCourt: true });
+  if (typeof refreshTeamManagerPlayersFromState === "function") {
+    refreshTeamManagerPlayersFromState();
+  }
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
@@ -3382,7 +3495,7 @@ function renderAggSkillDetailTable(summaryAll) {
     applySkillClassToCells(tdList, skillId, 0);
     elAggTableBody.appendChild(row);
   };
-  state.players.forEach((name, idx) => {
+  getSortedPlayerEntries().forEach(({ name, idx }) => {
     const counts = getAggSkillCounts(skillId, idx);
     mergeCounts(totals, counts);
     buildRow(formatNameWithNumber(name), counts, idx, false);
@@ -3496,7 +3609,7 @@ function renderPlayerAnalysisControls() {
     elPlayerAnalysisSelect.appendChild(opt);
     elPlayerAnalysisSelect.disabled = true;
   } else {
-    players.forEach((name, idx) => {
+    getSortedPlayerEntries().forEach(({ name, idx }) => {
       const opt = document.createElement("option");
       opt.value = String(idx);
       opt.textContent = formatNameWithNumber(name) || name || "Giocatrice " + (idx + 1);
@@ -3504,7 +3617,12 @@ function renderPlayerAnalysisControls() {
     });
     elPlayerAnalysisSelect.disabled = false;
     const selectedIdx = getPlayerAnalysisPlayerIdx();
-    elPlayerAnalysisSelect.value = selectedIdx !== null ? String(selectedIdx) : "0";
+    if (selectedIdx !== null) {
+      elPlayerAnalysisSelect.value = String(selectedIdx);
+    } else {
+      const firstEntry = getSortedPlayerEntries()[0];
+      elPlayerAnalysisSelect.value = firstEntry ? String(firstEntry.idx) : "0";
+    }
   }
   if (!elPlayerAnalysisSelect._playerAnalysisBound) {
     elPlayerAnalysisSelect.addEventListener("change", () => {
@@ -7736,13 +7854,14 @@ function renderTrajectoryFilters() {
     const dir = ev.attackDirection || ev.attackTrajectory;
     return dir && dir.start && dir.end;
   });
-  const playersOpts = buildUniqueOptions(
+  const playersOptsRaw = buildUniqueOptions(
     trajEvents.map(ev => ev.playerIdx),
     {
       asNumber: true,
       labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
     }
   );
+  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
   const setsOpts = buildUniqueOptions(trajEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -7876,13 +7995,14 @@ function renderServeTrajectoryFilters() {
   if (!elServeTrajectoryGrid) return;
   const events = state.events || [];
   const serveEvents = events.filter(ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd);
-  const playersOpts = buildUniqueOptions(
+  const playersOptsRaw = buildUniqueOptions(
     serveEvents.map(ev => ev.playerIdx),
     {
       asNumber: true,
       labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
     }
   );
+  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
   const setsOpts = buildUniqueOptions(serveEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -8772,7 +8892,7 @@ function renderVideoFilters(events) {
   const els = getVideoFilterElements();
   if (!els) return;
   const list = Array.isArray(events) ? events : [];
-  const playerOpts = buildUniqueOptions(
+  const playerOptsRaw = buildUniqueOptions(
     list.map(ev => {
       const idx = resolvePlayerIdx(ev);
       return idx === -1 ? null : idx;
@@ -8783,7 +8903,7 @@ function renderVideoFilters(events) {
         formatNameWithNumber(state.players[idx]) || state.players[idx] || "#" + (Number(idx) + 1)
     }
   );
-  const setterOpts = buildUniqueOptions(
+  const setterOptsRaw = buildUniqueOptions(
     list.map(ev => getSetterFromEvent(ev)),
     {
       asNumber: true,
@@ -8791,6 +8911,8 @@ function renderVideoFilters(events) {
         formatNameWithNumber(state.players[idx]) || state.players[idx] || "Alzatore " + (Number(idx) + 1)
     }
   );
+  const playerOpts = sortPlayerOptionsByNumber(playerOptsRaw);
+  const setterOpts = sortPlayerOptionsByNumber(setterOptsRaw);
   const skillOpts = buildUniqueOptions(list.map(ev => ev.skillId), {
     labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
   });
@@ -9072,7 +9194,7 @@ function renderServeTrajectoryAnalysis() {
   const selectedPlayers = serveTrajectoryFilterState.players.size
     ? Array.from(serveTrajectoryFilterState.players)
     : Array.from(new Set(events.map(ev => ev.playerIdx))).filter(idx => typeof idx === "number");
-  const playersToRender = selectedPlayers.length ? selectedPlayers : [];
+  const playersToRender = selectedPlayers.length ? sortPlayerIndexesByNumber(selectedPlayers) : [];
   elServeTrajectoryGrid.innerHTML = "";
   const cards = [];
   playersToRender.forEach(playerIdx => {
@@ -9205,7 +9327,7 @@ function renderAggregatedTable() {
     defense: emptyCounts()
   };
   let totalErrors = 0;
-  state.players.forEach((name, idx) => {
+  getSortedPlayerEntries().forEach(({ name, idx }) => {
     const serveCounts = normalizeCounts(state.stats[idx] && state.stats[idx].serve);
     const passCounts = normalizeCounts(state.stats[idx] && state.stats[idx].pass);
     const attackCounts = normalizeCounts(state.stats[idx] && state.stats[idx].attack);
@@ -9384,10 +9506,11 @@ function renderSecondFilters() {
       "Alzatrice " + (setterIdx + 1);
     playerLabels.set(setterIdx, label);
   });
-  const playersOpts = Array.from(playerLabels.entries()).map(([idx, label]) => ({
+  const playersOptsRaw = Array.from(playerLabels.entries()).map(([idx, label]) => ({
     value: idx,
     label
   }));
+  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
   const setTypeOpts = buildUniqueOptions(
     setTypeEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
@@ -10304,7 +10427,7 @@ function buildAggregatedDataForPdf() {
       target[code] = (target[code] || 0) + (source[code] || 0);
     });
   };
-  const rows = state.players.map((name, idx) => {
+  const rows = getSortedPlayerEntries().map(({ name, idx }) => {
     const serveCounts = getCounts(idx, "serve");
     const passCounts = getCounts(idx, "pass");
     const attackCounts = getCounts(idx, "attack");
@@ -11169,9 +11292,20 @@ async function init() {
     });
     applyTheme(state.theme || "dark");
   }
+  const elPastePlayersModal = document.getElementById("paste-players-modal");
+  const closePastePlayersModal = () => {
+    if (!elPastePlayersModal) return;
+    elPastePlayersModal.classList.add("hidden");
+    if (elTeamManagerModal && !elTeamManagerModal.classList.contains("hidden")) return;
+    document.body.classList.remove("modal-open");
+  };
   if (elBtnApplyPlayers) {
     elBtnApplyPlayers.addEventListener("click", () => {
       applyPlayersFromTextarea();
+      closePastePlayersModal();
+      if (elPlayersInput) {
+        elPlayersInput.value = "";
+      }
     });
   }
   if (elBtnApplyOpponentPlayers) {
@@ -11223,7 +11357,14 @@ async function init() {
     elBtnClearOpponentPlayers.addEventListener("click", clearOpponentPlayers);
   }
   if (elBtnSaveTeam) {
-    elBtnSaveTeam.addEventListener("click", saveCurrentTeam);
+    elBtnSaveTeam.addEventListener("click", () => {
+      const teamManagerModal = document.getElementById("team-manager-modal");
+      if (teamManagerModal && !teamManagerModal.classList.contains("hidden") && typeof saveTeamManagerPayload === "function") {
+        saveTeamManagerPayload({ closeModal: false });
+        return;
+      }
+      saveCurrentTeam();
+    });
   }
   if (elBtnOpenLineup) {
     elBtnOpenLineup.addEventListener("click", () => {
@@ -11236,21 +11377,26 @@ async function init() {
   if (elBtnOpenTeamManager) {
     elBtnOpenTeamManager.addEventListener("click", () => openTeamManagerModal("our"));
   }
+  const elBtnNewTeam = document.getElementById("btn-new-team");
+  if (elBtnNewTeam) {
+    elBtnNewTeam.addEventListener("click", () => {
+      if (typeof openNewTeamManager === "function") {
+        openNewTeamManager();
+        return;
+      }
+      openTeamManagerModal("our");
+    });
+  }
+  const elBtnDuplicateTeam = document.getElementById("btn-duplicate-team");
+  if (elBtnDuplicateTeam) {
+    elBtnDuplicateTeam.addEventListener("click", () => {
+      if (typeof duplicateSelectedTeam === "function") {
+        duplicateSelectedTeam();
+      }
+    });
+  }
   if (elBtnOpenOpponentTeamManager) {
     elBtnOpenOpponentTeamManager.addEventListener("click", () => openTeamManagerModal("opponent"));
-  }
-  const elTeamManagerLineup = document.getElementById("team-manager-lineup");
-  if (elTeamManagerLineup) {
-    elTeamManagerLineup.addEventListener("click", () => {
-      saveTeamManagerPayload({
-        closeModal: true,
-        openLineupAfter: teamManagerScope !== "opponent",
-        saveToStorage: true,
-        showAlert: false,
-        preserveCourt: true,
-        askReset: false
-      });
-    });
   }
   if (elLineupModalClose) {
     elLineupModalClose.addEventListener("click", closeLineupModal);
@@ -11290,7 +11436,7 @@ async function init() {
         return;
       }
       teamManagerState.players.push({
-        id: Date.now() + "_" + Math.random(),
+        id: typeof generatePlayerId === "function" ? generatePlayerId() : Date.now() + "_" + Math.random(),
         name: "",
         firstName: "",
         lastName: "",
@@ -11315,6 +11461,30 @@ async function init() {
       }
     });
   }
+  const elBtnOpenPlayersPaste = document.getElementById("btn-open-players-paste");
+  if (elBtnOpenPlayersPaste) {
+    elBtnOpenPlayersPaste.addEventListener("click", () => {
+      if (elPlayersInput) {
+        elPlayersInput.value = "";
+      }
+      if (elPastePlayersModal) {
+        elPastePlayersModal.classList.remove("hidden");
+        document.body.classList.add("modal-open");
+      }
+      if (elPlayersInput) {
+        elPlayersInput.focus();
+      }
+    });
+  }
+  if (elPastePlayersModal) {
+    elPastePlayersModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest("[data-close-paste]")) {
+        closePastePlayersModal();
+      }
+    });
+  }
   if (elTeamManagerDup) {
     elTeamManagerDup.addEventListener("click", () => {
       if (!teamManagerState) {
@@ -11324,7 +11494,7 @@ async function init() {
       const clone = JSON.parse(JSON.stringify(teamManagerState.players || []));
       teamManagerState.players = clone.map(p =>
         Object.assign({}, p, {
-          id: Date.now() + "_" + Math.random(),
+          id: typeof generatePlayerId === "function" ? generatePlayerId() : Date.now() + "_" + Math.random(),
           name: (p.name || "").trim() + " (dup)",
           firstName: p.firstName || splitNameParts(p.name || "").firstName || "",
           lastName: p.lastName || splitNameParts(p.name || "").lastName || ""
@@ -11338,7 +11508,7 @@ async function init() {
       const playersDetailed = TEMPLATE_TEAM.players.map((name, idx) => {
         const parts = splitNameParts(name);
         return {
-          id: idx + "_" + name,
+          id: typeof generatePlayerId === "function" ? generatePlayerId() : idx + "_" + name,
           name,
           firstName: parts.firstName || "",
           lastName: parts.lastName || name,
@@ -11358,9 +11528,6 @@ async function init() {
   }
   if (elBtnDeleteTeam) {
     elBtnDeleteTeam.addEventListener("click", deleteSelectedTeam);
-  }
-  if (elBtnRenameTeam) {
-    elBtnRenameTeam.addEventListener("click", renameSelectedTeam);
   }
   if (elBtnDeleteOpponentTeam) {
     elBtnDeleteOpponentTeam.addEventListener("click", deleteSelectedOpponentTeam);

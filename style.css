@@ -4011,8 +4011,8 @@ body[data-theme="light"] .error-choice-btn.danger {
   border: 1px solid #1f2937;
   border-radius: 8px;
   padding: 1rem;
-  width: min(960px, 95vw);
-  max-height: 90vh;
+  width: min(1200px, 96vw);
+  max-height: 92vh;
   overflow: hidden;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
 }
@@ -4027,9 +4027,12 @@ body[data-theme="light"] .error-choice-btn.danger {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-height: calc(90vh - 140px);
+  max-height: calc(92vh - 140px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+.team-manager-import summary {
+  cursor: pointer;
 }
 .team-meta-grid {
   display: grid;
@@ -4062,6 +4065,119 @@ body[data-theme="light"] .error-choice-btn.danger {
   max-height: 45vh;
   overflow: auto;
 }
+.team-manager-roster-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 0.8rem;
+}
+.team-manager-default {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #0b1224;
+  border: 1px solid #1f2937;
+  border-radius: 0.6rem;
+  padding: 0.6rem;
+}
+.team-manager-default h4 {
+  margin: 0;
+}
+.default-lineup-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(80px, 1fr));
+  gap: 0.4rem;
+}
+.default-lineup-slot {
+  border: 1px dashed #334155;
+  border-radius: 0.6rem;
+  background: #111827;
+  color: #e2e8f0;
+  padding: 0.4rem 0.3rem;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.default-lineup-slot::before {
+  content: attr(data-position);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+  font-weight: 700;
+  color: rgba(148, 163, 184, 0.2);
+  pointer-events: none;
+}
+.default-lineup-name {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+}
+.default-lineup-slot.empty {
+  color: rgba(148, 163, 184, 0.7);
+}
+.default-lineup-slot.drop-over {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+}
+.default-lineup-bench {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.default-lineup-bench__title {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+.default-lineup-bench__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow: auto;
+}
+.default-lineup-chip {
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  font-weight: 600;
+  cursor: grab;
+}
+.default-lineup-chip:active {
+  cursor: grabbing;
+}
+body[data-theme="light"] .team-manager-default {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+body[data-theme="light"] .default-lineup-slot {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+body[data-theme="light"] .default-lineup-chip {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+body[data-theme="light"] .default-lineup-slot::before {
+  color: rgba(100, 116, 139, 0.25);
+}
+@media (max-width: 900px) {
+  .team-manager-roster-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .team-manager-table {
   width: 100%;
   border-collapse: collapse;
@@ -4084,6 +4200,21 @@ body[data-theme="light"] .error-choice-btn.danger {
 .team-manager-table td:nth-child(6) {
   width: 88px;
   text-align: center;
+}
+.team-manager-table td:nth-child(7) {
+  width: 180px;
+}
+.team-manager-table td:nth-child(8) {
+  width: 88px;
+  text-align: center;
+}
+.team-manager-id {
+  font-family: "SFMono-Regular", ui-monospace, "DejaVu Sans Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 180px;
 }
 .team-manager-input {
   width: 100%;
