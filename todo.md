@@ -12,4 +12,3 @@ Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset 
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
 Esporta pdf esporta sempre e solo il tabellino
 Punti fatti e subiti di squadra sul tabellino non corretti
-LA pwa non permette la rotazione del telefono
