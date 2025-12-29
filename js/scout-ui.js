@@ -8345,17 +8345,142 @@ function loadScriptOnce(url, globalCheck) {
   });
 }
 async function ensurePdfLibs() {
-  await loadScriptOnce(
-    "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
-    () => typeof window.html2canvas === "function"
-  );
-  await loadScriptOnce(
-    "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
-    () => window.jspdf && typeof window.jspdf.jsPDF === "function"
-  );
+  try {
+    await loadScriptOnce(
+      "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
+      () => typeof window.html2canvas === "function"
+    );
+    await loadScriptOnce(
+      "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+      () => window.jspdf && typeof window.jspdf.jsPDF === "function"
+    );
+    return true;
+  } catch (err) {
+    logError("pdf-libs", err);
+    return false;
+  }
+}
+function prepareAnalysisFiltersForPdf(container) {
+  if (!container) return () => {};
+  const touched = [];
+  const summaries = [];
+  const setAttr = (el, name, value) => {
+    if (!el) return;
+    touched.push({ el, name, prev: el.getAttribute(name) });
+    el.setAttribute(name, value);
+  };
+  const buildSummary = items => {
+    const wrap = document.createElement("div");
+    wrap.className = "pdf-filter-summary";
+    const title = document.createElement("span");
+    title.className = "pdf-filter-summary__title";
+    title.textContent = "Filtri attivi:";
+    wrap.appendChild(title);
+    items.forEach(item => {
+      const chip = document.createElement("span");
+      chip.className = "pdf-filter-chip";
+      chip.textContent = item.label + ": " + item.values.join(", ");
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  };
+  const containers = container.querySelectorAll(".analysis-filters, .trajectory-filters");
+  containers.forEach(filterGroup => {
+    const items = [];
+    const filters = filterGroup.querySelectorAll(".analysis-filter, .trajectory-filter");
+    filters.forEach(filter => {
+      const labelEl = filter.querySelector(".analysis-filter__label, .trajectory-filter__label");
+      const label = labelEl ? labelEl.textContent.trim() : "";
+      const values = [];
+      const labels = filter.querySelectorAll("label");
+      labels.forEach(lbl => {
+        const input = lbl.querySelector("input");
+        if (!input || !input.checked) return;
+        const text = lbl.textContent.trim();
+        if (text) values.push(text);
+      });
+      const select = filter.querySelector("select");
+      if (select) {
+        const val = (select.value || "").trim();
+        const active = val !== "" && val !== "any";
+        if (active) {
+          const opt = select.selectedOptions && select.selectedOptions[0];
+          const text = opt ? opt.textContent.trim() : val;
+          values.push(text);
+        }
+      }
+      if (values.length) {
+        items.push({ label: label || "Filtro", values });
+      }
+    });
+    if (items.length === 0) {
+      setAttr(filterGroup, "data-pdf-hide", "true");
+      return;
+    }
+    const summary = buildSummary(items);
+    filterGroup.parentNode.insertBefore(summary, filterGroup);
+    summaries.push(summary);
+    setAttr(filterGroup, "data-pdf-hide", "true");
+  });
+  return () => {
+    summaries.forEach(node => {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+    touched.forEach(({ el, name, prev }) => {
+      if (!el) return;
+      if (prev === null) {
+        el.removeAttribute(name);
+      } else {
+        el.setAttribute(name, prev);
+      }
+    });
+  };
+}
+function waitForImages(images) {
+  const pending = images
+    .filter(img => img && !img.complete)
+    .map(
+      img =>
+        new Promise(resolve => {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+        })
+    );
+  if (!pending.length) return Promise.resolve();
+  return Promise.all(pending).then(() => undefined);
+}
+async function ensureTrajectoryAssetsLoaded(activeSubtab) {
+  if (activeSubtab === "trajectory") {
+    const canvases = elTrajectoryGrid ? elTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]") : [];
+    const imgs = [];
+    canvases.forEach(canvas => {
+      const zone = parseInt(canvas.dataset.trajCanvas, 10);
+      if (!isNaN(zone)) imgs.push(getTrajectoryBg(zone));
+    });
+    await waitForImages(imgs);
+    if (typeof renderTrajectoryAnalysis === "function") {
+      renderTrajectoryAnalysis();
+    }
+  }
+  if (activeSubtab === "serve") {
+    const imgs = getServeTrajectoryImages();
+    await waitForImages([imgs && imgs.start, imgs && imgs.end].filter(Boolean));
+    if (typeof renderServeTrajectoryAnalysis === "function") {
+      renderServeTrajectoryAnalysis();
+    }
+  }
+}
+function setPrintMatchTitle() {
+  const el = document.getElementById("print-match-title");
+  if (!el) return;
+  const label =
+    (typeof buildMatchDisplayName === "function" && buildMatchDisplayName(state.match)) ||
+    (state.match && state.match.opponent) ||
+    "";
+  el.textContent = label || "Match";
 }
 async function captureAnalysisAsPdf() {
-  await ensurePdfLibs();
+  const pdfReady = await ensurePdfLibs();
   const aggPanel = document.getElementById("aggregated-panel");
   if (!aggPanel) {
     throw new Error("Pannello analisi non trovato");
@@ -8364,14 +8489,24 @@ async function captureAnalysisAsPdf() {
   const prevAggTab = activeAggTab;
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
   setActiveTab("aggregated");
-  setActiveAggTab("summary");
+  setActiveAggTab(prevAggTab || activeAggTab || "summary");
   applyTheme("light");
   document.body.classList.add("pdf-capture");
+  setPrintMatchTitle();
+  const captureTarget = aggPanel.querySelector(".agg-subpanel.active") || aggPanel;
+  const restoreFilters = prepareAnalysisFiltersForPdf(captureTarget);
   try {
     await new Promise(res => setTimeout(res, 120));
-    const canvas = await window.html2canvas(aggPanel, {
+    await ensureTrajectoryAssetsLoaded(activeAggTab);
+    await new Promise(res => requestAnimationFrame(res));
+    if (!pdfReady) {
+      window.print();
+      return;
+    }
+    const canvas = await window.html2canvas(captureTarget, {
       backgroundColor: "#ffffff",
       scale: 1.3,
+      allowTaint: true,
       useCORS: true,
       scrollX: 0,
       scrollY: -window.scrollY,
@@ -8401,6 +8536,35 @@ async function captureAnalysisAsPdf() {
     const fileName = "analisi_" + safeMatchSlug() + ".pdf";
     downloadBlob(blob, fileName);
   } finally {
+    restoreFilters();
+    document.body.classList.remove("pdf-capture");
+    applyTheme(prevTheme);
+    if (prevTab) setActiveTab(prevTab);
+    if (prevAggTab) setActiveAggTab(prevAggTab);
+  }
+}
+async function openAnalysisPrintLayout() {
+  const aggPanel = document.getElementById("aggregated-panel");
+  if (!aggPanel) {
+    throw new Error("Pannello analisi non trovato");
+  }
+  const prevTab = activeTab;
+  const prevAggTab = activeAggTab;
+  const prevTheme = state.theme || document.body.dataset.theme || "dark";
+  setActiveTab("aggregated");
+  setActiveAggTab(prevAggTab || activeAggTab || "summary");
+  applyTheme("light");
+  document.body.classList.add("pdf-capture");
+  setPrintMatchTitle();
+  const captureTarget = aggPanel.querySelector(".agg-subpanel.active") || aggPanel;
+  const restoreFilters = prepareAnalysisFiltersForPdf(captureTarget);
+  try {
+    await new Promise(res => setTimeout(res, 120));
+    await ensureTrajectoryAssetsLoaded(activeAggTab);
+    await new Promise(res => requestAnimationFrame(res));
+    window.print();
+  } finally {
+    restoreFilters();
     document.body.classList.remove("pdf-capture");
     applyTheme(prevTheme);
     if (prevTab) setActiveTab(prevTab);
@@ -9008,9 +9172,9 @@ function exportAnalysisPdf() {
     alert("Nessun evento da esportare.");
     return;
   }
-  captureAnalysisAsPdf().catch(err => {
-    console.error("PDF export failed", err);
-    alert("Impossibile generare il PDF. Controlla la connessione o riprova.");
+  openAnalysisPrintLayout().catch(err => {
+    console.error("Print layout failed", err);
+    alert("Impossibile aprire il layout di stampa.");
   });
 }
 function resetMatch() {

@@ -261,8 +261,48 @@ body[data-theme="light"] .tab-panel {
 .pdf-capture .controls-row {
   display: none !important;
 }
+.pdf-capture [data-pdf-hide="true"] {
+  display: none !important;
+}
 .pdf-capture .section {
   background: #f8fafc;
+}
+.print-match-title {
+  display: none;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #0f172a;
+  margin: 0.2rem 0 0.6rem;
+}
+.pdf-capture .print-match-title {
+  display: block;
+}
+.pdf-capture .trajectory-layout,
+.pdf-capture .serve-trajectory-layout,
+.pdf-capture .second-layout {
+  grid-template-columns: 1fr;
+}
+.pdf-capture .trajectory-grid,
+.pdf-capture .serve-trajectory-grid {
+  width: 100%;
+}
+.pdf-filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.45rem;
+  align-items: center;
+  margin: 0.2rem 0 0.6rem;
+  font-size: 0.82rem;
+  color: #0f172a;
+}
+.pdf-filter-summary__title {
+  font-weight: 700;
+}
+.pdf-filter-chip {
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f1f5f9;
 }
 .tab-panel {
   padding-top: 0.6rem;
@@ -2952,6 +2992,11 @@ body[data-theme="light"] .analysis-filter select {
 .court-cell.best-volume {
   border: 2px solid #3b82f6;
 }
+.pdf-capture .court-cell.best-volume {
+  border-color: #2d6cdf;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(45, 108, 223, 0.25);
+}
 .court-cell.best-eff {
   background: rgba(34, 197, 94, 0.22);
 }
@@ -4279,9 +4324,10 @@ body.force-mobile .attack-trajectory-stage {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     font-size: 11px;
-    padding: 0.2rem;
+    padding: 0.4rem;
   }
   .tabs-nav,
+  .tabs-dots,
   .floating-actions-modal,
   .skill-modal,
   .skill-modal {
@@ -4333,5 +4379,44 @@ body.force-mobile .attack-trajectory-stage {
   .score-summary {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  .agg-subpanel.active {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .trajectory-layout,
+  .serve-trajectory-layout,
+  .trajectory-grid,
+  .serve-trajectory-grid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body[data-agg-tab="trajectory"],
+  body[data-agg-tab="second"],
+  body[data-agg-tab="video"] {
+    zoom: 0.90;
+  }
+  body[data-agg-tab="serve"] {
+    zoom: 0.70;
+  }
+  .agg-subpanel[data-agg-tab="trajectory"],
+  .agg-subpanel[data-agg-tab="serve"],
+  .agg-subpanel[data-agg-tab="second"],
+  .agg-subpanel[data-agg-tab="video"] {
+    font-size: 10px;
+    transform: none;
+    width: auto;
+    height: auto;
+  }
+  .agg-subpanel[data-agg-tab="trajectory"] .trajectory-grid,
+  .agg-subpanel[data-agg-tab="serve"] .trajectory-grid,
+  .agg-subpanel[data-agg-tab="serve"] .serve-trajectory-grid,
+  .agg-subpanel[data-agg-tab="second"] .second-layout,
+  .agg-subpanel[data-agg-tab="video"] .video-analysis__grid {
+    gap: 0.3rem;
+  }
+  .agg-subpanel[data-agg-tab="trajectory"] .trajectory-card,
+  .agg-subpanel[data-agg-tab="serve"] .trajectory-card {
+    min-height: 90px;
   }
 }
