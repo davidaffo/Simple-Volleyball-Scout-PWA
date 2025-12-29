@@ -6920,12 +6920,17 @@ const TRAJECTORY_BG_BY_ZONE = {
 };
 const TRAJECTORY_LINE_COLORS = {
   "#": "#16a34a", // verde: punto pieno
-  "+": "#2563eb", // blu: attacco positivo
-  "!": "#2563eb", // blu: attacco positivo
-  "-": "#facc15", // giallo acceso: negativo
-  "=": "#dc2626", // rosso: errore
-  "/": "#dc2626" // rosso: murata/errori gravi
+  "+": "#2563eb", // blu
+  "!": "#2563eb", // blu
+  "-": "#f97316", // arancione deciso
+  "=": "#dc2626", // rosso
+  "/": "#dc2626" // rosso
 };
+const TRAJECTORY_LINE_COLORS_SERVE = {
+  ...TRAJECTORY_LINE_COLORS,
+  "/": "#2563eb" // battuta: slash blu
+};
+const TRAJECTORY_LINE_WIDTH = 3;
 const trajectoryBgCache = {};
 let serveTrajectoryImgs = null;
 function clamp01Val(n) {
@@ -7526,8 +7531,10 @@ function getServeTrajectoryImages(cb) {
   serveTrajectoryImgs = { start, end };
   return serveTrajectoryImgs;
 }
-function getTrajectoryColorForCode(code) {
-  return TRAJECTORY_LINE_COLORS[code] || "#38bdf8";
+function getTrajectoryColorForCode(code, variant = "attack") {
+  const normalized = normalizeEvalCode(code) || String(code || "").trim();
+  const palette = variant === "serve" ? TRAJECTORY_LINE_COLORS_SERVE : TRAJECTORY_LINE_COLORS;
+  return palette[normalized] || "#38bdf8";
 }
 function getFilteredTrajectoryEvents() {
   const events = (state.events || []).filter(ev => {
@@ -7608,8 +7615,8 @@ function renderTrajectoryAnalysis() {
       const sy = clamp01Val(start.y) * height;
       const ex = clamp01Val(end.x) * width;
       const ey = clamp01Val(end.y) * height;
-      ctx.strokeStyle = getTrajectoryColorForCode(ev.code);
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "attack");
+      ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
@@ -7707,8 +7714,8 @@ function renderServeTrajectoryAnalysis() {
       const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
       const ex = clamp01Val(end.x) * width;
       const ey = clamp01Val(end.y) * endHeight;
-      ctx.strokeStyle = getTrajectoryColorForCode(ev.code);
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
+      ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
