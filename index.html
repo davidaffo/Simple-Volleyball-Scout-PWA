@@ -842,22 +842,6 @@ Bianchi 18"></textarea>
       </div>
     </div>
   </div>
-  <div id="qr-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
-    <div class="skill-modal__backdrop" data-close-qr></div>
-    <div class="skill-modal__content qr-modal__content">
-      <div class="skill-modal__head">
-        <div id="qr-modal-title" class="skill-modal__title">Codice match</div>
-        <button id="qr-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
-      </div>
-      <div class="skill-modal__body qr-modal__body">
-        <canvas id="qr-code-canvas" width="280" height="280" aria-label="Codice QR match"></canvas>
-        <div id="qr-scan-wrap" class="qr-scan-wrap hidden">
-          <video id="qr-scan-video" autoplay muted playsinline></video>
-        </div>
-        <div id="qr-modal-status" class="section-note"></div>
-      </div>
-    </div>
-  </div>
   <div id="lineup-modal" class="skill-modal hidden" role="dialog" aria-modal="true" aria-labelledby="lineup-modal-title">
     <div class="skill-modal__backdrop" data-close-lineup></div>
     <div class="skill-modal__content lineup-modal__content">
@@ -990,6 +974,7 @@ Bianchi 18"></textarea>
               <option value="">Nuovo match (vuoto)</option>
             </select>
             <div class="controls-row">
+              <button id="btn-load-match">Carica match</button>
               <button id="btn-new-match" class="secondary">Nuovo match</button>
               <button id="btn-delete-match" class="danger">Elimina selezionati</button>
             </div>
@@ -998,19 +983,9 @@ Bianchi 18"></textarea>
             <h4>Azioni match</h4>
             <div class="controls-row">
               <button id="btn-reset-match" class="danger">Reset match</button>
-              <button id="btn-copy-match-code" class="secondary">Copia match</button>
               <button id="btn-export-match" class="secondary">Esporta match</button>
               <button id="btn-import-match" class="secondary">Importa match</button>
               <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
-            </div>
-            <div class="match-code-panel">
-              <label for="match-code-input">Codice match</label>
-              <textarea id="match-code-input" rows="3" placeholder="Incolla qui il codice match per importare o generare il QR."></textarea>
-              <div class="controls-row">
-                <button id="btn-import-match-code" class="secondary">Importa codice</button>
-                <button id="btn-show-match-qr" class="secondary">Mostra QR</button>
-                <button id="btn-scan-match-qr" class="secondary">Importa QR</button>
-              </div>
             </div>
             <div class="controls-row">
               <button id="btn-export-db" class="secondary">Esporta database completo</button>
@@ -1108,7 +1083,6 @@ Bianchi 18"></textarea>
   <script src="js/match-settings.js"></script>
   <script src="js/opponent-settings.js"></script>
   <script src="js/roster-lineup.js"></script>
-  <script src="js/vendor/qrcode-generator.js"></script>
   <script src="js/scout-ui.js"></script>
 </body>
 </html>

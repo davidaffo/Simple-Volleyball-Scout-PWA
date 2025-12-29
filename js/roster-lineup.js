@@ -116,16 +116,12 @@ const elBtnExportCsv = document.getElementById("btn-export-csv");
 const elBtnCopyCsv = document.getElementById("btn-copy-csv");
 const elBtnExportPdf = document.getElementById("btn-export-pdf");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
-const elBtnCopyMatchCode = document.getElementById("btn-copy-match-code");
 const elBtnExportMatch = document.getElementById("btn-export-match");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
-const elMatchCodeInput = document.getElementById("match-code-input");
-const elBtnImportMatchCode = document.getElementById("btn-import-match-code");
-const elBtnShowMatchQr = document.getElementById("btn-show-match-qr");
-const elBtnScanMatchQr = document.getElementById("btn-scan-match-qr");
 const elSavedMatchesSelect = document.getElementById("saved-matches");
 const elSavedMatchesList = document.getElementById("saved-matches-list");
+const elBtnLoadMatch = document.getElementById("btn-load-match");
 const elBtnDeleteMatch = document.getElementById("btn-delete-match");
 const elBtnNewMatch = document.getElementById("btn-new-match");
 const elBtnOpenMatchManager = document.getElementById("btn-open-match-manager");
@@ -2527,6 +2523,9 @@ function updateOpponentTeamButtonsState() {
 function updateMatchButtonsState() {
   if (!elSavedMatchesSelect && !elSavedMatchesList) return;
   const selected = elSavedMatchesSelect ? elSavedMatchesSelect.value || "" : "";
+  if (elBtnLoadMatch) {
+    elBtnLoadMatch.disabled = !selected;
+  }
   if (elBtnDeleteMatch) {
     elBtnDeleteMatch.disabled = !selected;
   }
