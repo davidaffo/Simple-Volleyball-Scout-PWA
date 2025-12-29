@@ -6313,9 +6313,10 @@ function computePlayerErrorsMap() {
   const map = {};
   (state.events || []).forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
-    const dir = getPointDirection(ev);
-    if (dir !== "against") return;
     const val = typeof ev.value === "number" ? ev.value : 1;
+    const isManualError = ev.skillId === "manual" && ev.code === "error";
+    const isBlockError = ev.skillId === "block" && ev.code === "/";
+    if (!isManualError && !isBlockError) return;
     map[ev.playerIdx] = (map[ev.playerIdx] || 0) + Math.max(0, val);
   });
   return map;
