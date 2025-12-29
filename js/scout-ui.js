@@ -6295,8 +6295,9 @@ function endMatch() {
   });
 }
 function renderScoreAndRotations(summary) {
-  const effectiveSummary = summary || computePointsSummary();
-  const totalLabel = effectiveSummary.totalFor + " - " + effectiveSummary.totalAgainst;
+  const scoreSummary = computePointsSummary();
+  const effectiveSummary = summary || scoreSummary;
+  const totalLabel = scoreSummary.totalFor + " - " + scoreSummary.totalAgainst;
   if (elAggScore) {
     elAggScore.textContent = totalLabel;
   }
@@ -6317,10 +6318,11 @@ function renderScoreAndRotations(summary) {
       });
     }
   }
+  const rotationSummary = scoreSummary;
   const hasRotationEvents =
-    effectiveSummary.hasRotationEvents !== undefined
-      ? effectiveSummary.hasRotationEvents
-      : effectiveSummary.rotations.some(r => r.for || r.against);
+    rotationSummary.hasRotationEvents !== undefined
+      ? rotationSummary.hasRotationEvents
+      : rotationSummary.rotations.some(r => r.for || r.against);
   if (!elRotationTableBody) return;
   elRotationTableBody.innerHTML = "";
   const rotationLabel = rot => "P" + String(rot || 1);
@@ -6334,17 +6336,17 @@ function renderScoreAndRotations(summary) {
     return;
   }
   const highlightEnabled =
-    effectiveSummary.bestRotation !== null && effectiveSummary.worstRotation !== null;
-  effectiveSummary.rotations.forEach(rot => {
+    rotationSummary.bestRotation !== null && rotationSummary.worstRotation !== null;
+  rotationSummary.rotations.forEach(rot => {
     const tr = document.createElement("tr");
     tr.className = "rotation-row";
-    if (highlightEnabled && rot.rotation === effectiveSummary.bestRotation) {
+    if (highlightEnabled && rot.rotation === rotationSummary.bestRotation) {
       tr.classList.add("best");
     }
     if (
       highlightEnabled &&
-      rot.rotation === effectiveSummary.worstRotation &&
-      effectiveSummary.worstRotation !== effectiveSummary.bestRotation
+      rot.rotation === rotationSummary.worstRotation &&
+      rotationSummary.worstRotation !== rotationSummary.bestRotation
     ) {
       tr.classList.add("worst");
     }
