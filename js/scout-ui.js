@@ -6601,6 +6601,17 @@ function normalizePhaseValue(val) {
   }
   return null;
 }
+function getEventPhaseValue(ev) {
+  if (!ev) return null;
+  let phaseVal = ev.attackBp;
+  if (phaseVal === undefined || phaseVal === null) {
+    phaseVal = ev.phase;
+  }
+  if (phaseVal === undefined || phaseVal === null) {
+    phaseVal = ev.attackPhase;
+  }
+  return normalizePhaseValue(phaseVal);
+}
 function normalizeEvalCode(val) {
   if (!val) return null;
   const str = String(val).trim();
@@ -7087,10 +7098,9 @@ function renderTrajectoryFilters() {
     trajEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = buildUniqueOptions(
-    trajEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
-  );
+  const phaseOpts = buildUniqueOptions(trajEvents.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
   const recvEvalOpts = buildUniqueOptions(
     trajEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
@@ -7225,10 +7235,9 @@ function renderServeTrajectoryFilters() {
     serveEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = buildUniqueOptions(
-    serveEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
-  );
+  const phaseOpts = buildUniqueOptions(serveEvents.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
   const recvEvalOpts = buildUniqueOptions(
     serveEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
@@ -7928,10 +7937,9 @@ function renderSecondFilters() {
     secondEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizePhaseValue(ev.attackBp || ev.phase || ev.attackPhase)),
-    { labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val) }
-  );
+  const phaseOpts = buildUniqueOptions(secondEvents.map(ev => getEventPhaseValue(ev)), {
+    labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
+  });
   const recvEvalOpts = buildUniqueOptions(
     secondEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
