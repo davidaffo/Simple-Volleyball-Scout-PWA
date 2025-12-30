@@ -1245,6 +1245,26 @@ body[data-theme="light"] .match-list {
 .lineup-modal__bench h4 {
   margin: 0 0 0.2rem;
 }
+.lineup-number-input {
+  width: 72px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0b1224;
+  color: #e2e8f0;
+}
+.lineup-number-input:focus {
+  outline: 2px solid #38bdf8;
+  outline-offset: 1px;
+}
+body[data-theme="light"] .lineup-number-input {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #dfe3eb;
+}
 .lineup-bench-chips {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

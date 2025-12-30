@@ -51,6 +51,7 @@ const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-ove
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
+const elLineupModalToggleNumbers = document.getElementById("lineup-modal-toggle-numbers");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
@@ -169,6 +170,7 @@ let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
 let lineupDragName = "";
 let lineupSelectedName = "";
+let lineupNumberMode = false;
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
@@ -359,6 +361,9 @@ function updateLineupModalControls() {
   if (elLineupModalTitle) {
     elLineupModalTitle.textContent = "Imposta formazione";
   }
+  if (elLineupModalToggleNumbers) {
+    elLineupModalToggleNumbers.textContent = lineupNumberMode ? "Esci modalità numeri" : "Modalità numeri";
+  }
 }
 function applyDefaultLineupToModal() {
   const teamName = state.selectedTeam || "";
@@ -382,6 +387,29 @@ function applyDefaultLineupToModal() {
   const names =
     roster.defaultLineup && roster.defaultLineup.length > 0 ? roster.defaultLineup : fallback;
   lineupModalCourt = Array.from({ length: 6 }, (_, idx) => ({ main: names[idx] || "", replaced: "" }));
+  renderLineupModal();
+}
+function applyNumberToLineupSlot(slotIdx, rawValue) {
+  const value = (rawValue || "").trim();
+  if (!value) return false;
+  const players = getLineupModalPlayers();
+  const numbers = getLineupModalNumbers();
+  const matchName = players.find(name => numbers[name] === value);
+  if (!matchName) return false;
+  assignPlayerToLineup(matchName, slotIdx);
+  return true;
+}
+function focusLineupNumberInput(slotIdx) {
+  const input = elLineupModalCourt
+    ? elLineupModalCourt.querySelector(`.lineup-number-input[data-slot-index="${slotIdx}"]`)
+    : null;
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+function exitLineupNumberMode() {
+  lineupNumberMode = false;
   renderLineupModal();
 }
 function getSortedPlayerEntries() {
@@ -689,6 +717,7 @@ function renderLineupModal() {
   if (!elLineupModalCourt || !elLineupModalBench) return;
   elLineupModalCourt.innerHTML = "";
   const court = getCourtShape(lineupModalCourt);
+  const numbersMap = getLineupModalNumbers();
   const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   court.forEach((slot, idx) => {
     const areaClass = "pos-" + (idx + 1);
@@ -711,6 +740,7 @@ function renderLineupModal() {
       }
     });
     card.addEventListener("click", () => {
+      if (lineupNumberMode) return;
       if (lineupSelectedName) {
         assignPlayerToLineup(lineupSelectedName, idx);
         lineupSelectedName = "";
@@ -746,10 +776,40 @@ function renderLineupModal() {
     head.appendChild(clearBtn);
     const body = document.createElement("div");
     body.className = "slot-body";
-    const nameLabel = document.createElement("div");
-    nameLabel.className = "slot-name";
-    nameLabel.textContent = slot.main ? formatLineupModalName(slot.main, { compactCourt: true }) : "Trascina qui";
-    body.appendChild(nameLabel);
+    if (lineupNumberMode) {
+      const numInput = document.createElement("input");
+      numInput.type = "text";
+      numInput.inputMode = "numeric";
+      numInput.className = "lineup-number-input";
+      numInput.dataset.slotIndex = String(idx);
+      numInput.value = (numbersMap[slot.main] || "").trim();
+      numInput.addEventListener("focus", () => numInput.select());
+      numInput.addEventListener("click", e => {
+        e.stopPropagation();
+        numInput.select();
+      });
+      numInput.addEventListener("keydown", e => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          applyNumberToLineupSlot(idx, numInput.value);
+          const next = (idx + (e.shiftKey ? 5 : 1)) % 6;
+          renderLineupModal();
+          focusLineupNumberInput(next);
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyNumberToLineupSlot(idx, numInput.value);
+          exitLineupNumberMode();
+        }
+      });
+      body.appendChild(numInput);
+    } else {
+      const nameLabel = document.createElement("div");
+      nameLabel.className = "slot-name";
+      nameLabel.textContent = slot.main ? formatLineupModalName(slot.main, { compactCourt: true }) : "Trascina qui";
+      body.appendChild(nameLabel);
+    }
     card.appendChild(head);
     card.appendChild(body);
     elLineupModalCourt.appendChild(card);
@@ -830,6 +890,7 @@ function closeLineupModal() {
   }
   lineupDragName = "";
   lineupSelectedName = "";
+  lineupNumberMode = false;
 }
 function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
@@ -11629,6 +11690,12 @@ async function init() {
   }
   if (elLineupModalApplyDefault) {
     elLineupModalApplyDefault.addEventListener("click", applyDefaultLineupToModal);
+  }
+  if (elLineupModalToggleNumbers) {
+    elLineupModalToggleNumbers.addEventListener("click", () => {
+      lineupNumberMode = !lineupNumberMode;
+      renderLineupModal();
+    });
   }
   if (elLineupModal) {
     elLineupModal.addEventListener("click", e => {

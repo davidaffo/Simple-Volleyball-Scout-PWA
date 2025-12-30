@@ -4,9 +4,8 @@ Aggiungi squadra avversaria
 # Minor features
 Trasforma tutte le immagini in svg
 Modifica immagine battuta per mettere il campo fuori
-Cambio set migliorato
+Cambio set e inizio partita migliorato
 Aggregare dati di piu partite
-inserimento formazione tramite numeri
 mostrare traiettorie battute della persona che batte
 
 # Bugfix
