@@ -6,8 +6,8 @@ Trasforma tutte le immagini in svg
 Modifica immagine battuta per mettere il campo fuori
 Cambio set migliorato
 Aggregare dati di piu partite
-gestione id giocatrice in creazione squadre
 inserimento formazione tramite numeri
+mostrare traiettorie battute della persona che batte
 
 # Bugfix
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti

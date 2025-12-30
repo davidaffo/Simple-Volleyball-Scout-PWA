@@ -42,6 +42,8 @@ const TEAM_STORE_NAME = "Teams";
 const TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + TEAM_STORE_NAME + "/";
 const OPPONENT_TEAM_STORE_NAME = "OpponentTeams";
 const OPPONENT_TEAM_PREFIX = PERSISTENT_DB_NAME + "/" + OPPONENT_TEAM_STORE_NAME + "/";
+const PLAYER_STORE_NAME = "Players";
+const PLAYER_PREFIX = PERSISTENT_DB_NAME + "/" + PLAYER_STORE_NAME;
 const MATCH_STORE_NAME = "Matches";
 const MATCH_PREFIX = PERSISTENT_DB_NAME + "/" + MATCH_STORE_NAME + "/";
 const TEMPLATE_TEAM = {
@@ -95,6 +97,7 @@ let state = {
   liberoAutoMap: {},
   autoLiberoRole: "",
   preferredLibero: "",
+  playersDb: {},
   savedTeams: {},
   savedOpponentTeams: {},
   savedMatches: {},

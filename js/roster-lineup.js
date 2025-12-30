@@ -383,6 +383,12 @@ function applyStateSnapshot(parsed, options = {}) {
   state.savedTeams = parsed.savedTeams || {};
   state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
   state.savedMatches = parsed.savedMatches || {};
+  state.playersDb = loadPlayersDbFromStorage();
+  if (!state.playersDb || Object.keys(state.playersDb).length === 0) {
+    const rebuilt = rebuildPlayersDbFromTeams(state.savedTeams || {});
+    state.playersDb = rebuilt;
+    savePlayersDbToStorage(rebuilt);
+  }
   state.scoreOverrides = normalizeScoreOverrides(parsed.scoreOverrides);
   state.selectedTeam = parsed.selectedTeam || "";
   state.selectedOpponentTeam = parsed.selectedOpponentTeam || "";
@@ -1443,6 +1449,99 @@ function listTeamsFromStorage() {
   }
   return names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
+function loadPlayersDbFromStorage() {
+  try {
+    const raw = localStorage.getItem(PLAYER_PREFIX);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    logError("Error loading players db", e);
+    return {};
+  }
+}
+function savePlayersDbToStorage(db) {
+  try {
+    localStorage.setItem(PLAYER_PREFIX, JSON.stringify(db || {}));
+  } catch (e) {
+    logError("Error saving players db", e);
+  }
+}
+function buildPlayersDbEntry(player, existing = {}) {
+  const firstName = player.firstName || existing.firstName || "";
+  const lastName = player.lastName || existing.lastName || "";
+  const name = buildFullName(lastName, firstName) || player.name || existing.name || "";
+  return {
+    id: player.id,
+    firstName,
+    lastName,
+    name
+  };
+}
+function isTemplatePlayerName(name) {
+  if (!name || typeof TEMPLATE_TEAM === "undefined" || !TEMPLATE_TEAM.players) return false;
+  const clean = String(name).trim().toLowerCase();
+  return TEMPLATE_TEAM.players.some(templateName => templateName.toLowerCase() === clean);
+}
+function findPlayersDbMatchByName(firstName, lastName, currentId = "") {
+  const cleanFirst = (firstName || "").trim().toLowerCase();
+  const cleanLast = (lastName || "").trim().toLowerCase();
+  if (!cleanFirst || !cleanLast) return null;
+  const db = state.playersDb || {};
+  const entries = Object.values(db);
+  for (const entry of entries) {
+    if (!entry || !entry.id || entry.id === currentId) continue;
+    if (entry.name && isTemplatePlayerName(entry.name)) continue;
+    const entryFirst = (entry.firstName || "").trim().toLowerCase();
+    const entryLast = (entry.lastName || "").trim().toLowerCase();
+    if (entryFirst === cleanFirst && entryLast === cleanLast) {
+      return entry;
+    }
+  }
+  return null;
+}
+function findPlayersDbMatchByFullName(name, currentId = "") {
+  const cleanName = (name || "").trim().toLowerCase();
+  if (!cleanName) return null;
+  const db = state.playersDb || {};
+  const entries = Object.values(db);
+  for (const entry of entries) {
+    if (!entry || !entry.id || entry.id === currentId) continue;
+    if (entry.name && isTemplatePlayerName(entry.name)) continue;
+    const entryName = (entry.name || buildFullName(entry.lastName, entry.firstName) || "")
+      .trim()
+      .toLowerCase();
+    if (entryName === cleanName) {
+      return entry;
+    }
+  }
+  return null;
+}
+function rebuildPlayersDbFromTeams(teamsMap = {}) {
+  const db = {};
+  Object.values(teamsMap || {}).forEach(team => {
+    const normalized = normalizeTeamPayload(team);
+    if (!normalized || !Array.isArray(normalized.playersDetailed)) return;
+    normalized.playersDetailed.forEach(player => {
+      if (!player.id) return;
+      if (isTemplatePlayerName(player.name)) return;
+      db[player.id] = buildPlayersDbEntry(player, db[player.id] || {});
+    });
+  });
+  return db;
+}
+function syncPlayersDbFromTeam(team) {
+  const normalized = normalizeTeamPayload(team);
+  if (!normalized || !Array.isArray(normalized.playersDetailed)) return;
+  const db = Object.assign({}, state.playersDb || {}, loadPlayersDbFromStorage());
+  normalized.playersDetailed.forEach(player => {
+    if (!player.id) return;
+    if (isTemplatePlayerName(player.name)) return;
+    db[player.id] = buildPlayersDbEntry(player, db[player.id] || {});
+  });
+  state.playersDb = db;
+  savePlayersDbToStorage(db);
+}
 function loadTeamFromStorage(name) {
   if (!name) return null;
   try {
@@ -1576,6 +1675,7 @@ function saveTeamToStorage(name, data) {
   try {
     const compact = compactTeamPayload(data, name);
     localStorage.setItem(getTeamStorageKey(name), JSON.stringify(compact));
+    syncPlayersDbFromTeam(compact);
   } catch (e) {
     logError("Error saving team " + name, e);
   }
@@ -2081,6 +2181,9 @@ function loadSelectedMatch() {
     state.selectedMatch = generateMatchName();
     resetMatchState();
     persistCurrentMatch();
+    if (typeof syncMatchInfoInputs === "function") {
+      syncMatchInfoInputs(state.match);
+    }
     return;
   }
   const data = loadMatchFromStorage(name);
@@ -2093,6 +2196,9 @@ function loadSelectedMatch() {
     window.isLoadingMatch = true;
   }
   applyMatchPayload(data, { selectedName: name, silent: true });
+  if (typeof syncMatchInfoInputs === "function") {
+    syncMatchInfoInputs(state.match);
+  }
   isLoadingMatch = false;
   if (typeof window !== "undefined") {
     window.isLoadingMatch = false;
@@ -2426,6 +2532,11 @@ function importTeamFromFile(file) {
 function handleTeamSelectChange() {
   if (!elTeamsSelect) return;
   const selected = elTeamsSelect.value;
+  if (state.events && state.events.length > 0 && selected !== state.selectedTeam) {
+    alert("Non puoi cambiare squadra con dati match già presenti.");
+    renderTeamsSelect();
+    return;
+  }
   state.selectedTeam = selected;
   updateTeamButtonsState();
   if (!selected) {
@@ -2845,15 +2956,44 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
             }
           );
         })
-      : basePlayers.map((name, idx) => ({
-          id: generatePlayerId(),
-          name,
-          ...splitNameParts(name),
-          number: baseNumbers[name] || "",
-          role: baseLiberos.includes(name) ? "L" : "",
-          isCaptain: captainSet.has(name),
-          out: false
-        }));
+      : (() => {
+          const db = Object.assign({}, state.playersDb || {});
+          let dbChanged = false;
+          const list = basePlayers.map(name => {
+            const parts = splitNameParts(name);
+            const match =
+              findPlayersDbMatchByName(parts.firstName, parts.lastName) || findPlayersDbMatchByFullName(name);
+            const id = match && match.id ? match.id : generatePlayerId();
+            const player = {
+              id,
+              name,
+              ...parts,
+              number: baseNumbers[name] || "",
+              role: baseLiberos.includes(name) ? "L" : "",
+              isCaptain: captainSet.has(name),
+              out: false
+            };
+            if (!isTemplatePlayerName(name)) {
+              const existing = db[id];
+              const entry = buildPlayersDbEntry(player, existing || {});
+              if (
+                !existing ||
+                existing.name !== entry.name ||
+                existing.firstName !== entry.firstName ||
+                existing.lastName !== entry.lastName
+              ) {
+                db[id] = entry;
+                dbChanged = true;
+              }
+            }
+            return player;
+          });
+          if (dbChanged) {
+            state.playersDb = db;
+            savePlayersDbToStorage(db);
+          }
+          return list;
+        })();
   enforceSingleCaptainFlag(
     playersDetailed,
     (isOpponent ? state.opponentCaptains : state.captains) &&
@@ -2922,12 +3062,40 @@ function renderTeamManagerTable() {
       p.firstName = firstNameInput.value.trim();
       p.name = buildFullName(p.lastName, p.firstName);
     };
+    const maybeMatchPlayersDb = () => {
+      const first = p.firstName || "";
+      const last = p.lastName || "";
+      const key = (last + "|" + first).toLowerCase().trim();
+      if (!first || !last) {
+        p.__dbPromptKey = "";
+        return;
+      }
+      if (p.__dbPromptKey === key) return;
+      const match = findPlayersDbMatchByName(first, last, p.id);
+      if (match) {
+        const label = buildFullName(match.lastName, match.firstName) || match.name || "questa giocatrice";
+        const ok = confirm(
+          "Giocatrice già presente in archivio (" + label + "). Vuoi usare quella esistente?"
+        );
+        if (ok) {
+          p.id = match.id;
+          p.firstName = match.firstName || first;
+          p.lastName = match.lastName || last;
+          p.name = buildFullName(p.lastName, p.firstName);
+          renderTeamManagerTable();
+          return;
+        }
+      }
+      p.__dbPromptKey = key;
+    };
     syncFullName();
     lastNameInput.addEventListener("change", () => {
       syncFullName();
+      maybeMatchPlayersDb();
     });
     firstNameInput.addEventListener("change", () => {
       syncFullName();
+      maybeMatchPlayersDb();
     });
     let liberoChk = null;
     const captainChk = document.createElement("input");

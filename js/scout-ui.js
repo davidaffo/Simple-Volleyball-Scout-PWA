@@ -50,6 +50,21 @@ const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
 const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-override");
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
+const elPlayersDbModal = document.getElementById("players-db-modal");
+const elPlayersDbBody = document.getElementById("players-db-body");
+const elPlayersDbCount = document.getElementById("players-db-count");
+const elPlayersDbClose = document.getElementById("players-db-close");
+const elPlayersDbClean = document.getElementById("btn-clean-players-db");
+const elTeamsManagerModal = document.getElementById("teams-manager-modal");
+const elTeamsManagerList = document.getElementById("teams-manager-list");
+const elTeamsManagerClose = document.getElementById("teams-manager-close");
+const elTeamsManagerDelete = document.getElementById("teams-manager-delete");
+const elTeamsManagerDuplicate = document.getElementById("teams-manager-duplicate");
+const elTeamsManagerExport = document.getElementById("teams-manager-export");
+const elTeamsManagerImport = document.getElementById("teams-manager-import");
+const elTeamsManagerFileInput = document.getElementById("teams-manager-file-input");
+const elTeamsManagerOpenPlayersDb = document.getElementById("teams-manager-open-players-db");
+let teamsManagerSelectedName = "";
 const courtModalElements = [];
 let courtOverlayEl = null;
 courtModalElements.push(elSkillModal, elLineupModal, elErrorModal, elPointModal, elAttackTrajectoryModal);
@@ -1448,6 +1463,179 @@ function closeMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
+}
+function buildPlayersDbUsage(teamsMap) {
+  const usage = {};
+  Object.entries(teamsMap || {}).forEach(([teamName, teamData]) => {
+    const normalized =
+      typeof normalizeTeamPayload === "function" ? normalizeTeamPayload(teamData, teamName) : teamData;
+    const roster = normalized && Array.isArray(normalized.playersDetailed) ? normalized.playersDetailed : [];
+    roster.forEach(player => {
+      const id = player && (player.id || player.playerId);
+      if (!id) return;
+      if (!usage[id]) usage[id] = [];
+      usage[id].push(teamName);
+    });
+  });
+  Object.keys(usage).forEach(id => {
+    usage[id] = usage[id].filter(Boolean).sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }));
+  });
+  return usage;
+}
+function renderPlayersDbList() {
+  if (!elPlayersDbBody || !elPlayersDbCount) return;
+  const db = state.playersDb || {};
+  const teamsMap = typeof loadTeamsMapFromStorage === "function" ? loadTeamsMapFromStorage() : state.savedTeams || {};
+  const usage = buildPlayersDbUsage(teamsMap);
+  const entries = Object.values(db).filter(entry => {
+    if (!entry || !entry.id) return false;
+    if (typeof isTemplatePlayerName === "function" && isTemplatePlayerName(entry.name)) return false;
+    return true;
+  });
+  entries.sort((a, b) => {
+    const lastA = (a.lastName || "").trim();
+    const lastB = (b.lastName || "").trim();
+    const firstA = (a.firstName || "").trim();
+    const firstB = (b.firstName || "").trim();
+    const nameA = (a.name || "").trim();
+    const nameB = (b.name || "").trim();
+    if (lastA && lastB && lastA !== lastB) return lastA.localeCompare(lastB, "it", { sensitivity: "base" });
+    if (firstA && firstB && firstA !== firstB) return firstA.localeCompare(firstB, "it", { sensitivity: "base" });
+    return nameA.localeCompare(nameB, "it", { sensitivity: "base" });
+  });
+  elPlayersDbBody.innerHTML = "";
+  if (entries.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.textContent = "Nessuna giocatrice nell'archivio.";
+    tr.appendChild(td);
+    elPlayersDbBody.appendChild(tr);
+    elPlayersDbCount.textContent = "0 giocatrici";
+    return;
+  }
+  const orphanCount = entries.filter(entry => !usage[entry.id] || usage[entry.id].length === 0).length;
+  entries.forEach(entry => {
+    const tr = document.createElement("tr");
+    const tdLast = document.createElement("td");
+    const tdFirst = document.createElement("td");
+    const tdTeams = document.createElement("td");
+    const tdId = document.createElement("td");
+    tdLast.textContent = entry.lastName || "";
+    tdFirst.textContent = entry.firstName || "";
+    tdTeams.textContent = (usage[entry.id] || []).join(", ") || "—";
+    tdId.textContent = entry.id || "";
+    tr.appendChild(tdLast);
+    tr.appendChild(tdFirst);
+    tr.appendChild(tdTeams);
+    tr.appendChild(tdId);
+    elPlayersDbBody.appendChild(tr);
+  });
+  elPlayersDbCount.textContent =
+    entries.length + " giocatrici" + (orphanCount > 0 ? " · " + orphanCount + " senza squadra" : "");
+}
+function openPlayersDbModal() {
+  if (!elPlayersDbModal) return;
+  renderPlayersDbList();
+  elPlayersDbModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closePlayersDbModal() {
+  if (!elPlayersDbModal) return;
+  elPlayersDbModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+function renderTeamsManagerList() {
+  if (!elTeamsManagerList) return;
+  const names = typeof listTeamsFromStorage === "function" ? listTeamsFromStorage() : [];
+  if (!names.includes(teamsManagerSelectedName)) {
+    teamsManagerSelectedName = "";
+  }
+  elTeamsManagerList.innerHTML = "";
+  if (names.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "teams-manager-item";
+    empty.textContent = "Nessuna squadra salvata.";
+    elTeamsManagerList.appendChild(empty);
+  } else {
+    names.forEach(name => {
+      const item = document.createElement("li");
+      item.className = "teams-manager-item" + (name === teamsManagerSelectedName ? " selected" : "");
+      item.dataset.teamName = name;
+      item.textContent = name;
+      item.addEventListener("click", () => {
+        teamsManagerSelectedName = name;
+        renderTeamsManagerList();
+      });
+      elTeamsManagerList.appendChild(item);
+    });
+  }
+  const hasSelection = !!teamsManagerSelectedName;
+  if (elTeamsManagerDelete) elTeamsManagerDelete.disabled = !hasSelection;
+  if (elTeamsManagerDuplicate) elTeamsManagerDuplicate.disabled = !hasSelection;
+  if (elTeamsManagerExport) elTeamsManagerExport.disabled = !hasSelection;
+}
+function openTeamsManagerModal() {
+  if (!elTeamsManagerModal) return;
+  teamsManagerSelectedName = state.selectedTeam || "";
+  renderTeamsManagerList();
+  elTeamsManagerModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeTeamsManagerModal() {
+  if (!elTeamsManagerModal) return;
+  elTeamsManagerModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+function importTeamToStorageOnly(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const raw = evt && evt.target ? String(evt.target.result || "") : "";
+      const data = JSON.parse(raw);
+      const normalized =
+        typeof normalizeTeamPayload === "function" ? normalizeTeamPayload(data) : data;
+      const name = normalized && normalized.name ? normalized.name.trim() : "";
+      if (!name) {
+        alert("Il file non contiene un nome squadra valido.");
+        return;
+      }
+      if (typeof saveTeamToStorage === "function") {
+        saveTeamToStorage(name, normalized);
+      }
+      if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+      if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+      teamsManagerSelectedName = name;
+      renderTeamsManagerList();
+      alert("Squadra importata: " + name);
+    } catch (err) {
+      logError("Errore importazione squadra (manager)", err);
+      alert("File squadra non valido.");
+    }
+  };
+  reader.readAsText(file);
+}
+function removeOrphanPlayersFromDb() {
+  const teamsMap = typeof loadTeamsMapFromStorage === "function" ? loadTeamsMapFromStorage() : state.savedTeams || {};
+  const usage = buildPlayersDbUsage(teamsMap);
+  const db = Object.assign({}, state.playersDb || {});
+  const ids = Object.keys(db);
+  const orphans = ids.filter(id => !usage[id] || usage[id].length === 0);
+  if (orphans.length === 0) {
+    alert("Non ci sono giocatrici senza squadra.");
+    return;
+  }
+  const ok = confirm("Rimuovere " + orphans.length + " giocatrici senza squadra dall'archivio?");
+  if (!ok) return;
+  orphans.forEach(id => {
+    delete db[id];
+  });
+  state.playersDb = db;
+  if (typeof savePlayersDbToStorage === "function") {
+    savePlayersDbToStorage(db);
+  }
+  renderPlayersDbList();
 }
 const BULK_EDIT_CONFIG = {
   videoTime: {
@@ -11583,8 +11771,25 @@ async function init() {
   if (elBtnOpenMatchManager) {
     elBtnOpenMatchManager.addEventListener("click", openMatchManagerModal);
   }
+  const elBtnOpenTeamsManager = document.getElementById("btn-open-teams-manager");
+  if (elBtnOpenTeamsManager) {
+    elBtnOpenTeamsManager.addEventListener("click", openTeamsManagerModal);
+  }
+  const elBtnOpenPlayersDb = document.getElementById("btn-open-players-db");
+  if (elBtnOpenPlayersDb) {
+    elBtnOpenPlayersDb.addEventListener("click", openPlayersDbModal);
+  }
   if (elMatchManagerClose) {
     elMatchManagerClose.addEventListener("click", closeMatchManagerModal);
+  }
+  if (elPlayersDbClose) {
+    elPlayersDbClose.addEventListener("click", closePlayersDbModal);
+  }
+  if (elPlayersDbClean) {
+    elPlayersDbClean.addEventListener("click", removeOrphanPlayersFromDb);
+  }
+  if (elTeamsManagerClose) {
+    elTeamsManagerClose.addEventListener("click", closeTeamsManagerModal);
   }
   if (elMatchManagerModal) {
     elMatchManagerModal.addEventListener("click", e => {
@@ -11594,6 +11799,106 @@ async function init() {
         closeMatchManagerModal();
       }
     });
+  }
+  if (elPlayersDbModal) {
+    elPlayersDbModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closePlayersDb !== undefined) {
+        closePlayersDbModal();
+      }
+    });
+  }
+  if (elTeamsManagerModal) {
+    elTeamsManagerModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeTeamsManager !== undefined) {
+        closeTeamsManagerModal();
+      }
+    });
+  }
+  if (elTeamsManagerDelete) {
+    elTeamsManagerDelete.addEventListener("click", () => {
+      const name = teamsManagerSelectedName;
+      if (!name) return;
+      const ok = confirm("Eliminare la squadra \"" + name + "\"?");
+      if (!ok) return;
+      if (typeof deleteTeamFromStorage === "function") {
+        deleteTeamFromStorage(name);
+      }
+      if (state.selectedTeam === name) {
+        state.selectedTeam = "";
+      }
+      if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+      if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+      renderTeamsManagerList();
+    });
+  }
+  if (elTeamsManagerDuplicate) {
+    elTeamsManagerDuplicate.addEventListener("click", () => {
+      const name = teamsManagerSelectedName;
+      if (!name) return;
+      const team = typeof loadTeamFromStorage === "function" ? loadTeamFromStorage(name) : null;
+      if (!team) {
+        alert("Squadra non trovata o corrotta.");
+        return;
+      }
+      let newName = prompt("Nome della nuova squadra:", name + " (copia)") || "";
+      newName = newName.trim();
+      if (!newName) return;
+      if (newName === name) {
+        alert("Scegli un nome diverso per la copia.");
+        return;
+      }
+      const names = typeof listTeamsFromStorage === "function" ? listTeamsFromStorage() : [];
+      if (names.includes(newName)) {
+        const ok = confirm("Esiste già una squadra con questo nome. Sovrascrivere?");
+        if (!ok) return;
+      }
+      if (typeof saveTeamToStorage === "function") {
+        saveTeamToStorage(newName, team);
+      }
+      if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+      if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+      teamsManagerSelectedName = newName;
+      renderTeamsManagerList();
+    });
+  }
+  if (elTeamsManagerExport) {
+    elTeamsManagerExport.addEventListener("click", () => {
+      const name = teamsManagerSelectedName;
+      if (!name) return;
+      const team = typeof loadTeamFromStorage === "function" ? loadTeamFromStorage(name) : null;
+      if (!team) {
+        alert("Squadra non trovata o corrotta.");
+        return;
+      }
+      const payload = typeof compactTeamPayload === "function" ? compactTeamPayload(team, name) : team;
+      const slug = (name || "squadra").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "");
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+      if (typeof downloadBlob === "function") {
+        downloadBlob(blob, "squadra_" + (slug || "export") + ".json");
+      }
+    });
+  }
+  if (elTeamsManagerImport && elTeamsManagerFileInput) {
+    elTeamsManagerImport.addEventListener("click", () => {
+      elTeamsManagerFileInput.value = "";
+      elTeamsManagerFileInput.click();
+    });
+    elTeamsManagerFileInput.addEventListener("change", e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (file) {
+        importTeamToStorageOnly(file);
+      }
+      renderTeamsManagerList();
+    });
+  }
+  if (elTeamsManagerOpenPlayersDb) {
+    elTeamsManagerOpenPlayersDb.addEventListener("click", openPlayersDbModal);
   }
   if (elSavedMatchesList) {
     elSavedMatchesList.addEventListener("click", e => {

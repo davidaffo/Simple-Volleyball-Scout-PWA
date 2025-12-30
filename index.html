@@ -48,21 +48,15 @@
     </div>
     <div class="section">
       <h2>Squadra</h2>
-      <p class="section-note">Seleziona, rinomina o elimina le squadre salvate. La gestione roster resta nella finestra dedicata.</p>
+      <p class="section-note">Seleziona la squadra da usare nel match. Gestione, importazione ed esportazione passano da “Gestione squadre”.</p>
       <div class="team-manage">
         <label for="saved-teams">Squadre salvate</label>
         <div class="team-row">
           <select id="saved-teams">
             <option value="">Nuova squadra (vuota)</option>
           </select>
-          <button id="btn-delete-team" class="danger">Elimina</button>
-          <button id="btn-new-team" class="secondary">Nuova squadra</button>
-          <button id="btn-duplicate-team" class="secondary">Duplica squadra</button>
           <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
-        </div>
-        <div class="team-row">
-          <button id="btn-import-team" class="secondary">Importa da file</button>
-          <input id="team-file-input" type="file" accept="application/json,text/plain" hidden />
+          <button id="btn-open-teams-manager" class="secondary">Database Squadre</button>
         </div>
       </div>
     </div>
@@ -1283,6 +1277,58 @@ Bianchi Laura 18"></textarea>
             </div>
             <p class="section-note">Backup di tutte le impostazioni, squadre e match attuale in un unico file.</p>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="teams-manager-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="teams-manager-title">
+    <div class="settings-modal__backdrop" data-close-teams-manager></div>
+    <div class="settings-modal__content teams-manager__content">
+      <div class="settings-modal__head">
+        <h3 id="teams-manager-title">Gestione squadre</h3>
+        <button id="teams-manager-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body teams-manager__body">
+        <div class="teams-manager-row">
+          <label>Squadre salvate</label>
+          <ul id="teams-manager-list" class="teams-manager-list"></ul>
+        </div>
+        <div class="teams-manager-actions">
+          <button id="teams-manager-delete" class="danger">Elimina</button>
+          <button id="teams-manager-duplicate" class="secondary">Duplica</button>
+          <button id="teams-manager-export" class="secondary">Esporta su file</button>
+          <button id="teams-manager-import" class="secondary">Importa da file</button>
+          <button id="teams-manager-open-players-db" class="secondary">Archivio giocatrici</button>
+          <input id="teams-manager-file-input" type="file" accept="application/json,text/plain" hidden />
+        </div>
+        <p class="section-note">La selezione qui serve solo per gestire le squadre salvate.</p>
+      </div>
+    </div>
+  </div>
+  <div id="players-db-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="players-db-title">
+    <div class="settings-modal__backdrop" data-close-players-db></div>
+    <div class="settings-modal__content players-db__content">
+      <div class="settings-modal__head">
+        <h3 id="players-db-title">Archivio giocatrici</h3>
+        <button id="players-db-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body players-db__body">
+        <div class="players-db__summary">
+          <span id="players-db-count"></span>
+          <button id="btn-clean-players-db" class="secondary small">Rimuovi senza squadra</button>
+        </div>
+        <div class="table-wrapper players-db__tablewrap">
+          <table class="players-db-table">
+            <thead>
+              <tr>
+                <th>Cognome</th>
+                <th>Nome</th>
+                <th>Squadre</th>
+                <th>ID</th>
+              </tr>
+            </thead>
+            <tbody id="players-db-body"></tbody>
+          </table>
         </div>
       </div>
     </div>
