@@ -9,6 +9,51 @@ function isSkillEnabled(skillId) {
   const cfg = state.metricsConfig && state.metricsConfig[skillId];
   return !cfg || cfg.enabled !== false;
 }
+function getTeamScopeFromEvent(ev) {
+  return ev && ev.team === "opponent" ? "opponent" : "our";
+}
+function getOppositeScope(scope) {
+  return scope === "opponent" ? "our" : "opponent";
+}
+function isFarSideForScope(scope) {
+  const swapped = !!state.courtSideSwapped;
+  return scope === "our" ? swapped : !swapped;
+}
+function getTeamNameForScope(scope) {
+  return scope === "opponent"
+    ? state.selectedOpponentTeam || "Avversaria"
+    : state.selectedTeam || "Squadra";
+}
+function getPlayersForScope(scope) {
+  return scope === "opponent" ? state.opponentPlayers || [] : state.players || [];
+}
+function getPlayerNumbersForScope(scope) {
+  return scope === "opponent" ? state.opponentPlayerNumbers || {} : state.playerNumbers || {};
+}
+function getLiberosForScope(scope) {
+  return scope === "opponent" ? state.opponentLiberos || [] : state.liberos || [];
+}
+function getCaptainsForScope(scope) {
+  return scope === "opponent" ? state.opponentCaptains || [] : state.captains || [];
+}
+function getEnabledSkillsForScope(scope) {
+  if (scope === "opponent" && state.useOpponentTeam) {
+    const cfg = state.opponentSkillConfig || {};
+    return SKILLS.filter(skill => cfg[skill.id] !== false);
+  }
+  return getEnabledSkills();
+}
+function isSkillEnabledForScope(skillId, scope) {
+  if (!skillId) return false;
+  if (scope === "opponent" && state.useOpponentTeam) {
+    const cfg = state.opponentSkillConfig || {};
+    return cfg[skillId] !== false;
+  }
+  return isSkillEnabled(skillId);
+}
+function makePlayerKey(scope, playerIdx) {
+  return (scope || "our") + ":" + playerIdx;
+}
 const selectedSkillPerPlayer = {};
 const serveMetaByPlayer = {};
 const attackMetaByPlayer = {};
@@ -19,10 +64,12 @@ const selectedEventIds = new Set();
 let lastSelectedEventId = null;
 const eventTableContexts = {};
 let lastEventContextKey = null;
-let lastReceiveContext = null;
+let lastReceiveContext = { our: null, opponent: null };
 let lastLogRenderedKey = null;
 let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
 let aggTableHeadCache = null;
+let analysisStatsCache = null;
+let analysisStatsScope = "our";
 const ERROR_TYPES = [
   { id: "Double", label: "Doppia" },
   { id: "Carry", label: "Accompagnata" },
@@ -60,6 +107,8 @@ const elOpponentSkillAttack = document.getElementById("opponent-skill-attack");
 const elOpponentSkillDefense = document.getElementById("opponent-skill-defense");
 const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
 const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
+const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
+const elVideoFilterTeams = document.getElementById("video-filter-teams");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
@@ -116,6 +165,7 @@ let trajectorySetType = null;
 let trajectoryMode = "attack";
 let attackTrajectoryForcePopup = false;
 let trajectoryMirror = false;
+let trajectoryForceFar = false;
 let trajectoryEscapeHandler = null;
 const attackTrajectoryCourtSizingEls = {
   content: null,
@@ -434,9 +484,42 @@ function getSortedPlayerEntries() {
     .map(name => ({ name, idx: idxMap.get(name) }))
     .filter(entry => typeof entry.idx === "number");
 }
+function getSortedPlayerEntriesForScope(scope) {
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  const names = typeof sortNamesByNumber === "function" ? sortNamesByNumber(players, numbers) : players.slice();
+  const idxMap = new Map(players.map((name, idx) => [name, idx]));
+  return names
+    .map(name => ({ name, idx: idxMap.get(name) }))
+    .filter(entry => typeof entry.idx === "number");
+}
 function sortPlayerOptionsByNumber(options) {
   const players = state.players || [];
   const numbers = state.playerNumbers || {};
+  const getNum = idx => {
+    const name = players[idx];
+    if (!name) return null;
+    const raw = numbers[name];
+    const parsed = raw !== undefined && raw !== null && raw !== "" ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return options.slice().sort((a, b) => {
+    const idxA = Number(a.value);
+    const idxB = Number(b.value);
+    const numA = getNum(idxA);
+    const numB = getNum(idxB);
+    if (numA === null && numB === null) {
+      return String(a.label || "").localeCompare(String(b.label || ""), "it", { sensitivity: "base" });
+    }
+    if (numA === null) return 1;
+    if (numB === null) return -1;
+    if (numA !== numB) return numA - numB;
+    return String(a.label || "").localeCompare(String(b.label || ""), "it", { sensitivity: "base" });
+  });
+}
+function sortPlayerOptionsByNumberForScope(options, scope) {
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
   const getNum = idx => {
     const name = players[idx];
     if (!name) return null;
@@ -478,6 +561,26 @@ function sortPlayerIndexesByNumber(indices) {
     return a - b;
   });
 }
+function sortPlayerIndexesByNumberForScope(indices, scope) {
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  const getNum = idx => {
+    const name = players[idx];
+    if (!name) return null;
+    const raw = numbers[name];
+    const parsed = raw !== undefined && raw !== null && raw !== "" ? parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return indices.slice().sort((a, b) => {
+    const numA = getNum(a);
+    const numB = getNum(b);
+    if (numA === null && numB === null) return a - b;
+    if (numA === null) return 1;
+    if (numB === null) return -1;
+    if (numA !== numB) return numA - numB;
+    return a - b;
+  });
+}
 function setServeTypeSelection(type) {
   const t = (type || "").toUpperCase();
   const normalized = t === "F" || t === "S" ? t : "JF";
@@ -499,8 +602,9 @@ if (elServeTypeButtons) {
   });
   setServeTypeSelection("JF");
 }
-function bindServeTypeInlineListener(playerIdx, onSelect) {
-  serveTypeSelectHandlers[playerIdx] = onSelect;
+function bindServeTypeInlineListener(playerIdx, onSelect, scope = "our") {
+  const key = makePlayerKey(scope, playerIdx);
+  serveTypeSelectHandlers[key] = onSelect;
   if (serveTypeInlineHandler) return;
   serveTypeInlineHandler = e => {
     const key = (e.key || "").toUpperCase();
@@ -515,8 +619,8 @@ function bindServeTypeInlineListener(playerIdx, onSelect) {
   };
   window.addEventListener("keydown", serveTypeInlineHandler);
 }
-function setServeTypeFocusPlayer(playerIdx) {
-  serveTypeFocusPlayer = playerIdx;
+function setServeTypeFocusPlayer(playerIdx, scope = "our") {
+  serveTypeFocusPlayer = makePlayerKey(scope, playerIdx);
 }
 function removeServeTypeInlineKeyListener() {
   if (serveTypeInlineHandler) {
@@ -532,7 +636,7 @@ function clearServeTypeInlineListener() {
     delete serveTypeSelectHandlers[key];
   });
 }
-function clearAttackSelection(playerIdx = null) {
+function clearAttackSelection(playerIdx = null, scope = "our") {
   if (playerIdx === null || playerIdx === undefined) {
     attackInlinePlayer = null;
     Object.keys(attackMetaByPlayer).forEach(key => {
@@ -540,13 +644,16 @@ function clearAttackSelection(playerIdx = null) {
     });
     return;
   }
-  delete attackMetaByPlayer[playerIdx];
-  if (attackInlinePlayer === playerIdx) {
+  const key = makePlayerKey(scope, playerIdx);
+  delete attackMetaByPlayer[key];
+  if (attackInlinePlayer === key) {
     attackInlinePlayer = null;
   }
 }
-function shouldPromptAttackSetType() {
-  return !!state.setTypePromptEnabled || !!normalizeSetTypeValue(state.defaultSetType);
+function shouldPromptAttackSetType(scope = "our") {
+  const enabled =
+    scope === "opponent" ? state.opponentSetTypePromptEnabled : state.setTypePromptEnabled;
+  return !!enabled || !!normalizeSetTypeValue(state.defaultSetType);
 }
 function applyAttackTrajectoryToEvent(event, payload) {
   if (!payload || !event) return;
@@ -564,19 +671,25 @@ function applyAttackTrajectoryToEvent(event, payload) {
     event.playerPosition = event.attackStartZone;
   }
 }
-async function startAttackSelection(playerIdx, setTypeChoice, onDone) {
-  if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) return;
-  attackInlinePlayer = playerIdx;
+async function startAttackSelection(playerIdx, setTypeChoice, onDone, scope = "our") {
+  const key = makePlayerKey(scope, playerIdx);
+  if (attackInlinePlayer !== null && attackInlinePlayer !== key) return;
+  attackInlinePlayer = key;
   const meta = { setType: setTypeChoice || null };
   if (state.videoScoutMode) {
     const videoTime = getActiveVideoPlaybackSeconds();
     if (typeof videoTime === "number") meta.videoTime = videoTime;
   }
-  if (state.attackTrajectoryEnabled) {
-    const baseZone = getCurrentZoneForPlayer(playerIdx, "attack");
+  const trajectoryEnabled =
+    scope === "opponent" ? state.opponentAttackTrajectoryEnabled : state.attackTrajectoryEnabled;
+  if (trajectoryEnabled) {
+    const baseZone = getCurrentZoneForPlayer(playerIdx, "attack", scope);
+    const forceFar = isFarSideForScope(scope);
     const coords = await openAttackTrajectoryModal({
       baseZone: baseZone || null,
-      setType: setTypeChoice || null
+      setType: setTypeChoice || null,
+      forceFar,
+      scope
     });
     if (coords) {
       meta.trajectory = coords;
@@ -585,61 +698,80 @@ async function startAttackSelection(playerIdx, setTypeChoice, onDone) {
       meta.trajectorySkipped = true;
     }
   }
-  attackMetaByPlayer[playerIdx] = meta;
+  attackMetaByPlayer[key] = meta;
   if (typeof onDone === "function") {
     onDone();
   }
 }
-function getServeBaseZoneForPlayer(playerIdx) {
-  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return null;
-  const name = state.players[playerIdx];
+function getServeBaseZoneForPlayer(playerIdx, scope = "our") {
+  const players = getPlayersForScope(scope);
+  if (typeof playerIdx !== "number" || !players || !players[playerIdx]) return null;
+  const name = players[playerIdx];
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt
-      ? getCourtShape(autoRoleBaseCourt)
-      : getCourtShape(state.court);
+    scope === "opponent"
+      ? getCourtShape(state.opponentCourt)
+      : state.autoRolePositioning && autoRoleBaseCourt
+        ? getCourtShape(autoRoleBaseCourt)
+        : getCourtShape(state.court);
   if (!baseCourt || !baseCourt.length) return null;
   const slotIdx = baseCourt.findIndex(
     slot => slot && (slot.main === name || slot.replaced === name)
   );
   return slotIdx === -1 ? null : slotIdx + 1;
 }
-function maybeRotateServeToZoneOne(playerIdx) {
-  const zone = getServeBaseZoneForPlayer(playerIdx);
-  if (!zone || zone === 1) return;
-  const name =
-    formatNameWithNumber(state.players[playerIdx]) ||
-    state.players[playerIdx] ||
-    "Giocatrice";
-  const msg =
-    name +
-    " non è in zona 1 (zona " +
-    zone +
-    "). Vuoi ruotare automaticamente per farla andare in zona 1?";
-  const wantsRotate = window.confirm(msg);
-  if (!wantsRotate || typeof rotateCourt !== "function") return;
-  const steps = zone - 1;
-  for (let i = 0; i < steps; i += 1) {
-    rotateCourt("ccw");
-  }
+function maybeRotateServeToZoneOne(playerIdx, scope = "our") {
+  // disabilitato: la battuta è consentita solo alla giocatrice in zona 1
 }
-async function startServeTypeSelection(playerIdx, type, onDone) {
-  if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) return;
-  serveTypeInlinePlayer = playerIdx;
-  setServeTypeFocusPlayer(playerIdx);
+async function startServeTypeSelection(playerIdx, type, onDone, scope = "our") {
+  const key = makePlayerKey(scope, playerIdx);
+  if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== key) return;
+  serveTypeInlinePlayer = key;
+  setServeTypeFocusPlayer(playerIdx, scope);
   removeServeTypeInlineKeyListener();
-  maybeRotateServeToZoneOne(playerIdx);
+  const zone = getServeBaseZoneForPlayer(playerIdx, scope);
+  if (zone !== 1) {
+    serveTypeInlinePlayer = null;
+    return;
+  }
   const meta = { serveType: type };
   if (state.videoScoutMode) {
     const videoTime = getActiveVideoPlaybackSeconds();
     if (typeof videoTime === "number") meta.videoTime = videoTime;
   }
-  if (state.serveTrajectoryEnabled) {
-    const traj = await collectServeTrajectory(meta);
+  const serveTrajEnabled =
+    scope === "opponent" ? state.opponentServeTrajectoryEnabled : state.serveTrajectoryEnabled;
+  if (serveTrajEnabled) {
+    const forceFar = isFarSideForScope(scope);
+    const traj = await collectServeTrajectory(Object.assign({}, meta, { forceFar, scope }));
     meta.serveType = traj.serveType || type;
     meta.serveStart = traj.serveStart || null;
     meta.serveEnd = traj.serveEnd || null;
   }
-  serveMetaByPlayer[playerIdx] = meta;
+  const shouldQueueServe = state.useOpponentTeam && state.predictiveSkillFlow;
+  if (shouldQueueServe) {
+    const players = getPlayersForScope(scope);
+    const fallbackServer = getServerPlayerForScope(scope);
+    state.pendingServe = {
+      scope,
+      playerIdx,
+      playerName: players[playerIdx] || (fallbackServer && fallbackServer.name) || null,
+      meta
+    };
+    if (state.forceSkillActive && state.forceSkillScope === scope) {
+      state.forceSkillActive = false;
+      state.forceSkillScope = null;
+      if (scope === "opponent") {
+        state.opponentSkillFlowOverride = null;
+      } else {
+        state.skillFlowOverride = null;
+      }
+    }
+    state.flowTeamScope = getOppositeScope(scope);
+    setSelectedSkillForScope(scope, playerIdx, null);
+    delete serveMetaByPlayer[key];
+  } else {
+    serveMetaByPlayer[key] = meta;
+  }
   if (typeof onDone === "function") {
     onDone();
   }
@@ -648,13 +780,17 @@ async function collectServeTrajectory(prefill = {}) {
   const startRes = await openAttackTrajectoryModal({
     mode: "serve-start",
     start: prefill.serveStart || null,
-    serveType: prefill.serveType || null
+    serveType: prefill.serveType || null,
+    forceFar: prefill.forceFar,
+    scope: prefill.scope
   });
   const serveType = (startRes && startRes.serveType) || prefill.serveType || "JF";
   const serveStart = startRes && startRes.point ? startRes.point : prefill.serveStart || null;
   const endRes = await openAttackTrajectoryModal({
     mode: "serve-end",
-    end: prefill.serveEnd || null
+    end: prefill.serveEnd || null,
+    forceFar: prefill.forceFar,
+    scope: prefill.scope
   });
   const serveEnd = endRes && endRes.point ? endRes.point : prefill.serveEnd || null;
   return { serveType, serveStart, serveEnd };
@@ -951,78 +1087,107 @@ function closeCurrentEdit({ refresh = false } = {}) {
     }
   }
 }
-function setSelectedSkill(playerIdx, skillId) {
+function setSelectedSkillForScope(scope, playerIdx, skillId) {
+  const key = makePlayerKey(scope, playerIdx);
   if (skillId) {
-    selectedSkillPerPlayer[playerIdx] = skillId;
+    selectedSkillPerPlayer[key] = skillId;
     if (skillId !== "serve") {
-      delete serveMetaByPlayer[playerIdx];
+      delete serveMetaByPlayer[key];
     }
     if (skillId === "block") {
-      blockConfirmByPlayer[playerIdx] = false;
-      blockInlinePlayer = playerIdx;
+      blockConfirmByPlayer[key] = false;
+      blockInlinePlayer = key;
     } else {
-      delete blockConfirmByPlayer[playerIdx];
-      if (blockInlinePlayer === playerIdx) {
+      delete blockConfirmByPlayer[key];
+      if (blockInlinePlayer === key) {
         blockInlinePlayer = null;
       }
     }
   } else {
-    delete selectedSkillPerPlayer[playerIdx];
-    delete serveMetaByPlayer[playerIdx];
-    delete blockConfirmByPlayer[playerIdx];
-    if (blockInlinePlayer === playerIdx) {
+    delete selectedSkillPerPlayer[key];
+    delete serveMetaByPlayer[key];
+    delete blockConfirmByPlayer[key];
+    if (blockInlinePlayer === key) {
       blockInlinePlayer = null;
     }
   }
 }
+function getSelectedSkillForScope(scope, playerIdx) {
+  const key = makePlayerKey(scope, playerIdx);
+  return selectedSkillPerPlayer.hasOwnProperty(key) ? selectedSkillPerPlayer[key] : null;
+}
+function isAnySelectedSkillForScope(scope, skillId) {
+  const prefix = (scope || "our") + ":";
+  return Object.keys(selectedSkillPerPlayer).some(key => {
+    if (!key.startsWith(prefix)) return false;
+    return selectedSkillPerPlayer[key] === skillId;
+  });
+}
+function setSelectedSkill(playerIdx, skillId) {
+  setSelectedSkillForScope("our", playerIdx, skillId);
+}
 function getSelectedSkill(playerIdx) {
-  return selectedSkillPerPlayer.hasOwnProperty(playerIdx) ? selectedSkillPerPlayer[playerIdx] : null;
+  return getSelectedSkillForScope("our", playerIdx);
 }
 function isAnySelectedSkill(skillId) {
-  return Object.values(selectedSkillPerPlayer).some(val => val === skillId);
+  return isAnySelectedSkillForScope("our", skillId);
 }
-function isSetterPlayer(playerIdx) {
+function isSetterPlayerForScope(scope, playerIdx) {
   if (typeof getRoleLabel !== "function") return false;
-  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return false;
-  const name = state.players[playerIdx];
+  const players = getPlayersForScope(scope);
+  if (typeof playerIdx !== "number" || !players[playerIdx]) return false;
+  const name = players[playerIdx];
   const baseCourt =
-    state.autoRolePositioning && autoRoleBaseCourt
-      ? ensureCourtShapeFor(autoRoleBaseCourt)
-      : ensureCourtShapeFor(state.court);
+    scope === "opponent"
+      ? ensureCourtShapeFor(state.opponentCourt)
+      : state.autoRolePositioning && autoRoleBaseCourt
+        ? ensureCourtShapeFor(autoRoleBaseCourt)
+        : ensureCourtShapeFor(state.court);
   const idx = (baseCourt || []).findIndex(
     slot => slot && (slot.main === name || slot.replaced === name)
   );
   if (idx === -1) return false;
   return String(getRoleLabel(idx + 1)).toUpperCase() === "P";
 }
-function getSetterFromCourt() {
+function isSetterPlayer(playerIdx) {
+  return isSetterPlayerForScope("our", playerIdx);
+}
+function getSetterFromCourtForScope(scope) {
   if (typeof getRoleLabel !== "function") return { idx: null, name: null };
-  const court = getCourtShape(state.court);
+  const court =
+    scope === "opponent" ? getCourtShape(state.opponentCourt || []) : getCourtShape(state.court);
+  const players = getPlayersForScope(scope);
   for (let i = 0; i < court.length; i += 1) {
     const role = String(getRoleLabel(i + 1)).toUpperCase();
     if (role !== "P") continue;
     const name = court[i] && court[i].main ? court[i].main : "";
     if (!name) continue;
-    const idx = Array.isArray(state.players) ? state.players.indexOf(name) : -1;
+    const idx = Array.isArray(players) ? players.indexOf(name) : -1;
     return { idx: idx >= 0 ? idx : null, name };
   }
   return { idx: null, name: null };
 }
-function getSetterFromLastSetEvent() {
-  if (!isSkillEnabled("second")) return null;
+function getSetterFromCourt() {
+  return getSetterFromCourtForScope("our");
+}
+function getSetterFromLastSetEventForScope(scope) {
+  if (!isSkillEnabledForScope("second", scope)) return null;
   const last = state.events && state.events.length ? state.events[state.events.length - 1] : null;
   if (!last || last.skillId !== "second") return null;
+  const lastScope = getTeamScopeFromEvent(last);
+  if (lastScope !== scope) return null;
   const idx = typeof last.playerIdx === "number" ? last.playerIdx : null;
-  const name =
-    last.playerName ||
-    (idx !== null && state.players && state.players[idx]) ||
-    null;
+  const players = getPlayersForScope(scope);
+  const name = last.playerName || (idx !== null && players && players[idx]) || null;
   return { idx, name };
+}
+function getSetterFromLastSetEvent() {
+  return getSetterFromLastSetEventForScope("our");
 }
 function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
-function getPredictedSkillId() {
+function getPredictedSkillIdSingle() {
   const enabledSkills = getEnabledSkills();
   const flowNext = skillId => {
     switch (skillId) {
@@ -1058,8 +1223,8 @@ function getPredictedSkillId() {
   if (state.freeballPending) return resolveEnabledSkill("second");
   const ownEvents = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId) return false;
-    if (!ev.team) return true; // current app only tracks our team
-    return ev.team !== "opponent"; // future-proof: ignore opponent skills
+    if (!ev.team) return true;
+    return ev.team !== "opponent";
   });
   const last = ownEvents.slice(-1)[0] || null;
   const possessionServe = !!state.isServing;
@@ -1082,6 +1247,324 @@ function getPredictedSkillId() {
   if (dir === "against") return resolveEnabledSkill("pass") || fallback;
   return resolveEnabledSkill(flowNext(last.skillId)) || fallback;
 }
+function computeTwoTeamFlowFromEvent(ev) {
+  const scope = getTeamScopeFromEvent(ev);
+  const other = getOppositeScope(scope);
+  const dir = typeof getPointDirection === "function" ? getPointDirection(ev) : null;
+  if (dir === "for" || dir === "against") {
+    const scoringScope = dir === "for" ? scope : other;
+    return { teamScope: scoringScope, skillId: "serve" };
+  }
+  if (ev.skillId === "pass" && (ev.code === "/" || ev.receiveEvaluation === "/")) {
+    return { teamScope: other, skillId: "defense" };
+  }
+  if (ev.skillId === "defense" && (ev.code === "-" || ev.code === "/")) {
+    return { teamScope: other, skillId: "defense" };
+  }
+  if (ev.skillId === "block" && ev.code === "-") {
+    return { teamScope: other, skillId: "defense" };
+  }
+  switch (ev.skillId) {
+    case "serve":
+      return { teamScope: other, skillId: "pass" };
+    case "pass":
+    case "freeball":
+      return { teamScope: scope, skillId: "second" };
+    case "second":
+      return { teamScope: scope, skillId: "attack" };
+    case "attack": {
+      if (ev.code === "/") {
+        return { teamScope: other, skillId: "block" };
+      }
+      if (ev.code === "!") {
+        return { teamScope: other, skillId: "defense" };
+      }
+      return { teamScope: other, skillId: "defense" };
+    }
+    case "block":
+      if (ev.code === "-") {
+        return { teamScope: other, skillId: "defense" };
+      }
+      return { teamScope: scope, skillId: "defense" };
+    case "defense":
+      if (ev.code === "-" || ev.code === "/") {
+        return { teamScope: other, skillId: "second" };
+      }
+      return { teamScope: scope, skillId: "second" };
+    default:
+      return { teamScope: scope, skillId: null };
+  }
+}
+function getLastFlowEvent(events) {
+  const list = Array.isArray(events) ? events : [];
+  const skillIds = new Set(SKILLS.map(skill => skill.id));
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const ev = list[i];
+    if (!ev) continue;
+    if (skillIds.has(ev.skillId)) return ev;
+    if (ev.skillId === "manual") {
+      const dir = typeof getPointDirection === "function" ? getPointDirection(ev) : null;
+      if (dir) return ev;
+    }
+  }
+  return null;
+}
+function getActiveServerName(scope) {
+  if (state.pendingServe && state.pendingServe.scope === scope) {
+    return state.pendingServe.playerName || null;
+  }
+  const last = getLastFlowEvent(state.events || []);
+  if (last && last.skillId === "serve" && getTeamScopeFromEvent(last) === scope) {
+    return last.playerName || null;
+  }
+  const server = getServerPlayerForScope(scope);
+  return server && server.name ? server.name : null;
+}
+function isPostServeLockForScope(scope) {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  if (state.forceSkillActive && state.forceSkillScope === scope) return false;
+  if (state.pendingServe && state.pendingServe.scope === scope) return true;
+  const last = getLastFlowEvent(state.events || []);
+  return !!(last && last.skillId === "serve" && getTeamScopeFromEvent(last) === scope);
+}
+function getServeCodeFromPassCode(code) {
+  const map = {
+    "#": "-",
+    "+": "-",
+    "!": "!",
+    "-": "+",
+    "/": "/",
+    "=": "#"
+  };
+  return map[code] || "=";
+}
+function getAttackCodeFromBlockCode(code) {
+  const map = {
+    "#": "/",
+    "+": "-",
+    "-": "+",
+    "=": "#"
+  };
+  return map[code] || null;
+}
+function resolveFlowSkillForScope(scope, skillId) {
+  const flowNext = current => {
+    switch (current) {
+      case "serve":
+        return "pass";
+      case "pass":
+      case "freeball":
+        return "second";
+      case "second":
+        return "attack";
+      case "attack":
+        return "block";
+      case "block":
+        return "defense";
+      case "defense":
+        return "second";
+      default:
+        return null;
+    }
+  };
+  const visited = new Set();
+  let current = skillId;
+  while (current && !visited.has(current)) {
+    if (isSkillEnabledForScope(current, scope)) return current;
+    visited.add(current);
+    current = flowNext(current);
+  }
+  return null;
+}
+function getAutoFlowState() {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return null;
+  if (state.pendingServe && state.pendingServe.scope) {
+    return {
+      teamScope: getOppositeScope(state.pendingServe.scope),
+      skillId: "pass"
+    };
+  }
+  if (state.skillFlowOverride) {
+    return {
+      teamScope: "our",
+      skillId: resolveFlowSkillForScope("our", state.skillFlowOverride)
+    };
+  }
+  if (state.opponentSkillFlowOverride) {
+    return {
+      teamScope: "opponent",
+      skillId: resolveFlowSkillForScope("opponent", state.opponentSkillFlowOverride)
+    };
+  }
+  const last = getLastFlowEvent(state.events || []);
+  let flowScope = state.flowTeamScope || (state.isServing ? "our" : "opponent");
+  let nextSkill = "serve";
+  if (last) {
+    const next = computeTwoTeamFlowFromEvent(last);
+    flowScope = next.teamScope;
+    nextSkill = next.skillId;
+  }
+  if (state.freeballPending && state.freeballPendingScope) {
+    flowScope = state.freeballPendingScope;
+    nextSkill = "second";
+  }
+  const override = flowScope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
+  if (override) nextSkill = override;
+  const resolved = resolveFlowSkillForScope(flowScope, nextSkill);
+  return { teamScope: flowScope, skillId: resolved };
+}
+function canOverrideServeError(scope, skillId, code, flowState, playerName) {
+  if (!flowState || flowState.teamScope === scope) return false;
+  if (flowState.skillId !== "pass") return false;
+  if (skillId !== "serve" || code !== "=") return false;
+  if (!isSkillEnabledForScope("serve", scope)) return false;
+  const serverName = getActiveServerName(scope);
+  if (!serverName) return false;
+  return serverName === playerName;
+}
+function getServerPlayerForScope(scope) {
+  const players = getPlayersForScope(scope);
+  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
+  const court = getCourtShape(baseCourt);
+  const slot = court[0] || {};
+  const name = slot.main || slot.replaced || "";
+  if (!name) return null;
+  const idx = players.indexOf(name);
+  return { idx: idx >= 0 ? idx : null, name };
+}
+function shouldInferServeFromPass(scope, skillId) {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  if (skillId !== "pass") return false;
+  if (
+    state.pendingServe &&
+    state.pendingServe.scope &&
+    getOppositeScope(state.pendingServe.scope) === scope
+  ) {
+    return true;
+  }
+  const last = getLastFlowEvent(state.events || []);
+  const baseNext = last
+    ? computeTwoTeamFlowFromEvent(last)
+    : { teamScope: state.isServing ? "our" : "opponent", skillId: "serve" };
+  if (baseNext.skillId !== "serve") return false;
+  const servingScope = baseNext.teamScope;
+  if (getOppositeScope(servingScope) !== scope) return false;
+  if (!isSkillEnabledForScope("serve", servingScope)) return false;
+  if (!isSkillEnabledForScope("pass", scope)) return false;
+  return true;
+}
+function shouldInferAttackFromBlock(scope, skillId, code) {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  if (skillId !== "block") return false;
+  if (!code) return false;
+  const last = getLastFlowEvent(state.events || []);
+  if (!last || last.skillId !== "attack") return false;
+  const attackScope = getOppositeScope(scope);
+  if (getTeamScopeFromEvent(last) !== attackScope) return false;
+  if (last.code !== "/") return false;
+  return true;
+}
+function updateSkillStatsForEvent(scope, playerIdx, skillId, prevCode, nextCode) {
+  if (prevCode === nextCode) return;
+  const bucket = scope === "our" ? state.stats : state.opponentStats;
+  if (!bucket || typeof playerIdx !== "number") return;
+  if (!bucket[playerIdx] || !bucket[playerIdx][skillId]) return;
+  if (prevCode && bucket[playerIdx][skillId][prevCode] > 0) {
+    bucket[playerIdx][skillId][prevCode] -= 1;
+  }
+  if (nextCode) {
+    bucket[playerIdx][skillId][nextCode] = (bucket[playerIdx][skillId][nextCode] || 0) + 1;
+  }
+}
+function applyBlockInference(blockEvent, blockScope, blockCode) {
+  if (!shouldInferAttackFromBlock(blockScope, "block", blockCode)) return;
+  const attackScope = getOppositeScope(blockScope);
+  const events = state.events || [];
+  let attackEvent = null;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const ev = events[i];
+    if (!ev || ev.skillId !== "attack") continue;
+    if (getTeamScopeFromEvent(ev) !== attackScope) continue;
+    attackEvent = ev;
+    break;
+  }
+  if (!attackEvent || attackEvent.code !== "/") return;
+  const prevCode = attackEvent.code;
+  const nextCode = getAttackCodeFromBlockCode(blockCode);
+  attackEvent.code = nextCode || null;
+  attackEvent.pendingBlockEval = false;
+  attackEvent.derivedFromBlock = true;
+  const attackIdx = resolvePlayerIdx(attackEvent);
+  updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, nextCode);
+}
+function getPredictedSkillIdForScope(scope) {
+  if (scope === "opponent" && !state.useOpponentTeam) return null;
+  if (!state.predictiveSkillFlow) return null;
+  if (
+    state.pendingServe &&
+    state.pendingServe.scope &&
+    getOppositeScope(state.pendingServe.scope) === scope
+  ) {
+    return resolveFlowSkillForScope(scope, "pass");
+  }
+  const enabledSkills = getEnabledSkillsForScope(scope);
+  if (enabledSkills.length === 0) return null;
+  const flowNext = skillId => {
+    switch (skillId) {
+      case "serve":
+        return "pass";
+      case "pass":
+      case "freeball":
+        return "second";
+      case "second":
+        return "attack";
+      case "attack":
+        return "block";
+      case "block":
+        return "defense";
+      case "defense":
+        return "second";
+      default:
+        return null;
+    }
+  };
+  const resolveEnabledSkill = skillId => {
+    const visited = new Set();
+    let current = skillId;
+    while (current && !visited.has(current)) {
+      if (isSkillEnabledForScope(current, scope)) return current;
+      visited.add(current);
+      current = flowNext(current);
+    }
+    return null;
+  };
+  const override =
+    scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
+  if (override) return resolveEnabledSkill(override);
+  if (state.freeballPending && state.freeballPendingScope === scope) {
+    return resolveEnabledSkill("second");
+  }
+  const events = state.events || [];
+  const last = getLastFlowEvent(events);
+  let flowScope = state.flowTeamScope || (state.isServing ? "our" : "opponent");
+  let nextSkill = null;
+  if (last) {
+    const next = computeTwoTeamFlowFromEvent(last);
+    flowScope = next.teamScope;
+    nextSkill = next.skillId;
+  } else {
+    flowScope = state.isServing ? "our" : "opponent";
+    nextSkill = flowScope === "our" ? "serve" : "serve";
+  }
+  if (flowScope !== scope) return null;
+  return resolveEnabledSkill(nextSkill) || null;
+}
+function getPredictedSkillId() {
+  if (!state.useOpponentTeam) {
+    return getPredictedSkillIdSingle();
+  }
+  return getPredictedSkillIdForScope("our");
+}
 function updateNextSkillIndicator(skillId) {
   if (!elNextSkillIndicator) return;
   updateSetTypeVisibility(skillId);
@@ -1092,10 +1575,22 @@ function updateNextSkillIndicator(skillId) {
     return;
   }
   elNextSkillIndicator.style.display = "";
-  const meta = SKILLS.find(s => s.id === skillId);
+  let scopeLabel = "";
+  let resolvedSkillId = skillId;
+  if (state.useOpponentTeam) {
+    const ours = getPredictedSkillIdForScope("our");
+    const opp = getPredictedSkillIdForScope("opponent");
+    if (!resolvedSkillId) resolvedSkillId = ours || opp || null;
+    if (opp && !ours) {
+      scopeLabel = " (" + getTeamNameForScope("opponent") + ")";
+    } else if (ours && !opp) {
+      scopeLabel = " (" + getTeamNameForScope("our") + ")";
+    }
+  }
+  const meta = SKILLS.find(s => s.id === resolvedSkillId);
   const label = meta ? meta.label : skillId || "—";
-  elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—");
-  elNextSkillIndicator.classList.toggle("active", !!skillId);
+  elNextSkillIndicator.textContent = "Prossima skill: " + (label || "—") + scopeLabel;
+  elNextSkillIndicator.classList.toggle("active", !!resolvedSkillId);
 }
 function updateSetTypeVisibility(nextSkillId = null) {
   if (!elSetTypeShortcuts) return;
@@ -1281,8 +1776,8 @@ function updateTrajectoryImageFromStart() {
   const zoneNorm = trajectoryMirror
     ? { x: 1 - clamp01(startNorm.x), y: clamp01(startNorm.y) }
     : startNorm;
-  const startZoneRaw = getAttackZone(zoneNorm, false);
-  const imgSrc = getTrajectoryImageForZone(startZoneRaw, trajectoryMirror);
+  const startZoneRaw = getAttackZone(zoneNorm, trajectoryForceFar);
+  const imgSrc = getTrajectoryImageForZone(startZoneRaw, trajectoryMirror || trajectoryForceFar);
   if (elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
     elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
     elAttackTrajectoryImage.src = imgSrc;
@@ -1325,7 +1820,10 @@ function openAttackTrajectoryModal(prefill = null) {
       setAttackTrajectoryCourtSizing(false);
       restoreModalToPopup(elAttackTrajectoryModal);
     }
-    trajectoryMirror = !forcePopup && !!state.courtViewMirrored;
+    const scope = prefill && prefill.scope ? prefill.scope : "our";
+    const mirrorFlag = scope === "opponent" ? state.opponentCourtViewMirrored : state.courtViewMirrored;
+    trajectoryMirror = !forcePopup && !!mirrorFlag;
+    trajectoryForceFar = !!(prefill && prefill.forceFar);
     const mode = (prefill && prefill.mode) || "attack";
     trajectoryMode = mode;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
@@ -1354,6 +1852,11 @@ function openAttackTrajectoryModal(prefill = null) {
       elAttackTrajectoryInstructions.classList.toggle("hidden", hideInstructions);
     }
     const getInitialImage = () => {
+      if (trajectoryForceFar) {
+        if (mode === "serve-start") return SERVE_START_IMG_FAR;
+        if (mode === "serve-end") return SERVE_END_IMG_FAR;
+        return TRAJECTORY_IMG_FAR;
+      }
       if (mode === "serve-start") return trajectoryMirror ? SERVE_START_IMG_FAR : SERVE_START_IMG_NEAR;
       if (mode === "serve-end") return trajectoryMirror ? SERVE_END_IMG_FAR : SERVE_END_IMG_NEAR;
       return trajectoryMirror ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR;
@@ -1449,6 +1952,7 @@ function closeAttackTrajectoryModal(result = null) {
   elAttackTrajectoryModal.classList.remove("force-popup");
   attackTrajectoryForcePopup = false;
   trajectoryMirror = false;
+  trajectoryForceFar = false;
   trajectoryBaseZone = null;
   trajectorySetType = null;
   trajectoryMode = "attack";
@@ -1467,10 +1971,14 @@ function closeAttackTrajectoryModal(result = null) {
 }
 async function captureServeTrajectory(event, { forcePopup = false } = {}) {
   try {
+    const scope = getTeamScopeFromEvent(event);
+    const forceFar = isFarSideForScope(scope);
     const startRes = await openAttackTrajectoryModal({
       mode: "serve-start",
       start: event.serveStart || null,
-      forcePopup
+      forcePopup,
+      forceFar,
+      scope
     });
     if (startRes && startRes.serveType) {
       event.serveType = startRes.serveType;
@@ -1481,7 +1989,9 @@ async function captureServeTrajectory(event, { forcePopup = false } = {}) {
     const endRes = await openAttackTrajectoryModal({
       mode: "serve-end",
       end: event.serveEnd || null,
-      forcePopup
+      forcePopup,
+      forceFar,
+      scope
     });
     if (endRes && endRes.point) {
       event.serveEnd = endRes.point;
@@ -1495,23 +2005,37 @@ async function captureServeTrajectory(event, { forcePopup = false } = {}) {
     renderServeTrajectoryAnalysis();
   }
 }
-function forceNextSkill(skillId) {
+function forceNextSkill(skillId, scope = "our") {
   if (!skillId) return;
   state.predictiveSkillFlow = true;
-  state.skillFlowOverride = skillId;
-  if (skillId === "serve" && !state.isServing) {
-    state.isServing = true;
-    state.autoRotatePending = false;
-    if (typeof enforceAutoLiberoForState === "function") {
-      enforceAutoLiberoForState({ skipServerOnServe: true });
-    }
+  state.freeballPending = false;
+  state.freeballPendingScope = scope;
+  state.skillFlowOverride = null;
+  state.opponentSkillFlowOverride = null;
+  state.pendingServe = null;
+  state.forceSkillActive = true;
+  state.forceSkillScope = scope;
+  if (scope === "opponent") {
+    state.opponentSkillFlowOverride = skillId;
+  } else {
+    state.skillFlowOverride = skillId;
   }
-  if (skillId === "pass") {
-    state.isServing = false;
-    state.autoRotatePending = true;
-    state.freeballPending = false;
-    if (typeof enforceAutoLiberoForState === "function") {
-      enforceAutoLiberoForState({ skipServerOnServe: true });
+  state.flowTeamScope = scope;
+  if (scope === "our") {
+    if (skillId === "serve" && !state.isServing) {
+      state.isServing = true;
+      state.autoRotatePending = false;
+      if (typeof enforceAutoLiberoForState === "function") {
+        enforceAutoLiberoForState({ skipServerOnServe: true });
+      }
+    }
+    if (skillId === "pass") {
+      state.isServing = false;
+      state.autoRotatePending = true;
+      state.freeballPending = false;
+      if (typeof enforceAutoLiberoForState === "function") {
+        enforceAutoLiberoForState({ skipServerOnServe: true });
+      }
     }
   }
   saveState({ persistLocal: true });
@@ -1880,6 +2404,7 @@ const BULK_EDIT_CONFIG = {
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
+const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
 const elSetTypeCurrent = document.getElementById("set-type-current");
 const elBtnOffsetSkills = document.getElementById("btn-offset-skills");
@@ -1899,7 +2424,7 @@ const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
 const TAB_ORDER = ["info", "scout", "aggregated", "video"];
-function buildReceiveDisplayMapping(court, rotation) {
+function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
       buildAutoRolePermutation({
@@ -1907,7 +2432,9 @@ function buildReceiveDisplayMapping(court, rotation) {
         rotation,
         phase: "receive",
         isServing: state.isServing,
-        autoRoleP1American: !!state.autoRoleP1American
+        autoRoleP1American: scope === "opponent"
+          ? !!state.opponentAutoRoleP1American
+          : !!state.autoRoleP1American
       }) || [];
     return perm.map(item => ({
       slot: (item && item.slot) || { main: "", replaced: "" },
@@ -1932,10 +2459,12 @@ function buildReceiveDisplayMapping(court, rotation) {
   }
   return mapping;
 }
-function getAutoRoleDisplayCourt(forSkillId = null) {
+function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
   const useAuto = !!state.autoRolePositioning;
   const baseCourt =
-    useAuto && autoRoleBaseCourt ? ensureCourtShapeFor(autoRoleBaseCourt) : ensureCourtShapeFor(state.court);
+    useAuto && scope === "our" && autoRoleBaseCourt
+      ? ensureCourtShapeFor(autoRoleBaseCourt)
+      : ensureCourtShapeFor(scope === "opponent" ? state.opponentCourt : state.court);
   if (!useAuto) {
     return baseCourt.map((slot, idx) => ({ slot, idx }));
   }
@@ -1944,17 +2473,20 @@ function getAutoRoleDisplayCourt(forSkillId = null) {
     return baseCourt.map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "pass") {
-    return buildReceiveDisplayMapping(baseCourt, state.rotation || 1);
+    const rotation = scope === "opponent" ? state.opponentRotation : state.rotation;
+    return buildReceiveDisplayMapping(baseCourt, rotation || 1, scope);
   }
   const phase = getCurrentPhase();
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
       buildAutoRolePermutation({
         baseLineup: baseCourt,
-        rotation: state.rotation || 1,
+        rotation: scope === "opponent" ? state.opponentRotation || 1 : state.rotation || 1,
         phase,
-        isServing: state.isServing,
-        autoRoleP1American: !!state.autoRoleP1American
+        isServing: scope === "opponent" ? !state.isServing : state.isServing,
+        autoRoleP1American: scope === "opponent"
+          ? !!state.opponentAutoRoleP1American
+          : !!state.autoRoleP1American
       }) || [];
     return perm.map(item => ({
       slot: (item && item.slot) || { main: "", replaced: "" },
@@ -2200,11 +2732,12 @@ function schedulePostEventUpdates({
   includeAggregates = true,
   playerIdx = null,
   skillId = null,
-  persistLocal = false
+  persistLocal = false,
+  scope = "our"
 } = {}) {
   scheduleVideoSafeRender(() => {
     saveState({ persistLocal });
-    if (typeof playerIdx === "number" && skillId) {
+    if (scope === "our" && typeof playerIdx === "number" && skillId) {
       updateSkillStatsUI(playerIdx, skillId);
     }
     renderPlayers();
@@ -2329,10 +2862,14 @@ function buildBaseEventPayload(base) {
     state.videoClock.currentSeconds = 0;
     videoSeconds = 0;
   }
-  const rotation = Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1));
+  const teamScope = (base && (base.teamScope || base.team)) || "our";
+  const rotationValue = teamScope === "opponent" ? state.opponentRotation : state.rotation;
+  const rotation = Math.min(6, Math.max(1, parseInt(rotationValue, 10) || 1));
   const scoreSnapshot = computePointsSummary(state.currentSet || 1);
   const zone =
-    typeof base.playerIdx === "number" ? getCurrentZoneForPlayer(base.playerIdx, base.skillId) : null;
+    typeof base.playerIdx === "number"
+      ? getCurrentZoneForPlayer(base.playerIdx, base.skillId, teamScope)
+      : null;
   const lastEvent = state.events && state.events.length > 0 ? state.events[state.events.length - 1] : null;
   const lastEventTime = lastEvent ? lastEvent.t : null;
   const durationMs = 5000;
@@ -2346,7 +2883,9 @@ function buildBaseEventPayload(base) {
     playerIdx: base.playerIdx,
     playerName:
       base.playerName ||
-      (typeof base.playerIdx === "number" ? state.players[base.playerIdx] : base.playerName) ||
+      (typeof base.playerIdx === "number"
+        ? getPlayersForScope(teamScope)[base.playerIdx]
+        : base.playerName) ||
       null,
     zone,
     originZone: zone,
@@ -2357,7 +2896,10 @@ function buildBaseEventPayload(base) {
     autoRotationDirection: null,
     autoRotateNext: null,
     setterPosition: rotation,
-    opponentSetterPosition: null,
+    opponentSetterPosition:
+      teamScope === "opponent"
+        ? Math.min(6, Math.max(1, parseInt(state.rotation, 10) || 1))
+        : Math.min(6, Math.max(1, parseInt(state.opponentRotation, 10) || 1)),
     playerPosition: zone,
     receivePosition: null,
     base: base.base || null,
@@ -2380,7 +2922,8 @@ function buildBaseEventPayload(base) {
     playerIn: base.playerIn || null,
     playerOut: base.playerOut || null,
     relatedEvents: base.relatedEvents || [],
-    teamName: state.selectedTeam || (state.match && state.match.teamName) || null,
+    team: teamScope === "opponent" ? "opponent" : "our",
+    teamName: getTeamNameForScope(teamScope),
     homeScore: scoreSnapshot.totalFor || 0,
     visitorScore: scoreSnapshot.totalAgainst || 0,
     actionType: base.actionType || null,
@@ -2395,23 +2938,26 @@ function buildBaseEventPayload(base) {
     videoTime: videoSeconds
   };
 }
-function renderSkillChoice(playerIdx, playerName) {
+function renderSkillChoice(playerIdx, playerName, scope = "our") {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
   if (!elSkillModalBody) return;
-  updateSetTypeVisibility(getPredictedSkillId());
+  updateSetTypeVisibility(getPredictedSkillIdForScope(scope) || getPredictedSkillId());
   modalMode = "skill";
   modalSubPosIdx = -1;
   elSkillModalBody.innerHTML = "";
+  const players = getPlayersForScope(scope);
   if (elSkillModalTitle) {
     const title =
-      formatNameWithNumber(playerName || state.players[playerIdx]) ||
+      (scope === "opponent"
+        ? formatNameWithNumberFor(playerName || players[playerIdx], getPlayerNumbersForScope(scope))
+        : formatNameWithNumber(playerName || players[playerIdx])) ||
       (playerName || "Giocatrice");
     elSkillModalTitle.textContent = title + " · scegli fondamentale";
   }
-  const enabledSkills = getEnabledSkills();
+  const enabledSkills = getEnabledSkillsForScope(scope);
   if (enabledSkills.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
@@ -2426,21 +2972,26 @@ function renderSkillChoice(playerIdx, playerName) {
     btn.type = "button";
     btn.className = "modal-skill-btn";
     btn.innerHTML = `<span>${skill.label}</span><span class="modal-skill-badge badge-${skill.id}">${skill.label[0]}</span>`;
-    btn.addEventListener("click", () => renderSkillCodes(playerIdx, playerName, skill.id));
+    btn.addEventListener("click", () => renderSkillCodes(playerIdx, playerName, skill.id, scope));
     grid.appendChild(btn);
   });
   elSkillModalBody.appendChild(grid);
 }
-function renderSkillCodes(playerIdx, playerName, skillId) {
+function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
   if (!elSkillModalBody) return;
-  updateSetTypeVisibility(skillId === "attack" ? "attack" : getPredictedSkillId());
+  const predicted = getPredictedSkillIdForScope(scope) || getPredictedSkillId();
+  updateSetTypeVisibility(skillId === "attack" ? "attack" : predicted);
   modalMode = "skill-codes";
   modalSubPosIdx = -1;
   elSkillModalBody.innerHTML = "";
   const skill = SKILLS.find(s => s.id === skillId);
+  const players = getPlayersForScope(scope);
+  const nameValue = playerName || players[playerIdx];
   const title =
-    formatNameWithNumber(playerName || state.players[playerIdx]) ||
-    (playerName || "Giocatrice");
+    (scope === "opponent"
+      ? formatNameWithNumberFor(nameValue, getPlayerNumbersForScope(scope))
+      : formatNameWithNumber(nameValue)) ||
+    (nameValue || "Giocatrice");
   if (elSkillModalTitle) {
     elSkillModalTitle.textContent =
       (skill ? skill.label + " · " : "") + title;
@@ -2452,28 +3003,29 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
   backBtn.className = "secondary modal-skill-back";
   backBtn.textContent = "Indietro";
   backBtn.addEventListener("click", () => {
-    delete serveMetaByPlayer[playerIdx];
+    delete serveMetaByPlayer[makePlayerKey(scope, playerIdx)];
     clearServeTypeInlineListener();
-    clearAttackSelection(playerIdx);
-    renderSkillChoice(playerIdx, playerName);
+    clearAttackSelection(playerIdx, scope);
+    renderSkillChoice(playerIdx, playerName, scope);
   });
   header.appendChild(backBtn);
   elSkillModalBody.appendChild(header);
 
-  if (skillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
+  const playerKey = makePlayerKey(scope, playerIdx);
+  if (skillId !== "serve" && serveTypeInlinePlayer === playerKey) {
     clearServeTypeInlineListener();
   }
-  if (skillId !== "attack" && attackInlinePlayer === playerIdx) {
-    clearAttackSelection(playerIdx);
+  if (skillId !== "attack" && attackInlinePlayer === playerKey) {
+    clearAttackSelection(playerIdx, scope);
   }
-  if (skillId === "serve" && !serveMetaByPlayer[playerIdx]) {
-    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) {
+  if (skillId === "serve" && !serveMetaByPlayer[playerKey]) {
+    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerKey) {
       return;
     }
     const typeWrap = document.createElement("div");
     typeWrap.className = "modal-skill-codes";
-    typeWrap.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx));
-    setServeTypeFocusPlayer(playerIdx);
+    typeWrap.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx, scope));
+    setServeTypeFocusPlayer(playerIdx, scope);
     const types = [
       { id: "F", label: "Float (F)" },
       { id: "JF", label: "Jump float (JF)" },
@@ -2481,7 +3033,7 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     ];
     const handleSelect = async type => {
       await startServeTypeSelection(playerIdx, type, () => {
-        renderSkillCodes(playerIdx, playerName, skillId);
+        renderSkillCodes(playerIdx, playerName, skillId, scope);
       });
     };
     types.forEach(t => {
@@ -2492,18 +3044,18 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
       btn.addEventListener("click", () => handleSelect(t.id));
       typeWrap.appendChild(btn);
     });
-    bindServeTypeInlineListener(playerIdx, handleSelect);
+    bindServeTypeInlineListener(playerIdx, handleSelect, scope);
     elSkillModalBody.appendChild(typeWrap);
     return;
   }
-  if (skillId === "attack" && !attackMetaByPlayer[playerIdx]) {
-    if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
+  if (skillId === "attack" && !attackMetaByPlayer[playerKey]) {
+    if (attackInlinePlayer !== null && attackInlinePlayer !== playerKey) {
       return;
     }
-    if (shouldPromptAttackSetType()) {
+    if (shouldPromptAttackSetType(scope)) {
       const wrap = document.createElement("div");
       wrap.className = "modal-skill-codes";
-      const setTypeOptions = isSetterPlayer(playerIdx)
+      const setTypeOptions = isSetterPlayerForScope(scope, playerIdx)
         ? [{ value: "Damp", label: "Damp" }]
         : DEFAULT_SET_TYPE_OPTIONS;
       setTypeOptions.forEach(opt => {
@@ -2513,17 +3065,17 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
         btn.textContent = opt.label;
         btn.addEventListener("click", async () => {
           await startAttackSelection(playerIdx, opt.value, () => {
-            renderSkillCodes(playerIdx, playerName, skillId);
+            renderSkillCodes(playerIdx, playerName, skillId, scope);
           });
         });
         wrap.appendChild(btn);
       });
       elSkillModalBody.appendChild(wrap);
     } else {
-      if (attackInlinePlayer === playerIdx) return;
+      if (attackInlinePlayer === playerKey) return;
       const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
       startAttackSelection(playerIdx, fallback, () => {
-        renderSkillCodes(playerIdx, playerName, skillId);
+        renderSkillCodes(playerIdx, playerName, skillId, scope);
       });
     }
     return;
@@ -2542,7 +3094,7 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
     btn.className = "event-btn code-" + tone;
     btn.textContent = code;
     btn.dataset.playerIdx = String(playerIdx);
-    btn.dataset.playerName = playerName || state.players[playerIdx];
+    btn.dataset.playerName = nameValue;
     btn.dataset.skillId = skillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
@@ -2552,15 +3104,19 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
         code,
         playerName,
         e.currentTarget,
-        { serveMeta: serveMetaByPlayer[playerIdx] || null, attackMeta: attackMetaByPlayer[playerIdx] || null }
+        {
+          serveMeta: serveMetaByPlayer[playerKey] || null,
+          attackMeta: attackMetaByPlayer[playerKey] || null,
+          scope
+        }
       );
       if (success) {
-        delete serveMetaByPlayer[playerIdx];
+        delete serveMetaByPlayer[playerKey];
         if (skillId === "serve") {
           clearServeTypeInlineListener();
         }
         if (skillId === "attack") {
-          clearAttackSelection(playerIdx);
+          clearAttackSelection(playerIdx, scope);
         }
         closeSkillModal();
       }
@@ -2576,34 +3132,40 @@ function renderSkillCodes(playerIdx, playerName, skillId) {
   errorBtn.className = "small event-btn danger full-width";
   errorBtn.textContent = "Errore/Fallo";
   errorBtn.addEventListener("click", () => {
-    openErrorModal({ playerIdx, playerName: playerName || state.players[playerIdx] });
+    openErrorModal({
+      playerIdx,
+      playerName: nameValue,
+      scope
+    });
     closeSkillModal();
   });
   extraRow.appendChild(errorBtn);
   elSkillModalBody.appendChild(extraRow);
 }
-function openSkillModal(playerIdx, playerName) {
+function openSkillModal(playerIdx, playerName, scope = "our") {
   if (!elSkillModal || !elSkillModalBody) return;
   if (isDesktopCourtModalLayout()) {
     setCourtAreaLocked(true);
   }
   updateCourtModalPlacement();
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
-  if (isNaN(idx) || !state.players[idx]) return;
-  renderSkillChoice(idx, playerName);
+  const players = getPlayersForScope(scope);
+  if (isNaN(idx) || !players[idx]) return;
+  renderSkillChoice(idx, playerName, scope);
   elSkillModal.classList.remove("hidden");
   setModalOpenState(true);
 }
-function openSkillCodesModal(playerIdx, playerName, skillId) {
+function openSkillCodesModal(playerIdx, playerName, skillId, scope = "our") {
   if (!elSkillModal || !elSkillModalBody) return;
   if (isDesktopCourtModalLayout()) {
     setCourtAreaLocked(true);
   }
   updateCourtModalPlacement();
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
-  if (isNaN(idx) || !state.players[idx]) return;
+  const players = getPlayersForScope(scope);
+  if (isNaN(idx) || !players[idx]) return;
   if (!skillId) return;
-  renderSkillCodes(idx, playerName, skillId);
+  renderSkillCodes(idx, playerName, skillId, scope);
   elSkillModal.classList.remove("hidden");
   setModalOpenState(true);
 }
@@ -2660,6 +3222,7 @@ window._closeSkillModal = closeSkillModal;
 function renderErrorModal() {
   if (!elErrorModalBody) return;
   elErrorModalBody.innerHTML = "";
+  const scope = (errorModalPrefillPlayer && errorModalPrefillPlayer.scope) || "our";
   const typeSection = document.createElement("div");
   typeSection.className = "error-type-section";
   const typeLabel = document.createElement("p");
@@ -2689,14 +3252,14 @@ function renderErrorModal() {
   if (errorModalPrefillPlayer && typeof errorModalPrefillPlayer.playerIdx === "number") {
     const prefillName =
       errorModalPrefillPlayer.playerName ||
-      (state.players && state.players[errorModalPrefillPlayer.playerIdx]) ||
+      (getPlayersForScope(scope) && getPlayersForScope(scope)[errorModalPrefillPlayer.playerIdx]) ||
       "Giocatrice";
     const preBtn = document.createElement("button");
     preBtn.type = "button";
     preBtn.className = "error-choice-btn";
     preBtn.textContent = "Applica a " + formatNameWithNumber(prefillName);
     preBtn.addEventListener("click", () => {
-      addPlayerError(errorModalPrefillPlayer.playerIdx, prefillName, selectedErrorType);
+      addPlayerError(errorModalPrefillPlayer.playerIdx, prefillName, selectedErrorType, scope);
       errorModalPrefillPlayer = null;
       closeErrorModal();
     });
@@ -2707,12 +3270,13 @@ function renderErrorModal() {
   teamBtn.className = "error-choice-btn danger";
   teamBtn.textContent = "Assegna alla squadra";
   teamBtn.addEventListener("click", () => {
-    handleTeamError(selectedErrorType);
+    handleTeamError(selectedErrorType, scope);
     errorModalPrefillPlayer = null;
     closeErrorModal();
   });
   grid.appendChild(teamBtn);
-  if (!state.players || state.players.length === 0) {
+  const players = getPlayersForScope(scope);
+  if (!players || players.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
     empty.textContent = "Aggiungi giocatrici per assegnare l'errore.";
@@ -2720,13 +3284,20 @@ function renderErrorModal() {
     elErrorModalBody.appendChild(grid);
     return;
   }
-  getSortedPlayerEntries().forEach(({ name, idx }) => {
+  const entries =
+    scope === "opponent"
+      ? getSortedPlayerEntriesForScope(scope)
+      : getSortedPlayerEntries();
+  entries.forEach(({ name, idx }) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "error-choice-btn";
-    btn.textContent = formatNameWithNumber(name);
+    btn.textContent =
+      scope === "opponent"
+        ? formatNameWithNumberFor(name, getPlayerNumbersForScope(scope))
+        : formatNameWithNumber(name);
     btn.addEventListener("click", () => {
-      addPlayerError(idx, name, selectedErrorType);
+      addPlayerError(idx, name, selectedErrorType, scope);
       errorModalPrefillPlayer = null;
       closeErrorModal();
     });
@@ -2997,13 +3568,14 @@ function applyPlayersFromTextarea() {
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
-  const { closeAfterAction = false, nextSkillId = null } = options;
+  const { closeAfterAction = false, nextSkillId = null, scope = "our" } = options;
+  const playerKey = makePlayerKey(scope, playerIdx);
   const getSkillColors = skillId => {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
   };
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
-  const enabledSkills = getEnabledSkills();
+  const enabledSkills = getEnabledSkillsForScope(scope);
   if (enabledSkills.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
@@ -3011,12 +3583,171 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     targetEl.appendChild(empty);
     return;
   }
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    const isForcedScope = state.forceSkillActive && state.forceSkillScope === scope;
+    if (!isForcedScope) {
+      if (state.pendingServe && state.pendingServe.scope === scope) {
+        const fallbackServer = getServerPlayerForScope(scope);
+        const pendingName = state.pendingServe.playerName || (fallbackServer && fallbackServer.name) || null;
+        const pendingIdx = typeof state.pendingServe.playerIdx === "number" ? state.pendingServe.playerIdx : null;
+        const normalizedPending = pendingName ? pendingName.trim().toLowerCase() : null;
+        const normalizedActive = activeName ? activeName.trim().toLowerCase() : null;
+        const isPendingPlayer =
+          (pendingIdx !== null && pendingIdx === playerIdx) ||
+          (normalizedPending && normalizedActive && normalizedPending === normalizedActive);
+        if (isPendingPlayer && isSkillEnabledForScope("serve", scope)) {
+          const grid = document.createElement("div");
+          grid.className = "code-grid";
+          const title = document.createElement("div");
+          title.className = "skill-header";
+          const titleSpan = document.createElement("span");
+          titleSpan.className = "skill-title skill-serve";
+          const colors = getSkillColors("serve");
+          titleSpan.style.backgroundColor = colors.bg;
+          titleSpan.style.color = colors.text;
+          titleSpan.textContent = "Battuta";
+          title.appendChild(titleSpan);
+          grid.appendChild(title);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "event-btn code-negative";
+          btn.textContent = "=";
+          btn.dataset.playerIdx = String(playerIdx);
+          btn.dataset.playerName = activeName;
+          btn.dataset.skillId = "serve";
+          btn.dataset.code = "=";
+          btn.addEventListener("click", async e => {
+            const success = await handleEventClick(
+              playerIdx,
+              "serve",
+              "=",
+              activeName,
+              e.currentTarget,
+              { scope }
+            );
+            if (!success) return;
+            setSelectedSkillForScope(scope, playerIdx, null);
+            renderPlayers();
+          });
+          grid.appendChild(btn);
+          targetEl.appendChild(grid);
+          return;
+        }
+        const locked = document.createElement("div");
+        locked.className = "players-empty";
+        locked.textContent = "In attesa dell'altra squadra.";
+        targetEl.appendChild(locked);
+        return;
+      }
+      if (isPostServeLockForScope(scope)) {
+        const serverName = getActiveServerName(scope);
+        if (serverName && serverName === activeName && isSkillEnabledForScope("serve", scope)) {
+          const grid = document.createElement("div");
+          grid.className = "code-grid";
+          const title = document.createElement("div");
+          title.className = "skill-header";
+          const titleSpan = document.createElement("span");
+          titleSpan.className = "skill-title skill-serve";
+          const colors = getSkillColors("serve");
+          titleSpan.style.backgroundColor = colors.bg;
+          titleSpan.style.color = colors.text;
+          titleSpan.textContent = "Battuta";
+          title.appendChild(titleSpan);
+          grid.appendChild(title);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "event-btn code-negative";
+          btn.textContent = "=";
+          btn.dataset.playerIdx = String(playerIdx);
+          btn.dataset.playerName = activeName;
+          btn.dataset.skillId = "serve";
+          btn.dataset.code = "=";
+          btn.addEventListener("click", async e => {
+            const success = await handleEventClick(
+              playerIdx,
+              "serve",
+              "=",
+              activeName,
+              e.currentTarget,
+              { scope }
+            );
+            if (!success) return;
+            setSelectedSkillForScope(scope, playerIdx, null);
+            renderPlayers();
+          });
+          grid.appendChild(btn);
+          targetEl.appendChild(grid);
+          return;
+        }
+        const locked = document.createElement("div");
+        locked.className = "players-empty";
+        locked.textContent = "In attesa dell'altra squadra.";
+        targetEl.appendChild(locked);
+        return;
+      }
+      const flowState = getAutoFlowState();
+      const server = getServerPlayerForScope(scope);
+      const allowServeErrorOnly =
+        flowState &&
+        flowState.teamScope &&
+        flowState.teamScope !== scope &&
+        flowState.skillId === "pass" &&
+        isSkillEnabledForScope("serve", scope) &&
+        server &&
+        server.name === activeName;
+      if (allowServeErrorOnly) {
+        const grid = document.createElement("div");
+        grid.className = "code-grid";
+        const title = document.createElement("div");
+        title.className = "skill-header";
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "skill-title skill-serve";
+        const colors = getSkillColors("serve");
+        titleSpan.style.backgroundColor = colors.bg;
+        titleSpan.style.color = colors.text;
+        titleSpan.textContent = "Battuta";
+        title.appendChild(titleSpan);
+        grid.appendChild(title);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "event-btn code-negative";
+        btn.textContent = "=";
+        btn.dataset.playerIdx = String(playerIdx);
+        btn.dataset.playerName = activeName;
+        btn.dataset.skillId = "serve";
+        btn.dataset.code = "=";
+        btn.addEventListener("click", async e => {
+          const success = await handleEventClick(
+            playerIdx,
+            "serve",
+            "=",
+            activeName,
+            e.currentTarget,
+            { scope }
+          );
+          if (!success) return;
+          setSelectedSkillForScope(scope, playerIdx, null);
+          renderPlayers();
+        });
+        grid.appendChild(btn);
+        targetEl.appendChild(grid);
+        return;
+      }
+      if (flowState && flowState.teamScope && flowState.teamScope !== scope) {
+        const locked = document.createElement("div");
+        locked.className = "players-empty";
+        locked.textContent = "In attesa dell'altra squadra.";
+        targetEl.appendChild(locked);
+        return;
+      }
+    }
+  }
   if (isCompactMobile) {
     const pickedSkillId = nextSkillId || null;
-    if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+    if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
       return;
     }
-    if (pickedSkillId === "block" && blockConfirmByPlayer[playerIdx] !== true) {
+    if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
       const grid = document.createElement("div");
       grid.className = "code-grid block-confirm-grid";
       const skipBtn = document.createElement("button");
@@ -3024,11 +3755,17 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       skipBtn.className = "event-btn block-confirm-skip";
       skipBtn.textContent = "No muro";
       skipBtn.addEventListener("click", () => {
-        delete blockConfirmByPlayer[playerIdx];
-        if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
-        setSelectedSkill(playerIdx, null);
-        const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
-        if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
+        delete blockConfirmByPlayer[playerKey];
+        if (blockInlinePlayer === playerKey) blockInlinePlayer = null;
+        setSelectedSkillForScope(scope, playerIdx, null);
+        const predicted = getPredictedSkillIdForScope(scope);
+        const nextSkill = predicted === "block" ? "defense" : "defense";
+        if (typeof forceNextSkill === "function" && scope === "our") {
+          forceNextSkill(nextSkill);
+        } else if (scope === "opponent") {
+          state.opponentSkillFlowOverride = nextSkill;
+          saveState();
+        }
         scheduleRenderPlayers();
       });
       const goBtn = document.createElement("button");
@@ -3036,8 +3773,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       goBtn.className = "event-btn block-confirm-go";
       goBtn.textContent = "Muro";
       goBtn.addEventListener("click", () => {
-        blockInlinePlayer = playerIdx;
-        blockConfirmByPlayer[playerIdx] = true;
+        blockInlinePlayer = playerKey;
+        blockConfirmByPlayer[playerKey] = true;
         scheduleRenderPlayers();
       });
       grid.appendChild(skipBtn);
@@ -3055,32 +3792,50 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.style.color = colors.text;
       btn.textContent = meta ? meta.label : pickedSkillId;
       btn.addEventListener("click", () => {
-        openSkillCodesModal(playerIdx, activeName, pickedSkillId);
+        openSkillCodesModal(playerIdx, activeName, pickedSkillId, scope);
       });
     } else {
       btn.textContent = "Seleziona skill";
-      btn.addEventListener("click", () => openSkillModal(playerIdx, activeName));
+      btn.addEventListener("click", () => openSkillModal(playerIdx, activeName, scope));
     }
     targetEl.appendChild(btn);
     return;
   }
   const enabledSkillIds = new Set(enabledSkills.map(s => s.id));
-  let pickedSkillId = nextSkillId || getSelectedSkill(playerIdx);
+  let pickedSkillId = nextSkillId || getSelectedSkillForScope(scope, playerIdx);
   if (pickedSkillId && !enabledSkillIds.has(pickedSkillId)) {
-    if (!nextSkillId) setSelectedSkill(playerIdx, null);
+    if (!nextSkillId) setSelectedSkillForScope(scope, playerIdx, null);
     pickedSkillId = null;
   }
-  if (pickedSkillId !== "serve" && serveTypeInlinePlayer === playerIdx) {
+  if (
+    pickedSkillId === "serve" &&
+    state.useOpponentTeam &&
+    state.predictiveSkillFlow &&
+    serveMetaByPlayer[playerKey]
+  ) {
+    const cachedMeta = serveMetaByPlayer[playerKey];
+    state.pendingServe = {
+      scope,
+      playerIdx,
+      playerName: activeName,
+      meta: cachedMeta
+    };
+    delete serveMetaByPlayer[playerKey];
+    setSelectedSkillForScope(scope, playerIdx, null);
+    scheduleRenderPlayers();
+    return;
+  }
+  if (pickedSkillId !== "serve" && serveTypeInlinePlayer === playerKey) {
     clearServeTypeInlineListener();
   }
-  if (pickedSkillId !== "attack" && attackInlinePlayer === playerIdx) {
-    clearAttackSelection(playerIdx);
+  if (pickedSkillId !== "attack" && attackInlinePlayer === playerKey) {
+    clearAttackSelection(playerIdx, scope);
   }
   if (!pickedSkillId) {
     const grid = document.createElement("div");
     grid.className = "skill-grid";
     enabledSkills.forEach(skill => {
-      if (skill.id === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+      if (skill.id === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
         return;
       }
       const colors = getSkillColors(skill.id);
@@ -3091,7 +3846,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.style.color = colors.text;
       btn.textContent = skill.label;
       btn.addEventListener("click", () => {
-        setSelectedSkill(playerIdx, skill.id);
+        setSelectedSkillForScope(scope, playerIdx, skill.id);
         scheduleRenderPlayers();
       });
       grid.appendChild(btn);
@@ -3099,13 +3854,21 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     targetEl.appendChild(grid);
     return;
   }
-  if (pickedSkillId === "serve" && !serveMetaByPlayer[playerIdx]) {
-    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerIdx) {
+  if (pickedSkillId === "serve" && !serveMetaByPlayer[playerKey]) {
+    const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
+    if (serveZone !== 1) {
+      const locked = document.createElement("div");
+      locked.className = "players-empty";
+      locked.textContent = "La battuta è disponibile solo per la zona 1.";
+      targetEl.appendChild(locked);
+      return;
+    }
+    if (serveTypeInlinePlayer !== null && serveTypeInlinePlayer !== playerKey) {
       return;
     }
     const grid = document.createElement("div");
     grid.className = "code-grid serve-type-grid";
-    grid.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx));
+    grid.addEventListener("pointerdown", () => setServeTypeFocusPlayer(playerIdx, scope));
     const title = document.createElement("div");
     title.className = "skill-header";
     const titleSpan = document.createElement("span");
@@ -3119,7 +3882,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       { id: "S", label: "Spin (S)" }
     ];
     const handleSelect = async type => {
-      await startServeTypeSelection(playerIdx, type, renderPlayers);
+      await startServeTypeSelection(playerIdx, type, renderPlayers, scope);
     };
     types.forEach(t => {
       const btn = document.createElement("button");
@@ -3129,15 +3892,15 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.addEventListener("click", () => handleSelect(t.id));
       grid.appendChild(btn);
     });
-    bindServeTypeInlineListener(playerIdx, handleSelect);
+    bindServeTypeInlineListener(playerIdx, handleSelect, scope);
     targetEl.appendChild(grid);
     return;
   }
-  if (pickedSkillId === "attack" && !attackMetaByPlayer[playerIdx]) {
-    if (attackInlinePlayer !== null && attackInlinePlayer !== playerIdx) {
+  if (pickedSkillId === "attack" && !attackMetaByPlayer[playerKey]) {
+    if (attackInlinePlayer !== null && attackInlinePlayer !== playerKey) {
       return;
     }
-    if (shouldPromptAttackSetType()) {
+    if (shouldPromptAttackSetType(scope)) {
       const grid = document.createElement("div");
       grid.className = "code-grid attack-select-grid";
       const title = document.createElement("div");
@@ -3147,7 +3910,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       titleSpan.textContent = "Attacco";
       title.appendChild(titleSpan);
       grid.appendChild(title);
-      const setTypeOptions = isSetterPlayer(playerIdx)
+      const setTypeOptions = isSetterPlayerForScope(scope, playerIdx)
         ? [{ value: "Damp", label: "Damp" }]
         : DEFAULT_SET_TYPE_OPTIONS;
       setTypeOptions.forEach(opt => {
@@ -3156,7 +3919,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         btn.className = "event-btn";
         btn.textContent = opt.label;
         btn.addEventListener("click", async () => {
-          await startAttackSelection(playerIdx, opt.value, renderPlayers);
+          await startAttackSelection(playerIdx, opt.value, renderPlayers, scope);
         });
         grid.appendChild(btn);
       });
@@ -3177,21 +3940,21 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.textContent = "Attacco";
       btn.addEventListener("click", async () => {
         const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-        await startAttackSelection(playerIdx, fallback, renderPlayers);
+        await startAttackSelection(playerIdx, fallback, renderPlayers, scope);
       });
       grid.appendChild(btn);
       targetEl.appendChild(grid);
     } else {
-      if (attackInlinePlayer === playerIdx) return;
+      if (attackInlinePlayer === playerKey) return;
       const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-      startAttackSelection(playerIdx, fallback, renderPlayers);
+      startAttackSelection(playerIdx, fallback, renderPlayers, scope);
     }
     return;
   }
-  if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerIdx) {
+  if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
     return;
   }
-  if (pickedSkillId === "block" && blockConfirmByPlayer[playerIdx] !== true) {
+  if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
     const grid = document.createElement("div");
     grid.className = "code-grid block-confirm-grid";
     const title = document.createElement("div");
@@ -3206,11 +3969,17 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     skipBtn.className = "event-btn block-confirm-skip";
     skipBtn.textContent = "No muro";
     skipBtn.addEventListener("click", () => {
-      delete blockConfirmByPlayer[playerIdx];
-      if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
-      setSelectedSkill(playerIdx, null);
-      const nextSkill = getPredictedSkillId() === "block" ? "defense" : "defense";
-      if (typeof forceNextSkill === "function") forceNextSkill(nextSkill);
+      delete blockConfirmByPlayer[playerKey];
+      if (blockInlinePlayer === playerKey) blockInlinePlayer = null;
+      setSelectedSkillForScope(scope, playerIdx, null);
+      const predicted = getPredictedSkillIdForScope(scope);
+      const nextSkill = predicted === "block" ? "defense" : "defense";
+      if (typeof forceNextSkill === "function" && scope === "our") {
+        forceNextSkill(nextSkill);
+      } else if (scope === "opponent") {
+        state.opponentSkillFlowOverride = nextSkill;
+        saveState();
+      }
       scheduleRenderPlayers();
     });
     const goBtn = document.createElement("button");
@@ -3218,8 +3987,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     goBtn.className = "event-btn block-confirm-go";
     goBtn.textContent = "Muro";
     goBtn.addEventListener("click", () => {
-      blockInlinePlayer = playerIdx;
-      blockConfirmByPlayer[playerIdx] = true;
+      blockInlinePlayer = playerKey;
+      blockConfirmByPlayer[playerKey] = true;
       scheduleRenderPlayers();
     });
     grid.appendChild(skipBtn);
@@ -3261,21 +4030,25 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         code,
         activeName,
         e.currentTarget,
-        { serveMeta: serveMetaByPlayer[playerIdx] || null, attackMeta: attackMetaByPlayer[playerIdx] || null }
+        {
+          serveMeta: serveMetaByPlayer[playerKey] || null,
+          attackMeta: attackMetaByPlayer[playerKey] || null,
+          scope
+        }
       );
       if (!success) return;
-      delete serveMetaByPlayer[playerIdx];
+      delete serveMetaByPlayer[playerKey];
       if (pickedSkillId === "serve") {
         clearServeTypeInlineListener();
       }
       if (pickedSkillId === "attack") {
-        clearAttackSelection(playerIdx);
+        clearAttackSelection(playerIdx, scope);
       }
       if (pickedSkillId === "block") {
-        delete blockConfirmByPlayer[playerIdx];
-        if (blockInlinePlayer === playerIdx) blockInlinePlayer = null;
+        delete blockConfirmByPlayer[playerKey];
+        if (blockInlinePlayer === playerKey) blockInlinePlayer = null;
       }
-      setSelectedSkill(playerIdx, null);
+      setSelectedSkillForScope(scope, playerIdx, null);
       if (closeAfterAction) closeSkillModal();
       renderPlayers();
     });
@@ -3288,7 +4061,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     backBtn.className = "secondary small code-back-btn";
     backBtn.textContent = "← Scegli un altro fondamentale";
     backBtn.addEventListener("click", () => {
-      setSelectedSkill(playerIdx, null);
+      setSelectedSkillForScope(scope, playerIdx, null);
       renderPlayers();
     });
     grid.appendChild(backBtn);
@@ -3414,13 +4187,14 @@ function renderTeamCourtCards(options = {}) {
       card.addEventListener("drop", e => handlePositionDrop(e, card), true);
     }
 
-    if (scope === "our" && activeName) {
-      const playerIdx = (state.players || []).findIndex(p => p === activeName);
+    if (activeName && (scope === "our" || scope === "opponent")) {
+      const players = getPlayersForScope(scope);
+      const playerIdx = players.findIndex(p => p === activeName);
       if (playerIdx === -1) {
         container.appendChild(card);
         return;
       }
-      renderSkillRows(card, playerIdx, activeName, { nextSkillId });
+      renderSkillRows(card, playerIdx, activeName, { nextSkillId, scope });
     }
     if (meta) {
       card.style.gridArea = meta.gridArea;
@@ -3436,9 +4210,12 @@ function renderPlayers() {
   elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
   ensureCourtShape();
   ensureMetricsConfigDefaults();
-  const predictedSkillId = getPredictedSkillId();
+  const predictedSkillId = state.useOpponentTeam
+    ? getPredictedSkillIdForScope("our")
+    : getPredictedSkillId();
+  const predictedOpponentSkillId = state.useOpponentTeam ? getPredictedSkillIdForScope("opponent") : null;
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
-  updateSetTypeVisibility(predictedSkillId);
+  updateSetTypeVisibility(predictedSkillId || predictedOpponentSkillId);
   const hasSelectedServe = isAnySelectedSkill("serve");
   const layoutSkill =
     state.predictiveSkillFlow && predictedSkillId
@@ -3448,7 +4225,7 @@ function renderPlayers() {
         : hasSelectedServe
           ? "serve"
           : null;
-  const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
+  const displayCourt = getAutoRoleDisplayCourt(layoutSkill, "our");
   renderTeamCourtCards({
     container: elPlayersContainer,
     scope: "our",
@@ -3465,9 +4242,9 @@ function renderPlayers() {
   });
   recalcAllStatsAndUpdateUI();
   renderLineupChips();
-  renderOpponentPlayers();
+  renderOpponentPlayers({ nextSkillId: predictedOpponentSkillId });
 }
-function renderOpponentPlayers() {
+function renderOpponentPlayers({ nextSkillId = null } = {}) {
   if (!state.useOpponentTeam) return;
   const elOpponentContainer = document.getElementById("opponent-players-container");
   if (!elOpponentContainer) return;
@@ -3489,16 +4266,28 @@ function renderOpponentPlayers() {
     typeof ensureCourtShapeFor === "function"
       ? ensureCourtShapeFor(baseOppCourt)
       : Array.from({ length: 6 }, (_, idx) => baseOppCourt[idx] || { main: "" });
+  const predictedSkillId = nextSkillId;
+  const layoutSkill =
+    state.predictiveSkillFlow && predictedSkillId
+      ? predictedSkillId
+      : isAnySelectedSkillForScope("opponent", "pass")
+        ? "pass"
+        : isAnySelectedSkillForScope("opponent", "serve")
+          ? "serve"
+          : null;
+  const displayCourt = getAutoRoleDisplayCourt(layoutSkill, "opponent");
   renderTeamCourtCards({
     container: elOpponentContainer,
     scope: "opponent",
-    court,
+    court: displayCourt.map(item => item.slot || { main: "" }),
+    displayCourt,
     numbersMap: state.opponentPlayerNumbers || {},
     captainSet: new Set((state.opponentCaptains || []).map(name => name.toLowerCase())),
     libSet: new Set(state.opponentLiberos || []),
     allowReturn: true,
     allowDrop: true,
-    isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches
+    isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches,
+    nextSkillId
   });
 }
 function syncCourtSideLayout() {
@@ -3567,8 +4356,8 @@ function swapTeamsInMatch() {
   saveState();
   renderPlayers();
 }
-function clearReceiveContext() {
-  lastReceiveContext = null;
+function clearReceiveContext(scope = "our") {
+  lastReceiveContext[scope] = null;
 }
 function animateFreeballButton() {
   if (!elBtnFreeball) return;
@@ -3579,21 +4368,31 @@ function animateFreeballButton() {
   elBtnFreeball.classList.add("freeball-pulse");
   setTimeout(() => elBtnFreeball.classList.remove("freeball-pulse"), 420);
 }
-function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null } = {}) {
+function animateEventToLog() {
+  // fallback no-op: some builds don't include the log animation helper
+}
+function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null, scope = "our" } = {}) {
   state.freeballPending = true;
+  state.freeballPendingScope = scope;
+  state.flowTeamScope = scope;
   state.predictiveSkillFlow = true;
-  state.skillFlowOverride = startSkill || null;
+  if (scope === "opponent") {
+    state.opponentSkillFlowOverride = startSkill || null;
+  } else {
+    state.skillFlowOverride = startSkill || null;
+  }
   animateFreeballButton();
   if (persist) saveState();
   if (rerender) {
     renderPlayers();
-    updateNextSkillIndicator(getPredictedSkillId());
+    updateNextSkillIndicator(getPredictedSkillIdForScope(scope));
   }
 }
 function rememberReceiveContext(ev) {
   if (!ev) return;
+  const scope = getTeamScopeFromEvent(ev);
   const zone = ev.zone || ev.playerPosition || null;
-  lastReceiveContext = {
+  lastReceiveContext[scope] = {
     zone,
     evaluation: ev.code || ev.receiveEvaluation || null,
     set: ev.set || null,
@@ -3602,9 +4401,10 @@ function rememberReceiveContext(ev) {
 }
 function applyReceiveContextToEvent(ev) {
   if (!ev) return;
+  const scope = getTeamScopeFromEvent(ev);
   // Un servizio segna l'inizio di un nuovo scambio
   if (ev.skillId === "serve") {
-    clearReceiveContext();
+    clearReceiveContext(scope);
     return;
   }
   // Registra la ricezione e salva i dati utili per le azioni successive
@@ -3614,7 +4414,7 @@ function applyReceiveContextToEvent(ev) {
     rememberReceiveContext(ev);
     return;
   }
-  const ctx = lastReceiveContext;
+  const ctx = lastReceiveContext[scope];
   const sameSet = ctx && (ctx.set === null || ctx.set === ev.set);
   const fromReceive = !!ctx && sameSet;
   if ((ev.skillId === "second" || ev.skillId === "attack") && fromReceive) {
@@ -3624,8 +4424,31 @@ function applyReceiveContextToEvent(ev) {
   if (ev.skillId === "attack") {
     // Default BP, salvo attacco immediato dopo ricezione (solo il primo)
     ev.attackBp = !fromReceive;
-    clearReceiveContext();
+    clearReceiveContext(scope);
   }
+}
+function incrementSkillStats(scope, playerIdx, skillId, code) {
+  if (typeof playerIdx !== "number" || playerIdx < 0) return;
+  if (scope === "our") {
+    if (!state.stats[playerIdx]) {
+      state.stats[playerIdx] = {};
+    }
+    if (!state.stats[playerIdx][skillId]) {
+      state.stats[playerIdx][skillId] = { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
+    }
+    state.stats[playerIdx][skillId][code] =
+      (state.stats[playerIdx][skillId][code] || 0) + 1;
+    return;
+  }
+  state.opponentStats = state.opponentStats || [];
+  if (!state.opponentStats[playerIdx]) {
+    state.opponentStats[playerIdx] = {};
+  }
+  if (!state.opponentStats[playerIdx][skillId]) {
+    state.opponentStats[playerIdx][skillId] = { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
+  }
+  state.opponentStats[playerIdx][skillId][code] =
+    (state.opponentStats[playerIdx][skillId][code] || 0) + 1;
 }
 async function handleEventClick(
   playerIdxStr,
@@ -3633,20 +4456,72 @@ async function handleEventClick(
   code,
   playerName,
   sourceEl,
-  { setTypeChoice = null, serveMeta = null, attackMeta = null } = {}
+  { setTypeChoice = null, serveMeta = null, attackMeta = null, scope = "our" } = {}
 ) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return false;
   }
-  const wasFreeball = !!state.freeballPending;
-  let playerIdx = parseInt(playerIdxStr, 10);
-  if (isNaN(playerIdx) || !state.players[playerIdx]) {
-    playerIdx = state.players.findIndex(p => p === playerName);
+  let forceMatch = false;
+  let allowPendingServePass = false;
+  let flowState = null;
+  let activeOverride = null;
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    flowState = getAutoFlowState();
+    activeOverride = scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
+    forceMatch = state.forceSkillActive && state.forceSkillScope === scope && activeOverride === skillId;
+    allowPendingServePass =
+      state.pendingServe &&
+      state.pendingServe.scope &&
+      getOppositeScope(state.pendingServe.scope) === scope &&
+      skillId === "pass";
   }
-  if (playerIdx === -1 || !state.players[playerIdx]) return false;
+  const wasFreeball = !!state.freeballPending;
+  const players = getPlayersForScope(scope);
+  let playerIdx = parseInt(playerIdxStr, 10);
+  if (isNaN(playerIdx) || !players[playerIdx]) {
+    playerIdx = players.findIndex(p => p === playerName);
+  }
+  if ((playerIdx === -1 || !players[playerIdx]) && playerName) {
+    const raw = playerName.trim().toLowerCase();
+    const normalized = raw.replace(/^[0-9]+\\s*/, "");
+    playerIdx = players.findIndex(p => {
+      const base = (p || "").trim().toLowerCase();
+      if (!base) return false;
+      return base === normalized || base === raw;
+    });
+  }
+  if (playerIdx === -1 || !players[playerIdx]) return false;
+  if (skillId === "serve") {
+    const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
+    if (serveZone !== 1) {
+      return false;
+    }
+  }
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    const playerLabel = playerName || players[playerIdx];
+    if (forceMatch || allowPendingServePass) {
+      // forced skill always allowed
+    } else if (isPostServeLockForScope(scope)) {
+      if (skillId !== "serve" || code !== "=" || getActiveServerName(scope) !== playerLabel) {
+        return false;
+      }
+    } else if (
+      flowState &&
+      flowState.teamScope &&
+      flowState.teamScope !== scope &&
+      !canOverrideServeError(scope, skillId, code, flowState, playerLabel)
+    ) {
+      return false;
+    }
+  }
   state.freeballPending = false;
-  state.skillFlowOverride = null;
+  state.freeballPendingScope = scope;
+  if (scope === "opponent") {
+    state.opponentSkillFlowOverride = null;
+  } else {
+    state.skillFlowOverride = null;
+  }
   const selectionVideoTime = state.videoScoutMode
     ? serveMeta && typeof serveMeta.videoTime === "number"
       ? serveMeta.videoTime
@@ -3654,12 +4529,59 @@ async function handleEventClick(
         ? attackMeta.videoTime
         : null
     : null;
+  if (state.pendingServe && !forceMatch) {
+    const pendingScope = state.pendingServe.scope;
+    if (pendingScope && scope !== pendingScope && skillId !== "pass") {
+      return false;
+    }
+  }
+  const shouldInferServe = shouldInferServeFromPass(scope, skillId);
+  if (shouldInferServe) {
+    const servingScope = getOppositeScope(scope);
+    const server = getServerPlayerForScope(servingScope);
+    const pendingServe = state.pendingServe;
+    const serveMetaToUse =
+      pendingServe && pendingServe.scope === servingScope ? pendingServe.meta || {} : serveMeta || {};
+    const serverName =
+      pendingServe && pendingServe.scope === servingScope && pendingServe.playerName
+        ? pendingServe.playerName
+        : server
+          ? server.name
+          : null;
+    const serverIdx =
+      pendingServe && pendingServe.scope === servingScope && typeof pendingServe.playerIdx === "number"
+        ? pendingServe.playerIdx
+        : server
+          ? server.idx
+          : null;
+    if (serverName) {
+      const serveCode = getServeCodeFromPassCode(code);
+      const serveEvent = buildBaseEventPayload({
+        playerIdx: serverIdx,
+        playerName: serverName,
+        skillId: "serve",
+        code: serveCode,
+        teamScope: servingScope
+      });
+      serveEvent.derivedFromPassServe = true;
+      serveEvent.serveType = serveMetaToUse.serveType || serveEvent.serveType || "JF";
+      serveEvent.serveStart = serveMetaToUse.serveStart || serveEvent.serveStart || null;
+      serveEvent.serveEnd = serveMetaToUse.serveEnd || serveEvent.serveEnd || null;
+      applyReceiveContextToEvent(serveEvent);
+      state.events.push(serveEvent);
+      incrementSkillStats(servingScope, serverIdx, "serve", serveCode);
+      if (state.pendingServe && state.pendingServe.scope === servingScope) {
+        state.pendingServe = null;
+      }
+    }
+  }
   const event = buildBaseEventPayload({
     playerIdx,
-    playerName: state.players[playerIdx],
+    playerName: players[playerIdx],
     skillId,
     code,
-    videoTime: selectionVideoTime
+    videoTime: selectionVideoTime,
+    teamScope: scope
   });
   if (skillId === "serve") {
     if (serveMeta) {
@@ -3669,9 +4591,21 @@ async function handleEventClick(
     } else if (!event.serveType) {
       event.serveType = "JF";
     }
+    if (state.pendingServe && state.pendingServe.scope === scope) {
+      state.pendingServe = null;
+    }
   }
   let appliedSetType = setTypeChoice || (attackMeta && attackMeta.setType) || null;
   if (skillId === "attack") {
+    const otherScope = getOppositeScope(scope);
+    if (
+      state.useOpponentTeam &&
+      state.predictiveSkillFlow &&
+      code === "/" &&
+      isSkillEnabledForScope("block", otherScope)
+    ) {
+      event.pendingBlockEval = true;
+    }
     const fallbackSetType = normalizeSetTypeValue(state.defaultSetType) || null;
     if (!appliedSetType && fallbackSetType) appliedSetType = fallbackSetType;
     if (appliedSetType) {
@@ -3680,12 +4614,12 @@ async function handleEventClick(
     if (attackMeta && attackMeta.trajectory) {
       applyAttackTrajectoryToEvent(event, attackMeta.trajectory);
     }
-    const setterFromSet = getSetterFromLastSetEvent();
+    const setterFromSet = getSetterFromLastSetEventForScope(scope);
     if (setterFromSet && (setterFromSet.idx !== null || setterFromSet.name)) {
       event.setterIdx = setterFromSet.idx;
       event.setterName = setterFromSet.name;
     } else {
-      const setterFromCourt = getSetterFromCourt();
+      const setterFromCourt = getSetterFromCourtForScope(scope);
       event.setterIdx = setterFromCourt.idx;
       event.setterName = setterFromCourt.name;
     }
@@ -3695,17 +4629,21 @@ async function handleEventClick(
   event.fromFreeball = wasFreeball;
   applyReceiveContextToEvent(event);
   state.events.push(event);
-  handleAutoRotationFromEvent(event);
-  if (!state.stats[playerIdx]) {
-    state.stats[playerIdx] = {};
+  handleAutoRotationFromEvent(event, scope);
+  if (state.useOpponentTeam) {
+    const nextFlow = computeTwoTeamFlowFromEvent(event);
+    state.flowTeamScope = nextFlow.teamScope;
   }
-  if (!state.stats[playerIdx][skillId]) {
-    state.stats[playerIdx][skillId] = { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
+  incrementSkillStats(scope, playerIdx, skillId, code);
+  if (state.forceSkillActive && state.forceSkillScope === scope) {
+    state.forceSkillActive = false;
+    state.forceSkillScope = null;
   }
-  state.stats[playerIdx][skillId][code] =
-    (state.stats[playerIdx][skillId][code] || 0) + 1;
+  if (skillId === "block") {
+    applyBlockInference(event, scope, code);
+  }
   if (skillId === "serve" && code === "/") {
-    triggerFreeballFlow({ persist: false, rerender: false });
+    triggerFreeballFlow({ persist: false, rerender: false, scope });
   }
   animateEventToLog(sourceEl, skillId, code);
   const persistLocal = typeof getPointDirection === "function" && !!getPointDirection(event);
@@ -3713,16 +4651,23 @@ async function handleEventClick(
     includeAggregates: !state.predictiveSkillFlow,
     playerIdx,
     skillId,
-    persistLocal
+    persistLocal,
+    scope
   });
   if (
-    state.attackTrajectoryEnabled &&
+    (scope === "opponent" ? state.opponentAttackTrajectoryEnabled : state.attackTrajectoryEnabled) &&
     skillId === "attack" &&
     !(attackMeta && attackMeta.trajectory) &&
     !(attackMeta && attackMeta.trajectorySkipped)
   ) {
     const baseZoneForMapping = event.originZone || event.zone || event.playerPosition || null;
-    openAttackTrajectoryModal({ baseZone: baseZoneForMapping, setType: event.setType || null }).then(coords => {
+    const forceFar = isFarSideForScope(scope);
+    openAttackTrajectoryModal({
+      baseZone: baseZoneForMapping,
+      setType: event.setType || null,
+      forceFar,
+      scope
+    }).then(coords => {
       if (coords && coords.start && coords.end) {
         const mapZone = z => mapBackRowZone(z, baseZoneForMapping);
         const trajectoryPayload = {
@@ -3753,7 +4698,11 @@ async function handleEventClick(
       }
     });
   }
-  if (state.serveTrajectoryEnabled && skillId === "serve" && !serveMeta) {
+  if (
+    (scope === "opponent" ? state.opponentServeTrajectoryEnabled : state.serveTrajectoryEnabled) &&
+    skillId === "serve" &&
+    !serveMeta
+  ) {
     captureServeTrajectory(event);
   }
   return true;
@@ -3810,7 +4759,7 @@ function ensurePlayerAnalysisState() {
 }
 function getPlayerAnalysisPlayerIdx() {
   const prefs = ensurePlayerAnalysisState();
-  const players = state.players || [];
+  const players = getPlayersForScope(getAnalysisTeamScope());
   if (!players.length) {
     prefs.playerIdx = null;
     return null;
@@ -3886,6 +4835,9 @@ function renderAggSkillDetailTable(summaryAll) {
   const skillId = aggTableView.skillId;
   const skillLabel = getSkillLabel(skillId);
   const skillHeaderClass = "skill-col skill-" + skillId;
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   renderAggDetailHeader(thead, [
     {
       label: "Atleta · " + skillLabel + " <- Tabellino",
@@ -3906,14 +4858,14 @@ function renderAggSkillDetailTable(summaryAll) {
     { label: "Eff", className: skillHeaderClass }
   ]);
   elAggTableBody.innerHTML = "";
-  if (!state.players || state.players.length === 0) {
+  if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
     td.textContent = "Aggiungi giocatrici per vedere il dettaglio " + skillLabel + ".";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll);
+    renderScoreAndRotations(summaryAll, analysisScope);
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -3954,13 +4906,21 @@ function renderAggSkillDetailTable(summaryAll) {
     applySkillClassToCells(tdList, skillId, 0);
     elAggTableBody.appendChild(row);
   };
-  getSortedPlayerEntries().forEach(({ name, idx }) => {
+  const sortedEntries =
+    analysisScope === "opponent"
+      ? getSortedPlayerEntriesForScope(analysisScope)
+      : getSortedPlayerEntries();
+  sortedEntries.forEach(({ name, idx }) => {
     const counts = getAggSkillCounts(skillId, idx);
     mergeCounts(totals, counts);
-    buildRow(formatNameWithNumber(name), counts, idx, false);
+    const label =
+      analysisScope === "opponent"
+        ? formatNameWithNumberFor(name, analysisNumbers)
+        : formatNameWithNumber(name);
+    buildRow(label, counts, idx, false);
   });
   buildRow("Totale squadra", totals, null, true);
-  renderScoreAndRotations(summaryAll);
+  renderScoreAndRotations(summaryAll, analysisScope);
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -3970,6 +4930,8 @@ function renderAggPlayerDetailTable(summaryAll) {
   if (!elAggTableBody || !thead) return;
   const playerIdx = aggTableView.playerIdx;
   const playerLabel = getAggSkillPlayerLabel(playerIdx);
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
   renderAggDetailHeader(thead, [
     {
       label: "Fondamentale · " + playerLabel + " <- Tabellino",
@@ -3990,14 +4952,14 @@ function renderAggPlayerDetailTable(summaryAll) {
     { label: "Eff" }
   ]);
   elAggTableBody.innerHTML = "";
-  if (!state.players || state.players.length === 0) {
+  if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
     td.textContent = "Aggiungi giocatrici per vedere il dettaglio.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll);
+    renderScoreAndRotations(summaryAll, analysisScope);
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -4031,35 +4993,47 @@ function renderAggPlayerDetailTable(summaryAll) {
     applySkillClassToCells(tdList, skillId, 0);
     elAggTableBody.appendChild(row);
   });
-  renderScoreAndRotations(summaryAll);
+  renderScoreAndRotations(summaryAll, analysisScope);
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
 }
 function getAggSkillCounts(skillId, playerIdx) {
   if (!skillId) return emptyCounts();
+  const statsSource =
+    analysisStatsCache && analysisStatsScope === getAnalysisTeamScope()
+      ? analysisStatsCache
+      : state.stats || [];
   if (playerIdx === "team") {
     const totals = emptyCounts();
-    (state.stats || []).forEach(playerStats => {
+    Object.values(statsSource || []).forEach(playerStats => {
       const counts = normalizeCounts(playerStats && playerStats[skillId]);
       mergeCounts(totals, counts);
     });
     return totals;
   }
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
-  if (isNaN(idx) || !state.stats || !state.stats[idx]) return emptyCounts();
-  return normalizeCounts(state.stats[idx][skillId]);
+  if (isNaN(idx) || !statsSource || !statsSource[idx]) return emptyCounts();
+  return normalizeCounts(statsSource[idx][skillId]);
 }
 function getAggSkillPlayerLabel(playerIdx) {
   if (playerIdx === "team") return "Totale squadra";
   const idx = typeof playerIdx === "number" ? playerIdx : parseInt(playerIdx, 10);
-  if (isNaN(idx) || !state.players || !state.players[idx]) return "Giocatrice";
-  return formatNameWithNumber(state.players[idx]);
+  const scope = getAnalysisTeamScope();
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  if (isNaN(idx) || !players || !players[idx]) return "Giocatrice";
+  return scope === "opponent"
+    ? formatNameWithNumberFor(players[idx], numbers)
+    : formatNameWithNumber(players[idx]);
 }
 function renderPlayerAnalysisControls() {
   if (!elPlayerAnalysisSelect) return;
   const prefs = ensurePlayerAnalysisState();
-  const players = state.players || [];
+  renderAnalysisTeamFilter();
+  const analysisScope = getAnalysisTeamScope();
+  const players = getPlayersForScope(analysisScope);
+  const numbers = getPlayerNumbersForScope(analysisScope);
   elPlayerAnalysisSelect.innerHTML = "";
   if (!players.length) {
     const opt = document.createElement("option");
@@ -4068,10 +5042,17 @@ function renderPlayerAnalysisControls() {
     elPlayerAnalysisSelect.appendChild(opt);
     elPlayerAnalysisSelect.disabled = true;
   } else {
-    getSortedPlayerEntries().forEach(({ name, idx }) => {
+    const entries =
+      analysisScope === "opponent"
+        ? getSortedPlayerEntriesForScope(analysisScope)
+        : getSortedPlayerEntries();
+    entries.forEach(({ name, idx }) => {
       const opt = document.createElement("option");
       opt.value = String(idx);
-      opt.textContent = formatNameWithNumber(name) || name || "Giocatrice " + (idx + 1);
+      opt.textContent =
+        analysisScope === "opponent"
+          ? formatNameWithNumberFor(name, numbers) || name || "Giocatrice " + (idx + 1)
+          : formatNameWithNumber(name) || name || "Giocatrice " + (idx + 1);
       elPlayerAnalysisSelect.appendChild(opt);
     });
     elPlayerAnalysisSelect.disabled = false;
@@ -4079,7 +5060,7 @@ function renderPlayerAnalysisControls() {
     if (selectedIdx !== null) {
       elPlayerAnalysisSelect.value = String(selectedIdx);
     } else {
-      const firstEntry = getSortedPlayerEntries()[0];
+      const firstEntry = entries[0];
       elPlayerAnalysisSelect.value = firstEntry ? String(firstEntry.idx) : "0";
     }
   }
@@ -4130,7 +5111,12 @@ function renderPlayerAnalysisTable() {
   if (!elPlayerAnalysisBody) return;
   elPlayerAnalysisBody.innerHTML = "";
   const idx = getPlayerAnalysisPlayerIdx();
-  if (idx === null || !state.players || !state.players[idx]) {
+  const analysisScope = getAnalysisTeamScope();
+  const players = getPlayersForScope(analysisScope);
+  const numbers = getPlayerNumbersForScope(analysisScope);
+  const filteredEvents = filterEventsByAnalysisTeam(state.events || []);
+  const statsByPlayer = ensureAnalysisStatsCache();
+  if (idx === null || !players || !players[idx]) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 26;
@@ -4139,27 +5125,32 @@ function renderPlayerAnalysisTable() {
     elPlayerAnalysisBody.appendChild(tr);
     return;
   }
-  const name = state.players[idx];
-  const serveCounts = normalizeCounts(state.stats[idx] && state.stats[idx].serve);
-  const passCounts = normalizeCounts(state.stats[idx] && state.stats[idx].pass);
-  const attackCounts = normalizeCounts(state.stats[idx] && state.stats[idx].attack);
-  const blockCounts = normalizeCounts(state.stats[idx] && state.stats[idx].block);
-  const defenseCounts = normalizeCounts(state.stats[idx] && state.stats[idx].defense);
+  const name = players[idx];
+  const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
+  const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
+  const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
+  const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
+  const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
 
   const serveMetrics = computeMetrics(serveCounts, "serve");
   const passMetrics = computeMetrics(passCounts, "pass");
   const attackMetrics = computeMetrics(attackCounts, "attack");
   const defenseMetrics = computeMetrics(defenseCounts, "defense");
 
-  const playerPoints = computePlayerPointsMap();
-  const playerErrors = computePlayerErrorsMap();
+  const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
+  const playerErrors = computePlayerErrorsMap(filteredEvents);
   const points = playerPoints[idx] || { for: 0, against: 0 };
   const personalErrors = playerErrors[idx] || 0;
   const attackTotal = totalFromCounts(attackCounts);
 
   const row = document.createElement("tr");
   const cells = [
-    { text: formatNameWithNumber(name) },
+    {
+      text:
+        analysisScope === "opponent"
+          ? formatNameWithNumberFor(name, numbers)
+          : formatNameWithNumber(name)
+    },
     { text: points.for || 0 },
     { text: points.against || 0 },
     { text: formatDelta((points.for || 0) - (points.against || 0)) },
@@ -4229,6 +5220,7 @@ function renderPlayerAnalysis() {
 }
 function renderAggSkillModal(skillId, playerIdx) {
   if (!elAggSkillModalBody) return;
+  ensureAnalysisStatsCache();
   const skillLabel = getSkillLabel(skillId);
   const playerLabel = getAggSkillPlayerLabel(playerIdx);
   if (elAggSkillModalTitle) {
@@ -4320,9 +5312,10 @@ function mergeCounts(target, source) {
     target[code] = (target[code] || 0) + (source[code] || 0);
   });
 }
-function getCurrentZoneForPlayer(playerIdx, forSkillId = null) {
-  if (typeof playerIdx !== "number" || !state.players || !state.players[playerIdx]) return null;
-  const name = state.players[playerIdx];
+function getCurrentZoneForPlayer(playerIdx, forSkillId = null, scope = "our") {
+  const players = getPlayersForScope(scope);
+  if (typeof playerIdx !== "number" || !players || !players[playerIdx]) return null;
+  const name = players[playerIdx];
   const getZoneFromCourt = court => {
     if (!court || !Array.isArray(court)) return null;
     const slotIdx = court.findIndex(
@@ -4331,14 +5324,15 @@ function getCurrentZoneForPlayer(playerIdx, forSkillId = null) {
     if (slotIdx === -1) return null;
     return slotIdx + 1;
   };
-  if (state.autoRolePositioning && forSkillId) {
+  if (scope !== "opponent" && state.autoRolePositioning && forSkillId) {
     const displayCourt = getAutoRoleDisplayCourt(forSkillId);
     const displayIdx = displayCourt.findIndex(
       item => item && item.slot && (item.slot.main === name || item.slot.replaced === name)
     );
     if (displayIdx !== -1) return displayIdx + 1;
   }
-  return getZoneFromCourt(state.court);
+  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
+  return getZoneFromCourt(baseCourt);
 }
 function normalizeCounts(raw) {
   return Object.assign(emptyCounts(), raw || {});
@@ -4404,6 +5398,9 @@ function recalcAllStatsAndUpdateUI() {
   initStats();
   state.events.forEach(ev => {
     const idx = ev.playerIdx;
+    if (ev && ev.team === "opponent") {
+      return;
+    }
     if (ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
       return;
     }
@@ -4694,7 +5691,9 @@ function buildSelectedSegments() {
         end,
         duration,
         label:
-          (ev.playerName ? formatNameWithNumber(ev.playerName) : "Evento") +
+          (ev.playerName
+            ? formatNameWithNumberFor(ev.playerName, getPlayerNumbersForScope(getTeamScopeFromEvent(ev)))
+            : "Evento") +
           " " +
           (ev.skillId || "") +
           " " +
@@ -4812,18 +5811,23 @@ function renderEventsLog(options = {}) {
       ev.errorType && (ev.code === "error" || ev.code === "team-error")
         ? getErrorTypeLabel(ev.errorType)
         : "";
+    const scope = getTeamScopeFromEvent(ev);
+    const numbers = getPlayerNumbersForScope(scope);
+    const nameLabel = ev.playerName ? formatNameWithNumberFor(ev.playerName, numbers) : null;
+    const numRaw = ev.playerName ? numbers[ev.playerName] : null;
+    const num =
+      numRaw !== undefined && numRaw !== null && String(numRaw).trim() !== "" ? String(numRaw) : "";
     const leftText =
       "[S" +
       ev.set +
       "] " +
-      (ev.playerName ? formatNameWithNumber(ev.playerName) : "#" + ev.playerIdx) +
+      (nameLabel || "#" + ev.playerIdx) +
       " - " +
       getEventSkillLabel(ev) +
       " " +
       ev.code +
       (errorTypeLabel ? " · " + errorTypeLabel : "");
     const shortSkill = getEventShortLabel(ev);
-    const num = getPlayerNumber(ev.playerName);
     const initials = getInitials(ev.playerName);
     const compact =
       (num || initials || "#" + (typeof ev.playerIdx === "number" ? ev.playerIdx + 1 : "?")) +
@@ -5545,18 +6549,20 @@ function undoLastVideoEdit() {
   renderPlayers();
 }
 function resolvePlayerIdx(ev) {
-  if (typeof ev.playerIdx === "number" && state.players[ev.playerIdx]) {
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope);
+  if (typeof ev.playerIdx === "number" && players[ev.playerIdx]) {
     return ev.playerIdx;
   }
-  return state.players.findIndex(name => name === ev.playerName);
+  return players.findIndex(name => name === ev.playerName);
 }
 function refreshAfterVideoEdit(shouldRecalcStats) {
   if (bulkEditActive) return;
   saveState({ persistLocal: shouldTrackVideoUndo() });
   if (shouldRecalcStats) {
     recalcAllStatsAndUpdateUI();
-  renderEventsLog();
-}
+    renderEventsLog();
+  }
   renderVideoAnalysis();
 }
 function createPlayerSelect(ev, onDone, options = {}) {
@@ -5565,10 +6571,14 @@ function createPlayerSelect(ev, onDone, options = {}) {
   emptyOpt.value = "";
   emptyOpt.textContent = "—";
   select.appendChild(emptyOpt);
-  (state.players || []).forEach((name, idx) => {
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  players.forEach((name, idx) => {
     const opt = document.createElement("option");
     opt.value = String(idx);
-    opt.textContent = formatNameWithNumber(name);
+    opt.textContent =
+      scope === "opponent" ? formatNameWithNumberFor(name, numbers) : formatNameWithNumber(name);
     select.appendChild(opt);
   });
   const isSetterTarget = options && options.target === "setter";
@@ -5576,7 +6586,7 @@ function createPlayerSelect(ev, onDone, options = {}) {
     ? typeof ev.setterIdx === "number"
       ? ev.setterIdx
       : typeof ev.setterName === "string"
-        ? state.players.indexOf(ev.setterName)
+        ? players.indexOf(ev.setterName)
         : -1
     : resolvePlayerIdx(ev);
   select.value = playerIdx >= 0 ? String(playerIdx) : "";
@@ -5595,13 +6605,13 @@ function createPlayerSelect(ev, onDone, options = {}) {
       refreshAfterVideoEdit(true);
       return;
     }
-    if (!isNaN(val) && state.players[val]) {
+    if (!isNaN(val) && players[val]) {
       if (isSetterTarget) {
         ev.setterIdx = val;
-        ev.setterName = state.players[val];
+        ev.setterName = players[val];
       } else {
         ev.playerIdx = val;
-        ev.playerName = state.players[val];
+        ev.playerName = players[val];
       }
       refreshAfterVideoEdit(true);
     }
@@ -5811,10 +6821,13 @@ function createPlayerNameSelect(ev, field, onDone) {
   emptyOpt.value = "";
   emptyOpt.textContent = "—";
   select.appendChild(emptyOpt);
-  (state.players || []).forEach(name => {
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  players.forEach(name => {
     const opt = document.createElement("option");
     opt.value = name;
-    opt.textContent = formatNameWithNumber(name) || name;
+    opt.textContent = formatNameWithNumberFor(name, numbers) || name;
     select.appendChild(opt);
   });
   select.value = ev[field] || "";
@@ -5873,7 +6886,7 @@ function createZoneInput(ev, onDone) {
   input.min = "1";
   input.max = "6";
   input.placeholder = "1-6";
-  const fallback = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
+  const fallback = getCurrentZoneForPlayer(resolvePlayerIdx(ev), null, getTeamScopeFromEvent(ev));
   input.value = ev.zone || fallback || "";
   input.addEventListener("change", () => {
     const val = parseInt(input.value, 10);
@@ -6213,11 +7226,27 @@ function renderEventTableRows(target, events, options = {}) {
       { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
       { text: resolveTeamLabel() },
       {
-        text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
+              text: (() => {
+                const scope = getTeamScopeFromEvent(ev);
+                const players = getPlayersForScope(scope);
+                const numbers = getPlayerNumbersForScope(scope);
+                const name = ev.playerName || players[resolvePlayerIdx(ev)];
+                if (!name) return "—";
+                return scope === "opponent"
+                  ? formatNameWithNumberFor(name, numbers)
+                  : formatNameWithNumber(name);
+              })(),
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
       },
       {
-        text: formatNameWithNumber(ev.setterName || (typeof ev.setterIdx === "number" ? state.players[ev.setterIdx] : "")) || "",
+        text: (() => {
+          const scope = getTeamScopeFromEvent(ev);
+          const players = getPlayersForScope(scope);
+          const numbers = getPlayerNumbersForScope(scope);
+          const setterName =
+            ev.setterName || (typeof ev.setterIdx === "number" ? players[ev.setterIdx] : "");
+          return setterName ? formatNameWithNumberFor(setterName, numbers) : "";
+        })(),
         editable: td =>
           makeEditableCell(td, "Alzatore", done => createPlayerSelect(ev, done, { target: "setter" }), editGuard)
       },
@@ -6335,6 +7364,8 @@ function renderEventTableRows(target, events, options = {}) {
           e.stopPropagation();
           const dir = ev.attackDirection || traj || null;
           const baseZonePrefill = ev.originZone || ev.zone || ev.playerPosition || null;
+          const evScope = getTeamScopeFromEvent(ev);
+          const forceFar = isFarSideForScope(evScope);
           const prefill =
             dir && typeof dir === "object" && dir.start && dir.end
               ? {
@@ -6343,7 +7374,9 @@ function renderEventTableRows(target, events, options = {}) {
                   startZone: dir.startZone,
                   endZone: dir.endZone,
                   baseZone: baseZonePrefill,
-                  setType: ev.setType || null
+                  setType: ev.setType || null,
+                  forceFar,
+                  scope: evScope
                 }
               : traj && traj.start && traj.end
               ? {
@@ -6352,9 +7385,11 @@ function renderEventTableRows(target, events, options = {}) {
                   startZone: traj.startZone,
                   endZone: traj.endZone,
                   baseZone: baseZonePrefill,
-                  setType: ev.setType || null
+                  setType: ev.setType || null,
+                  forceFar,
+                  scope: evScope
                 }
-              : { baseZone: baseZonePrefill, setType: ev.setType || null };
+              : { baseZone: baseZonePrefill, setType: ev.setType || null, forceFar, scope: evScope };
           openAttackTrajectoryModal(Object.assign({ forcePopup: true }, prefill)).then(coords => {
             if (!coords || !coords.start || !coords.end) return;
             const mapZone = z => mapBackRowZone(z, baseZonePrefill);
@@ -6737,7 +7772,7 @@ function renderVideoAnalysis() {
   }
   let updatedZones = false;
   skillEvents.forEach(({ ev }) => {
-    const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev));
+    const fallbackZone = getCurrentZoneForPlayer(resolvePlayerIdx(ev), null, getTeamScopeFromEvent(ev));
     if ((ev.zone === undefined || ev.zone === null || ev.zone === "") && fallbackZone) {
       ev.zone = fallbackZone;
       updatedZones = true;
@@ -7040,6 +8075,8 @@ function getScoreOverrideTotals(targetSet = null) {
   );
 }
 function getPointDirection(ev) {
+  if (ev && ev.pendingBlockEval) return null;
+  if (ev && (ev.derivedFromPassServe || ev.derivedFromBlock)) return null;
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
     return ev.pointDirection;
   }
@@ -7051,12 +8088,20 @@ function getPointDirection(ev) {
   if (cfg.against.includes(code)) return "against";
   return null;
 }
+function getPointDirectionForScope(ev, scope) {
+  const dir = getPointDirection(ev);
+  if (!dir) return null;
+  const eventScope = getTeamScopeFromEvent(ev);
+  if (eventScope === scope) return dir;
+  return dir === "for" ? "against" : "for";
+}
 function isOpponentErrorPoint(ev) {
   return !!(ev && ev.skillId === "manual" && ev.code === "opp-error");
 }
 function computePointsSummary(targetSet, options = {}) {
   const includeOverrides = options.includeOverrides !== false;
   const excludeOpponentErrors = !!options.excludeOpponentErrors;
+  const teamScope = options.teamScope || "our";
   const target = targetSet ? parseInt(targetSet, 10) : null;
   const rotations = {};
   for (let r = 1; r <= 6; r++) {
@@ -7070,7 +8115,9 @@ function computePointsSummary(targetSet, options = {}) {
   });
   filteredEvents.forEach(ev => {
     if (excludeOpponentErrors && isOpponentErrorPoint(ev)) return;
-    const direction = getPointDirection(ev);
+    const direction = state.useOpponentTeam
+      ? getPointDirectionForScope(ev, teamScope)
+      : getPointDirection(ev);
     if (!direction) return;
     const value = typeof ev.value === "number" ? ev.value : 1;
     const rot = ev.rotation && ev.rotation >= 1 && ev.rotation <= 6 ? ev.rotation : 1;
@@ -7114,11 +8161,12 @@ function computePointsSummary(targetSet, options = {}) {
     overrideAgainst: overrideTotals.against
   };
 }
-function computeSetScores() {
+function computeSetScores(teamScope = "our") {
   const setMap = {};
   (state.events || []).forEach(ev => {
     const setNum = parseInt(ev.set, 10) || 1;
-    const direction = getPointDirection(ev);
+    const direction =
+      state.useOpponentTeam ? getPointDirectionForScope(ev, teamScope) : getPointDirection(ev);
     if (!direction) return;
     const value = typeof ev.value === "number" ? ev.value : 1;
     if (!setMap[setNum]) {
@@ -7154,11 +8202,11 @@ function computeSetScores() {
   const totalAgainst = sets.reduce((sum, s) => sum + s.against, 0);
   return { sets, totalFor: Math.max(0, totalFor), totalAgainst: Math.max(0, totalAgainst) };
 }
-function computePlayerPointsMap() {
+function computePlayerPointsMap(events = state.events || [], scope = "our") {
   const map = {};
-  (state.events || []).forEach(ev => {
+  (events || []).forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
-    const dir = getPointDirection(ev);
+    const dir = state.useOpponentTeam ? getPointDirectionForScope(ev, scope) : getPointDirection(ev);
     if (!dir) return;
     const val = typeof ev.value === "number" ? ev.value : 1;
     if (!map[ev.playerIdx]) {
@@ -7172,9 +8220,9 @@ function computePlayerPointsMap() {
   });
   return map;
 }
-function computePlayerErrorsMap() {
+function computePlayerErrorsMap(events = state.events || []) {
   const map = {};
-  (state.events || []).forEach(ev => {
+  (events || []).forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
     const val = typeof ev.value === "number" ? ev.value : 1;
     const isManualError = ev.skillId === "manual" && ev.code === "error";
@@ -7183,6 +8231,33 @@ function computePlayerErrorsMap() {
     map[ev.playerIdx] = (map[ev.playerIdx] || 0) + Math.max(0, val);
   });
   return map;
+}
+function computeStatsByPlayerForEvents(events, players) {
+  const stats = {};
+  (events || []).forEach(ev => {
+    if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+      return;
+    }
+    if (typeof ev.playerIdx !== "number" || !players[ev.playerIdx]) return;
+    if (!stats[ev.playerIdx]) {
+      stats[ev.playerIdx] = {};
+    }
+    if (!stats[ev.playerIdx][ev.skillId]) {
+      stats[ev.playerIdx][ev.skillId] = { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
+    }
+    stats[ev.playerIdx][ev.skillId][ev.code] =
+      (stats[ev.playerIdx][ev.skillId][ev.code] || 0) + 1;
+  });
+  return stats;
+}
+function ensureAnalysisStatsCache() {
+  const scope = getAnalysisTeamScope();
+  if (analysisStatsCache && analysisStatsScope === scope) return analysisStatsCache;
+  const players = getPlayersForScope(scope);
+  const events = filterEventsByAnalysisTeam(state.events || []);
+  analysisStatsCache = computeStatsByPlayerForEvents(events, players);
+  analysisStatsScope = scope;
+  return analysisStatsCache;
 }
 function formatDelta(value) {
   if (value === null || value === undefined || isNaN(value)) return "0";
@@ -7201,18 +8276,52 @@ function renderLiveScore() {
   }
   updateMatchStatusUI();
 }
-function handleAutoRotationFromEvent(eventObj) {
+function handleAutoRotationFromEvent(eventObj, scope = "our") {
   if (!state || !state.autoRotate) {
     state.autoRotatePending = false;
     return;
   }
-  const wasReceiving = !state.isServing || !!state.autoRotatePending;
-  eventObj.autoRotatePrev = wasReceiving;
+  const eventScope = scope || getTeamScopeFromEvent(eventObj);
   if (typeof ensurePointRulesDefaults === "function") {
     ensurePointRulesDefaults();
   }
+  if (eventScope === "opponent") {
+    const opponentServing = !state.isServing;
+    const wasReceiving = !opponentServing || !!state.opponentAutoRotatePending;
+    eventObj.autoRotatePrev = wasReceiving;
+    if (eventObj.skillId === "pass") {
+      state.opponentAutoRotatePending = true;
+      state.isServing = true;
+      eventObj.autoRotateNext = true;
+      saveState();
+      return;
+    }
+    let pending = wasReceiving;
+    let serving = opponentServing;
+    const direction = getPointDirection(eventObj);
+    if (direction === "for") {
+      if (pending && typeof rotateOpponentCourt === "function") {
+        rotateOpponentCourt("ccw");
+        eventObj.autoRotationDirection = "ccw";
+      }
+      pending = false;
+      serving = true;
+    } else if (direction === "against") {
+      pending = true;
+      serving = false;
+    } else {
+      pending = pending || !serving;
+    }
+    state.opponentAutoRotatePending = pending;
+    state.isServing = !serving;
+    eventObj.autoRotateNext = pending;
+    saveState();
+    return;
+  }
+  const wasReceiving = !state.isServing || !!state.autoRotatePending;
+  eventObj.autoRotatePrev = wasReceiving;
   if (eventObj.skillId === "pass") {
-    state.autoRotatePending = true; // siamo in cambio palla
+    state.autoRotatePending = true;
     state.isServing = false;
     eventObj.autoRotateNext = true;
     saveState();
@@ -7223,18 +8332,15 @@ function handleAutoRotationFromEvent(eventObj) {
   const direction = getPointDirection(eventObj);
   if (direction === "for") {
     if (pending && typeof rotateCourt === "function") {
-      // Side-out rotation: advance in the same direction as manual CCW button
       rotateCourt("ccw");
       eventObj.autoRotationDirection = "ccw";
     }
     pending = false;
     serving = true;
   } else if (direction === "against") {
-    // Siamo tornati in ricezione finché non facciamo punto
     pending = true;
     serving = false;
   } else {
-    // Nessun punto assegnato: manteniamo l'informazione se eravamo in cambio palla
     pending = pending || !serving;
   }
   state.autoRotatePending = pending;
@@ -7249,38 +8355,53 @@ function handleAutoRotationFromEvent(eventObj) {
   }
 }
 function recomputeServeFlagsFromHistory() {
-  let serving = !!state.isServing;
-  let pending = !serving;
+  let servingScope = state.isServing ? "our" : "opponent";
   if (!state || !state.autoRotate) {
-    state.isServing = serving;
+    state.isServing = servingScope === "our";
     state.autoRotatePending = false;
     return;
   }
   (state.events || []).forEach(ev => {
     if (!ev) return;
-    if (ev.skillId === "pass") {
-      pending = true;
-      serving = false;
+    const scope = getTeamScopeFromEvent(ev);
+    if (ev.skillId === "serve") {
+      servingScope = scope;
       return;
     }
     const dir = getPointDirection(ev);
     if (dir === "for") {
-      pending = false;
-      serving = true;
+      servingScope = scope;
     } else if (dir === "against") {
-      pending = true;
-      serving = false;
-    } else if (!serving) {
-      pending = true;
+      servingScope = getOppositeScope(scope);
     }
   });
-  state.isServing = serving;
-  state.autoRotatePending = pending;
+  state.isServing = servingScope === "our";
+  state.autoRotatePending = !state.isServing;
+  state.opponentAutoRotatePending = state.isServing;
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    const lastFlowEvent = getLastFlowEvent(state.events || []);
+    if (lastFlowEvent) {
+      const next = computeTwoTeamFlowFromEvent(lastFlowEvent);
+      state.flowTeamScope = next.teamScope || servingScope;
+    } else {
+      state.flowTeamScope = servingScope;
+    }
+  } else {
+    state.flowTeamScope = servingScope;
+  }
   if (typeof enforceAutoLiberoForState === "function") {
     enforceAutoLiberoForState({ skipServerOnServe: true });
   }
 }
-function addManualPoint(direction, value, codeLabel, playerIdx = null, playerName = "Squadra", errorType = null) {
+function addManualPoint(
+  direction,
+  value,
+  codeLabel,
+  playerIdx = null,
+  playerName = "Squadra",
+  errorType = null,
+  scope = "our"
+) {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
@@ -7293,11 +8414,16 @@ function addManualPoint(direction, value, codeLabel, playerIdx = null, playerNam
     code: codeLabel || direction,
     pointDirection: direction,
     value: value,
-    errorType: errorType || null
+    errorType: errorType || null,
+    teamScope: scope
   });
-  clearReceiveContext();
+  clearReceiveContext(scope);
   state.events.push(event);
-  handleAutoRotationFromEvent(event);
+  handleAutoRotationFromEvent(event, scope);
+  if (state.useOpponentTeam) {
+    const nextFlow = computeTwoTeamFlowFromEvent(event);
+    state.flowTeamScope = nextFlow.teamScope;
+  }
   saveState({ persistLocal: true });
   renderEventsLog();
   recalcAllStatsAndUpdateUI();
@@ -7329,35 +8455,37 @@ function handleManualScore(direction, delta) {
   renderAggregatedTable();
   renderVideoAnalysis();
 }
-function handleTeamPoint() {
-  addManualPoint("for", 1, "for", null, "Squadra");
+function handleTeamPoint(scope = "our") {
+  const teamLabel = getTeamNameForScope(scope);
+  addManualPoint("for", 1, "for", null, teamLabel, null, scope);
 }
 function handleOpponentErrorPoint() {
   state.skillFlowOverride = null;
-  addManualPoint("for", 1, "opp-error", null, "Avversari");
-  updateNextSkillIndicator(getPredictedSkillId());
+  addManualPoint("for", 1, "opp-error", null, getTeamNameForScope("opponent"), null, "opponent");
+  updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
 }
-function addPlayerError(playerIdx, playerName, errorType = null) {
+function addPlayerError(playerIdx, playerName, errorType = null, scope = "our") {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
-  addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice", errorType);
+  addManualPoint("against", 1, "error", playerIdx, playerName || "Giocatrice", errorType, scope);
 }
-function addPlayerPoint(playerIdx, playerName) {
+function addPlayerPoint(playerIdx, playerName, scope = "our") {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
-  addManualPoint("for", 1, "for", playerIdx, playerName || "Giocatrice");
+  addManualPoint("for", 1, "for", playerIdx, playerName || "Giocatrice", null, scope);
 }
-function handleTeamError(errorType = null) {
-  addManualPoint("against", 1, "team-error", null, "Squadra", errorType);
+function handleTeamError(errorType = null, scope = "our") {
+  const teamLabel = getTeamNameForScope(scope);
+  addManualPoint("against", 1, "team-error", null, teamLabel, errorType, scope);
 }
 function handleOpponentPoint() {
   state.skillFlowOverride = null;
-  addManualPoint("against", 1, "opp-point", null, "Avversari");
-  updateNextSkillIndicator(getPredictedSkillId());
+  addManualPoint("against", 1, "opp-point", null, getTeamNameForScope("opponent"), null, "opponent");
+  updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
 }
 function snapshotSkillClock() {
   ensureSkillClock();
@@ -7504,16 +8632,16 @@ function endMatch() {
     actionType: "match-end"
   });
 }
-function renderScoreAndRotations(summary) {
-  const scoreSummary = computePointsSummary();
-  const effectiveSummary = summary || scoreSummary;
+function renderScoreAndRotations(summary, teamScope = "our") {
+  const scoreSummary = summary || computePointsSummary(null, { teamScope });
+  const effectiveSummary = scoreSummary;
   const totalLabel = scoreSummary.totalFor + " - " + scoreSummary.totalAgainst;
   if (elAggScore) {
     elAggScore.textContent = totalLabel;
   }
   if (elAggSetCards) {
     elAggSetCards.innerHTML = "";
-    const setsData = computeSetScores();
+    const setsData = computeSetScores(teamScope);
     if (!setsData.sets || setsData.sets.length === 0) {
       const span = document.createElement("div");
       span.className = "score-set-chip";
@@ -7971,6 +9099,83 @@ function getCheckedValues(container, { asNumber = false } = {}) {
     asNumber ? Number(inp.value) : inp.value
   );
 }
+function getTeamFilterOptions() {
+  const options = [
+    { value: "our", label: getTeamNameForScope("our") }
+  ];
+  if (state.useOpponentTeam) {
+    options.push({ value: "opponent", label: getTeamNameForScope("opponent") });
+  }
+  return options;
+}
+function ensureAnalysisTeamFilterDefault() {
+  if (analysisTeamFilterState.teams.size === 0) {
+    analysisTeamFilterState.teams.add("our");
+  }
+}
+function handleAnalysisTeamFilterChange(e) {
+  if (!elAnalysisFilterTeams) return;
+  if (e && e.target instanceof HTMLInputElement && e.target.checked) {
+    elAnalysisFilterTeams.querySelectorAll("input[type=checkbox]").forEach(inp => {
+      if (inp !== e.target) inp.checked = false;
+    });
+  }
+  const values = getCheckedValues(elAnalysisFilterTeams);
+  analysisTeamFilterState.teams = new Set(values);
+  if (analysisTeamFilterState.teams.size === 0) {
+    analysisTeamFilterState.teams.add("our");
+    const fallback = elAnalysisFilterTeams.querySelector('input[value="our"]');
+    if (fallback) fallback.checked = true;
+  }
+  renderAggregatedTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+  renderSecondTable();
+  renderPlayerAnalysis();
+}
+function handleVideoTeamFilterChange(e) {
+  if (!elVideoFilterTeams) return;
+  if (e && e.target instanceof HTMLInputElement && e.target.checked) {
+    elVideoFilterTeams.querySelectorAll("input[type=checkbox]").forEach(inp => {
+      if (inp !== e.target) inp.checked = false;
+    });
+  }
+  const values = getCheckedValues(elVideoFilterTeams);
+  videoFilterState.teams = new Set(values);
+  if (videoFilterState.teams.size === 0) {
+    videoFilterState.teams.add("our");
+    const fallback = elVideoFilterTeams.querySelector('input[value="our"]');
+    if (fallback) fallback.checked = true;
+  }
+  renderVideoAnalysis();
+}
+function renderAnalysisTeamFilter() {
+  if (!elAnalysisFilterTeams) return;
+  ensureAnalysisTeamFilterDefault();
+  const options = getTeamFilterOptions();
+  analysisTeamFilterState.teams = new Set(
+    [...analysisTeamFilterState.teams].filter(val => options.some(opt => opt.value === val))
+  );
+  const visible = renderDynamicFilter(elAnalysisFilterTeams, options, analysisTeamFilterState.teams, {
+    onChange: handleAnalysisTeamFilterChange
+  });
+  toggleFilterVisibility(elAnalysisFilterTeams, visible);
+}
+function matchesTeamFilter(ev, selectedSet) {
+  if (!selectedSet || selectedSet.size === 0) return true;
+  const scope = getTeamScopeFromEvent(ev);
+  return selectedSet.has(scope);
+}
+function getAnalysisTeamScope() {
+  ensureAnalysisTeamFilterDefault();
+  if (analysisTeamFilterState.teams.size === 1) {
+    return Array.from(analysisTeamFilterState.teams)[0];
+  }
+  return "our";
+}
+function filterEventsByAnalysisTeam(events) {
+  return (events || []).filter(ev => matchesTeamFilter(ev, analysisTeamFilterState.teams));
+}
 function matchesPreviousSkill(ev, filterVal) {
   if (!filterVal || filterVal === "any") return true;
   const normalizedVal = filterVal === "dig-negative" ? "defense-negative" : filterVal;
@@ -8040,6 +9245,9 @@ function matchesAdvancedFilters(ev, filters, { includeSetter = false } = {}) {
 }
 function matchesVideoFilters(ev, filters) {
   if (!ev || !filters) return true;
+  if (filters.teams && filters.teams.size) {
+    if (!matchesTeamFilter(ev, filters.teams)) return false;
+  }
   if (filters.players && filters.players.size) {
     const idx = resolvePlayerIdx(ev);
     if (idx === -1 || !filters.players.has(idx)) return false;
@@ -8109,6 +9317,9 @@ const trajectoryFilterState = {
   receiveZones: new Set(),
   prevSkill: "any"
 };
+const analysisTeamFilterState = {
+  teams: new Set()
+};
 const serveTrajectoryFilterState = {
   players: new Set(),
   sets: new Set(),
@@ -8161,6 +9372,7 @@ const playerSecondFilterState = {
   prevSkill: "any"
 };
 const videoFilterState = {
+  teams: new Set(),
   players: new Set(),
   setters: new Set(),
   skills: new Set(),
@@ -8228,6 +9440,10 @@ function syncServeTrajectoryFilterState() {
 function syncVideoFilterState() {
   const els = getVideoFilterElements();
   if (!els) return;
+  videoFilterState.teams = new Set(getCheckedValues(els.teams));
+  if (videoFilterState.teams.size === 0) {
+    videoFilterState.teams.add("our");
+  }
   videoFilterState.players = new Set(getCheckedValues(els.players, { asNumber: true }));
   videoFilterState.setters = new Set(getCheckedValues(els.setters, { asNumber: true }));
   videoFilterState.skills = new Set(getCheckedValues(els.skills));
@@ -8283,6 +9499,7 @@ function resetServeTrajectoryFilters() {
   renderServeTrajectoryAnalysis();
 }
 function resetVideoFilters() {
+  videoFilterState.teams.clear();
   videoFilterState.players.clear();
   videoFilterState.setters.clear();
   videoFilterState.skills.clear();
@@ -8304,6 +9521,7 @@ function getVideoFilterElements() {
   if (!players) return null;
   return {
     wrap,
+    teams: document.getElementById("video-filter-teams"),
     players,
     setters: document.getElementById("video-filter-setters"),
     skills: document.getElementById("video-filter-skills"),
@@ -8322,20 +9540,27 @@ function getVideoFilterElements() {
 }
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
-  const events = state.events || [];
+  renderAnalysisTeamFilter();
+  const events = filterEventsByAnalysisTeam(state.events || []);
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const trajEvents = attackEvents.filter(ev => {
     const dir = ev.attackDirection || ev.attackTrajectory;
     return dir && dir.start && dir.end;
   });
-  const playersOptsRaw = buildUniqueOptions(
-    trajEvents.map(ev => ev.playerIdx),
-    {
-      asNumber: true,
-      labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
+  const playersOptsRaw = buildUniqueOptions(trajEvents.map(ev => ev.playerIdx), {
+    asNumber: true,
+    labelFn: idx => {
+      const name = analysisPlayers[idx];
+      if (!name) return "—";
+      return analysisScope === "opponent"
+        ? formatNameWithNumberFor(name, analysisNumbers)
+        : formatNameWithNumber(name);
     }
-  );
-  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
+  });
+  const playersOpts = sortPlayerOptionsByNumberForScope(playersOptsRaw, getAnalysisTeamScope());
   const setsOpts = buildUniqueOptions(trajEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -8467,16 +9692,23 @@ function renderTrajectoryFilters() {
 }
 function renderServeTrajectoryFilters() {
   if (!elServeTrajectoryGrid) return;
-  const events = state.events || [];
+  renderAnalysisTeamFilter();
+  const events = filterEventsByAnalysisTeam(state.events || []);
   const serveEvents = events.filter(ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd);
-  const playersOptsRaw = buildUniqueOptions(
-    serveEvents.map(ev => ev.playerIdx),
-    {
-      asNumber: true,
-      labelFn: idx => formatNameWithNumber(state.players[idx]) || state.players[idx] || "—"
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
+  const playersOptsRaw = buildUniqueOptions(serveEvents.map(ev => ev.playerIdx), {
+    asNumber: true,
+    labelFn: idx => {
+      const name = analysisPlayers[idx];
+      if (!name) return "—";
+      return analysisScope === "opponent"
+        ? formatNameWithNumberFor(name, analysisNumbers)
+        : formatNameWithNumber(name);
     }
-  );
-  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
+  });
+  const playersOpts = sortPlayerOptionsByNumberForScope(playersOptsRaw, analysisScope);
   const setsOpts = buildUniqueOptions(serveEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -8629,6 +9861,7 @@ function renderPlayerTrajectoryFilters() {
     const dir = ev.attackDirection || ev.attackTrajectory;
     if (!dir || !dir.start || !dir.end) return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return ev.playerIdx === playerIdx;
   });
   const setsOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
@@ -8758,6 +9991,7 @@ function getFilteredPlayerTrajectoryEvents() {
     const dir = ev.attackDirection || ev.attackTrajectory;
     if (!dir || !dir.start || !dir.end) return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return ev.playerIdx === playerIdx;
   });
   return events.filter(ev => {
@@ -8855,6 +10089,7 @@ function renderPlayerServeTrajectoryFilters() {
     if (!ev || ev.skillId !== "serve") return false;
     if (!ev.serveStart || !ev.serveEnd) return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return ev.playerIdx === playerIdx;
   });
   const setsOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
@@ -8974,6 +10209,7 @@ function getFilteredPlayerServeTrajectoryEvents() {
     if (!ev || ev.skillId !== "serve") return false;
     if (!ev.serveStart || !ev.serveEnd) return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return ev.playerIdx === playerIdx;
   });
   return events.filter(ev => {
@@ -8992,12 +10228,18 @@ function renderPlayerServeTrajectoryAnalysis() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
   elPlayerServeTrajectoryGrid.innerHTML = "";
   if (playerIdx === null) return;
+  const analysisScope = getAnalysisTeamScope();
+  const players = getPlayersForScope(analysisScope);
+  const numbers = getPlayerNumbersForScope(analysisScope);
   const card = document.createElement("div");
   card.className = "trajectory-card serve-trajectory-card";
   card.dataset.playerIdx = String(playerIdx);
   const title = document.createElement("div");
   title.className = "trajectory-card__title";
-  title.textContent = formatNameWithNumber(state.players[playerIdx]) || state.players[playerIdx] || "—";
+  title.textContent =
+    analysisScope === "opponent"
+      ? formatNameWithNumberFor(players[playerIdx], numbers) || players[playerIdx] || "—"
+      : formatNameWithNumber(players[playerIdx]) || players[playerIdx] || "—";
   const canvas = document.createElement("canvas");
   canvas.dataset.serveTrajCanvas = String(playerIdx);
   const empty = document.createElement("div");
@@ -9097,11 +10339,17 @@ function renderPlayerSecondFilters() {
   if (!elPlayerSecondFilterSetTypes) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
   const secondEvents = (state.events || []).filter(
-    ev => ev && ev.skillId === "second" && playerIdx !== null && ev.playerIdx === playerIdx
+    ev =>
+      ev &&
+      ev.skillId === "second" &&
+      playerIdx !== null &&
+      ev.playerIdx === playerIdx &&
+      matchesTeamFilter(ev, analysisTeamFilterState.teams)
   );
   const attackEvents = (state.events || []).filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return getSetterFromEvent(ev) === playerIdx;
   });
   const setTypeEvents = secondEvents.concat(attackEvents);
@@ -9203,7 +10451,12 @@ function renderPlayerSecondFilters() {
 function getFilteredPlayerSecondEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
   const events = (state.events || []).filter(
-    ev => ev && ev.skillId === "second" && playerIdx !== null && ev.playerIdx === playerIdx
+    ev =>
+      ev &&
+      ev.skillId === "second" &&
+      playerIdx !== null &&
+      ev.playerIdx === playerIdx &&
+      matchesTeamFilter(ev, analysisTeamFilterState.teams)
   );
   return events.filter(ev => matchesAdvancedFilters(ev, playerSecondFilterState));
 }
@@ -9212,6 +10465,7 @@ function getFilteredPlayerAttacksForSecondDistribution() {
   const attacks = (state.events || []).filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return getSetterFromEvent(ev) === playerIdx;
   });
   return attacks.filter(ev => {
@@ -9308,6 +10562,9 @@ function renderPlayerSecondTable() {
   if (!elPlayerSecondBody) return;
   elPlayerSecondBody.innerHTML = "";
   renderPlayerSecondFilters();
+  const analysisScope = getAnalysisTeamScope();
+  const players = getPlayersForScope(analysisScope);
+  const numbers = getPlayerNumbersForScope(analysisScope);
   const playerIdx = getPlayerAnalysisPlayerIdx();
   if (playerIdx === null) {
     const tr = document.createElement("tr");
@@ -9341,7 +10598,12 @@ function renderPlayerSecondTable() {
   const metrics = computeMetrics(counts, "second");
   const tr = document.createElement("tr");
   const cells = [
-    { text: formatNameWithNumber(state.players[playerIdx]) },
+    {
+      text:
+        analysisScope === "opponent"
+          ? formatNameWithNumberFor(players[playerIdx], numbers)
+          : formatNameWithNumber(players[playerIdx])
+    },
     { text: total, className: "skill-col skill-second" },
     { text: counts["#"] || 0, className: "skill-col skill-second" },
     { text: counts["+"] || 0, className: "skill-col skill-second" },
@@ -9366,48 +10628,67 @@ function renderVideoFilters(events) {
   const els = getVideoFilterElements();
   if (!els) return;
   const list = Array.isArray(events) ? events : [];
+  if (videoFilterState.teams.size === 0) {
+    videoFilterState.teams.add("our");
+  }
+  const filteredByTeam = videoFilterState.teams.size
+    ? list.filter(ev => matchesTeamFilter(ev, videoFilterState.teams))
+    : list;
+  const labelScope = filteredByTeam.length ? getTeamScopeFromEvent(filteredByTeam[0]) : getAnalysisTeamScope();
+  const labelPlayers = getPlayersForScope(labelScope);
+  const labelNumbers = getPlayerNumbersForScope(labelScope);
   const playerOptsRaw = buildUniqueOptions(
-    list.map(ev => {
+    filteredByTeam.map(ev => {
       const idx = resolvePlayerIdx(ev);
       return idx === -1 ? null : idx;
     }),
     {
       asNumber: true,
-      labelFn: idx =>
-        formatNameWithNumber(state.players[idx]) || state.players[idx] || "#" + (Number(idx) + 1)
+      labelFn: idx => {
+        const name = labelPlayers[idx];
+        if (!name) return "#" + (Number(idx) + 1);
+        return labelScope === "opponent"
+          ? formatNameWithNumberFor(name, labelNumbers)
+          : formatNameWithNumber(name);
+      }
     }
   );
   const setterOptsRaw = buildUniqueOptions(
-    list.map(ev => getSetterFromEvent(ev)),
+    filteredByTeam.map(ev => getSetterFromEvent(ev)),
     {
       asNumber: true,
-      labelFn: idx =>
-        formatNameWithNumber(state.players[idx]) || state.players[idx] || "Alzatore " + (Number(idx) + 1)
+      labelFn: idx => {
+        const name = labelPlayers[idx];
+        if (!name) return "Alzatore " + (Number(idx) + 1);
+        return labelScope === "opponent"
+          ? formatNameWithNumberFor(name, labelNumbers)
+          : formatNameWithNumber(name);
+      }
     }
   );
-  const playerOpts = sortPlayerOptionsByNumber(playerOptsRaw);
-  const setterOpts = sortPlayerOptionsByNumber(setterOptsRaw);
-  const skillOpts = buildUniqueOptions(list.map(ev => ev.skillId), {
+  const playerOpts = sortPlayerOptionsByNumberForScope(playerOptsRaw, labelScope);
+  const setterOpts = sortPlayerOptionsByNumberForScope(setterOptsRaw, labelScope);
+  const skillOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.skillId), {
     labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
   });
-  const codeOpts = buildUniqueOptions(list.map(ev => ev.code), { labelFn: val => val });
-  const setOpts = buildUniqueOptions(list.map(ev => normalizeSetNumber(ev.set)), {
+  const codeOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.code), { labelFn: val => val });
+  const setOpts = buildUniqueOptions(filteredByTeam.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const rotOpts = buildUniqueOptions(list.map(ev => ev.rotation), {
+  const rotOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.rotation), {
     asNumber: true,
     labelFn: val => "P" + val
   });
-  const zoneOpts = buildUniqueOptions(list.map(ev => ev.zone || ev.playerPosition), {
+  const zoneOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.zone || ev.playerPosition), {
     asNumber: true,
     labelFn: val => "Z" + val
   });
-  const baseOpts = buildUniqueOptions(list.map(ev => normalizeBaseValue(ev.base)), {
+  const baseOpts = buildUniqueOptions(filteredByTeam.map(ev => normalizeBaseValue(ev.base)), {
     labelFn: val => val.toUpperCase()
   });
   const setTypeOpts = buildUniqueOptions(
-    list.map(ev =>
+    filteredByTeam.map(ev =>
       normalizeSetTypeValue(
         ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
       )
@@ -9415,7 +10696,7 @@ function renderVideoFilters(events) {
     { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
   const phaseOpts = buildUniqueOptions(
-    list.map(ev => {
+    filteredByTeam.map(ev => {
       let rawPhase = ev.attackBp;
       if (rawPhase === undefined || rawPhase === null) {
         rawPhase = ev.phase !== undefined ? ev.phase : ev.attackPhase !== undefined ? ev.attackPhase : null;
@@ -9424,14 +10705,14 @@ function renderVideoFilters(events) {
     }),
     { labelFn: val => formatAttackPhaseLabel(val) }
   );
-  const recvEvalOpts = buildUniqueOptions(list.map(ev => normalizeEvalCode(ev.receiveEvaluation)), {
+  const recvEvalOpts = buildUniqueOptions(filteredByTeam.map(ev => normalizeEvalCode(ev.receiveEvaluation)), {
     labelFn: val => val
   });
   const recvZoneOpts = buildUniqueOptions(
-    list.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    filteredByTeam.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
     { asNumber: true, labelFn: val => "Z" + val }
   );
-  const serveTypeOpts = buildUniqueOptions(list.map(ev => ev.serveType), { labelFn: val => val });
+  const serveTypeOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.serveType), { labelFn: val => val });
 
   videoFilterState.players = new Set(
     [...videoFilterState.players].filter(idx => playerOpts.some(p => Number(p.value) === idx))
@@ -9472,7 +10753,13 @@ function renderVideoFilters(events) {
   videoFilterState.serveTypes = new Set(
     [...videoFilterState.serveTypes].filter(val => serveTypeOpts.some(o => o.value === val))
   );
+  videoFilterState.teams = new Set(
+    [...videoFilterState.teams].filter(val => getTeamFilterOptions().some(o => o.value === val))
+  );
 
+  renderDynamicFilter(els.teams, getTeamFilterOptions(), videoFilterState.teams, {
+    onChange: handleVideoTeamFilterChange
+  });
   renderDynamicFilter(els.players, playerOpts, videoFilterState.players, {
     onChange: handleVideoFilterChange
   });
@@ -9582,6 +10869,7 @@ function getFilteredTrajectoryEvents() {
   return events.filter(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory;
     const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     if (!matchesAdvancedFilters(ev, trajectoryFilterState)) return false;
     if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
@@ -9601,6 +10889,7 @@ function getFilteredServeTrajectoryEvents() {
   });
   return events.filter(ev => {
     const startZone = getServeStartZone(ev);
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     if (!matchesAdvancedFilters(ev, serveTrajectoryFilterState)) return false;
     if (serveTrajectoryFilterState.players.size && !serveTrajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (serveTrajectoryFilterState.sets.size && !serveTrajectoryFilterState.sets.has(ev.set)) return false;
@@ -9665,10 +10954,15 @@ function renderServeTrajectoryAnalysis() {
   if (!elServeTrajectoryGrid) return;
   renderServeTrajectoryFilters();
   const events = getFilteredServeTrajectoryEvents();
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   const selectedPlayers = serveTrajectoryFilterState.players.size
     ? Array.from(serveTrajectoryFilterState.players)
     : Array.from(new Set(events.map(ev => ev.playerIdx))).filter(idx => typeof idx === "number");
-  const playersToRender = selectedPlayers.length ? sortPlayerIndexesByNumber(selectedPlayers) : [];
+  const playersToRender = selectedPlayers.length
+    ? sortPlayerIndexesByNumberForScope(selectedPlayers, analysisScope)
+    : [];
   elServeTrajectoryGrid.innerHTML = "";
   const cards = [];
   playersToRender.forEach(playerIdx => {
@@ -9677,7 +10971,12 @@ function renderServeTrajectoryAnalysis() {
     card.dataset.playerIdx = String(playerIdx);
     const title = document.createElement("div");
     title.className = "trajectory-card__title";
-    title.textContent = formatNameWithNumber(state.players[playerIdx]) || state.players[playerIdx] || "—";
+    title.textContent =
+      analysisScope === "opponent"
+        ? formatNameWithNumberFor(analysisPlayers[playerIdx], analysisNumbers) ||
+          analysisPlayers[playerIdx] ||
+          "—"
+        : formatNameWithNumber(analysisPlayers[playerIdx]) || analysisPlayers[playerIdx] || "—";
     const canvas = document.createElement("canvas");
     canvas.dataset.serveTrajCanvas = String(playerIdx);
     const empty = document.createElement("div");
@@ -9764,7 +11063,16 @@ function renderAggregatedTable() {
   if (!elAggTableBody) return;
   const { thead } = getAggTableElements();
   ensureAggTableHeadCache(thead);
-  const summaryAll = computePointsSummary(null, { excludeOpponentErrors: true });
+  renderAnalysisTeamFilter();
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
+  const filteredEvents = filterEventsByAnalysisTeam(state.events || []);
+  ensureAnalysisStatsCache();
+  const summaryAll = computePointsSummary(null, {
+    excludeOpponentErrors: true,
+    teamScope: analysisScope
+  });
   if (aggTableView.mode === "skill" && aggTableView.skillId) {
     renderAggSkillDetailTable(summaryAll);
     return;
@@ -9777,22 +11085,46 @@ function renderAggregatedTable() {
     thead.innerHTML = aggTableHeadCache;
   }
   elAggTableBody.innerHTML = "";
-  if (!state.players || state.players.length === 0) {
+  if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 26;
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll);
+    renderScoreAndRotations(summaryAll, analysisScope);
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
     applyAggColumnsVisibility();
     return;
   }
-  const playerPoints = computePlayerPointsMap();
-  const playerErrors = computePlayerErrorsMap();
+  const statsByPlayer = {};
+  filteredEvents.forEach(ev => {
+    if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+      return;
+    }
+    if (typeof ev.playerIdx !== "number" || !analysisPlayers[ev.playerIdx]) return;
+    if (!statsByPlayer[ev.playerIdx]) {
+      statsByPlayer[ev.playerIdx] = {};
+    }
+    if (!statsByPlayer[ev.playerIdx][ev.skillId]) {
+      statsByPlayer[ev.playerIdx][ev.skillId] = {
+        "#": 0,
+        "+": 0,
+        "!": 0,
+        "-": 0,
+        "=": 0,
+        "/": 0
+      };
+    }
+    statsByPlayer[ev.playerIdx][ev.skillId][ev.code] =
+      (statsByPlayer[ev.playerIdx][ev.skillId][ev.code] || 0) + 1;
+  });
+  analysisStatsCache = statsByPlayer;
+  analysisStatsScope = analysisScope;
+  const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
+  const playerErrors = computePlayerErrorsMap(filteredEvents);
   const totalsBySkill = {
     serve: emptyCounts(),
     pass: emptyCounts(),
@@ -9801,12 +11133,16 @@ function renderAggregatedTable() {
     defense: emptyCounts()
   };
   let totalErrors = 0;
-  getSortedPlayerEntries().forEach(({ name, idx }) => {
-    const serveCounts = normalizeCounts(state.stats[idx] && state.stats[idx].serve);
-    const passCounts = normalizeCounts(state.stats[idx] && state.stats[idx].pass);
-    const attackCounts = normalizeCounts(state.stats[idx] && state.stats[idx].attack);
-    const blockCounts = normalizeCounts(state.stats[idx] && state.stats[idx].block);
-    const defenseCounts = normalizeCounts(state.stats[idx] && state.stats[idx].defense);
+  const sortedEntries =
+    analysisScope === "opponent"
+      ? getSortedPlayerEntriesForScope(analysisScope)
+      : getSortedPlayerEntries();
+  sortedEntries.forEach(({ name, idx }) => {
+    const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
+    const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
+    const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
+    const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
+    const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
 
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
@@ -9825,7 +11161,14 @@ function renderAggregatedTable() {
     const attackTotal = totalFromCounts(attackCounts);
     const row = document.createElement("tr");
     const cells = [
-      { text: formatNameWithNumber(name), isPlayer: true, playerIdx: idx },
+      {
+        text:
+          analysisScope === "opponent"
+            ? formatNameWithNumberFor(name, analysisNumbers)
+            : formatNameWithNumber(name),
+        isPlayer: true,
+        playerIdx: idx
+      },
       { text: points.for || 0 },
       { text: points.against || 0 },
       { text: formatDelta((points.for || 0) - (points.against || 0)) },
@@ -9921,7 +11264,7 @@ function renderAggregatedTable() {
     totalsRow.appendChild(td);
   });
   elAggTableBody.appendChild(totalsRow);
-  renderScoreAndRotations(summaryAll);
+  renderScoreAndRotations(summaryAll, analysisScope);
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -9957,16 +11300,23 @@ function resetSecondFilters() {
 }
 function renderSecondFilters() {
   if (!elSecondFilterSetters) return;
-  const secondEvents = (state.events || []).filter(ev => ev && ev.skillId === "second");
-  const attackEvents = (state.events || []).filter(ev => ev && ev.skillId === "attack");
+  renderAnalysisTeamFilter();
+  const events = filterEventsByAnalysisTeam(state.events || []);
+  const secondEvents = events.filter(ev => ev && ev.skillId === "second");
+  const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const setTypeEvents = secondEvents.concat(attackEvents);
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   const playerLabels = new Map();
   secondEvents.forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
     const label =
-      formatNameWithNumber(ev.playerName || state.players[ev.playerIdx]) ||
+      (analysisScope === "opponent"
+        ? formatNameWithNumberFor(ev.playerName || analysisPlayers[ev.playerIdx], analysisNumbers)
+        : formatNameWithNumber(ev.playerName || analysisPlayers[ev.playerIdx])) ||
       ev.playerName ||
-      state.players[ev.playerIdx] ||
+      analysisPlayers[ev.playerIdx] ||
       "Alzatrice " + (ev.playerIdx + 1);
     playerLabels.set(ev.playerIdx, label);
   });
@@ -9974,9 +11324,11 @@ function renderSecondFilters() {
     const setterIdx = getSetterFromEvent(ev);
     if (typeof setterIdx !== "number") return;
     const label =
-      formatNameWithNumber(ev.setterName || state.players[setterIdx]) ||
+      (analysisScope === "opponent"
+        ? formatNameWithNumberFor(ev.setterName || analysisPlayers[setterIdx], analysisNumbers)
+        : formatNameWithNumber(ev.setterName || analysisPlayers[setterIdx])) ||
       ev.setterName ||
-      state.players[setterIdx] ||
+      analysisPlayers[setterIdx] ||
       "Alzatrice " + (setterIdx + 1);
     playerLabels.set(setterIdx, label);
   });
@@ -9984,7 +11336,7 @@ function renderSecondFilters() {
     value: idx,
     label
   }));
-  const playersOpts = sortPlayerOptionsByNumber(playersOptsRaw);
+  const playersOpts = sortPlayerOptionsByNumberForScope(playersOptsRaw, analysisScope);
   const setTypeOpts = buildUniqueOptions(
     setTypeEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
@@ -10085,11 +11437,15 @@ function renderSecondFilters() {
 }
 function getFilteredSecondEvents() {
   const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
-  return events.filter(ev => matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true }));
+  return events.filter(ev => {
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
+    return matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true });
+  });
 }
 function getFilteredAttacksForSecondDistribution() {
   const attacks = (state.events || []).filter(ev => ev && ev.skillId === "attack");
   return attacks.filter(ev => {
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     const setType = normalizeSetTypeValue(
       ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
     );
@@ -10101,7 +11457,10 @@ function renderSecondTable() {
   if (!elAggSecondBody) return;
   elAggSecondBody.innerHTML = "";
   renderSecondFilters();
-  if (!state.players || state.players.length === 0) {
+  const analysisScope = getAnalysisTeamScope();
+  const analysisPlayers = getPlayersForScope(analysisScope);
+  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
+  if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
@@ -10120,8 +11479,10 @@ function renderSecondTable() {
     const playerIdx = typeof ev.playerIdx === "number" ? ev.playerIdx : null;
     const key = playerIdx !== null ? "idx-" + playerIdx : ev.playerName || String(ev.playerIdx || "");
     if (!countsByPlayer.has(key)) {
-      const name = playerIdx !== null && state.players[playerIdx]
-        ? formatNameWithNumber(state.players[playerIdx])
+      const name = playerIdx !== null && analysisPlayers[playerIdx]
+        ? analysisScope === "opponent"
+          ? formatNameWithNumberFor(analysisPlayers[playerIdx], analysisNumbers)
+          : formatNameWithNumber(analysisPlayers[playerIdx])
         : ev.playerName || "Alzatrice";
       countsByPlayer.set(key, { name, counts: emptyCounts() });
     }
@@ -10219,7 +11580,7 @@ function computeAttackDistribution(events = state.events || []) {
     if (!ev || ev.skillId !== "attack") return;
     let zone = ev.zone;
     if (zone === undefined || zone === null) {
-      zone = getCurrentZoneForPlayer(ev.playerIdx);
+      zone = getCurrentZoneForPlayer(ev.playerIdx, null, getTeamScopeFromEvent(ev));
     }
     if (!zone || zone < 1 || zone > 6) return;
     const rot = ev.rotation && ev.rotation >= 1 && ev.rotation <= 6 ? ev.rotation : 1;
@@ -10587,11 +11948,15 @@ function buildMatchExportPayload() {
       theme: state.theme,
       currentSet: state.currentSet,
       rotation: state.rotation,
+      isServing: !!state.isServing,
+      autoRotatePending: !!state.autoRotatePending,
+      opponentAutoRotatePending: !!state.opponentAutoRotatePending,
       skillClock: state.skillClock,
       players: state.players,
       captains: (state.captains || []).slice(0, 1),
       playerNumbers: state.playerNumbers,
       liberos: state.liberos,
+      opponentStats: state.opponentStats,
       opponentPlayers: state.opponentPlayers,
       opponentPlayerNumbers: state.opponentPlayerNumbers,
       opponentLiberos: state.opponentLiberos,
@@ -10608,6 +11973,7 @@ function buildMatchExportPayload() {
       opponentLiberoAutoMap: state.opponentLiberoAutoMap,
       opponentPreferredLibero: state.opponentPreferredLibero,
       opponentSkillFlowOverride: state.opponentSkillFlowOverride,
+      opponentSkillConfig: state.opponentSkillConfig,
       court: state.court,
       events: state.events,
       stats: state.stats,
@@ -10626,6 +11992,10 @@ function buildMatchExportPayload() {
       liberoAutoMap: state.liberoAutoMap,
       preferredLibero: state.preferredLibero,
       nextSetType: state.nextSetType,
+      freeballPending: !!state.freeballPending,
+      freeballPendingScope: state.freeballPendingScope,
+      flowTeamScope: state.flowTeamScope,
+      useOpponentTeam: !!state.useOpponentTeam,
       courtViewMirrored: !!state.courtViewMirrored,
       courtSideSwapped: !!state.courtSideSwapped
     }
@@ -10680,6 +12050,7 @@ function applyImportedMatch(nextState, options = {}) {
     .filter(name => (nextState.players || []).includes(name))
     .slice(0, 1);
   merged.liberos = nextState.liberos || [];
+  merged.opponentStats = nextState.opponentStats || state.opponentStats || {};
   merged.liberoAutoMap = nextState.liberoAutoMap || {};
   merged.autoLiberoBackline = nextState.autoLiberoBackline !== false;
   merged.autoLiberoRole =
@@ -10696,10 +12067,15 @@ function applyImportedMatch(nextState, options = {}) {
   merged.opponentPlayers = normalizePlayers(nextState.opponentPlayers || []);
   merged.opponentPlayerNumbers = nextState.opponentPlayerNumbers || {};
   merged.opponentLiberos = normalizePlayers(nextState.opponentLiberos || []);
+  merged.opponentRotation = nextState.opponentRotation || state.opponentRotation || 1;
+  merged.opponentCourt = nextState.opponentCourt || state.opponentCourt || [];
   merged.opponentCaptains = normalizePlayers(nextState.opponentCaptains || [])
     .filter(name => (merged.opponentPlayers || []).includes(name))
     .slice(0, 1);
   merged.rotation = nextState.rotation || 1;
+  merged.isServing = !!nextState.isServing;
+  merged.autoRotatePending = !!nextState.autoRotatePending;
+  merged.opponentAutoRotatePending = !!nextState.opponentAutoRotatePending;
   merged.currentSet = nextState.currentSet || 1;
   merged.matchFinished = !!nextState.matchFinished;
   merged.skillClock = nextState.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
@@ -10712,6 +12088,11 @@ function applyImportedMatch(nextState, options = {}) {
   merged.video.youtubeUrl = merged.video.youtubeUrl || "";
   merged.courtViewMirrored = !!nextState.courtViewMirrored;
   merged.courtSideSwapped = !!nextState.courtSideSwapped;
+  merged.useOpponentTeam = !!nextState.useOpponentTeam;
+  merged.opponentSkillConfig = nextState.opponentSkillConfig || state.opponentSkillConfig || {};
+  merged.freeballPending = !!nextState.freeballPending;
+  merged.freeballPendingScope = nextState.freeballPendingScope || state.freeballPendingScope || "our";
+  merged.flowTeamScope = nextState.flowTeamScope || state.flowTeamScope || "our";
   state = merged;
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
@@ -11364,7 +12745,12 @@ function deleteEventByKey(eventKey) {
   if (evIndex === -1) return;
   const ev = state.events[evIndex];
   const label = ev
-    ? `${formatNameWithNumber(ev.playerName || "")} ${ev.skillId || ""} ${ev.code || ""}`.trim()
+    ? (() => {
+        const scope = getTeamScopeFromEvent(ev);
+        const numbers = getPlayerNumbersForScope(scope);
+        const nameLabel = ev.playerName ? formatNameWithNumberFor(ev.playerName, numbers) : "";
+        return `${nameLabel} ${ev.skillId || ""} ${ev.code || ""}`.trim();
+      })()
     : "questa skill";
   if (!confirm(`Eliminare ${label}?`)) return;
   state.events.splice(evIndex, 1);
@@ -12767,8 +14153,7 @@ async function init() {
       if (!(target instanceof HTMLElement)) return;
       const skillId = target.dataset.forceSkill;
       if (!skillId) return;
-      state.opponentSkillFlowOverride = skillId;
-      saveState();
+      forceNextSkill(skillId, "opponent");
     });
   }
   if (elBtnFreeball) {
@@ -12778,7 +14163,7 @@ async function init() {
   }
   if (elBtnFreeballOpp) {
     elBtnFreeballOpp.addEventListener("click", () => {
-      triggerFreeballFlow({ startSkill: "block" });
+      triggerFreeballFlow({ startSkill: "block", scope: "opponent" });
     });
   }
   if (elBtnToggleCourtView) {
@@ -12896,18 +14281,25 @@ async function init() {
         trajectoryEnd = null;
         const xWithinStage = box ? pos.x - box.offsetX : pos.x;
         const third = xWithinStage < w / 3 ? 0 : xWithinStage < (2 * w) / 3 ? 1 : 2;
+        const isFarSide = trajectoryForceFar;
+        const leftZone = isFarSide ? 5 : 4;
+        const midZone = isFarSide ? 6 : 3;
+        const rightZone = isFarSide ? 1 : 2;
         const zoneFromClickRaw = trajectoryMirror
           ? third === 0
-            ? 2
+            ? rightZone
             : third === 1
-              ? 3
-              : 4
+              ? midZone
+              : leftZone
           : third === 0
-            ? 4
+            ? leftZone
             : third === 1
-              ? 3
-              : 2;
-        const imgSrc = getTrajectoryImageForZone(zoneFromClickRaw, trajectoryMirror); // mostra il campo della zona front-row
+              ? midZone
+              : rightZone;
+        const imgSrc = getTrajectoryImageForZone(
+          zoneFromClickRaw,
+          trajectoryMirror || trajectoryForceFar
+        ); // mostra il campo della zona front-row
         if (elAttackTrajectoryImage && elAttackTrajectoryImage.dataset.activeSrc !== imgSrc) {
           elAttackTrajectoryImage.dataset.activeSrc = imgSrc;
           elAttackTrajectoryImage.src = imgSrc;
@@ -12998,7 +14390,7 @@ async function init() {
       const rawEnd = normalizeTrajectoryPoint(trajectoryEnd);
       const start = trajectoryMirror ? mirrorTrajectoryPoint(rawStart) : rawStart;
       const end = trajectoryMirror ? mirrorTrajectoryPoint(rawEnd) : rawEnd;
-      const isFar = false;
+      const isFar = trajectoryForceFar;
       const startZone = mapBackRowZone(getAttackZone(start, isFar), trajectoryBaseZone);
       const endZone = mapBackRowZone(getAttackZone(end, isFar), trajectoryBaseZone);
       const directionDeg = computeAttackDirectionDeg(start, end);

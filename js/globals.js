@@ -22,11 +22,11 @@ const THEME_TEXT = {
 const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
 const POINT_RULE_DEFAULTS = {
   serve: { for: ["#"], against: ["="] },
-  pass: { for: [], against: ["="] },
-  defense: { for: [], against: ["="] },
+  pass: { for: [], against: ["=", "/"] },
+  defense: { for: [], against: ["=", "/"] },
   attack: { for: ["#"], against: ["=", "/"] },
   block: { for: ["#"], against: ["/", "="] },
-  second: { for: [], against: ["="] },
+  second: { for: [], against: ["=", "/"] },
   manual: { for: ["for"], against: ["against", "error"] }
 };
 const METRIC_DEFAULTS = {
@@ -120,10 +120,12 @@ let state = {
   opponentLiberoAutoMap: {},
   opponentPreferredLibero: "",
   opponentSkillFlowOverride: null,
+  opponentStats: {},
   metricsConfig: {},
   pointRules: {},
   autoRotate: true,
   autoRotatePending: false,
+  opponentAutoRotatePending: false,
   autoLiberoBackline: true,
   predictiveSkillFlow: true,
   autoRoleP1American: false,
@@ -145,6 +147,11 @@ let state = {
   setTypePromptEnabled: true,
   nextSetType: "",
   freeballPending: false,
+  freeballPendingScope: "our",
+  flowTeamScope: "our",
+  forceSkillActive: false,
+  forceSkillScope: null,
+  pendingServe: null,
   matchFinished: false,
   forceMobileLayout: false,
   courtViewMirrored: false,

@@ -384,6 +384,8 @@ function applyStateSnapshot(parsed, options = {}) {
   state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
   state.autoRolePositioning = parsed.autoRolePositioning !== false;
   state.isServing = !!parsed.isServing;
+  state.autoRotatePending = !!parsed.autoRotatePending;
+  state.opponentAutoRotatePending = !!parsed.opponentAutoRotatePending;
   state.rotation = parsed.rotation || 1;
   state.matchFinished = !!parsed.matchFinished;
   state.attackTrajectoryEnabled = parsed.attackTrajectoryEnabled !== false;
@@ -411,6 +413,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.selectedOpponentTeam = parsed.selectedOpponentTeam || "";
   state.opponentPlayers = normalizePlayers(parsed.opponentPlayers || state.opponentPlayers || []);
   state.opponentPlayerNumbers = parsed.opponentPlayerNumbers || {};
+  state.opponentStats = parsed.opponentStats || state.opponentStats || {};
   state.opponentLiberos = Array.isArray(parsed.opponentLiberos) ? normalizePlayers(parsed.opponentLiberos) : [];
   state.opponentCaptains = normalizePlayers(
     Array.isArray(parsed.opponentCaptains) ? parsed.opponentCaptains : []
@@ -475,8 +478,9 @@ function applyStateSnapshot(parsed, options = {}) {
   state.courtViewMirrored = !!state.courtSideSwapped;
   state.opponentCourtViewMirrored = !state.courtSideSwapped;
   state.predictiveSkillFlow = parsed.predictiveSkillFlow !== false;
-  state.autoRotatePending = false;
   state.freeballPending = !!parsed.freeballPending;
+  state.freeballPendingScope = parsed.freeballPendingScope || state.freeballPendingScope || "our";
+  state.flowTeamScope = parsed.flowTeamScope || state.flowTeamScope || "our";
   state.opponentSkillConfig = parsed.opponentSkillConfig || state.opponentSkillConfig || {};
   state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
   state.skillClock = parsed.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
@@ -3160,6 +3164,14 @@ function ensurePointRulesDefaults() {
   state.pointRules = state.pointRules || {};
   SKILLS.forEach(skill => {
     state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
+    if (
+      (skill.id === "pass" || skill.id === "defense" || skill.id === "second") &&
+      Array.isArray(state.pointRules[skill.id].against) &&
+      state.pointRules[skill.id].against.length === 1 &&
+      state.pointRules[skill.id].against[0] === "="
+    ) {
+      state.pointRules[skill.id].against.push("/");
+    }
   });
 }
 function getCodeTone(skillId, code) {
