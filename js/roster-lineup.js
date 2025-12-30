@@ -2289,6 +2289,7 @@ function resetMatchState() {
   state.autoRotatePending = false;
   state.liberoAutoMap = preservedLiberoMap;
   state.preferredLibero = preservedPreferredLibero;
+  state.courtViewMirrored = false;
   state.skillClock = { paused: true, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: 0 };
   state.video = state.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "" };
   state.video.offsetSeconds = 0;

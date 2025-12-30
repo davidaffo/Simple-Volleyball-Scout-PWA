@@ -126,6 +126,7 @@ let state = {
   freeballPending: false,
   matchFinished: false,
   forceMobileLayout: false,
+  courtViewMirrored: false,
   skillClock: { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null },
   scoreOverrides: {},
   autoRoleBaseCourt: [],
