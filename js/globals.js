@@ -66,12 +66,12 @@ const TEMPLATE_TEAM = {
   liberos: ["Libero 1", "Libero 2"]
 };
 const POSITIONS_META = [
-  { id: 1, label: "Posizione 1 · P" },
-  { id: 2, label: "Posizione 2 · S1" },
-  { id: 3, label: "Posizione 3 · C2" },
-  { id: 4, label: "Posizione 4 · O" },
-  { id: 5, label: "Posizione 5 · S2" },
-  { id: 6, label: "Posizione 6 · C1" }
+  { id: 1, label: "Posizione 1 · P", gridArea: "pos1" },
+  { id: 2, label: "Posizione 2 · S1", gridArea: "pos2" },
+  { id: 3, label: "Posizione 3 · C2", gridArea: "pos3" },
+  { id: 4, label: "Posizione 4 · O", gridArea: "pos4" },
+  { id: 5, label: "Posizione 5 · S2", gridArea: "pos5" },
+  { id: 6, label: "Posizione 6 · C1", gridArea: "pos6" }
 ];
 let state = {
   match: {
@@ -108,6 +108,18 @@ let state = {
   opponentPlayerNumbers: {},
   opponentLiberos: [],
   opponentCaptains: [],
+  opponentCourt: [],
+  opponentRotation: 1,
+  opponentCourtViewMirrored: false,
+  opponentAutoRoleP1American: false,
+  opponentAttackTrajectoryEnabled: true,
+  opponentServeTrajectoryEnabled: true,
+  opponentSetTypePromptEnabled: true,
+  opponentAutoLiberoBackline: true,
+  opponentAutoLiberoRole: "",
+  opponentLiberoAutoMap: {},
+  opponentPreferredLibero: "",
+  opponentSkillFlowOverride: null,
   metricsConfig: {},
   pointRules: {},
   autoRotate: true,
@@ -119,6 +131,15 @@ let state = {
   attackTrajectorySimplified: true,
   serveTrajectoryEnabled: true,
   videoScoutMode: false,
+  useOpponentTeam: false,
+  opponentSkillConfig: {
+    serve: true,
+    pass: true,
+    attack: true,
+    defense: true,
+    block: true,
+    second: true
+  },
   videoPlayByPlay: false,
   defaultSetType: "",
   setTypePromptEnabled: true,
@@ -127,6 +148,7 @@ let state = {
   matchFinished: false,
   forceMobileLayout: false,
   courtViewMirrored: false,
+  courtSideSwapped: false,
   skillClock: { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null },
   scoreOverrides: {},
   autoRoleBaseCourt: [],
@@ -221,12 +243,16 @@ const elLineupChips = document.getElementById("lineup-chips");
 const elBenchChips = document.getElementById("bench-chips");
 const elRotationIndicator = document.getElementById("rotation-indicator");
 const elRotationSelect = document.getElementById("rotation-select");
+const elRotationSelectOpp = document.getElementById("rotation-select-opp");
 const elBtnRotateCw = document.getElementById("btn-rotate-cw");
 const elBtnRotateCcw = document.getElementById("btn-rotate-ccw");
+const elBtnRotateCwOpp = document.getElementById("btn-rotate-cw-opp");
+const elBtnRotateCcwOpp = document.getElementById("btn-rotate-ccw-opp");
 const elBtnRotateCwModal = document.getElementById("btn-rotate-cw-modal");
 const elBtnRotateCcwModal = document.getElementById("btn-rotate-ccw-modal");
 const elLiberoTags = document.getElementById("libero-tags");
 const elLiberoTagsInline = document.getElementById("libero-tags-inline");
+const elLiberoTagsInlineOpp = document.getElementById("libero-tags-inline-opp");
 const elSkillModal = document.getElementById("skill-modal");
 const elSkillModalBackdrop = document.querySelector("#skill-modal .skill-modal__backdrop");
 const elSkillModalBody = document.getElementById("skill-modal-body");

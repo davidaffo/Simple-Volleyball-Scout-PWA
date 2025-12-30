@@ -48,15 +48,56 @@
     </div>
     <div class="section">
       <h2>Squadra</h2>
-      <p class="section-note">Seleziona la squadra da usare nel match. Gestione, importazione ed esportazione passano da “Gestione squadre”.</p>
+      <p class="section-note">Seleziona le squadre dal database. Gestione, importazione ed esportazione passano da “Gestione squadre”.</p>
       <div class="team-manage">
-        <label for="saved-teams">Squadre salvate</label>
-        <div class="team-row">
-          <select id="saved-teams">
-            <option value="">Nuova squadra (vuota)</option>
-          </select>
-          <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
-          <button id="btn-open-teams-manager" class="secondary">Database Squadre</button>
+        <label class="auto-rotate-toggle">
+          <input type="checkbox" id="use-opponent-team-toggle" />
+          Usa squadra avversaria
+        </label>
+        <div class="team-manage-grid">
+          <div class="team-manage-col">
+            <h4>Squadra nostra</h4>
+            <select id="saved-teams">
+              <option value="">Nuova squadra (vuota)</option>
+            </select>
+            <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
+          </div>
+          <div class="team-manage-col opponent-settings hidden" id="opponent-team-settings">
+            <h4>Squadra avversaria</h4>
+            <select id="saved-opponent-teams">
+              <option value="">Nuova squadra (vuota)</option>
+            </select>
+            <div class="opponent-skill-toggles">
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-serve" />
+                Battuta
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-pass" />
+                Ricezione
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-attack" />
+                Attacco
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-defense" />
+                Difesa
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-block" />
+                Muro
+              </label>
+              <label class="auto-rotate-toggle">
+                <input type="checkbox" id="opponent-skill-second" />
+                Alzata
+              </label>
+            </div>
+            <button id="btn-open-opponent-team-manager" class="secondary">Gestione squadra</button>
+          </div>
+        </div>
+        <div class="team-manage-actions">
+          <button id="btn-open-teams-manager" class="secondary">Gestione squadre</button>
         </div>
       </div>
     </div>
@@ -155,40 +196,68 @@
                 <input type="checkbox" id="force-mobile-toggle" />
                 Modalità mobile (test)
               </label>
-              <label class="auto-rotate-toggle">
+          <label class="auto-rotate-toggle">
                 <input type="checkbox" id="video-scout-toggle" />
                 Scout da video
               </label>
             </div>
-        </div>
-        <div class="team-settings-panel court-actions-bar">
-          <h3 class="panel-title">Impostazioni squadra</h3>
-          <div class="rotation-toggles">
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="auto-role-p1american-toggle" />
-              P1 americana
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="attack-trajectory-toggle" />
-              Traiettoria attacco
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="settype-prompt-toggle-inline" />
-              Tipo alzata
-            </label>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="serve-trajectory-toggle-inline" />
-              Traiettoria servizio
-            </label>
-          </div>
-          <div class="team-timeout-block">
-            <button id="btn-timeout" class="small secondary">Timeout</button>
-            <button id="btn-timeout-opp" class="small danger">Timeout Avv.</button>
-            <button id="btn-open-lineup" class="secondary small">Formazione/Sostituzione</button>
-            <span class="team-counter">TO: <strong id="timeout-count">0</strong></span>
-            <span class="team-counter">TO Avv: <strong id="timeout-opp-count">0</strong></span>
-            <span class="team-counter">Cambi: <strong id="substitution-remaining">6</strong></span>
-          </div>
+            <div class="set-bottom-actions">
+              <button id="btn-toggle-court-view" class="small secondary" type="button">Cambia campo</button>
+            </div>
+            <div class="court-actions-bar team-panel team-panel--home" data-team-panel="home-settings">
+              <h3 class="panel-title">Impostazioni squadra</h3>
+              <div class="rotation-toggles">
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-role-p1american-toggle" />
+                  P1 americana
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="attack-trajectory-toggle" />
+                  Traiettoria attacco
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="settype-prompt-toggle-inline" />
+                  Tipo alzata
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="serve-trajectory-toggle-inline" />
+                  Traiettoria servizio
+                </label>
+              </div>
+              <div class="team-timeout-block">
+                <button id="btn-timeout" class="small secondary">Timeout</button>
+                <button id="btn-open-lineup" class="secondary small">Formazione/Sostituzione</button>
+                <span class="team-counter">TO: <strong id="timeout-count">0</strong></span>
+                <span class="team-counter">Cambi: <strong id="substitution-remaining">6</strong></span>
+              </div>
+            </div>
+            <div class="court-actions-bar team-panel team-panel--opponent" data-team-panel="opponent-settings">
+              <h3 class="panel-title">Impostazioni avversaria</h3>
+              <div class="rotation-toggles">
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="auto-role-p1american-toggle-opp" />
+                  P1 americana
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="attack-trajectory-toggle-opp" />
+                  Traiettoria attacco
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="settype-prompt-toggle-inline-opp" />
+                  Tipo alzata
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="serve-trajectory-toggle-inline-opp" />
+                  Traiettoria servizio
+                </label>
+              </div>
+              <div class="team-timeout-block">
+                <button id="btn-timeout-opp" class="secondary small">Timeout</button>
+                <button id="btn-open-lineup-opp" class="secondary small">Formazione/Sostituzione</button>
+                <span class="team-counter">TO: <strong id="timeout-opp-count">0</strong></span>
+                <span class="team-counter">Cambi: <strong id="substitution-remaining-opp">6</strong></span>
+              </div>
+            </div>
         </div>
       </div>
       <div class="section scout-col-center" data-scout-panel="team">
@@ -235,58 +304,112 @@
           </div>
         </div>
         <div class="players-area" id="court-area">
-          <div id="players-container"></div>
-          <div class="court-actions-bar court-actions-inline">
-            <div class="rotation-block court-rotation-block">
-            <div class="rotation-controls">
-              <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
-              <div class="rotation-display">
-                <select id="rotation-select" class="rotation-select">
-                  <option value="1">P1</option>
-                  <option value="2">P2</option>
-                  <option value="3">P3</option>
-                  <option value="4">P4</option>
-                  <option value="5">P5</option>
-                  <option value="6">P6</option>
-                </select>
-              </div>
-              <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
-              <button id="btn-toggle-court-view" class="small secondary">Cambia campo</button>
-            </div>
-            </div>
-            <div class="score-actions court-game-actions">
-              <button id="btn-score-team-point" class="small">Punto</button>
-              <button id="btn-score-opp-error" class="small success">Err. Avv.</button>
-              <button id="btn-score-team-error" class="small danger">Errore</button>
-              <button id="btn-score-opp-point" class="small danger">Punto Avv.</button>
-              <button id="btn-freeball" class="secondary small">Freeball</button>
-              <button id="btn-freeball-opp" class="secondary small">Freeball Avv.</button>
-            </div>
-            <div class="team-controls-panel">
-              <div class="libero-inline">
-                <label>Libero</label>
-                <div id="libero-tags-inline" class="libero-tags"></div>
-                <label class="auto-libero-inline">
-                  <span>Auto L</span>
-                  <select id="auto-libero-select">
-                    <option value="">Nessuno</option>
-                    <option value="P">P</option>
-                    <option value="S">S</option>
-                    <option value="C">C</option>
-                    <option value="O">O</option>
+          <div class="team-panel team-panel--far team-panel--opponent" data-team-panel="opponent">
+            <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--opponent">
+              <h3 class="panel-title">Squadra avversaria</h3>
+              <div class="rotation-block court-rotation-block">
+              <div class="rotation-controls">
+                <button id="btn-rotate-cw-opp" class="small rotate-cw">↺</button>
+                <div class="rotation-display">
+                  <select id="rotation-select-opp" class="rotation-select">
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3">P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                    <option value="6">P6</option>
                   </select>
-                </label>
-                <button type="button" id="btn-swap-libero" class="small secondary">Cambia L</button>
+                </div>
+                <button id="btn-rotate-ccw-opp" class="small rotate-ccw">↻</button>
               </div>
-              <div class="skill-flow-panel">
-                <label>Forza prossima skill</label>
-                <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons">
-                  <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
-                  <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
-                  <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
-                  <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
-                  <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
-                  <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+              </div>
+              <div class="score-actions court-game-actions">
+                <button id="btn-score-opp-point" class="small danger">Punto</button>
+                <button id="btn-score-opp-error" class="small success">Errore</button>
+                <button id="btn-freeball-opp" class="secondary small">Freeball</button>
+              </div>
+              <div class="team-controls-panel">
+                <div class="libero-inline">
+                  <label>Libero</label>
+                  <div id="libero-tags-inline-opp" class="libero-tags"></div>
+                  <label class="auto-libero-inline">
+                    <span>Auto L</span>
+                    <select id="auto-libero-select-opp">
+                      <option value="">Nessuno</option>
+                      <option value="P">P</option>
+                      <option value="S">S</option>
+                      <option value="C">C</option>
+                      <option value="O">O</option>
+                    </select>
+                  </label>
+                  <button type="button" id="btn-swap-libero-opp" class="small secondary">Cambia L</button>
+                </div>
+                <div class="skill-flow-panel">
+                  <label>Forza prossima skill</label>
+                  <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons-opp">
+                    <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
+                    <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                    <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
+                    <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
+                    <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
+                    <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="opponent-players-container"></div>
+          </div>
+          <div id="players-container"></div>
+          <div class="team-panel team-panel--near team-panel--home" data-team-panel="home">
+            <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--home">
+              <h3 class="panel-title">Squadra nostra</h3>
+              <div class="rotation-block court-rotation-block">
+              <div class="rotation-controls">
+                <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+                <div class="rotation-display">
+                  <select id="rotation-select" class="rotation-select">
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3">P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                    <option value="6">P6</option>
+                  </select>
+                </div>
+                <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
+              </div>
+              </div>
+              <div class="score-actions court-game-actions">
+                <button id="btn-score-team-point" class="small">Punto</button>
+                <button id="btn-score-team-error" class="small danger">Errore</button>
+                <button id="btn-freeball" class="secondary small">Freeball</button>
+              </div>
+              <div class="team-controls-panel">
+                <div class="libero-inline">
+                  <label>Libero</label>
+                  <div id="libero-tags-inline" class="libero-tags"></div>
+                  <label class="auto-libero-inline">
+                    <span>Auto L</span>
+                    <select id="auto-libero-select">
+                      <option value="">Nessuno</option>
+                      <option value="P">P</option>
+                      <option value="S">S</option>
+                      <option value="C">C</option>
+                      <option value="O">O</option>
+                    </select>
+                  </label>
+                  <button type="button" id="btn-swap-libero" class="small secondary">Cambia L</button>
+                </div>
+                <div class="skill-flow-panel">
+                  <label>Forza prossima skill</label>
+                  <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons">
+                    <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
+                    <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                    <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
+                    <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
+                    <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
+                    <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                  </div>
                 </div>
               </div>
             </div>

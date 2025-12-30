@@ -461,6 +461,57 @@ button.small {
   background: #0f172a;
   border: 1px solid #1f2937;
 }
+.team-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.team-panel .panel-title {
+  flex: 1 0 100%;
+}
+.team-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  width: 100%;
+}
+.team-panel__bar {
+  width: 100%;
+}
+.team-panel--opponent .team-panel__bar {
+  background: #3a0f12;
+  border-color: #7f1d1d;
+}
+body[data-theme="light"] .team-panel--opponent .team-panel__bar {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+.team-panel--opponent .team-panel__bar .panel-title {
+  color: #fecaca;
+}
+body[data-theme="light"] .team-panel--opponent .team-panel__bar .panel-title {
+  color: #7f1d1d;
+}
+ .court-actions-bar.team-panel--opponent {
+  background: #3a0f12;
+  border-color: #7f1d1d;
+ }
+ body[data-theme="light"] .court-actions-bar.team-panel--opponent {
+  background: #fee2e2;
+  border-color: #fca5a5;
+ }
+ .court-actions-bar.team-panel--opponent .panel-title {
+  color: #fecaca;
+ }
+ body[data-theme="light"] .court-actions-bar.team-panel--opponent .panel-title {
+  color: #7f1d1d;
+ }
+.team-score-actions {
+  flex: 1 1 240px;
+  min-width: 220px;
+}
 .panel-title {
   width: 100%;
   margin: 0 0 0.2rem 0;
@@ -482,6 +533,10 @@ body[data-theme="light"] .court-actions-bar {
 .court-actions-inline > * {
   flex: 1 1 260px;
   min-width: 220px;
+}
+.court-actions-inline > .panel-title {
+  flex: 1 0 100%;
+  min-width: 100%;
 }
 .court-rotation-block {
   flex: 1 1 260px;
@@ -1509,6 +1564,21 @@ body[data-theme="light"] .scout-mobile-bar button {
   gap: 0.35rem;
   position: relative;
 }
+.players-area > [data-team-panel="opponent"] {
+  order: 1;
+}
+.players-area > #players-container {
+  order: 2;
+}
+.players-area > [data-team-panel="home"] {
+  order: 3;
+}
+.players-area.court-area--swapped > [data-team-panel="home"] {
+  order: 1;
+}
+.players-area.court-area--swapped > [data-team-panel="opponent"] {
+  order: 3;
+}
 body.desktop-court-modal-open #court-area {
   overflow: hidden;
 }
@@ -1554,7 +1624,8 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
 .undo-controls button {
   flex: 0 0 220px;
 }
-#players-container {
+#players-container,
+#opponent-players-container {
   display: grid;
   gap: 0.4rem;
   min-height: 200px;
@@ -2173,6 +2244,49 @@ body[data-theme="light"] .player-management.feature-disabled::after {
 .team-manage {
   margin-top: 0.25rem;
 }
+.team-manage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.5rem;
+}
+.team-manage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.6rem;
+  border: 1px solid #1f2937;
+  border-radius: 0.6rem;
+  background: #0b1224;
+}
+.team-manage-col.opponent-settings {
+  background: #4c1d1d;
+  border-color: #7f1d1d;
+}
+.team-manage-col h4 {
+  margin: 0;
+}
+.team-manage-col select {
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+.team-manage-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.opponent-skill-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+}
+.opponent-settings.hidden {
+  display: none;
+}
 .team-row {
   display: flex;
   gap: 0.4rem;
@@ -2186,6 +2300,24 @@ body[data-theme="light"] .player-management.feature-disabled::after {
 }
 .team-row button {
   flex: 1 1 120px;
+}
+body[data-theme="light"] .team-manage-col {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+body[data-theme="light"] .team-manage-col.opponent-settings {
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+body[data-theme="light"] .team-manage-col select {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #0f172a;
+}
+@media (max-width: 900px) {
+  .team-manage-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .metrics-panel {
   margin-top: 0.4rem;
@@ -4684,7 +4816,8 @@ body[data-theme="light"] .floating-actions__block {
   .players-area {
     gap: 0.45rem;
   }
-  #players-container {
+  #players-container,
+  #opponent-players-container {
     min-height: 0;
     align-items: start;
   }
@@ -4744,7 +4877,8 @@ body.force-mobile .scout-col-center {
 body.force-mobile .players-area {
   gap: 0.45rem;
 }
-body.force-mobile #players-container {
+body.force-mobile #players-container,
+body.force-mobile #opponent-players-container {
   min-height: 0;
   align-items: start;
 }

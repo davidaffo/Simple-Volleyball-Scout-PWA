@@ -23,7 +23,12 @@
 
     function applyMatchInfoToUI() {
       ensureMatchDefaults();
-      if (elOpponent) elOpponent.value = state.match.opponent || "";
+      if (elOpponent) {
+        const opponentName =
+          state.useOpponentTeam && state.selectedOpponentTeam ? state.selectedOpponentTeam : state.match.opponent || "";
+        elOpponent.value = opponentName;
+        elOpponent.disabled = !!state.useOpponentTeam;
+      }
       if (elCategory) elCategory.value = state.match.category || "";
       if (elDate) elDate.value = state.match.date || "";
       if (elMatchType) elMatchType.value = state.match.matchType || "amichevole";
@@ -32,7 +37,11 @@
     }
 
     function saveMatchInfoFromUI() {
-      if (elOpponent) state.match.opponent = elOpponent.value.trim();
+      if (state.useOpponentTeam && state.selectedOpponentTeam) {
+        state.match.opponent = state.selectedOpponentTeam;
+      } else if (elOpponent) {
+        state.match.opponent = elOpponent.value.trim();
+      }
       if (elCategory) state.match.category = elCategory.value.trim();
       if (elDate) {
         state.match.date = elDate.value || getTodayIso();

@@ -52,6 +52,14 @@ const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
 const elLineupModalToggleNumbers = document.getElementById("lineup-modal-toggle-numbers");
+const elUseOpponentTeamToggle = document.getElementById("use-opponent-team-toggle");
+const elOpponentTeamSettings = document.getElementById("opponent-team-settings");
+const elOpponentSkillServe = document.getElementById("opponent-skill-serve");
+const elOpponentSkillPass = document.getElementById("opponent-skill-pass");
+const elOpponentSkillAttack = document.getElementById("opponent-skill-attack");
+const elOpponentSkillDefense = document.getElementById("opponent-skill-defense");
+const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
+const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
@@ -171,6 +179,7 @@ let lineupModalCourt = [];
 let lineupDragName = "";
 let lineupSelectedName = "";
 let lineupNumberMode = false;
+let lineupModalScope = "our";
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
@@ -265,7 +274,7 @@ function setCourtAreaLocked(isLocked) {
   if (isLocked) {
     if (lockedCourtAreaHeight === null) {
       const playerEl = courtArea.querySelector("#players-container");
-      const actionsEl = courtArea.querySelector(".court-actions-bar");
+      const actionsEls = Array.from(courtArea.querySelectorAll(".court-actions-bar"));
       const gapValue = window.getComputedStyle(courtArea).gap || "0px";
       const gap = parseFloat(gapValue) || 0;
       const getOuterHeight = el => {
@@ -276,8 +285,11 @@ function setCourtAreaLocked(isLocked) {
         const marginBottom = parseFloat(styles.marginBottom) || 0;
         return rect.height + marginTop + marginBottom;
       };
-      if (playerEl && actionsEl) {
-        lockedCourtAreaHeight = Math.ceil(getOuterHeight(playerEl) + getOuterHeight(actionsEl) + gap);
+      if (playerEl && actionsEls.length) {
+        const actionsHeight = actionsEls.reduce((sum, el) => sum + getOuterHeight(el), 0);
+        const itemsCount = (playerEl ? 1 : 0) + actionsEls.length;
+        const gapCount = Math.max(0, itemsCount - 1);
+        lockedCourtAreaHeight = Math.ceil(getOuterHeight(playerEl) + actionsHeight + gap * gapCount);
       } else {
         lockedCourtAreaHeight = courtArea.offsetHeight || null;
       }
@@ -331,13 +343,13 @@ function cloneCourt(court) {
   return getCourtShape(court).map(slot => ({ main: slot.main, replaced: slot.replaced }));
 }
 function getLineupModalPlayers() {
-  return state.players || [];
+  return lineupModalScope === "opponent" ? state.opponentPlayers || [] : state.players || [];
 }
 function getLineupModalLiberos() {
-  return state.liberos || [];
+  return lineupModalScope === "opponent" ? state.opponentLiberos || [] : state.liberos || [];
 }
 function getLineupModalNumbers() {
-  return state.playerNumbers || {};
+  return lineupModalScope === "opponent" ? state.opponentPlayerNumbers || {} : state.playerNumbers || {};
 }
 function formatLineupModalName(name, options = {}) {
   return formatNameWithNumber(name, options);
@@ -359,14 +371,15 @@ function updateLineupModalControls() {
   if (elLineupModalSaveOverride) elLineupModalSaveOverride.classList.remove("hidden");
   if (elLineupModalSaveSubstitution) elLineupModalSaveSubstitution.classList.remove("hidden");
   if (elLineupModalTitle) {
-    elLineupModalTitle.textContent = "Imposta formazione";
+    elLineupModalTitle.textContent =
+      lineupModalScope === "opponent" ? "Imposta formazione avversaria" : "Imposta formazione";
   }
   if (elLineupModalToggleNumbers) {
     elLineupModalToggleNumbers.textContent = lineupNumberMode ? "Esci modalità numeri" : "Modalità numeri";
   }
 }
 function applyDefaultLineupToModal() {
-  const teamName = state.selectedTeam || "";
+  const teamName = lineupModalScope === "opponent" ? state.selectedOpponentTeam || "" : state.selectedTeam || "";
   if (!teamName) {
     alert("Seleziona prima una squadra.");
     return;
@@ -660,8 +673,10 @@ function getBenchForLineup(court) {
   return bench;
 }
 function getLineupBaseCourtFromState() {
-  const libSet = new Set(state.liberos || []);
-  return getCourtShape(state.court).map(slot => {
+  const libSet = new Set(getLineupModalLiberos());
+  const baseCourt =
+    lineupModalScope === "opponent" ? state.opponentCourt || [] : state.court;
+  return getCourtShape(baseCourt).map(slot => {
     if (libSet.has(slot.main)) {
       return { main: slot.replaced || "", replaced: "" };
     }
@@ -863,15 +878,18 @@ function renderLineupModal() {
     });
   }
 }
-function openMobileLineupModal() {
-  const libSet = new Set(state.liberos || []);
-  const baseCourt = getCourtShape(state.court).map(slot => {
+function openMobileLineupModal(scope = "our") {
+  lineupModalScope = scope === "opponent" ? "opponent" : "our";
+  const libSet = new Set(getLineupModalLiberos());
+  const baseCourt =
+    lineupModalScope === "opponent" ? state.opponentCourt || [] : state.court;
+  const normalizedCourt = getCourtShape(baseCourt).map(slot => {
     if (libSet.has(slot.main)) {
       return { main: slot.replaced || "", replaced: "" };
     }
     return { main: slot.main || "", replaced: "" };
   });
-  lineupModalCourt = cloneCourt(baseCourt);
+  lineupModalCourt = cloneCourt(normalizedCourt);
   renderLineupModal();
   updateLineupModalControls();
   if (elLineupModal) {
@@ -895,7 +913,11 @@ function closeLineupModal() {
 function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
   const nextCourt = getCourtShape(lineupModalCourt);
-  if (typeof commitCourtChange === "function") {
+  if (lineupModalScope === "opponent") {
+    state.opponentCourt = nextCourt;
+    saveState();
+    if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+  } else if (typeof commitCourtChange === "function") {
     commitCourtChange(nextCourt, { clean: true });
   } else {
     state.court = nextCourt;
@@ -905,7 +927,7 @@ function saveLineupModal({ countSubstitutions = false } = {}) {
     if (typeof renderLineupChips === "function") renderLineupChips();
     if (typeof updateRotationDisplay === "function") updateRotationDisplay();
   }
-  if (countSubstitutions) {
+  if (countSubstitutions && lineupModalScope !== "opponent") {
     const subs = getLineupSubstitutions(prevCourt || [], nextCourt);
     subs.forEach(sub => recordSubstitutionEvent(sub));
   }
@@ -1631,6 +1653,40 @@ function closePlayersDbModal() {
   elPlayersDbModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
 }
+function syncOpponentSettingsUI() {
+  const enabled = !!state.useOpponentTeam;
+  if (elUseOpponentTeamToggle) elUseOpponentTeamToggle.checked = enabled;
+  if (elOpponentTeamSettings) {
+    elOpponentTeamSettings.classList.toggle("hidden", !enabled);
+  }
+  const opponentPanel = document.querySelector('[data-team-panel="opponent"]');
+  if (opponentPanel) {
+    opponentPanel.classList.toggle("hidden", !enabled);
+  }
+  const opponentSettingsPanel = document.querySelector('[data-team-panel="opponent-settings"]');
+  if (opponentSettingsPanel) {
+    opponentSettingsPanel.classList.toggle("hidden", !enabled);
+  }
+  if (enabled && state.selectedOpponentTeam) {
+    state.match.opponent = state.selectedOpponentTeam;
+    saveState();
+  }
+  if (!enabled) {
+    state.courtSideSwapped = false;
+    state.courtViewMirrored = false;
+    state.opponentCourtViewMirrored = false;
+    saveState();
+  }
+  if (typeof syncCourtSideLayout === "function") {
+    syncCourtSideLayout();
+  }
+  if (typeof renderPlayers === "function") {
+    renderPlayers();
+  }
+  if (typeof applyMatchInfoToUI === "function") {
+    applyMatchInfoToUI();
+  }
+}
 function renderTeamsManagerList() {
   if (!elTeamsManagerList) return;
   const names = typeof listTeamsFromStorage === "function" ? listTeamsFromStorage() : [];
@@ -1837,6 +1893,7 @@ const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elTimeoutCount = document.getElementById("timeout-count");
 const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
+const elSubstitutionRemainingOpp = document.getElementById("substitution-remaining-opp");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -3238,46 +3295,40 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   targetEl.appendChild(grid);
 }
-function renderPlayers() {
-  if (!elPlayersContainer) return;
-  elPlayersContainer.innerHTML = "";
-  elPlayersContainer.classList.add("court-layout");
-  elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
-  ensureCourtShape();
-  ensureMetricsConfigDefaults();
-  const predictedSkillId = getPredictedSkillId();
-  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
-  updateSetTypeVisibility(predictedSkillId);
-  const hasSelectedServe = isAnySelectedSkill("serve");
-  const layoutSkill =
-    state.predictiveSkillFlow && predictedSkillId
-      ? predictedSkillId
-      : isAnySelectedSkill("pass")
-        ? "pass"
-        : hasSelectedServe
-          ? "serve"
-          : null;
-  const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
-  const renderOrder = [3, 2, 1, 4, 5, 0]; // pos4, pos3, pos2, pos5, pos6, pos1
+function renderTeamCourtCards(options = {}) {
+  const {
+    container,
+    scope = "our",
+    court = [],
+    displayCourt = null,
+    numbersMap = {},
+    captainSet = new Set(),
+    libSet = new Set(),
+    allowDrag = false,
+    allowReturn = false,
+    isCompactMobile = false,
+    nextSkillId = null,
+    allowDrop = false
+  } = options;
+  if (!container) return;
+  const renderOrder = [3, 2, 1, 4, 5, 0];
+  const map = displayCourt || court.map((slot, idx) => ({ slot, idx }));
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
-    const slotInfo = displayCourt[idx] || { slot: { main: "" }, idx: idx };
+    const slotInfo = map[idx] || { slot: { main: "" }, idx: idx };
     const slot = slotInfo.slot || { main: "" };
     const posIdx = slotInfo.idx != null ? slotInfo.idx : idx;
     const activeName = slot.main;
-    let playerIdx = -1;
-    if (activeName) {
-      playerIdx = state.players.findIndex(p => p === activeName);
-    }
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
-    const isLibSlot = isLibero(slot.main);
+    const isLibSlot = libSet.has(slot.main);
     if (isLibSlot) {
       card.classList.add("libero-card");
     }
     card.dataset.posNumber = String(idx + 1);
     card.dataset.posIndex = String(posIdx);
     card.dataset.playerName = activeName || "";
+    card.dataset.teamScope = scope;
     if (!activeName) {
       card.classList.add("empty");
     }
@@ -3286,7 +3337,7 @@ function renderPlayers() {
     }
     card.dataset.dropTarget = "main";
     const header = document.createElement("div");
-    const canDrag = !!activeName && isLibSlot;
+    const canDrag = allowDrag && !!activeName && isLibSlot;
     header.className = "court-header" + (canDrag ? " draggable" : "");
     header.draggable = canDrag;
     if (canDrag) {
@@ -3304,7 +3355,7 @@ function renderPlayers() {
     tagLibero.style.visibility = isLibSlot ? "visible" : "hidden";
     tagBar.appendChild(posLabel);
     tagBar.appendChild(tagLibero);
-    if (isLibSlot && slot.replaced) {
+    if (allowReturn && isLibSlot && slot.replaced) {
       const btnReturn = document.createElement("button");
       btnReturn.type = "button";
       btnReturn.className = "libero-return-btn";
@@ -3312,7 +3363,9 @@ function renderPlayers() {
       btnReturn.textContent = "↩";
       const handleReturn = e => {
         e.stopPropagation();
-        if (typeof restorePlayerFromLibero === "function") {
+        if (scope === "opponent" && typeof restorePlayerFromLiberoForScope === "function") {
+          restorePlayerFromLiberoForScope(posIdx, "opponent");
+        } else if (typeof restorePlayerFromLibero === "function") {
           restorePlayerFromLibero(posIdx);
         }
       };
@@ -3332,55 +3385,187 @@ function renderPlayers() {
     if (isLibSlot) {
       nameLabel.classList.add("libero-flag");
     }
-    nameLabel.textContent = slot.main
-      ? formatNameWithNumber(slot.main, { compactCourt: true })
-      : "Trascina una giocatrice qui";
-    const roleTag = document.createElement("span");
-    roleTag.className = "court-role-tag";
-    roleTag.textContent = getRoleLabel((posIdx || 0) + 1);
+    if (activeName && scope === "opponent" && typeof formatNameWithNumberFor === "function") {
+      nameLabel.textContent = formatNameWithNumberFor(activeName, numbersMap, {
+        captainSet,
+        compactCourt: true
+      });
+    } else {
+      nameLabel.textContent = activeName
+        ? formatNameWithNumber(activeName, { compactCourt: true })
+        : scope === "our"
+          ? "Trascina una giocatrice qui"
+          : "—";
+    }
     nameBlock.appendChild(nameLabel);
-    nameBlock.appendChild(roleTag);
+    if (scope === "our") {
+      const roleTag = document.createElement("span");
+      roleTag.className = "court-role-tag";
+      roleTag.textContent = getRoleLabel((posIdx || 0) + 1);
+      nameBlock.appendChild(roleTag);
+    }
     header.appendChild(nameBlock);
     card.appendChild(header);
 
-    card.addEventListener("dragenter", e => handlePositionDragOver(e, card), true);
-    card.addEventListener("dragover", e => handlePositionDragOver(e, card), true);
-    card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);
-    card.addEventListener("drop", e => handlePositionDrop(e, card), true);
-
-    if (!activeName || playerIdx === -1) {
-      elPlayersContainer.appendChild(card);
-      return;
+    if (allowDrop) {
+      card.addEventListener("dragenter", e => handlePositionDragOver(e, card), true);
+      card.addEventListener("dragover", e => handlePositionDragOver(e, card), true);
+      card.addEventListener("dragleave", () => handlePositionDragLeave(card), true);
+      card.addEventListener("drop", e => handlePositionDrop(e, card), true);
     }
-    renderSkillRows(card, playerIdx, activeName, { nextSkillId: predictedSkillId });
-    elPlayersContainer.appendChild(card);
+
+    if (scope === "our" && activeName) {
+      const playerIdx = (state.players || []).findIndex(p => p === activeName);
+      if (playerIdx === -1) {
+        container.appendChild(card);
+        return;
+      }
+      renderSkillRows(card, playerIdx, activeName, { nextSkillId });
+    }
+    if (meta) {
+      card.style.gridArea = meta.gridArea;
+    }
+    container.appendChild(card);
+  });
+}
+function renderPlayers() {
+  if (!elPlayersContainer) return;
+  syncCourtSideLayout();
+  elPlayersContainer.innerHTML = "";
+  elPlayersContainer.classList.add("court-layout");
+  elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
+  ensureCourtShape();
+  ensureMetricsConfigDefaults();
+  const predictedSkillId = getPredictedSkillId();
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  updateSetTypeVisibility(predictedSkillId);
+  const hasSelectedServe = isAnySelectedSkill("serve");
+  const layoutSkill =
+    state.predictiveSkillFlow && predictedSkillId
+      ? predictedSkillId
+      : isAnySelectedSkill("pass")
+        ? "pass"
+        : hasSelectedServe
+          ? "serve"
+          : null;
+  const displayCourt = getAutoRoleDisplayCourt(layoutSkill);
+  renderTeamCourtCards({
+    container: elPlayersContainer,
+    scope: "our",
+    court: displayCourt.map(item => item.slot || { main: "" }),
+    displayCourt,
+    numbersMap: state.playerNumbers || {},
+    captainSet: new Set((state.captains || []).map(name => name.toLowerCase())),
+    libSet: new Set(state.liberos || []),
+    allowDrag: true,
+    allowReturn: true,
+    allowDrop: true,
+    isCompactMobile,
+    nextSkillId: predictedSkillId
   });
   recalcAllStatsAndUpdateUI();
   renderLineupChips();
+  renderOpponentPlayers();
 }
-function animateEventToLog(sourceEl, skillId, code) {
-  if (!sourceEl || !elEventsLog) return;
-  const src = sourceEl.getBoundingClientRect();
-  const dest = elEventsLog.getBoundingClientRect();
-  const flyer = document.createElement("div");
-  flyer.className = "event-flyer badge";
-  if (skillId) flyer.classList.add("badge-" + skillId);
-  flyer.textContent = code || "";
-  const startX = src.left + src.width / 2;
-  const startY = src.top + src.height / 2;
-  const destX = dest.left + Math.min(dest.width * 0.15, 28);
-  const destY = dest.top + 12;
-  flyer.style.setProperty("--sx", startX + "px");
-  flyer.style.setProperty("--sy", startY + "px");
-  flyer.style.setProperty("--dx", destX - startX + "px");
-  flyer.style.setProperty("--dy", destY - startY + "px");
-  document.body.appendChild(flyer);
-  requestAnimationFrame(() => flyer.classList.add("run"));
-  flyer.addEventListener("animationend", () => {
-    flyer.remove();
-    elEventsLog.classList.add("log-pulse");
-    setTimeout(() => elEventsLog.classList.remove("log-pulse"), 320);
+function renderOpponentPlayers() {
+  if (!state.useOpponentTeam) return;
+  const elOpponentContainer = document.getElementById("opponent-players-container");
+  if (!elOpponentContainer) return;
+  if (typeof ensureOpponentLiberosFromTeam === "function") {
+    ensureOpponentLiberosFromTeam();
+  }
+  syncCourtSideLayout();
+  if (typeof updateOpponentRotationDisplay === "function") {
+    updateOpponentRotationDisplay();
+  }
+  elOpponentContainer.innerHTML = "";
+  elOpponentContainer.classList.add("court-layout");
+  elOpponentContainer.classList.toggle("court-layout--mirror", !!state.opponentCourtViewMirrored);
+  const baseOppCourt =
+    Array.isArray(state.opponentCourt) && state.opponentCourt.length === 6
+      ? state.opponentCourt
+      : Array.from({ length: 6 }, (_, idx) => ({ main: (state.opponentPlayers || [])[idx] || "" }));
+  const court =
+    typeof ensureCourtShapeFor === "function"
+      ? ensureCourtShapeFor(baseOppCourt)
+      : Array.from({ length: 6 }, (_, idx) => baseOppCourt[idx] || { main: "" });
+  renderTeamCourtCards({
+    container: elOpponentContainer,
+    scope: "opponent",
+    court,
+    numbersMap: state.opponentPlayerNumbers || {},
+    captainSet: new Set((state.opponentCaptains || []).map(name => name.toLowerCase())),
+    libSet: new Set(state.opponentLiberos || []),
+    allowReturn: true,
+    allowDrop: true,
+    isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches
   });
+}
+function syncCourtSideLayout() {
+  const courtArea = document.getElementById("court-area");
+  const opponentPanel = document.querySelector('[data-team-panel="opponent"]');
+  const homePanel = document.querySelector('[data-team-panel="home"]');
+  const swapped = !!state.courtSideSwapped;
+  const homeIsFar = swapped;
+  const opponentIsFar = !swapped;
+  state.courtViewMirrored = homeIsFar;
+  state.opponentCourtViewMirrored = opponentIsFar;
+  if (courtArea) {
+    courtArea.classList.toggle("court-area--swapped", swapped);
+  }
+  if (opponentPanel) {
+    opponentPanel.classList.toggle("team-panel--far", !swapped);
+    opponentPanel.classList.toggle("team-panel--near", swapped);
+  }
+  if (homePanel) {
+    homePanel.classList.toggle("team-panel--far", swapped);
+    homePanel.classList.toggle("team-panel--near", !swapped);
+  }
+}
+function swapTeamsInMatch() {
+  const swapState = (keyA, keyB) => {
+    const tmp = state[keyA];
+    state[keyA] = state[keyB];
+    state[keyB] = tmp;
+  };
+  swapState("selectedTeam", "selectedOpponentTeam");
+  swapState("players", "opponentPlayers");
+  swapState("playerNumbers", "opponentPlayerNumbers");
+  swapState("liberos", "opponentLiberos");
+  swapState("captains", "opponentCaptains");
+  swapState("court", "opponentCourt");
+  swapState("rotation", "opponentRotation");
+  swapState("courtViewMirrored", "opponentCourtViewMirrored");
+  swapState("autoRoleP1American", "opponentAutoRoleP1American");
+  swapState("attackTrajectoryEnabled", "opponentAttackTrajectoryEnabled");
+  swapState("serveTrajectoryEnabled", "opponentServeTrajectoryEnabled");
+  swapState("setTypePromptEnabled", "opponentSetTypePromptEnabled");
+  swapState("autoLiberoBackline", "opponentAutoLiberoBackline");
+  swapState("autoLiberoRole", "opponentAutoLiberoRole");
+  swapState("liberoAutoMap", "opponentLiberoAutoMap");
+  swapState("preferredLibero", "opponentPreferredLibero");
+  swapState("skillFlowOverride", "opponentSkillFlowOverride");
+
+  if (typeof updateAutoRoleBaseCourtCache === "function") {
+    updateAutoRoleBaseCourtCache(state.court);
+  }
+  if (state.useOpponentTeam) {
+    state.match.opponent = state.selectedOpponentTeam || "";
+    if (typeof applyMatchInfoToUI === "function") {
+      applyMatchInfoToUI();
+    }
+  }
+  if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+  if (typeof renderOpponentTeamsSelect === "function") renderOpponentTeamsSelect();
+  if (typeof renderOpponentPlayersList === "function") renderOpponentPlayersList();
+  if (typeof renderOpponentLiberoTags === "function") renderOpponentLiberoTags();
+  if (typeof renderLiberoChipsInline === "function") renderLiberoChipsInline();
+  if (typeof applyPlayersFromStateToTextarea === "function") applyPlayersFromStateToTextarea();
+  if (typeof applyOpponentPlayersFromStateToTextarea === "function") {
+    applyOpponentPlayersFromStateToTextarea();
+  }
+  saveState();
+  renderPlayers();
 }
 function clearReceiveContext() {
   lastReceiveContext = null;
@@ -4750,6 +4935,11 @@ function updateTeamCounters() {
     const remaining = Math.max(0, 6 - used);
     elSubstitutionRemaining.textContent = String(remaining);
   }
+  if (elSubstitutionRemainingOpp) {
+    const used = getSubstitutionCountForSet(setNum);
+    const remaining = Math.max(0, 6 - used);
+    elSubstitutionRemainingOpp.textContent = String(remaining);
+  }
 }
 function recordTimeoutEvent() {
   recordSetAction("timeout", { playerName: "Timeout", code: "TO" });
@@ -5868,6 +6058,7 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Pt A" },
       { label: "Set", bulkKey: "set" },
       { label: "FB N" },
+      { label: "Squadra" },
       { label: "Giocatrice", bulkKey: "player" },
       { label: "Alzatore", bulkKey: "setter" },
       { label: "Fondamentale", bulkKey: "skill" },
@@ -5979,6 +6170,14 @@ function renderEventTableRows(target, events, options = {}) {
       }
       return valueToString(dir);
     };
+    const resolveTeamLabel = () => {
+      if (ev.team === "opponent") return state.selectedOpponentTeam || "Avversaria";
+      if (ev.team && ev.team !== "opponent") return ev.teamName || state.selectedTeam || "Squadra";
+      if (ev.code === "opp-error" || ev.code === "opp-point" || ev.playerName === "Avversari") {
+        return state.selectedOpponentTeam || "Avversaria";
+      }
+      return state.selectedTeam || "Squadra";
+    };
     if (enableSelection && showCheckbox) {
       const selectTd = document.createElement("td");
       selectTd.className = "row-select";
@@ -6012,6 +6211,7 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
       },
       { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
+      { text: resolveTeamLabel() },
       {
         text: formatNameWithNumber(ev.playerName || state.players[resolvePlayerIdx(ev)]) || "—",
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
@@ -10396,6 +10596,18 @@ function buildMatchExportPayload() {
       opponentPlayerNumbers: state.opponentPlayerNumbers,
       opponentLiberos: state.opponentLiberos,
       opponentCaptains: state.opponentCaptains,
+      opponentCourt: state.opponentCourt,
+      opponentRotation: state.opponentRotation,
+      opponentCourtViewMirrored: !!state.opponentCourtViewMirrored,
+      opponentAutoRoleP1American: !!state.opponentAutoRoleP1American,
+      opponentAttackTrajectoryEnabled: state.opponentAttackTrajectoryEnabled !== false,
+      opponentServeTrajectoryEnabled: state.opponentServeTrajectoryEnabled !== false,
+      opponentSetTypePromptEnabled: state.opponentSetTypePromptEnabled !== false,
+      opponentAutoLiberoBackline: state.opponentAutoLiberoBackline !== false,
+      opponentAutoLiberoRole: state.opponentAutoLiberoRole,
+      opponentLiberoAutoMap: state.opponentLiberoAutoMap,
+      opponentPreferredLibero: state.opponentPreferredLibero,
+      opponentSkillFlowOverride: state.opponentSkillFlowOverride,
       court: state.court,
       events: state.events,
       stats: state.stats,
@@ -10414,7 +10626,8 @@ function buildMatchExportPayload() {
       liberoAutoMap: state.liberoAutoMap,
       preferredLibero: state.preferredLibero,
       nextSetType: state.nextSetType,
-      courtViewMirrored: !!state.courtViewMirrored
+      courtViewMirrored: !!state.courtViewMirrored,
+      courtSideSwapped: !!state.courtSideSwapped
     }
   };
 }
@@ -10498,6 +10711,7 @@ function applyImportedMatch(nextState, options = {}) {
   merged.video.youtubeId = merged.video.youtubeId || "";
   merged.video.youtubeUrl = merged.video.youtubeUrl || "";
   merged.courtViewMirrored = !!nextState.courtViewMirrored;
+  merged.courtSideSwapped = !!nextState.courtSideSwapped;
   state = merged;
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
@@ -11645,6 +11859,12 @@ async function init() {
       openMobileLineupModal();
     });
   }
+  const elBtnOpenLineupOpp = document.getElementById("btn-open-lineup-opp");
+  if (elBtnOpenLineupOpp) {
+    elBtnOpenLineupOpp.addEventListener("click", () => {
+      openMobileLineupModal("opponent");
+    });
+  }
   if (elBtnSaveOpponentTeam) {
     elBtnSaveOpponentTeam.addEventListener("click", saveCurrentOpponentTeam);
   }
@@ -11805,7 +12025,11 @@ async function init() {
         name: teamManagerScope === "opponent" ? state.selectedOpponentTeam || "Avversaria" : state.selectedTeam || "Squadra",
         staff: Object.assign({}, DEFAULT_STAFF),
         players: playersDetailed,
-        defaultRotation: 1
+        defaultRotation: 1,
+        defaultLineup:
+          typeof buildRoleBasedDefaultLineup === "function"
+            ? buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players)
+            : TEMPLATE_TEAM.players.slice(0, 6)
       };
       renderTeamManagerTable();
     });
@@ -11926,8 +12150,12 @@ async function init() {
       if (state.selectedTeam === name) {
         state.selectedTeam = "";
       }
+      if (state.selectedOpponentTeam === name) {
+        state.selectedOpponentTeam = "";
+      }
       if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
       if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+      if (typeof renderOpponentTeamsSelect === "function") renderOpponentTeamsSelect();
       renderTeamsManagerList();
     });
   }
@@ -12081,6 +12309,24 @@ async function init() {
   if (elBtnRotateCcw) {
     elBtnRotateCcw.addEventListener("click", () => rotateCourt("ccw"));
   }
+  if (typeof elBtnRotateCwOpp !== "undefined" && elBtnRotateCwOpp) {
+    elBtnRotateCwOpp.addEventListener("click", () => {
+      if (typeof rotateOpponentCourt === "function") {
+        rotateOpponentCourt("cw");
+        return;
+      }
+      rotateCourt("cw");
+    });
+  }
+  if (typeof elBtnRotateCcwOpp !== "undefined" && elBtnRotateCcwOpp) {
+    elBtnRotateCcwOpp.addEventListener("click", () => {
+      if (typeof rotateOpponentCourt === "function") {
+        rotateOpponentCourt("ccw");
+        return;
+      }
+      rotateCourt("ccw");
+    });
+  }
   if (elBtnRotateCwModal) {
     elBtnRotateCwModal.addEventListener("click", () => rotateCourt("cw"));
   }
@@ -12089,6 +12335,15 @@ async function init() {
   }
   if (elRotationSelect) {
     elRotationSelect.addEventListener("change", () => setRotation(elRotationSelect.value));
+  }
+  if (typeof elRotationSelectOpp !== "undefined" && elRotationSelectOpp) {
+    elRotationSelectOpp.addEventListener("change", () => {
+      if (typeof setOpponentRotation === "function") {
+        setOpponentRotation(elRotationSelectOpp.value);
+        return;
+      }
+      setRotation(elRotationSelectOpp.value);
+    });
   }
   const elAutoRotateToggleSettings = document.getElementById("auto-rotate-toggle-settings");
   if (elAutoRotateToggle) {
@@ -12148,15 +12403,21 @@ async function init() {
     });
   }
   const elAutoLiberoSelect = document.getElementById("auto-libero-select");
+  const elAutoLiberoSelectOpp = document.getElementById("auto-libero-select-opp");
   const elAutoLiberoSelectSettings = document.getElementById("auto-libero-select-settings");
   const elSwapLibero = document.getElementById("btn-swap-libero");
+  const elSwapLiberoOpp = document.getElementById("btn-swap-libero-opp");
   const elSwapLiberoSettings = document.getElementById("btn-swap-libero-settings");
   const elLiberoToBench = document.getElementById("btn-libero-to-bench");
   const syncAutoLiberoSelects = role => {
     if (elAutoLiberoSelect) elAutoLiberoSelect.value = role || "";
     if (elAutoLiberoSelectSettings) elAutoLiberoSelectSettings.value = role || "";
   };
+  const syncOpponentAutoLiberoSelect = role => {
+    if (elAutoLiberoSelectOpp) elAutoLiberoSelectOpp.value = role || "";
+  };
   syncAutoLiberoSelects(state.autoLiberoRole || "");
+  syncOpponentAutoLiberoSelect(state.opponentAutoLiberoRole || "");
   [elAutoLiberoSelect, elAutoLiberoSelectSettings].forEach(sel => {
     if (!sel) return;
     sel.addEventListener("change", () => {
@@ -12179,6 +12440,32 @@ async function init() {
       syncAutoLiberoSelects(role);
     });
   });
+  if (elAutoLiberoSelectOpp) {
+    elAutoLiberoSelectOpp.addEventListener("change", () => {
+      const role = elAutoLiberoSelectOpp.value || "";
+      if (typeof setTeamAutoLiberoRole === "function") {
+        setTeamAutoLiberoRole("opponent", role);
+      } else {
+        state.opponentAutoLiberoRole = role;
+      }
+      if (typeof setTeamAutoLiberoBackline === "function") {
+        setTeamAutoLiberoBackline("opponent", role !== "");
+      } else if (role !== "") {
+        state.opponentAutoLiberoBackline = true;
+      }
+      if (typeof setTeamLiberoAutoMap === "function") {
+        setTeamLiberoAutoMap("opponent", {});
+      } else {
+        state.opponentLiberoAutoMap = {};
+      }
+      if (typeof enforceAutoLiberoForScope === "function") {
+        enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+      }
+      saveState();
+      syncOpponentAutoLiberoSelect(role);
+      if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+    });
+  }
   [elSwapLibero, elSwapLiberoSettings].forEach(btn => {
     if (!btn) return;
     btn.addEventListener("click", () => {
@@ -12188,6 +12475,16 @@ async function init() {
       }
     });
   });
+  if (elSwapLiberoOpp) {
+    elSwapLiberoOpp.addEventListener("click", () => {
+      if (typeof swapPreferredLiberoForScope === "function") {
+        swapPreferredLiberoForScope("opponent");
+        return;
+      }
+      state.opponentPreferredLibero = "";
+      saveState();
+    });
+  }
   if (elLiberoToBench) {
     elLiberoToBench.addEventListener("click", () => {
       if (typeof sendLiberoToBench === "function") {
@@ -12196,6 +12493,7 @@ async function init() {
     });
   }
   const elAutoRoleP1AmericanToggle = document.getElementById("auto-role-p1american-toggle");
+  const elAutoRoleP1AmericanToggleOpp = document.getElementById("auto-role-p1american-toggle-opp");
   const elAutoRoleP1AmericanToggleSettings = document.getElementById("auto-role-p1american-toggle-settings");
   if (elAutoRoleP1AmericanToggle) {
     elAutoRoleP1AmericanToggle.checked = !!state.autoRoleP1American;
@@ -12204,7 +12502,7 @@ async function init() {
         elAutoRoleP1AmericanToggleSettings.checked = elAutoRoleP1AmericanToggle.checked;
       }
       if (typeof setAutoRoleP1American === "function") {
-        setAutoRoleP1American(elAutoRoleP1AmericanToggle.checked);
+        setAutoRoleP1American(!!elAutoRoleP1AmericanToggle.checked);
       } else {
         state.autoRoleP1American = !!elAutoRoleP1AmericanToggle.checked;
         saveState();
@@ -12218,11 +12516,18 @@ async function init() {
         elAutoRoleP1AmericanToggle.checked = elAutoRoleP1AmericanToggleSettings.checked;
       }
       if (typeof setAutoRoleP1American === "function") {
-        setAutoRoleP1American(elAutoRoleP1AmericanToggleSettings.checked);
+        setAutoRoleP1American(!!elAutoRoleP1AmericanToggleSettings.checked);
       } else {
         state.autoRoleP1American = !!elAutoRoleP1AmericanToggleSettings.checked;
         saveState();
       }
+    });
+  }
+  if (elAutoRoleP1AmericanToggleOpp) {
+    elAutoRoleP1AmericanToggleOpp.checked = !!state.opponentAutoRoleP1American;
+    elAutoRoleP1AmericanToggleOpp.addEventListener("change", () => {
+      state.opponentAutoRoleP1American = !!elAutoRoleP1AmericanToggleOpp.checked;
+      saveState();
     });
   }
   const elPredictiveSkillToggle = document.getElementById("predictive-skill-toggle");
@@ -12252,10 +12557,12 @@ async function init() {
     });
   }
   const elAttackTrajectoryToggle = document.getElementById("attack-trajectory-toggle");
+  const elAttackTrajectoryToggleOpp = document.getElementById("attack-trajectory-toggle-opp");
   const elAttackTrajectoryToggleSettings = document.getElementById("attack-trajectory-toggle-settings");
   const elAttackTrajectorySimpleToggle = document.getElementById("attack-trajectory-simple-toggle");
   const elAttackTrajectorySimpleToggleSettings = document.getElementById("attack-trajectory-simple-toggle-settings");
   const elServeTrajectoryToggleInline = document.getElementById("serve-trajectory-toggle-inline");
+  const elServeTrajectoryToggleInlineOpp = document.getElementById("serve-trajectory-toggle-inline-opp");
   const elDefaultSetTypeSelect = document.getElementById("default-settype-select");
   const elDefaultSetTypeSelectSettings = document.getElementById("default-settype-select-settings");
   if (elAttackTrajectoryToggle) {
@@ -12265,6 +12572,13 @@ async function init() {
         elAttackTrajectoryToggleSettings.checked = elAttackTrajectoryToggle.checked;
       }
       state.attackTrajectoryEnabled = !!elAttackTrajectoryToggle.checked;
+      saveState();
+    });
+  }
+  if (elAttackTrajectoryToggleOpp) {
+    elAttackTrajectoryToggleOpp.checked = !!state.opponentAttackTrajectoryEnabled;
+    elAttackTrajectoryToggleOpp.addEventListener("change", () => {
+      state.opponentAttackTrajectoryEnabled = !!elAttackTrajectoryToggleOpp.checked;
       saveState();
     });
   }
@@ -12304,11 +12618,38 @@ async function init() {
     saveState();
   };
   const elSetTypePromptToggleInline = document.getElementById("settype-prompt-toggle-inline");
+  const elSetTypePromptToggleInlineOpp = document.getElementById("settype-prompt-toggle-inline-opp");
   const syncSetTypePromptToggle = value => {
     state.setTypePromptEnabled = !!value;
     if (elSetTypePromptToggleInline) elSetTypePromptToggleInline.checked = !!value;
     saveState();
     renderPlayers();
+  };
+  const syncOpponentSetTypePromptToggle = value => {
+    state.opponentSetTypePromptEnabled = !!value;
+    if (elSetTypePromptToggleInlineOpp) elSetTypePromptToggleInlineOpp.checked = !!value;
+    saveState();
+  };
+  const opponentSkillToggles = [
+    { id: "serve", el: elOpponentSkillServe },
+    { id: "pass", el: elOpponentSkillPass },
+    { id: "attack", el: elOpponentSkillAttack },
+    { id: "defense", el: elOpponentSkillDefense },
+    { id: "block", el: elOpponentSkillBlock },
+    { id: "second", el: elOpponentSkillSecond }
+  ];
+  const syncOpponentSkillToggles = () => {
+    state.opponentSkillConfig = state.opponentSkillConfig || {};
+    opponentSkillToggles.forEach(item => {
+      if (!item.el) return;
+      const enabled = state.opponentSkillConfig[item.id] !== false;
+      item.el.checked = enabled;
+    });
+  };
+  const updateOpponentSkillToggle = (skillId, enabled) => {
+    state.opponentSkillConfig = state.opponentSkillConfig || {};
+    state.opponentSkillConfig[skillId] = !!enabled;
+    saveState();
   };
   if (elSetTypePromptToggleInline) {
     elSetTypePromptToggleInline.checked = !!state.setTypePromptEnabled;
@@ -12316,11 +12657,37 @@ async function init() {
       syncSetTypePromptToggle(elSetTypePromptToggleInline.checked)
     );
   }
+  if (elSetTypePromptToggleInlineOpp) {
+    elSetTypePromptToggleInlineOpp.checked = !!state.opponentSetTypePromptEnabled;
+    elSetTypePromptToggleInlineOpp.addEventListener("change", () =>
+      syncOpponentSetTypePromptToggle(elSetTypePromptToggleInlineOpp.checked)
+    );
+  }
+  opponentSkillToggles.forEach(item => {
+    if (!item.el) return;
+    item.el.addEventListener("change", () => updateOpponentSkillToggle(item.id, item.el.checked));
+  });
+  syncOpponentSkillToggles();
   if (elServeTrajectoryToggleInline) {
     elServeTrajectoryToggleInline.checked = !!state.serveTrajectoryEnabled;
     elServeTrajectoryToggleInline.addEventListener("change", () =>
       syncServeTrajectoryToggles(elServeTrajectoryToggleInline.checked)
     );
+  }
+  if (elServeTrajectoryToggleInlineOpp) {
+    elServeTrajectoryToggleInlineOpp.checked = !!state.opponentServeTrajectoryEnabled;
+    elServeTrajectoryToggleInlineOpp.addEventListener("change", () => {
+      state.opponentServeTrajectoryEnabled = !!elServeTrajectoryToggleInlineOpp.checked;
+      saveState();
+    });
+  }
+  if (elUseOpponentTeamToggle) {
+    elUseOpponentTeamToggle.checked = !!state.useOpponentTeam;
+    elUseOpponentTeamToggle.addEventListener("change", () => {
+      state.useOpponentTeam = !!elUseOpponentTeamToggle.checked;
+      saveState();
+      syncOpponentSettingsUI();
+    });
   }
   if (elVideoScoutToggle) {
     elVideoScoutToggle.checked = !!state.videoScoutMode;
@@ -12348,6 +12715,9 @@ async function init() {
         stopPlayByPlay();
       }
     });
+  }
+  if (elUseOpponentTeamToggle || elOpponentTeamSettings) {
+    syncOpponentSettingsUI();
   }
   if (elDefaultSetTypeSelect) {
     elDefaultSetTypeSelect.value = normalizeSetTypeValue(state.defaultSetType) || "";
@@ -12381,6 +12751,7 @@ async function init() {
     });
   }
   const elSkillFlowButtons = document.getElementById("skill-flow-buttons");
+  const elSkillFlowButtonsOpp = document.getElementById("skill-flow-buttons-opp");
   if (elSkillFlowButtons) {
     elSkillFlowButtons.addEventListener("click", e => {
       const target = e.target;
@@ -12388,6 +12759,16 @@ async function init() {
       const skillId = target.dataset.forceSkill;
       if (!skillId) return;
       forceNextSkill(skillId);
+    });
+  }
+  if (elSkillFlowButtonsOpp) {
+    elSkillFlowButtonsOpp.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const skillId = target.dataset.forceSkill;
+      if (!skillId) return;
+      state.opponentSkillFlowOverride = skillId;
+      saveState();
     });
   }
   if (elBtnFreeball) {
@@ -12402,8 +12783,11 @@ async function init() {
   }
   if (elBtnToggleCourtView) {
     elBtnToggleCourtView.addEventListener("click", () => {
-      state.courtViewMirrored = !state.courtViewMirrored;
+      state.courtSideSwapped = !state.courtSideSwapped;
+      state.courtViewMirrored = !!state.courtSideSwapped;
+      state.opponentCourtViewMirrored = !state.courtSideSwapped;
       saveState();
+      syncCourtSideLayout();
       renderPlayers();
     });
   }
