@@ -50,6 +50,7 @@ const elLineupModalCancel = document.getElementById("lineup-modal-cancel");
 const elLineupModalSaveOverride = document.getElementById("lineup-modal-save-override");
 const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save-substitution");
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
+const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
@@ -358,6 +359,30 @@ function updateLineupModalControls() {
   if (elLineupModalTitle) {
     elLineupModalTitle.textContent = "Imposta formazione";
   }
+}
+function applyDefaultLineupToModal() {
+  const teamName = state.selectedTeam || "";
+  if (!teamName) {
+    alert("Seleziona prima una squadra.");
+    return;
+  }
+  if (typeof loadTeamFromStorage !== "function" || typeof extractRosterFromTeam !== "function") {
+    alert("Funzioni squadra non disponibili.");
+    return;
+  }
+  const team = loadTeamFromStorage(teamName);
+  if (!team) {
+    alert("Squadra non trovata o corrotta.");
+    return;
+  }
+  const roster = extractRosterFromTeam(team);
+  const fallback = roster.playersDetailed && roster.playersDetailed.length > 0
+    ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+    : roster.players || [];
+  const names =
+    roster.defaultLineup && roster.defaultLineup.length > 0 ? roster.defaultLineup : fallback;
+  lineupModalCourt = Array.from({ length: 6 }, (_, idx) => ({ main: names[idx] || "", replaced: "" }));
+  renderLineupModal();
 }
 function getSortedPlayerEntries() {
   const players = state.players || [];
@@ -11602,6 +11627,9 @@ async function init() {
       saveLineupModal({ countSubstitutions: true });
     });
   }
+  if (elLineupModalApplyDefault) {
+    elLineupModalApplyDefault.addEventListener("click", applyDefaultLineupToModal);
+  }
   if (elLineupModal) {
     elLineupModal.addEventListener("click", e => {
       const target = e.target;
@@ -11709,7 +11737,8 @@ async function init() {
       teamManagerState = {
         name: teamManagerScope === "opponent" ? state.selectedOpponentTeam || "Avversaria" : state.selectedTeam || "Squadra",
         staff: Object.assign({}, DEFAULT_STAFF),
-        players: playersDetailed
+        players: playersDetailed,
+        defaultRotation: 1
       };
       renderTeamManagerTable();
     });

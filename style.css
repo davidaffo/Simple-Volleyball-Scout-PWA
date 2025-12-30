@@ -4079,6 +4079,23 @@ body[data-theme="light"] .error-choice-btn.danger {
   border-radius: 0.6rem;
   padding: 0.6rem;
 }
+.default-lineup-rotation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+.default-lineup-rotation .rotation-controls {
+  justify-content: flex-start;
+}
+.default-lineup-rotation .rotation-select {
+  margin-top: 0;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  background: #0f172a;
+  color: #e2e8f0;
+}
 .team-manager-default h4 {
   margin: 0;
 }
@@ -4169,6 +4186,11 @@ body[data-theme="light"] .default-lineup-chip {
   background: #ffffff;
   border-color: #e2e8f0;
   color: #0f172a;
+}
+body[data-theme="light"] .default-lineup-rotation .rotation-select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
 }
 body[data-theme="light"] .default-lineup-slot::before {
   color: rgba(100, 116, 139, 0.25);

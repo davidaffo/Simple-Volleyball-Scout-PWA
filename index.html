@@ -1053,6 +1053,23 @@
           </div>
           <div class="team-manager-default">
             <h4>Formazione di default</h4>
+            <label class="default-lineup-rotation">
+              <span>Rotazione iniziale</span>
+              <div class="rotation-controls default-lineup-rotation-controls">
+                <button id="default-lineup-rotate-cw" class="small rotate-cw" type="button">↺</button>
+                <div class="rotation-display">
+                  <select id="default-lineup-rotation" class="rotation-select">
+                    <option value="1">P1</option>
+                    <option value="2">P2</option>
+                    <option value="3">P3</option>
+                    <option value="4">P4</option>
+                    <option value="5">P5</option>
+                    <option value="6">P6</option>
+                  </select>
+                </div>
+                <button id="default-lineup-rotate-ccw" class="small rotate-ccw" type="button">↻</button>
+              </div>
+            </label>
             <div id="default-lineup-grid" class="default-lineup-grid"></div>
             <div class="default-lineup-bench">
               <div class="default-lineup-bench__title">Giocatrici disponibili</div>
@@ -1142,6 +1159,7 @@ Bianchi Laura 18"></textarea>
         </div>
       </div>
       <div class="lineup-modal__foot">
+        <button id="lineup-modal-apply-default" class="secondary">Inserisci formazione default</button>
         <button id="lineup-modal-save-override">Metti in campo (Override)</button>
         <button id="lineup-modal-save-substitution" class="danger">Effettua sostituzioni</button>
         <button id="lineup-modal-cancel" class="secondary">Chiudi</button>

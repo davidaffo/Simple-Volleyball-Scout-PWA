@@ -133,6 +133,9 @@ const elTeamManagerClose = document.getElementById("team-manager-close");
 const elTeamManagerBody = document.getElementById("team-manager-body");
 const elDefaultLineupGrid = document.getElementById("default-lineup-grid");
 const elDefaultLineupBench = document.getElementById("default-lineup-bench");
+const elDefaultLineupRotation = document.getElementById("default-lineup-rotation");
+const elDefaultLineupRotateCw = document.getElementById("default-lineup-rotate-cw");
+const elDefaultLineupRotateCcw = document.getElementById("default-lineup-rotate-ccw");
 let defaultLineupDragName = "";
 let defaultLineupDragAt = 0;
 const elTeamManagerAdd = document.getElementById("team-manager-add");
@@ -147,6 +150,12 @@ const elTeamManagerTemplate = document.getElementById("team-manager-template");
 const DEFAULT_STAFF = { headCoach: "", assistantCoach: "", manager: "" };
 let teamManagerState = null;
 let teamManagerScope = "our";
+if (elDefaultLineupRotateCw) {
+  elDefaultLineupRotateCw.addEventListener("click", () => rotateDefaultLineup("cw"));
+}
+if (elDefaultLineupRotateCcw) {
+  elDefaultLineupRotateCcw.addEventListener("click", () => rotateDefaultLineup("ccw"));
+}
 const elBtnExportDb = document.getElementById("btn-export-db");
 const elBtnImportDb = document.getElementById("btn-import-db");
 const elDbFileInput = document.getElementById("db-file-input");
@@ -368,12 +377,14 @@ function applyStateSnapshot(parsed, options = {}) {
   ensureCourtShape();
   cleanCourtPlayers();
   state.captains = (state.captains || []).filter(name => (state.players || []).includes(name)).slice(0, 1);
-  state.autoRolePositioning = !!parsed.autoRolePositioning;
+  state.autoRolePositioning = parsed.autoRolePositioning !== false;
   state.isServing = !!parsed.isServing;
   state.rotation = parsed.rotation || 1;
   state.matchFinished = !!parsed.matchFinished;
-  state.attackTrajectoryEnabled = !!parsed.attackTrajectoryEnabled;
-  state.setTypePromptEnabled = !!parsed.setTypePromptEnabled;
+  state.attackTrajectoryEnabled = parsed.attackTrajectoryEnabled !== false;
+  state.attackTrajectorySimplified = parsed.attackTrajectorySimplified !== false;
+  state.serveTrajectoryEnabled = parsed.serveTrajectoryEnabled !== false;
+  state.setTypePromptEnabled = parsed.setTypePromptEnabled !== false;
   state.videoScoutMode = !!parsed.videoScoutMode;
   state.videoPlayByPlay = !!parsed.videoPlayByPlay;
   state.nextSetType = parsed.nextSetType || "";
@@ -439,7 +450,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.preferredLibero = typeof parsed.preferredLibero === "string" ? parsed.preferredLibero : "";
   state.autoRoleP1American = !!parsed.autoRoleP1American;
   state.courtViewMirrored = !!parsed.courtViewMirrored;
-  state.predictiveSkillFlow = !!parsed.predictiveSkillFlow;
+  state.predictiveSkillFlow = parsed.predictiveSkillFlow !== false;
   state.autoRotatePending = false;
   state.freeballPending = !!parsed.freeballPending;
   state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
@@ -739,11 +750,12 @@ function cleanOpponentLiberos() {
   const set = new Set(state.opponentPlayers || []);
   state.opponentLiberos = normalizePlayers(state.opponentLiberos || []).filter(name => set.has(name));
 }
-function applyDefaultLineup(names = []) {
+function applyDefaultLineup(names = [], rotation = 1) {
   ensureCourtShape();
   const lineup = Array.isArray(names) ? names.filter(Boolean) : [];
   state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
-  state.rotation = 1;
+  const rot = Number.isFinite(rotation) ? rotation : parseInt(rotation, 10) || 1;
+  state.rotation = Math.min(6, Math.max(1, rot));
   autoRoleBaseCourt = null;
   state.autoRoleBaseCourt = null;
   resetAutoRoleCache();
@@ -1577,6 +1589,11 @@ function normalizeTeamPayload(raw, fallbackName = "") {
   const staff = raw.staff || Object.assign({}, DEFAULT_STAFF);
   const makeId = () => generatePlayerId();
   const rawDefaultLineup = Array.isArray(raw.defaultLineup) ? normalizePlayers(raw.defaultLineup) : [];
+  const rawDefaultRotation = parseInt(raw.defaultRotation, 10);
+  const defaultRotation =
+    Number.isFinite(rawDefaultRotation) && rawDefaultRotation >= 1 && rawDefaultRotation <= 6
+      ? rawDefaultRotation
+      : 1;
   if ((raw.version === 2 || raw.version === 3) && Array.isArray(raw.playersDetailed)) {
     const playersDetailed = enforceSingleCaptainFlag(
       raw.playersDetailed.map(p => {
@@ -1611,7 +1628,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
       numbers,
       players: raw.players || playersDetailed.map(p => p.name),
       captains,
-      defaultLineup
+      defaultLineup,
+      defaultRotation
     };
   }
   const legacyPlayers = raw.players || [];
@@ -1637,7 +1655,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     numbers,
     players: legacyPlayers,
     captains,
-    defaultLineup
+    defaultLineup,
+    defaultRotation
   };
 }
 function loadTeamNormalized(name) {
@@ -1667,7 +1686,8 @@ function compactTeamPayload(data, fallbackName = "") {
     name: normalized.name || fallbackName,
     staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
     playersDetailed,
-    defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup.slice(0, 6) : []
+    defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup.slice(0, 6) : [],
+    defaultRotation: normalized.defaultRotation || 1
   };
 }
 function saveTeamToStorage(name, data) {
@@ -1741,8 +1761,24 @@ function extractRosterFromTeam(team) {
     staff: normalized.staff || DEFAULT_STAFF,
     playersDetailed: normalized.playersDetailed || [],
     captains,
-    defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup : []
+    defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup : [],
+    defaultRotation: normalized.defaultRotation || 1
   };
+}
+function getSelectedTeamDefaultSettings() {
+  const name = state.selectedTeam || "";
+  if (!name) return null;
+  const team = loadTeamFromStorage(name);
+  if (!team) return null;
+  const roster = extractRosterFromTeam(team);
+  const fallback =
+    roster.playersDetailed && roster.playersDetailed.length > 0
+      ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
+      : roster.players || [];
+  const defaultLineup =
+    roster.defaultLineup && roster.defaultLineup.length > 0 ? roster.defaultLineup : fallback;
+  const defaultRotation = roster.defaultRotation || 1;
+  return { defaultLineup, defaultRotation };
 }
 function getOpponentTeamStorageKey(name) {
   return OPPONENT_TEAM_PREFIX + name;
@@ -2237,10 +2273,15 @@ function resetMatchState() {
   };
   state.events = [];
   state.stats = {};
-  state.court = preservedCourt;
-  autoRoleBaseCourt = preservedAutoRoleCourt.length ? [...preservedAutoRoleCourt] : null;
-  state.autoRoleBaseCourt = preservedAutoRoleCourt;
-  state.rotation = preservedRotation;
+  const defaults = getSelectedTeamDefaultSettings();
+  if (defaults && defaults.defaultLineup && defaults.defaultLineup.length > 0) {
+    applyDefaultLineup(defaults.defaultLineup, defaults.defaultRotation || 1);
+  } else {
+    state.court = preservedCourt;
+    autoRoleBaseCourt = preservedAutoRoleCourt.length ? [...preservedAutoRoleCourt] : null;
+    state.autoRoleBaseCourt = preservedAutoRoleCourt;
+    state.rotation = preservedRotation;
+  }
   state.isServing = preservedServing;
   state.currentSet = 1;
   state.matchFinished = false;
@@ -2401,7 +2442,8 @@ function applyImportedTeamData(data) {
     playerNumbers: roster.numbers || {},
     captains: roster.captains || [],
     setDefaultLineup: true,
-    defaultLineupNames: defaultLineup
+    defaultLineupNames: defaultLineup,
+    defaultLineupRotation: roster.defaultRotation || 1
   });
   state.selectedTeam = normalizedTeam && normalizedTeam.name ? normalizedTeam.name : "";
   if (state.selectedTeam) {
@@ -2572,7 +2614,8 @@ function handleTeamSelectChange() {
     playerNumbers: roster.numbers || {},
     captains: roster.captains || [],
     setDefaultLineup: true,
-    defaultLineupNames: defaultLineup
+    defaultLineupNames: defaultLineup,
+    defaultLineupRotation: roster.defaultRotation || 1
   });
   renderLiberoTags();
   renderTeamsSelect();
@@ -3011,7 +3054,8 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
       (isOpponent ? "Avversaria" : "Squadra"),
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
     players: playersDetailed,
-    defaultLineup
+    defaultLineup,
+    defaultRotation: (normalized && normalized.defaultRotation) || 1
   };
 }
 function renderTeamManagerTable() {
@@ -3242,6 +3286,22 @@ function setDefaultLineupSlot(slotIdx, name) {
   teamManagerState.defaultLineup = current;
   renderDefaultLineupEditor();
 }
+function rotateDefaultLineup(direction) {
+  if (!teamManagerState) return;
+  const rosterNames = getDefaultLineupRoster().map(p => p.name);
+  const current = normalizeDefaultLineup(teamManagerState.defaultLineup || [], rosterNames);
+  let rotated = current.slice();
+  if (direction === "cw") {
+    rotated = [current[5], current[0], current[1], current[2], current[3], current[4]];
+    teamManagerState.defaultRotation = ((teamManagerState.defaultRotation || 1) % 6) + 1;
+  } else {
+    rotated = [current[1], current[2], current[3], current[4], current[5], current[0]];
+    teamManagerState.defaultRotation =
+      teamManagerState.defaultRotation === 1 ? 6 : (teamManagerState.defaultRotation || 1) - 1;
+  }
+  teamManagerState.defaultLineup = rotated;
+  renderDefaultLineupEditor();
+}
 function clearDefaultLineupSlot(slotIdx) {
   if (!teamManagerState) return;
   const rosterNames = getDefaultLineupRoster().map(p => p.name);
@@ -3252,6 +3312,17 @@ function clearDefaultLineupSlot(slotIdx) {
 }
 function renderDefaultLineupEditor() {
   if (!elDefaultLineupGrid || !elDefaultLineupBench || !teamManagerState) return;
+  if (elDefaultLineupRotation) {
+    const rawRotation = parseInt(teamManagerState.defaultRotation, 10);
+    const rotation =
+      Number.isFinite(rawRotation) && rawRotation >= 1 && rawRotation <= 6 ? rawRotation : 1;
+    teamManagerState.defaultRotation = rotation;
+    elDefaultLineupRotation.value = String(rotation);
+    elDefaultLineupRotation.onchange = () => {
+      const next = parseInt(elDefaultLineupRotation.value, 10);
+      teamManagerState.defaultRotation = Number.isFinite(next) ? Math.min(6, Math.max(1, next)) : 1;
+    };
+  }
   const roster = getDefaultLineupRoster();
   const rosterNames = roster.map(p => p.name);
   const numbersMap = {};
@@ -3306,7 +3377,6 @@ function renderDefaultLineupEditor() {
       e.preventDefault();
       setDefaultLineupSlot(idx, defaultLineupDragName);
       defaultLineupDragName = "";
-      defaultLineupSelectedName = "";
       defaultLineupDragAt = 0;
     });
     slot.addEventListener("dragover", e => {
@@ -3355,11 +3425,6 @@ function renderDefaultLineupEditor() {
     });
     chip.addEventListener("dragend", () => {
       defaultLineupDragName = "";
-    });
-    chip.addEventListener("pointerdown", () => {
-      defaultLineupDragName = p.name;
-      defaultLineupSelectedName = p.name;
-      defaultLineupDragAt = Date.now();
     });
     chip.addEventListener("touchstart", e => {
       e.preventDefault();
@@ -3446,7 +3511,8 @@ function openNewTeamManager() {
     name: "",
     staff: Object.assign({}, DEFAULT_STAFF),
     players: [],
-    defaultLineup: []
+    defaultLineup: [],
+    defaultRotation: 1
   };
   if (elTeamMetaName) elTeamMetaName.value = "";
   if (elTeamMetaHead) elTeamMetaHead.value = "";
@@ -3495,6 +3561,10 @@ function collectTeamManagerPayload() {
   const defaultLineup = normalizePlayers(teamManagerState.defaultLineup || [])
     .filter(name => playersDetailed.some(p => p.name === name && !p.out))
     .slice(0, 6);
+  const defaultRotation =
+    teamManagerState.defaultRotation && teamManagerState.defaultRotation >= 1 && teamManagerState.defaultRotation <= 6
+      ? teamManagerState.defaultRotation
+      : 1;
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
   const numbers = {};
   playersDetailed.forEach(p => {
@@ -3513,7 +3583,8 @@ function collectTeamManagerPayload() {
     liberos,
     numbers,
     captains,
-    defaultLineup
+    defaultLineup,
+    defaultRotation
   };
 }
 function saveTeamManagerPayload(options = {}) {
@@ -3864,6 +3935,7 @@ function updatePlayersList(newPlayers, options = {}) {
     captains = null,
     setDefaultLineup = false,
     defaultLineupNames = null,
+    defaultLineupRotation = null,
     preserveCourt = false
   } = options;
   const normalized = normalizePlayers(newPlayers);
@@ -3886,7 +3958,7 @@ function updatePlayersList(newPlayers, options = {}) {
     state.liberos = nextLiberos;
     state.captains = nextCaptains;
     if (setDefaultLineup) {
-      applyDefaultLineup(lineupNames);
+      applyDefaultLineup(lineupNames, defaultLineupRotation);
     }
     saveState();
     applyPlayersFromStateToTextarea();
@@ -3915,7 +3987,7 @@ function updatePlayersList(newPlayers, options = {}) {
     state.liberos = nextLiberos;
     state.captains = nextCaptains;
     if (setDefaultLineup) {
-      applyDefaultLineup(lineupNames);
+      applyDefaultLineup(lineupNames, defaultLineupRotation);
     }
     state.autoRoleBaseCourt = null;
     autoRoleBaseCourt = null;
