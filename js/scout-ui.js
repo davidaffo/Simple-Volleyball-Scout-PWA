@@ -245,6 +245,8 @@ let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
 let attackInlinePlayer = null;
+let queuedSetTypeChoice = null;
+let activeSkillModalContext = null;
 let currentEditControl = null;
 let currentEditCell = null;
 let lockedCourtAreaHeight = null;
@@ -2976,6 +2978,7 @@ function renderSkillChoice(playerIdx, playerName, scope = "our") {
     return;
   }
   if (!elSkillModalBody) return;
+  activeSkillModalContext = { playerIdx, playerName: playerName || null, skillId: null, scope };
   updateSetTypeVisibility(getPredictedSkillIdForScope(scope) || getPredictedSkillId());
   modalMode = "skill";
   modalSubPosIdx = -1;
@@ -3011,6 +3014,7 @@ function renderSkillChoice(playerIdx, playerName, scope = "our") {
 }
 function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
   if (!elSkillModalBody) return;
+  activeSkillModalContext = { playerIdx, playerName: playerName || null, skillId, scope };
   const predicted = getPredictedSkillIdForScope(scope) || getPredictedSkillId();
   updateSetTypeVisibility(skillId === "attack" ? "attack" : predicted);
   modalMode = "skill-codes";
@@ -3085,6 +3089,19 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
       return;
     }
     if (shouldPromptAttackSetType(scope)) {
+      const queuedSetType = normalizeSetTypeValue(queuedSetTypeChoice);
+      if (queuedSetType) {
+        startAttackSelection(playerIdx, queuedSetType, () => {
+          const key = makePlayerKey(scope, playerIdx);
+          if (attackMetaByPlayer[key]) {
+            attackMetaByPlayer[key].fromNextSetType = true;
+          }
+          queuedSetTypeChoice = null;
+          setNextSetType("");
+          renderSkillCodes(playerIdx, playerName, skillId, scope);
+        }, scope);
+        return;
+      }
       const wrap = document.createElement("div");
       wrap.className = "modal-skill-codes";
       const setTypeOptions = isSetterPlayerForScope(scope, playerIdx)
@@ -3094,7 +3111,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "event-btn";
-        btn.textContent = opt.label;
+        btn.textContent = formatSetTypeLabelWithShortcut(opt.value, opt.label);
         btn.addEventListener("click", async () => {
           await startAttackSelection(playerIdx, opt.value, () => {
             renderSkillCodes(playerIdx, playerName, skillId, scope);
@@ -3130,6 +3147,10 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
     btn.dataset.skillId = skillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
+      const usedQueuedSetType =
+        skillId === "attack" &&
+        attackMetaByPlayer[playerKey] &&
+        attackMetaByPlayer[playerKey].fromNextSetType;
       const success = await handleEventClick(
         playerIdx,
         skillId,
@@ -3148,6 +3169,9 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
           clearServeTypeInlineListener();
         }
         if (skillId === "attack") {
+          if (usedQueuedSetType) {
+            setNextSetType("");
+          }
           clearAttackSelection(playerIdx, scope);
         }
         closeSkillModal();
@@ -3248,6 +3272,7 @@ function closeSkillModal() {
   if (!elSkillModal) return;
   elSkillModal.classList.add("hidden");
   setModalOpenState(false);
+  activeSkillModalContext = null;
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
@@ -3936,6 +3961,53 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       return;
     }
     if (shouldPromptAttackSetType(scope)) {
+      const queuedSetType = normalizeSetTypeValue(queuedSetTypeChoice);
+      if (queuedSetType && queuedSetType.toLowerCase() === "damp" && isSetterPlayerForScope(scope, playerIdx)) {
+        if (attackInlinePlayer === playerKey) return;
+        const dampChoice = queuedSetTypeChoice;
+        queuedSetTypeChoice = null;
+        setNextSetType("");
+        startAttackSelection(
+          playerIdx,
+          dampChoice,
+          () => {
+            const metaKey = makePlayerKey(scope, playerIdx);
+            if (attackMetaByPlayer[metaKey]) {
+              attackMetaByPlayer[metaKey].fromNextSetType = true;
+            }
+            renderPlayers();
+          },
+          scope
+        );
+        return;
+      }
+      if (queuedSetType) {
+        const grid = document.createElement("div");
+        grid.className = "code-grid attack-select-grid";
+        const title = document.createElement("div");
+        title.className = "skill-header";
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "skill-title skill-attack";
+        titleSpan.textContent = "Attacco";
+        title.appendChild(titleSpan);
+        grid.appendChild(title);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "event-btn attack-main-btn";
+        btn.textContent = "Attacco";
+        btn.addEventListener("click", async () => {
+          await startAttackSelection(playerIdx, queuedSetType, renderPlayers, scope);
+          const metaKey = makePlayerKey(scope, playerIdx);
+          if (attackMetaByPlayer[metaKey]) {
+            attackMetaByPlayer[metaKey].fromNextSetType = true;
+          }
+          queuedSetTypeChoice = null;
+          setNextSetType("");
+        });
+        grid.appendChild(btn);
+        targetEl.appendChild(grid);
+        return;
+      }
       const grid = document.createElement("div");
       grid.className = "code-grid attack-select-grid";
       const title = document.createElement("div");
@@ -3952,7 +4024,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "event-btn";
-        btn.textContent = opt.label;
+        btn.textContent = formatSetTypeLabelWithShortcut(opt.value, opt.label);
         btn.addEventListener("click", async () => {
           await startAttackSelection(playerIdx, opt.value, renderPlayers, scope);
         });
@@ -8816,6 +8888,15 @@ const DEFAULT_SET_TYPE_OPTIONS = [
   { value: "fast", label: "Fast" },
   { value: "alta", label: "Alta" }
 ];
+const SET_TYPE_SHORTCUTS = {
+  mezza: "M",
+  super: "S",
+  quick: "Q",
+  veloce: "V",
+  fast: "F",
+  alta: "A",
+  damp: "D"
+};
 const DEFAULT_BASE_OPTIONS = [
   { value: "K1", label: "K1" },
   { value: "K2", label: "K2" },
@@ -8845,12 +8926,27 @@ function normalizeSetTypeValue(val) {
   }
   return String(val).trim();
 }
+function formatSetTypeLabelWithShortcut(value, label) {
+  const key = normalizeSetTypeValue(value);
+  const shortcut = key ? SET_TYPE_SHORTCUTS[key.toLowerCase()] : null;
+  const base = label || (key ? key.charAt(0).toUpperCase() + key.slice(1) : "");
+  return shortcut ? `${base} (${shortcut})` : base;
+}
 function renderSetTypeShortcuts() {
   const current = normalizeSetTypeValue(state.nextSetType) || "—";
   if (elSetTypeCurrent) {
     elSetTypeCurrent.textContent = current;
   }
   if (!elSetTypeShortcuts) return;
+  elSetTypeShortcuts.querySelectorAll("[data-settype]").forEach(btn => {
+    const value = btn.dataset.settype || "";
+    const option = DEFAULT_SET_TYPE_OPTIONS.find(opt => opt.value === value);
+    const label = option ? option.label : btn.textContent || value;
+    btn.textContent = formatSetTypeLabelWithShortcut(value, label);
+  });
+  elSetTypeShortcuts.querySelectorAll("[data-clear-settype]").forEach(btn => {
+    btn.textContent = "Nessuna (N)";
+  });
   elSetTypeShortcuts.querySelectorAll("[data-settype]").forEach(btn => {
     const active = normalizeSetTypeValue(btn.dataset.settype) === normalizeSetTypeValue(state.nextSetType);
     btn.classList.toggle("active", active);
@@ -8859,6 +8955,9 @@ function renderSetTypeShortcuts() {
 }
 function setNextSetType(val) {
   const normalized = normalizeSetTypeValue(val) || "";
+  if (!normalized) {
+    queuedSetTypeChoice = null;
+  }
   state.nextSetType = normalized;
   saveState();
   renderSetTypeShortcuts();
@@ -9015,12 +9114,15 @@ function handleSetTypeHotkeys(e) {
     V: "veloce",
     f: "fast",
     F: "fast",
+    d: "Damp",
+    D: "Damp",
     a: "alta",
     A: "alta"
   };
   const choice = keyMap[e.key];
   if (!choice) return;
   e.preventDefault();
+  queuedSetTypeChoice = choice;
   setNextSetType(choice);
 }
 function initSetTypeShortcuts() {
@@ -9034,6 +9136,7 @@ function initSetTypeShortcuts() {
       setNextSetType("");
       return;
     }
+    queuedSetTypeChoice = btn.dataset.settype || "";
     setNextSetType(btn.dataset.settype || "");
   });
   document.addEventListener("keydown", handleSetTypeHotkeys);
@@ -13170,6 +13273,7 @@ async function init() {
   initTabs();
   initSwipeTabs();
   setupFocusGuards();
+  initSetTypeShortcuts();
   document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
