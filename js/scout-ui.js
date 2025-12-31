@@ -1256,9 +1256,12 @@ function computeTwoTeamFlowFromEvent(ev) {
     return { teamScope: scoringScope, skillId: "serve" };
   }
   if (ev.skillId === "pass" && (ev.code === "/" || ev.receiveEvaluation === "/")) {
-    return { teamScope: other, skillId: "defense" };
+    return { teamScope: other, skillId: "second" };
   }
-  if (ev.skillId === "defense" && (ev.code === "-" || ev.code === "/")) {
+  if (ev.skillId === "defense" && ev.code === "/") {
+    return { teamScope: other, skillId: "second" };
+  }
+  if (ev.skillId === "defense" && ev.code === "-") {
     return { teamScope: other, skillId: "defense" };
   }
   if (ev.skillId === "block" && ev.code === "-") {
@@ -1822,8 +1825,8 @@ function openAttackTrajectoryModal(prefill = null) {
     }
     const scope = prefill && prefill.scope ? prefill.scope : "our";
     const mirrorFlag = scope === "opponent" ? state.opponentCourtViewMirrored : state.courtViewMirrored;
-    trajectoryMirror = !forcePopup && !!mirrorFlag;
     trajectoryForceFar = !!(prefill && prefill.forceFar);
+    trajectoryMirror = !forcePopup && !!mirrorFlag && !trajectoryForceFar;
     const mode = (prefill && prefill.mode) || "attack";
     trajectoryMode = mode;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
@@ -4627,6 +4630,17 @@ async function handleEventClick(
     event.attackBp = true;
   }
   event.fromFreeball = wasFreeball;
+  if (!event.fromFreeball && skillId === "attack") {
+    const prevEvent = state.events && state.events.length ? state.events[state.events.length - 1] : null;
+    if (
+      prevEvent &&
+      prevEvent.skillId === "second" &&
+      prevEvent.fromFreeball &&
+      getTeamScopeFromEvent(prevEvent) === scope
+    ) {
+      event.fromFreeball = true;
+    }
+  }
   applyReceiveContextToEvent(event);
   state.events.push(event);
   handleAutoRotationFromEvent(event, scope);
@@ -4644,6 +4658,14 @@ async function handleEventClick(
   }
   if (skillId === "serve" && code === "/") {
     triggerFreeballFlow({ persist: false, rerender: false, scope });
+  }
+  if (
+    state.useOpponentTeam &&
+    state.predictiveSkillFlow &&
+    (skillId === "pass" || skillId === "defense") &&
+    code === "/"
+  ) {
+    triggerFreeballFlow({ persist: false, rerender: false, scope: getOppositeScope(scope) });
   }
   animateEventToLog(sourceEl, skillId, code);
   const persistLocal = typeof getPointDirection === "function" && !!getPointDirection(event);
@@ -8079,6 +8101,9 @@ function getPointDirection(ev) {
   if (ev && (ev.derivedFromPassServe || ev.derivedFromBlock)) return null;
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
     return ev.pointDirection;
+  }
+  if (ev && (ev.skillId === "defense" || ev.skillId === "pass") && ev.code === "/") {
+    return null;
   }
   ensurePointRulesDefaults();
   const skill = ev.skillId;
