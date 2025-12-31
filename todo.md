@@ -7,6 +7,7 @@ Modifica immagine battuta per mettere il campo fuori
 Cambio set e inizio partita migliorato
 Aggregare dati di piu partite
 mostrare traiettorie battute della persona che batte
+tasti scorciatoia alzata trasformano il tasto in attacco
 
 # Bugfix
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti

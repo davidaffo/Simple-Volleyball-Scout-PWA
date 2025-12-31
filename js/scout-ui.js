@@ -19,6 +19,17 @@ function isFarSideForScope(scope) {
   const swapped = !!state.courtSideSwapped;
   return scope === "our" ? swapped : !swapped;
 }
+function isServingForScope(scope) {
+  return scope === "opponent" ? !state.isServing : !!state.isServing;
+}
+function getServeDisplayCourt(scope = "our") {
+  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
+  if (!Array.isArray(baseCourt) || baseCourt.length === 0) return [];
+  if (typeof removeLiberosAndRestoreForScope === "function") {
+    return removeLiberosAndRestoreForScope(baseCourt, scope);
+  }
+  return getCourtShape(baseCourt);
+}
 function getTeamNameForScope(scope) {
   return scope === "opponent"
     ? state.selectedOpponentTeam || "Avversaria"
@@ -707,10 +718,7 @@ function getServeBaseZoneForPlayer(playerIdx, scope = "our") {
   const players = getPlayersForScope(scope);
   if (typeof playerIdx !== "number" || !players || !players[playerIdx]) return null;
   const name = players[playerIdx];
-  const baseCourt =
-    scope === "opponent"
-      ? getCourtShape(state.opponentCourt)
-      : getCourtShape(state.court);
+  const baseCourt = getServeDisplayCourt(scope);
   if (!baseCourt || !baseCourt.length) return null;
   const slotIdx = baseCourt.findIndex(slot => slot && slot.main === name);
   return slotIdx === -1 ? null : slotIdx + 1;
@@ -744,21 +752,21 @@ async function startServeTypeSelection(playerIdx, type, onDone, scope = "our") {
     meta.serveEnd = traj.serveEnd || null;
   }
   const shouldQueueServe = state.useOpponentTeam && state.predictiveSkillFlow;
-    if (shouldQueueServe) {
-      const players = getPlayersForScope(scope);
-      const fallbackServer = getServerPlayerForScope(scope);
-      state.pendingServe = {
-        scope,
-        playerIdx,
-        playerName: players[playerIdx] || (fallbackServer && fallbackServer.name) || null,
-        meta
-      };
-      clearServeTypeInlineListener();
-      if (state.forceSkillActive && state.forceSkillScope === scope) {
-        state.forceSkillActive = false;
-        state.forceSkillScope = null;
-        if (scope === "opponent") {
-          state.opponentSkillFlowOverride = null;
+  if (shouldQueueServe) {
+    const players = getPlayersForScope(scope);
+    const fallbackServer = getServerPlayerForScope(scope);
+    state.pendingServe = {
+      scope,
+      playerIdx,
+      playerName: players[playerIdx] || (fallbackServer && fallbackServer.name) || null,
+      meta
+    };
+    clearServeTypeInlineListener();
+    if (state.forceSkillActive && state.forceSkillScope === scope) {
+      state.forceSkillActive = false;
+      state.forceSkillScope = null;
+      if (scope === "opponent") {
+        state.opponentSkillFlowOverride = null;
       } else {
         state.skillFlowOverride = null;
       }
@@ -2478,12 +2486,17 @@ function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
     useAuto && scope === "our" && autoRoleBaseCourt
       ? ensureCourtShapeFor(autoRoleBaseCourt)
       : ensureCourtShapeFor(scope === "opponent" ? state.opponentCourt : state.court);
+  if (isServingForScope(scope)) {
+    const serveCourt = getServeDisplayCourt(scope);
+    return ensureCourtShapeFor(serveCourt).map((slot, idx) => ({ slot, idx }));
+  }
   if (!useAuto) {
     return baseCourt.map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "serve") {
-    // For the serve we want to display the actual rotation before any auto-role permutation
-    return baseCourt.map((slot, idx) => ({ slot, idx }));
+    // For the serve we want to display the actual rotation without libero on court
+    const serveCourt = getServeDisplayCourt(scope);
+    return ensureCourtShapeFor(serveCourt).map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "pass") {
     const rotation = scope === "opponent" ? state.opponentRotation : state.rotation;
@@ -4187,10 +4200,14 @@ function renderTeamCourtCards(options = {}) {
           : "—";
     }
     nameBlock.appendChild(nameLabel);
-    if (scope === "our") {
+    if (scope === "our" || scope === "opponent") {
       const roleTag = document.createElement("span");
       roleTag.className = "court-role-tag";
-      roleTag.textContent = getRoleLabel((posIdx || 0) + 1);
+      const rotationValue = scope === "opponent" ? state.opponentRotation : state.rotation;
+      roleTag.textContent =
+        typeof getRoleLabelForRotation === "function"
+          ? getRoleLabelForRotation((posIdx || 0) + 1, rotationValue || 1)
+          : getRoleLabel((posIdx || 0) + 1);
       nameBlock.appendChild(roleTag);
     }
     header.appendChild(nameBlock);
@@ -8372,6 +8389,9 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     state.opponentAutoRotatePending = pending;
     state.isServing = !serving;
     eventObj.autoRotateNext = pending;
+    if (typeof enforceAutoLiberoForScope === "function" && state.isServing) {
+      enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+    }
     saveState();
     return;
   }
@@ -8409,8 +8429,13 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
   state.autoRotatePending = pending;
   state.isServing = serving;
   eventObj.autoRotateNext = pending;
-  if (typeof enforceAutoLiberoForState === "function") {
-    enforceAutoLiberoForState({ skipServerOnServe: true });
+  if (typeof enforceAutoLiberoForScope === "function") {
+    if (!state.isServing) {
+      enforceAutoLiberoForScope("our", { skipServerOnServe: true });
+    }
+    if (state.isServing) {
+      enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+    }
   }
   saveState();
   if (state.autoRolePositioning && typeof applyAutoRolePositioning === "function") {
