@@ -241,6 +241,7 @@ let lineupDragName = "";
 let lineupSelectedName = "";
 let lineupNumberMode = false;
 let lineupModalScope = "our";
+let lineupDragFromIdx = null;
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
@@ -857,6 +858,23 @@ function assignPlayerToLineup(name, posIdx) {
     });
   }
 }
+function swapLineupSlots(fromIdx, toIdx) {
+  const core = typeof LineupCore !== "undefined" ? LineupCore : null;
+  if (core && typeof core.swapCourtSlots === "function") {
+    lineupModalCourt = core.swapCourtSlots({
+      court: lineupModalCourt,
+      fromIdx,
+      toIdx
+    });
+    return;
+  }
+  const court = getCourtShape(lineupModalCourt);
+  const next = court.map(slot => Object.assign({}, slot));
+  const tmp = next[fromIdx];
+  next[fromIdx] = next[toIdx];
+  next[toIdx] = tmp;
+  lineupModalCourt = next;
+}
 function clearLineupSlot(posIdx) {
   const core = typeof LineupCore !== "undefined" ? LineupCore : null;
   if (core && typeof core.clearCourtSlot === "function") {
@@ -883,6 +901,21 @@ function renderLineupModal() {
     card.className = "lineup-slot " + areaClass + (!slot.main ? " empty" : "");
     card.style.gridArea = "pos" + (idx + 1);
     card.dataset.pos = "P" + (idx + 1);
+    if (slot.main) {
+      card.draggable = true;
+      card.addEventListener("dragstart", e => {
+        lineupDragName = slot.main;
+        lineupDragFromIdx = idx;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", slot.main);
+          e.dataTransfer.effectAllowed = "move";
+        }
+      });
+      card.addEventListener("dragend", () => {
+        lineupDragName = "";
+        lineupDragFromIdx = null;
+      });
+    }
     card.addEventListener("dragover", e => {
       e.preventDefault();
       card.classList.add("drop-over");
@@ -893,7 +926,13 @@ function renderLineupModal() {
       card.classList.remove("drop-over");
       const name = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || lineupDragName || "";
       if (name) {
-        assignPlayerToLineup(name, idx);
+        if (typeof lineupDragFromIdx === "number" && lineupDragFromIdx !== idx) {
+          swapLineupSlots(lineupDragFromIdx, idx);
+        } else {
+          assignPlayerToLineup(name, idx);
+        }
+        lineupDragFromIdx = null;
+        lineupDragName = "";
         renderLineupModal();
       }
     });
@@ -913,8 +952,13 @@ function renderLineupModal() {
     card.addEventListener("touchend", e => {
       if (!lineupDragName) return;
       e.preventDefault();
-      assignPlayerToLineup(lineupDragName, idx);
+      if (typeof lineupDragFromIdx === "number" && lineupDragFromIdx !== idx) {
+        swapLineupSlots(lineupDragFromIdx, idx);
+      } else {
+        assignPlayerToLineup(lineupDragName, idx);
+      }
       lineupDragName = "";
+      lineupDragFromIdx = null;
       lineupSelectedName = "";
       renderLineupModal();
     });
@@ -992,6 +1036,7 @@ function renderLineupModal() {
       chip.dataset.playerName = name;
       chip.addEventListener("dragstart", e => {
         lineupDragName = name;
+        lineupDragFromIdx = null;
         if (e.dataTransfer) {
           e.dataTransfer.setData("text/plain", name);
           e.dataTransfer.effectAllowed = "move";
@@ -999,6 +1044,7 @@ function renderLineupModal() {
       });
       chip.addEventListener("dragend", () => {
         lineupDragName = "";
+        lineupDragFromIdx = null;
       });
       chip.addEventListener("click", () => {
         const nextEmpty = court.findIndex(slot => !slot.main);
