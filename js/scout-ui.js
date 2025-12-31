@@ -2490,31 +2490,30 @@ function buildReceiveDisplayMapping(court, rotation, scope = "our") {
 }
 function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
   const useAuto = !!state.autoRolePositioning;
+  const opponentBase =
+    useAuto && scope === "opponent" && state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6
+      ? ensureCourtShapeFor(state.opponentAutoRoleBaseCourt)
+      : ensureCourtShapeFor(state.opponentCourt);
   const baseCourt =
     useAuto && scope === "our" && autoRoleBaseCourt
       ? ensureCourtShapeFor(autoRoleBaseCourt)
-      : ensureCourtShapeFor(scope === "opponent" ? state.opponentCourt : state.court);
-  if (isServingForScope(scope)) {
-    const serveCourt = getServeDisplayCourt(scope);
-    return ensureCourtShapeFor(serveCourt).map((slot, idx) => ({ slot, idx }));
-  }
+      : scope === "opponent"
+        ? opponentBase
+        : ensureCourtShapeFor(state.court);
+  const servingCourt = isServingForScope(scope) ? getServeDisplayCourt(scope) : null;
+  const effectiveBase = servingCourt ? ensureCourtShapeFor(servingCourt) : baseCourt;
   if (!useAuto) {
-    return baseCourt.map((slot, idx) => ({ slot, idx }));
-  }
-  if (forSkillId === "serve") {
-    // For the serve we want to display the actual rotation without libero on court
-    const serveCourt = getServeDisplayCourt(scope);
-    return ensureCourtShapeFor(serveCourt).map((slot, idx) => ({ slot, idx }));
+    return effectiveBase.map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "pass") {
     const rotation = scope === "opponent" ? state.opponentRotation : state.rotation;
-    return buildReceiveDisplayMapping(baseCourt, rotation || 1, scope);
+    return buildReceiveDisplayMapping(effectiveBase, rotation || 1, scope);
   }
-  const phase = getCurrentPhase();
+  const phase = forSkillId ? getCurrentPhase(scope) : isServingForScope(scope) ? "attack" : "receive";
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
       buildAutoRolePermutation({
-        baseLineup: baseCourt,
+        baseLineup: effectiveBase,
         rotation: scope === "opponent" ? state.opponentRotation || 1 : state.rotation || 1,
         phase,
         isServing: scope === "opponent" ? !state.isServing : state.isServing,
@@ -2527,7 +2526,7 @@ function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
       idx: typeof item.idx === "number" ? item.idx : 0
     }));
   }
-  return ensureCourtShapeFor(baseCourt).map((slot, idx) => ({ slot, idx }));
+  return ensureCourtShapeFor(effectiveBase).map((slot, idx) => ({ slot, idx }));
 }
 function valueToString(val) {
   if (val === null || val === undefined) return "";
@@ -5464,8 +5463,8 @@ function getCurrentZoneForPlayer(playerIdx, forSkillId = null, scope = "our") {
     if (slotIdx === -1) return null;
     return slotIdx + 1;
   };
-  if (scope !== "opponent" && state.autoRolePositioning && forSkillId) {
-    const displayCourt = getAutoRoleDisplayCourt(forSkillId);
+  if (state.autoRolePositioning && forSkillId) {
+    const displayCourt = getAutoRoleDisplayCourt(forSkillId, scope);
     const displayIdx = displayCourt.findIndex(
       item => item && item.slot && (item.slot.main === name || item.slot.replaced === name)
     );

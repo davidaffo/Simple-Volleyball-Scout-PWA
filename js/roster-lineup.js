@@ -293,6 +293,7 @@ let autoRolePhaseApplied = "";
 let autoRoleRotationApplied = null;
 let autoRoleBaseCourt = null;
 let autoRoleRenderedCourt = null;
+let opponentAutoRoleBaseCourt = null;
 let activeTab = "info";
 let activeAggTab = "summary";
 function getTodayIso() {
@@ -483,10 +484,17 @@ function applyStateSnapshot(parsed, options = {}) {
   state.flowTeamScope = parsed.flowTeamScope || state.flowTeamScope || "our";
   state.opponentSkillConfig = parsed.opponentSkillConfig || state.opponentSkillConfig || {};
   state.autoRoleBaseCourt = Array.isArray(parsed.autoRoleBaseCourt) ? ensureCourtShapeFor(parsed.autoRoleBaseCourt) : [];
+  state.opponentAutoRoleBaseCourt = Array.isArray(parsed.opponentAutoRoleBaseCourt)
+    ? ensureCourtShapeFor(parsed.opponentAutoRoleBaseCourt)
+    : [];
   state.skillClock = parsed.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   autoRoleBaseCourt =
     state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6
       ? cloneCourtLineup(state.autoRoleBaseCourt)
+      : null;
+  opponentAutoRoleBaseCourt =
+    state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6
+      ? cloneCourtLineup(state.opponentAutoRoleBaseCourt)
       : null;
   state.pointRules = parsed.pointRules || state.pointRules || {};
   ensureMatchDefaults();
@@ -684,6 +692,9 @@ function getTeamCourt(scope = "our") {
 function setTeamCourt(scope = "our", court = []) {
   if (scope === "opponent") {
     state.opponentCourt = court;
+    if (state.autoRolePositioning) {
+      updateOpponentAutoRoleBaseCourtCache(court);
+    }
   } else {
     state.court = court;
   }
@@ -901,6 +912,9 @@ function applyOpponentDefaultLineup(names = [], rotation = 1) {
   const rot = Number.isFinite(rotation) ? rotation : parseInt(rotation, 10) || 1;
   state.opponentRotation = Math.min(6, Math.max(1, rot));
   updateOpponentRotationDisplay();
+  if (state.autoRolePositioning) {
+    updateOpponentAutoRoleBaseCourtCache(state.opponentCourt);
+  }
 }
 function setAutoRolePositioning(enabled) {
   const next = !!enabled;
@@ -908,6 +922,7 @@ function setAutoRolePositioning(enabled) {
   state.autoRolePositioning = next;
   if (!next && prev) {
     const restored = restoreAutoRoleBaseCourt();
+    const restoredOpp = restoreOpponentAutoRoleBaseCourt();
     saveState();
     if (restored) {
       renderPlayers();
@@ -915,14 +930,25 @@ function setAutoRolePositioning(enabled) {
       renderLiberoChipsInline();
       renderLineupChips();
       updateRotationDisplay();
+    } else if (typeof renderPlayers === "function") {
+      renderPlayers();
+    }
+    if (!restoredOpp && typeof renderOpponentPlayers === "function") {
+      renderOpponentPlayers();
     }
     return;
   }
   if (next && !prev) {
     cacheAutoRoleBaseCourt();
+    cacheOpponentAutoRoleBaseCourt();
     applyAutoRolePositioning();
+    saveState();
+    return;
   }
   saveState();
+  if (typeof renderPlayers === "function") {
+    renderPlayers();
+  }
 }
 function setAutoRoleP1American(enabled) {
   state.autoRoleP1American = !!enabled;
@@ -962,25 +988,54 @@ function setAutoLiberoRole(role) {
   renderLiberoChipsInline();
   renderLineupChips();
 }
-function getLastOwnEvent() {
-  const list = (state.events || []).filter(ev => {
-    if (!ev || !ev.skillId || ev.skillId === "manual") return false;
-    if (!ev.team) return true;
-    return ev.team !== "opponent";
-  });
-  return list.length > 0 ? list[list.length - 1] : null;
+function getLastEventForScope(scope = "our") {
+  const list = Array.isArray(state.events) ? state.events : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const ev = list[i];
+    if (!ev || !ev.skillId) continue;
+    if (ev.skillId === "manual") {
+      const dir = typeof getPointDirection === "function" ? getPointDirection(ev) : null;
+      if (dir) {
+        const evScope =
+          typeof getTeamScopeFromEvent === "function"
+            ? getTeamScopeFromEvent(ev)
+            : ev.team === "opponent"
+              ? "opponent"
+              : "our";
+        if (scope === "opponent") {
+          if (evScope === "opponent") return ev;
+        } else if (evScope !== "opponent") {
+          return ev;
+        }
+      }
+      continue;
+    }
+    const evScope =
+      typeof getTeamScopeFromEvent === "function"
+        ? getTeamScopeFromEvent(ev)
+        : ev.team === "opponent"
+          ? "opponent"
+          : "our";
+    if (scope === "opponent") {
+      if (evScope === "opponent") return ev;
+    } else if (evScope !== "opponent") {
+      return ev;
+    }
+  }
+  return null;
 }
-function getCurrentPhase() {
-  const last = getLastOwnEvent();
+function getCurrentPhase(scope = "our") {
+  const last = getLastEventForScope(scope);
+  const isServing = scope === "opponent" ? !state.isServing : state.isServing;
   if (last && last.skillId) {
     if (["pass", "second", "attack", "block", "defense"].includes(last.skillId)) {
       return "attack";
     }
     const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
     if (dir === "against") return "receive";
-    if (dir === "for" && state.isServing) return "attack";
+    if (dir === "for" && isServing) return "attack";
   }
-  return state.isServing ? "attack" : "receive";
+  return isServing ? "attack" : "receive";
 }
 function handlePlayerNumberChange(name, value) {
   if (!name) return;
@@ -1042,6 +1097,9 @@ function cloneCourtLineup(lineup = state.court) {
 function cacheAutoRoleBaseCourt() {
   updateAutoRoleBaseCourtCache(state.court);
 }
+function cacheOpponentAutoRoleBaseCourt() {
+  updateOpponentAutoRoleBaseCourtCache(state.opponentCourt || []);
+}
 function restoreAutoRoleBaseCourt() {
   if (!autoRoleBaseCourt || autoRoleBaseCourt.length !== 6) {
     if (state.autoRoleBaseCourt && state.autoRoleBaseCourt.length === 6) {
@@ -1053,6 +1111,18 @@ function restoreAutoRoleBaseCourt() {
   state.court = restored;
   updateAutoRoleBaseCourtCache(restored);
   resetAutoRoleCache();
+  return true;
+}
+function restoreOpponentAutoRoleBaseCourt() {
+  if (!opponentAutoRoleBaseCourt || opponentAutoRoleBaseCourt.length !== 6) {
+    if (state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6) {
+      opponentAutoRoleBaseCourt = cloneCourtLineup(state.opponentAutoRoleBaseCourt);
+    }
+  }
+  if (!opponentAutoRoleBaseCourt || opponentAutoRoleBaseCourt.length !== 6) return false;
+  const restored = cloneCourtLineup(opponentAutoRoleBaseCourt);
+  state.opponentCourt = restored;
+  updateOpponentAutoRoleBaseCourtCache(restored);
   return true;
 }
 function cleanCourtPlayers(target = state.court) {
@@ -1379,6 +1449,11 @@ function updateAutoRoleBaseCourtCache(base) {
   autoRoleBaseCourt = shaped;
   state.autoRoleBaseCourt = shaped;
 }
+function updateOpponentAutoRoleBaseCourtCache(base) {
+  const shaped = cloneCourtLineup(base);
+  opponentAutoRoleBaseCourt = shaped;
+  state.opponentAutoRoleBaseCourt = shaped;
+}
 function commitCourtChange(baseCourt, options = {}) {
   const { clean = true } = options;
   if (clean) cleanCourtPlayers(baseCourt);
@@ -1405,6 +1480,9 @@ function commitCourtChangeForScope(baseCourt, scope = "our") {
     return;
   }
   state.opponentCourt = ensureCourtShapeFor(baseCourt);
+  if (state.autoRolePositioning) {
+    updateOpponentAutoRoleBaseCourtCache(state.opponentCourt);
+  }
   if (typeof enforceAutoLiberoForScope === "function") {
     enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
   }
@@ -5178,7 +5256,7 @@ function applyAutoRolePositioning() {
   if (!state.autoRolePositioning) return;
   ensureCourtShape();
   enforceAutoLiberoForState({ skipServerOnServe: true });
-  const phase = getCurrentPhase();
+  const phase = getCurrentPhase("our");
   const rot = state.rotation || 1;
   if (autoRolePhaseApplied === phase && autoRoleRotationApplied === rot) return;
   if (!autoRoleBaseCourt) {
