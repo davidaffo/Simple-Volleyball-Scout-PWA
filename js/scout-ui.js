@@ -1186,13 +1186,15 @@ function isAnySelectedSkill(skillId) {
   return isAnySelectedSkillForScope("our", skillId);
 }
 function isSetterPlayerForScope(scope, playerIdx) {
-  if (typeof getRoleLabel !== "function") return false;
+  if (typeof getRoleLabelForRotation !== "function") return false;
   const players = getPlayersForScope(scope);
   if (typeof playerIdx !== "number" || !players[playerIdx]) return false;
   const name = players[playerIdx];
   const baseCourt =
     scope === "opponent"
-      ? ensureCourtShapeFor(state.opponentCourt)
+      ? state.autoRolePositioning && state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6
+        ? ensureCourtShapeFor(state.opponentAutoRoleBaseCourt)
+        : ensureCourtShapeFor(state.opponentCourt)
       : state.autoRolePositioning && autoRoleBaseCourt
         ? ensureCourtShapeFor(autoRoleBaseCourt)
         : ensureCourtShapeFor(state.court);
@@ -1200,7 +1202,8 @@ function isSetterPlayerForScope(scope, playerIdx) {
     slot => slot && (slot.main === name || slot.replaced === name)
   );
   if (idx === -1) return false;
-  return String(getRoleLabel(idx + 1)).toUpperCase() === "P";
+  const rotation = scope === "opponent" ? state.opponentRotation || 1 : state.rotation || 1;
+  return String(getRoleLabelForRotation(idx + 1, rotation)).toUpperCase() === "P";
 }
 function isSetterPlayer(playerIdx) {
   return isSetterPlayerForScope("our", playerIdx);
@@ -1539,8 +1542,16 @@ function updateSkillStatsForEvent(scope, playerIdx, skillId, prevCode, nextCode)
     bucket[playerIdx][skillId][nextCode] = (bucket[playerIdx][skillId][nextCode] || 0) + 1;
   }
 }
+function shouldSkipBlockConfirm(scope = "our") {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  const last = getLastFlowEvent(state.events || []);
+  if (!last || last.skillId !== "attack" || last.code !== "/") return false;
+  const expectedScope = getOppositeScope(getTeamScopeFromEvent(last));
+  return expectedScope === scope;
+}
 function applyBlockInference(blockEvent, blockScope, blockCode) {
-  if (!shouldInferAttackFromBlock(blockScope, "block", blockCode)) return;
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return;
+  if (!blockEvent || blockEvent.skillId !== "block") return;
   const attackScope = getOppositeScope(blockScope);
   const events = state.events || [];
   let attackEvent = null;
@@ -1548,17 +1559,29 @@ function applyBlockInference(blockEvent, blockScope, blockCode) {
     const ev = events[i];
     if (!ev || ev.skillId !== "attack") continue;
     if (getTeamScopeFromEvent(ev) !== attackScope) continue;
-    attackEvent = ev;
-    break;
+    if (ev.pendingBlockEval || ev.code === "/") {
+      attackEvent = ev;
+      break;
+    }
   }
-  if (!attackEvent || attackEvent.code !== "/") return;
+  if (!attackEvent) return false;
+  if (blockCode === "/") {
+    const prevCode = attackEvent.code;
+    attackEvent.code = "";
+    attackEvent.pendingBlockEval = false;
+    attackEvent.derivedFromBlock = true;
+    const attackIdx = resolvePlayerIdx(attackEvent);
+    updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, "");
+    return true;
+  }
   const prevCode = attackEvent.code;
   const nextCode = getAttackCodeFromBlockCode(blockCode);
-  attackEvent.code = nextCode || null;
+  attackEvent.code = nextCode || "";
   attackEvent.pendingBlockEval = false;
   attackEvent.derivedFromBlock = true;
   const attackIdx = resolvePlayerIdx(attackEvent);
-  updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, nextCode);
+  updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, attackEvent.code);
+  return true;
 }
 function getPredictedSkillIdForScope(scope) {
   if (scope === "opponent" && !state.useOpponentTeam) return null;
@@ -2551,6 +2574,9 @@ function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
   if (!useAuto) {
     return effectiveBase.map((slot, idx) => ({ slot, idx }));
   }
+  if (forSkillId === "serve") {
+    return ensureCourtShapeFor(effectiveBase).map((slot, idx) => ({ slot, idx }));
+  }
   if (forSkillId === "pass") {
     const rotation = scope === "opponent" ? state.opponentRotation : state.rotation;
     return buildReceiveDisplayMapping(effectiveBase, rotation || 1, scope);
@@ -2809,6 +2835,7 @@ function scheduleRenderPlayers() {
 function schedulePostEventUpdates({
   suppressScroll = false,
   includeAggregates = true,
+  append = true,
   playerIdx = null,
   skillId = null,
   persistLocal = false,
@@ -2820,7 +2847,7 @@ function schedulePostEventUpdates({
       updateSkillStatsUI(playerIdx, skillId);
     }
     renderPlayers();
-    renderEventsLog({ suppressScroll, append: true });
+    renderEventsLog({ suppressScroll, append });
     if (includeAggregates) {
       renderLiveScore();
       renderScoreAndRotations(computePointsSummary());
@@ -3853,39 +3880,43 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       return;
     }
     if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
-      const grid = document.createElement("div");
-      grid.className = "code-grid block-confirm-grid";
-      const skipBtn = document.createElement("button");
-      skipBtn.type = "button";
-      skipBtn.className = "event-btn block-confirm-skip";
-      skipBtn.textContent = "No muro";
-      skipBtn.addEventListener("click", () => {
-        delete blockConfirmByPlayer[playerKey];
-        if (blockInlinePlayer === playerKey) blockInlinePlayer = null;
-        setSelectedSkillForScope(scope, playerIdx, null);
-        const predicted = getPredictedSkillIdForScope(scope);
-        const nextSkill = predicted === "block" ? "defense" : "defense";
-        if (typeof forceNextSkill === "function" && scope === "our") {
-          forceNextSkill(nextSkill);
-        } else if (scope === "opponent") {
-          state.opponentSkillFlowOverride = nextSkill;
-          saveState();
-        }
-        scheduleRenderPlayers();
-      });
-      const goBtn = document.createElement("button");
-      goBtn.type = "button";
-      goBtn.className = "event-btn block-confirm-go";
-      goBtn.textContent = "Muro";
-      goBtn.addEventListener("click", () => {
-        blockInlinePlayer = playerKey;
+      if (shouldSkipBlockConfirm(scope)) {
         blockConfirmByPlayer[playerKey] = true;
-        scheduleRenderPlayers();
-      });
-      grid.appendChild(skipBtn);
-      grid.appendChild(goBtn);
-      targetEl.appendChild(grid);
-      return;
+      } else {
+        const grid = document.createElement("div");
+        grid.className = "code-grid block-confirm-grid";
+        const skipBtn = document.createElement("button");
+        skipBtn.type = "button";
+        skipBtn.className = "event-btn block-confirm-skip";
+        skipBtn.textContent = "No muro";
+        skipBtn.addEventListener("click", () => {
+          delete blockConfirmByPlayer[playerKey];
+          if (blockInlinePlayer === playerKey) blockInlinePlayer = null;
+          setSelectedSkillForScope(scope, playerIdx, null);
+          const predicted = getPredictedSkillIdForScope(scope);
+          const nextSkill = predicted === "block" ? "defense" : "defense";
+          if (typeof forceNextSkill === "function" && scope === "our") {
+            forceNextSkill(nextSkill);
+          } else if (scope === "opponent") {
+            state.opponentSkillFlowOverride = nextSkill;
+            saveState();
+          }
+          scheduleRenderPlayers();
+        });
+        const goBtn = document.createElement("button");
+        goBtn.type = "button";
+        goBtn.className = "event-btn block-confirm-go";
+        goBtn.textContent = "Muro";
+        goBtn.addEventListener("click", () => {
+          blockInlinePlayer = playerKey;
+          blockConfirmByPlayer[playerKey] = true;
+          scheduleRenderPlayers();
+        });
+        grid.appendChild(skipBtn);
+        grid.appendChild(goBtn);
+        targetEl.appendChild(grid);
+        return;
+      }
     }
     const btn = document.createElement("button");
     btn.type = "button";
@@ -4107,6 +4138,9 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return;
   }
   if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
+    if (shouldSkipBlockConfirm(scope)) {
+      blockConfirmByPlayer[playerKey] = true;
+    } else {
     const grid = document.createElement("div");
     grid.className = "code-grid block-confirm-grid";
     const title = document.createElement("div");
@@ -4147,6 +4181,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     grid.appendChild(goBtn);
     targetEl.appendChild(grid);
     return;
+    }
   }
   const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
   const codes = (state.metricsConfig[pickedSkillId]?.activeCodes || RESULT_CODES).slice();
@@ -4815,9 +4850,7 @@ async function handleEventClick(
     state.forceSkillActive = false;
     state.forceSkillScope = null;
   }
-  if (skillId === "block") {
-    applyBlockInference(event, scope, code);
-  }
+  const inferredAttackUpdated = skillId === "block" ? applyBlockInference(event, scope, code) : false;
   if (skillId === "serve" && code === "/") {
     triggerFreeballFlow({ persist: false, rerender: false, scope });
   }
@@ -4832,7 +4865,8 @@ async function handleEventClick(
   animateEventToLog(sourceEl, skillId, code);
   const persistLocal = typeof getPointDirection === "function" && !!getPointDirection(event);
   schedulePostEventUpdates({
-    includeAggregates: !state.predictiveSkillFlow,
+    includeAggregates: !state.predictiveSkillFlow || inferredAttackUpdated,
+    append: !inferredAttackUpdated,
     playerIdx,
     skillId,
     persistLocal,
