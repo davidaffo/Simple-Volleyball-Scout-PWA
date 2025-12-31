@@ -710,13 +710,9 @@ function getServeBaseZoneForPlayer(playerIdx, scope = "our") {
   const baseCourt =
     scope === "opponent"
       ? getCourtShape(state.opponentCourt)
-      : state.autoRolePositioning && autoRoleBaseCourt
-        ? getCourtShape(autoRoleBaseCourt)
-        : getCourtShape(state.court);
+      : getCourtShape(state.court);
   if (!baseCourt || !baseCourt.length) return null;
-  const slotIdx = baseCourt.findIndex(
-    slot => slot && (slot.main === name || slot.replaced === name)
-  );
+  const slotIdx = baseCourt.findIndex(slot => slot && slot.main === name);
   return slotIdx === -1 ? null : slotIdx + 1;
 }
 function maybeRotateServeToZoneOne(playerIdx, scope = "our") {
@@ -748,20 +744,21 @@ async function startServeTypeSelection(playerIdx, type, onDone, scope = "our") {
     meta.serveEnd = traj.serveEnd || null;
   }
   const shouldQueueServe = state.useOpponentTeam && state.predictiveSkillFlow;
-  if (shouldQueueServe) {
-    const players = getPlayersForScope(scope);
-    const fallbackServer = getServerPlayerForScope(scope);
-    state.pendingServe = {
-      scope,
-      playerIdx,
-      playerName: players[playerIdx] || (fallbackServer && fallbackServer.name) || null,
-      meta
-    };
-    if (state.forceSkillActive && state.forceSkillScope === scope) {
-      state.forceSkillActive = false;
-      state.forceSkillScope = null;
-      if (scope === "opponent") {
-        state.opponentSkillFlowOverride = null;
+    if (shouldQueueServe) {
+      const players = getPlayersForScope(scope);
+      const fallbackServer = getServerPlayerForScope(scope);
+      state.pendingServe = {
+        scope,
+        playerIdx,
+        playerName: players[playerIdx] || (fallbackServer && fallbackServer.name) || null,
+        meta
+      };
+      clearServeTypeInlineListener();
+      if (state.forceSkillActive && state.forceSkillScope === scope) {
+        state.forceSkillActive = false;
+        state.forceSkillScope = null;
+        if (scope === "opponent") {
+          state.opponentSkillFlowOverride = null;
       } else {
         state.skillFlowOverride = null;
       }
@@ -1250,6 +1247,9 @@ function getPredictedSkillIdSingle() {
 function computeTwoTeamFlowFromEvent(ev) {
   const scope = getTeamScopeFromEvent(ev);
   const other = getOppositeScope(scope);
+  if (ev.skillId === "serve" && ev.code === "=") {
+    return { teamScope: other, skillId: "serve" };
+  }
   const dir = typeof getPointDirection === "function" ? getPointDirection(ev) : null;
   if (dir === "for" || dir === "against") {
     const scoringScope = dir === "for" ? scope : other;
@@ -1328,7 +1328,11 @@ function isPostServeLockForScope(scope) {
   if (state.forceSkillActive && state.forceSkillScope === scope) return false;
   if (state.pendingServe && state.pendingServe.scope === scope) return true;
   const last = getLastFlowEvent(state.events || []);
-  return !!(last && last.skillId === "serve" && getTeamScopeFromEvent(last) === scope);
+  if (last && last.skillId === "serve" && getTeamScopeFromEvent(last) === scope) {
+    if (last.code === "=") return false;
+    return true;
+  }
+  return false;
 }
 function getServeCodeFromPassCode(code) {
   const map = {
@@ -1509,6 +1513,12 @@ function getPredictedSkillIdForScope(scope) {
     getOppositeScope(state.pendingServe.scope) === scope
   ) {
     return resolveFlowSkillForScope(scope, "pass");
+  }
+  if (scope === "opponent" && state.useOpponentTeam && state.predictiveSkillFlow) {
+    const last = getLastFlowEvent(state.events || []);
+    if (last && last.skillId === "serve" && getTeamScopeFromEvent(last) === scope && last.code === "=") {
+      return resolveFlowSkillForScope(scope, "serve");
+    }
   }
   const enabledSkills = getEnabledSkillsForScope(scope);
   if (enabledSkills.length === 0) return null;
@@ -3629,6 +3639,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
               { scope }
             );
             if (!success) return;
+            clearServeTypeInlineListener();
             setSelectedSkillForScope(scope, playerIdx, null);
             renderPlayers();
           });
@@ -3675,6 +3686,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
               { scope }
             );
             if (!success) return;
+            clearServeTypeInlineListener();
             setSelectedSkillForScope(scope, playerIdx, null);
             renderPlayers();
           });
@@ -3729,6 +3741,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
             { scope }
           );
           if (!success) return;
+          clearServeTypeInlineListener();
           setSelectedSkillForScope(scope, playerIdx, null);
           renderPlayers();
         });
@@ -4495,6 +4508,9 @@ async function handleEventClick(
     });
   }
   if (playerIdx === -1 || !players[playerIdx]) return false;
+  if (skillId === "serve" && !serveMeta && state.pendingServe && state.pendingServe.scope === scope) {
+    serveMeta = state.pendingServe.meta || null;
+  }
   if (skillId === "serve") {
     const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
     if (serveZone !== 1) {
@@ -4594,6 +4610,7 @@ async function handleEventClick(
     } else if (!event.serveType) {
       event.serveType = "JF";
     }
+    clearServeTypeInlineListener();
     if (state.pendingServe && state.pendingServe.scope === scope) {
       state.pendingServe = null;
     }
@@ -4647,6 +4664,11 @@ async function handleEventClick(
   if (state.useOpponentTeam) {
     const nextFlow = computeTwoTeamFlowFromEvent(event);
     state.flowTeamScope = nextFlow.teamScope;
+  }
+  if (state.useOpponentTeam && state.predictiveSkillFlow && skillId === "serve" && code === "=") {
+    const nextServeScope = getOppositeScope(scope);
+    state.flowTeamScope = nextServeScope;
+    state.isServing = nextServeScope === "our";
   }
   incrementSkillStats(scope, playerIdx, skillId, code);
   if (state.forceSkillActive && state.forceSkillScope === scope) {
@@ -4723,7 +4745,8 @@ async function handleEventClick(
   if (
     (scope === "opponent" ? state.opponentServeTrajectoryEnabled : state.serveTrajectoryEnabled) &&
     skillId === "serve" &&
-    !serveMeta
+    !serveMeta &&
+    code !== "="
   ) {
     captureServeTrajectory(event);
   }
@@ -8102,6 +8125,9 @@ function getPointDirection(ev) {
   if (ev.pointDirection === "for" || ev.pointDirection === "against") {
     return ev.pointDirection;
   }
+  if (ev && ev.skillId === "serve" && ev.code === "=") {
+    return "against";
+  }
   if (ev && (ev.skillId === "defense" || ev.skillId === "pass") && ev.code === "/") {
     return null;
   }
@@ -8313,6 +8339,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
   if (eventScope === "opponent") {
     const opponentServing = !state.isServing;
     const wasReceiving = !opponentServing || !!state.opponentAutoRotatePending;
+    const ourWasReceiving = !state.isServing || !!state.autoRotatePending;
     eventObj.autoRotatePrev = wasReceiving;
     if (eventObj.skillId === "pass") {
       state.opponentAutoRotatePending = true;
@@ -8334,6 +8361,11 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     } else if (direction === "against") {
       pending = true;
       serving = false;
+      if (ourWasReceiving && typeof rotateCourt === "function") {
+        rotateCourt("ccw");
+        eventObj.autoRotationDirection = "ccw";
+      }
+      state.autoRotatePending = false;
     } else {
       pending = pending || !serving;
     }
@@ -8344,6 +8376,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     return;
   }
   const wasReceiving = !state.isServing || !!state.autoRotatePending;
+  const opponentWasReceiving = !!state.isServing || !!state.opponentAutoRotatePending;
   eventObj.autoRotatePrev = wasReceiving;
   if (eventObj.skillId === "pass") {
     state.autoRotatePending = true;
@@ -8365,6 +8398,11 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
   } else if (direction === "against") {
     pending = true;
     serving = false;
+    if (opponentWasReceiving && typeof rotateOpponentCourt === "function") {
+      rotateOpponentCourt("ccw");
+      eventObj.autoRotationDirection = "ccw";
+    }
+    state.opponentAutoRotatePending = false;
   } else {
     pending = pending || !serving;
   }
