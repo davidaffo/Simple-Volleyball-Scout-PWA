@@ -1794,7 +1794,8 @@ function updateTrajectoryImageFromStart() {
   if (!trajectoryStart || !elAttackTrajectoryImage) return;
   const startNorm = normalizeTrajectoryPoint(trajectoryStart);
   if (!startNorm) return;
-  const zoneNorm = trajectoryMirror
+  const mirrorX = trajectoryMirror || trajectoryForceFar;
+  const zoneNorm = mirrorX
     ? { x: 1 - clamp01(startNorm.x), y: clamp01(startNorm.y) }
     : startNorm;
   const startZoneRaw = getAttackZone(zoneNorm, trajectoryForceFar);
@@ -1810,11 +1811,13 @@ function applyTrajectoryStartFromNetPoint() {
   if (!point || !elAttackTrajectoryCanvas) return;
   const box = getTrajectoryDisplayBox();
   const canvas = elAttackTrajectoryCanvas;
-  const normX = trajectoryMirror ? 1 - point.x : point.x;
+  const mirrorX = trajectoryMirror || trajectoryForceFar;
+  const normX = mirrorX ? 1 - point.x : point.x;
   const x = box ? box.offsetX + normX * box.width : normX * canvas.width;
+  const startFromTop = trajectoryMirror || trajectoryForceFar;
   const fixedY = box
-    ? box.offsetY + (trajectoryMirror ? 0.5 : box.height - 0.5)
-    : trajectoryMirror
+    ? box.offsetY + (startFromTop ? 0.5 : box.height - 0.5)
+    : startFromTop
       ? 0.5
       : canvas.height - 0.5;
   trajectoryStart = { x, y: fixedY };
@@ -1919,8 +1922,9 @@ function openAttackTrajectoryModal(prefill = null) {
         return;
       }
       if (prefill && prefill.start && prefill.end) {
-        const startNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
-        const endNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
+        const mirrorForDisplay = trajectoryMirror || trajectoryForceFar;
+        const startNorm = mirrorForDisplay ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
+        const endNorm = mirrorForDisplay ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
         const startPx = denormalizeTrajectoryPoint(startNorm);
         const endPx = denormalizeTrajectoryPoint(endNorm);
         if (!startPx || !endPx) return;
@@ -1935,7 +1939,8 @@ function openAttackTrajectoryModal(prefill = null) {
         return;
       }
       if (mode === "serve-start" && prefill && prefill.start) {
-        const startNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
+        const mirrorForDisplay = trajectoryMirror || trajectoryForceFar;
+        const startNorm = mirrorForDisplay ? mirrorTrajectoryPoint(prefill.start) : prefill.start;
         const startPx = denormalizeTrajectoryPoint(startNorm);
         if (startPx) {
           trajectoryStart = startPx;
@@ -1943,7 +1948,8 @@ function openAttackTrajectoryModal(prefill = null) {
         }
       }
       if (mode === "serve-end" && prefill && prefill.end) {
-        const endNorm = trajectoryMirror ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
+        const mirrorForDisplay = trajectoryMirror || trajectoryForceFar;
+        const endNorm = mirrorForDisplay ? mirrorTrajectoryPoint(prefill.end) : prefill.end;
         const endPx = denormalizeTrajectoryPoint(endNorm);
         if (endPx) {
           trajectoryEnd = endPx;
@@ -1993,7 +1999,7 @@ function closeAttackTrajectoryModal(result = null) {
 async function captureServeTrajectory(event, { forcePopup = false } = {}) {
   try {
     const scope = getTeamScopeFromEvent(event);
-    const forceFar = isFarSideForScope(scope);
+    const forceFar = forcePopup ? false : isFarSideForScope(scope);
     const startRes = await openAttackTrajectoryModal({
       mode: "serve-start",
       start: event.serveStart || null,
@@ -7427,7 +7433,7 @@ function renderEventTableRows(target, events, options = {}) {
           const dir = ev.attackDirection || traj || null;
           const baseZonePrefill = ev.originZone || ev.zone || ev.playerPosition || null;
           const evScope = getTeamScopeFromEvent(ev);
-          const forceFar = isFarSideForScope(evScope);
+          const forceFar = false;
           const prefill =
             dir && typeof dir === "object" && dir.start && dir.end
               ? {
@@ -14360,9 +14366,10 @@ async function init() {
       if (!trajectoryStart || trajectoryEnd) {
         const box = getTrajectoryDisplayBox();
         const w = box ? box.width : elAttackTrajectoryCanvas.clientWidth || elAttackTrajectoryCanvas.width || 1;
+        const startFromTop = trajectoryMirror || trajectoryForceFar;
         const fixedY = box
-          ? box.offsetY + (trajectoryMirror ? 0.5 : box.height - 0.5)
-          : trajectoryMirror
+          ? box.offsetY + (startFromTop ? 0.5 : box.height - 0.5)
+          : startFromTop
             ? 0.5
             : elAttackTrajectoryCanvas.height - 0.5; // partenza forzata sul bordo basso
         trajectoryStart = { x: pos.x, y: fixedY };
@@ -14373,7 +14380,7 @@ async function init() {
         const leftZone = isFarSide ? 5 : 4;
         const midZone = isFarSide ? 6 : 3;
         const rightZone = isFarSide ? 1 : 2;
-        const zoneFromClickRaw = trajectoryMirror
+        const zoneFromClickRaw = startFromTop
           ? third === 0
             ? rightZone
             : third === 1
@@ -14461,7 +14468,8 @@ async function init() {
       if (trajectoryMode === "serve-start") {
         if (!trajectoryStart) return;
         const rawPoint = normalizeTrajectoryPoint(trajectoryStart);
-        const point = trajectoryMirror ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
+        const mirrorForStorage = trajectoryMirror || trajectoryForceFar;
+        const point = mirrorForStorage ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
         closeAttackTrajectoryModal({ point, serveType: serveTrajectoryType });
         return;
       }
@@ -14469,16 +14477,18 @@ async function init() {
         const pt = trajectoryEnd || trajectoryStart;
         if (!pt) return;
         const rawPoint = normalizeTrajectoryPoint(pt);
-        const point = trajectoryMirror ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
+        const mirrorForStorage = trajectoryMirror || trajectoryForceFar;
+        const point = mirrorForStorage ? mirrorTrajectoryPoint(rawPoint) : rawPoint;
         closeAttackTrajectoryModal({ point });
         return;
       }
       if (!trajectoryStart || !trajectoryEnd) return;
       const rawStart = normalizeTrajectoryPoint(trajectoryStart);
       const rawEnd = normalizeTrajectoryPoint(trajectoryEnd);
-      const start = trajectoryMirror ? mirrorTrajectoryPoint(rawStart) : rawStart;
-      const end = trajectoryMirror ? mirrorTrajectoryPoint(rawEnd) : rawEnd;
-      const isFar = trajectoryForceFar;
+      const mirrorForStorage = trajectoryMirror || trajectoryForceFar;
+      const start = mirrorForStorage ? mirrorTrajectoryPoint(rawStart) : rawStart;
+      const end = mirrorForStorage ? mirrorTrajectoryPoint(rawEnd) : rawEnd;
+      const isFar = false;
       const startZone = mapBackRowZone(getAttackZone(start, isFar), trajectoryBaseZone);
       const endZone = mapBackRowZone(getAttackZone(end, isFar), trajectoryBaseZone);
       const directionDeg = computeAttackDirectionDeg(start, end);
