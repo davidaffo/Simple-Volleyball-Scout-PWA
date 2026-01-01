@@ -3667,6 +3667,12 @@ body[data-theme="light"] .rotation-table td {
 .agg-table tbody tr:nth-child(even) td.skill-col {
   background-image: linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.12));
 }
+.agg-table tbody tr.agg-body-header td {
+  background-image: none !important;
+}
+.agg-table tbody tr.agg-body-header td.skill-col {
+  box-shadow: none !important;
+}
 .agg-table tbody tr:hover td {
   background-image: linear-gradient(rgba(59, 130, 246, 0.26), rgba(59, 130, 246, 0.26));
   border-color: rgba(59, 130, 246, 0.6);
@@ -3711,6 +3717,12 @@ body[data-theme="light"] .agg-table tbody tr:nth-child(even) td {
 body[data-theme="light"] .agg-table tbody tr:nth-child(even) td.skill-col {
   box-shadow: inset 0 0 0 9999px rgba(15, 23, 42, 0.1);
 }
+body[data-theme="light"] .agg-table tbody tr.agg-body-header td {
+  background-image: none !important;
+}
+body[data-theme="light"] .agg-table tbody tr.agg-body-header td.skill-col {
+  box-shadow: none !important;
+}
 .agg-table tbody tr:nth-child(even) td.skill-col {
   box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.12);
 }
@@ -3724,12 +3736,14 @@ body[data-theme="light"] .agg-table td {
   border-color: #d6d6d6;
 }
 .agg-table th.agg-skill-header,
+.agg-table td.agg-skill-header,
 .agg-table td.agg-player-cell,
 .agg-table th.agg-table-back {
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .agg-table th.agg-skill-header:hover,
+.agg-table td.agg-skill-header:hover,
 .agg-table td.agg-player-cell:hover,
 .agg-table th.agg-table-back:hover {
   background: rgba(59, 130, 246, 0.12);

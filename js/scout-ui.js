@@ -5355,8 +5355,11 @@ function renderAggSkillDetailTable(summaryAll) {
       if (idx === 0 && !isTotal) {
         td.classList.add("agg-player-cell");
         td.addEventListener("click", () => {
-          aggTableView = { mode: "player", skillId: null, playerIdx };
-          renderAggregatedTable();
+          const prefs = ensurePlayerAnalysisState();
+          prefs.playerIdx = playerIdx;
+          saveState();
+          setActiveAggTab("player");
+          renderPlayerAnalysis();
         });
       }
       tdList.push(td);
@@ -11937,7 +11940,23 @@ function renderAggregatedTable() {
       headerRow.appendChild(headerCell);
       elAggTableBody.appendChild(headerRow);
       const columnsRows = buildAggBodyHeaderRows(thead);
-      columnsRows.forEach(row => elAggTableBody.appendChild(row));
+      columnsRows.forEach(row => {
+        elAggTableBody.appendChild(row);
+        const skillHeaders = row.querySelectorAll(".skill-col");
+        skillHeaders.forEach(cell => {
+          const skillId = getSkillIdFromHeader(cell);
+          if (!skillId) return;
+          cell.classList.add("agg-skill-header");
+          cell.title = "Dettagli " + getSkillLabel(skillId);
+          cell.addEventListener("click", () => {
+            if (showBothTeams) {
+              analysisTeamFilterState.teams = new Set([scope]);
+            }
+            aggTableView = { mode: "skill", skillId, playerIdx: null };
+            renderAggregatedTable();
+          });
+        });
+      });
     }
     if (!analysisPlayers || analysisPlayers.length === 0) {
       const tr = document.createElement("tr");
@@ -12060,8 +12079,11 @@ function renderAggregatedTable() {
             if (showBothTeams) {
               analysisTeamFilterState.teams = new Set([scope]);
             }
-            aggTableView = { mode: "player", skillId: null, playerIdx: cell.playerIdx };
-            renderAggregatedTable();
+            const prefs = ensurePlayerAnalysisState();
+            prefs.playerIdx = cell.playerIdx;
+            saveState();
+            setActiveAggTab("player");
+            renderPlayerAnalysis();
           });
         }
         row.appendChild(td);
