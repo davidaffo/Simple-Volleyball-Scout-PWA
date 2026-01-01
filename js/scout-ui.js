@@ -1103,9 +1103,13 @@ function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
   const nextCourt = getCourtShape(lineupModalCourt);
   if (lineupModalScope === "opponent") {
-    state.opponentCourt = nextCourt;
-    saveState();
-    if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+    if (typeof commitCourtChangeForScope === "function") {
+      commitCourtChangeForScope(nextCourt, "opponent");
+    } else {
+      state.opponentCourt = nextCourt;
+      saveState();
+      if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+    }
   } else if (typeof commitCourtChange === "function") {
     commitCourtChange(nextCourt, { clean: true });
   } else {
