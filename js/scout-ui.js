@@ -25,13 +25,7 @@ function isServingForScope(scope) {
 function getServeDisplayCourt(scope = "our") {
   const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
   if (!Array.isArray(baseCourt) || baseCourt.length === 0) return [];
-  const autoLiberoActive =
-    typeof getTeamAutoLiberoBackline === "function"
-      ? getTeamAutoLiberoBackline(scope)
-      : scope === "opponent"
-        ? !!state.opponentAutoLiberoBackline
-        : !!state.autoLiberoBackline;
-  if (!autoLiberoActive && typeof removeLiberosAndRestoreForScope === "function") {
+  if (isServingForScope(scope) && typeof removeLiberosAndRestoreForScope === "function") {
     return removeLiberosAndRestoreForScope(baseCourt, scope);
   }
   return getCourtShape(baseCourt);
@@ -70,6 +64,10 @@ function isSkillEnabledForScope(skillId, scope) {
 }
 function makePlayerKey(scope, playerIdx) {
   return (scope || "our") + ":" + playerIdx;
+}
+function isPlayerKeyInScope(key, scope) {
+  if (!key || !scope) return false;
+  return key.startsWith(scope + ":");
 }
 const selectedSkillPerPlayer = {};
 const serveMetaByPlayer = {};
@@ -695,7 +693,13 @@ function applyAttackTrajectoryToEvent(event, payload) {
 }
 async function startAttackSelection(playerIdx, setTypeChoice, onDone, scope = "our") {
   const key = makePlayerKey(scope, playerIdx);
-  if (attackInlinePlayer !== null && attackInlinePlayer !== key) return;
+  if (
+    attackInlinePlayer !== null &&
+    attackInlinePlayer !== key &&
+    isPlayerKeyInScope(attackInlinePlayer, scope)
+  ) {
+    return;
+  }
   attackInlinePlayer = key;
   const meta = { setType: setTypeChoice || null };
   if (state.videoScoutMode) {
@@ -3213,7 +3217,11 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
     return;
   }
   if (skillId === "attack" && !attackMetaByPlayer[playerKey]) {
-    if (attackInlinePlayer !== null && attackInlinePlayer !== playerKey) {
+    if (
+      attackInlinePlayer !== null &&
+      attackInlinePlayer !== playerKey &&
+      isPlayerKeyInScope(attackInlinePlayer, scope)
+    ) {
       return;
     }
     if (shouldPromptAttackSetType(scope)) {
@@ -3931,7 +3939,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   if (isCompactMobile) {
     const pickedSkillId = nextSkillId || null;
-    if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
+    if (
+      pickedSkillId === "block" &&
+      blockInlinePlayer !== null &&
+      blockInlinePlayer !== playerKey &&
+      isPlayerKeyInScope(blockInlinePlayer, scope)
+    ) {
       return;
     }
     if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
@@ -4026,7 +4039,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const grid = document.createElement("div");
     grid.className = "skill-grid";
     enabledSkills.forEach(skill => {
-      if (skill.id === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
+      if (
+        skill.id === "block" &&
+        blockInlinePlayer !== null &&
+        blockInlinePlayer !== playerKey &&
+        isPlayerKeyInScope(blockInlinePlayer, scope)
+      ) {
         return;
       }
       const colors = getSkillColors(skill.id);
@@ -4088,7 +4106,11 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return;
   }
   if (pickedSkillId === "attack" && !attackMetaByPlayer[playerKey]) {
-    if (attackInlinePlayer !== null && attackInlinePlayer !== playerKey) {
+    if (
+      attackInlinePlayer !== null &&
+      attackInlinePlayer !== playerKey &&
+      isPlayerKeyInScope(attackInlinePlayer, scope)
+    ) {
       return;
     }
     if (shouldPromptAttackSetType(scope)) {
@@ -4187,7 +4209,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
     return;
   }
-  if (pickedSkillId === "block" && blockInlinePlayer !== null && blockInlinePlayer !== playerKey) {
+  if (
+    pickedSkillId === "block" &&
+    blockInlinePlayer !== null &&
+    blockInlinePlayer !== playerKey &&
+    isPlayerKeyInScope(blockInlinePlayer, scope)
+  ) {
     return;
   }
   if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
@@ -4663,14 +4690,16 @@ function animateEventToLog() {
   // fallback no-op: some builds don't include the log animation helper
 }
 function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null, scope = "our" } = {}) {
+  const desiredStartSkill =
+    startSkill || (isSkillEnabledForScope("second", scope) ? "second" : null);
   state.freeballPending = true;
   state.freeballPendingScope = scope;
   state.flowTeamScope = scope;
   state.predictiveSkillFlow = true;
   if (scope === "opponent") {
-    state.opponentSkillFlowOverride = startSkill || null;
+    state.opponentSkillFlowOverride = desiredStartSkill;
   } else {
-    state.skillFlowOverride = startSkill || null;
+    state.skillFlowOverride = desiredStartSkill;
   }
   animateFreeballButton();
   if (persist) saveState();
@@ -14677,7 +14706,7 @@ async function init() {
   }
   if (elBtnFreeballOpp) {
     elBtnFreeballOpp.addEventListener("click", () => {
-      triggerFreeballFlow({ startSkill: "block", scope: "opponent" });
+      triggerFreeballFlow({ scope: "opponent" });
     });
   }
   if (elBtnToggleCourtView) {
