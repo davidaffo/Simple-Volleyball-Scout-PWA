@@ -667,7 +667,7 @@ function clearAttackSelection(playerIdx = null, scope = "our") {
 function shouldPromptAttackSetType(scope = "our") {
   const enabled =
     scope === "opponent" ? state.opponentSetTypePromptEnabled : state.setTypePromptEnabled;
-  return !!enabled || !!normalizeSetTypeValue(state.defaultSetType);
+  return !!enabled;
 }
 function applyAttackTrajectoryToEvent(event, payload) {
   if (!payload || !event) return;
@@ -3194,8 +3194,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
       elSkillModalBody.appendChild(wrap);
     } else {
       if (attackInlinePlayer === playerKey) return;
-      const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-      startAttackSelection(playerIdx, fallback, () => {
+      startAttackSelection(playerIdx, null, () => {
         renderSkillCodes(playerIdx, playerName, skillId, scope);
       });
     }
@@ -4122,15 +4121,13 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       btn.className = "event-btn attack-main-btn";
       btn.textContent = "Attacco";
       btn.addEventListener("click", async () => {
-        const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-        await startAttackSelection(playerIdx, fallback, renderPlayers, scope);
+        await startAttackSelection(playerIdx, null, renderPlayers, scope);
       });
       grid.appendChild(btn);
       targetEl.appendChild(grid);
     } else {
       if (attackInlinePlayer === playerKey) return;
-      const fallback = normalizeSetTypeValue(state.defaultSetType) || null;
-      startAttackSelection(playerIdx, fallback, renderPlayers, scope);
+      startAttackSelection(playerIdx, null, renderPlayers, scope);
     }
     return;
   }
@@ -4801,8 +4798,6 @@ async function handleEventClick(
     ) {
       event.pendingBlockEval = true;
     }
-    const fallbackSetType = normalizeSetTypeValue(state.defaultSetType) || null;
-    if (!appliedSetType && fallbackSetType) appliedSetType = fallbackSetType;
     if (appliedSetType) {
       event.setType = appliedSetType;
     }
@@ -14226,8 +14221,6 @@ async function init() {
   const elAttackTrajectorySimpleToggleSettings = document.getElementById("attack-trajectory-simple-toggle-settings");
   const elServeTrajectoryToggleInline = document.getElementById("serve-trajectory-toggle-inline");
   const elServeTrajectoryToggleInlineOpp = document.getElementById("serve-trajectory-toggle-inline-opp");
-  const elDefaultSetTypeSelect = document.getElementById("default-settype-select");
-  const elDefaultSetTypeSelectSettings = document.getElementById("default-settype-select-settings");
   if (elAttackTrajectoryToggle) {
     elAttackTrajectoryToggle.checked = !!state.attackTrajectoryEnabled;
     elAttackTrajectoryToggle.addEventListener("change", () => {
@@ -14381,28 +14374,6 @@ async function init() {
   }
   if (elUseOpponentTeamToggle || elOpponentTeamSettings) {
     syncOpponentSettingsUI();
-  }
-  if (elDefaultSetTypeSelect) {
-    elDefaultSetTypeSelect.value = normalizeSetTypeValue(state.defaultSetType) || "";
-    elDefaultSetTypeSelect.addEventListener("change", () => {
-      const value = normalizeSetTypeValue(elDefaultSetTypeSelect.value) || "";
-      state.defaultSetType = value;
-      if (elDefaultSetTypeSelectSettings) {
-        elDefaultSetTypeSelectSettings.value = value;
-      }
-      saveState();
-    });
-  }
-  if (elDefaultSetTypeSelectSettings) {
-    elDefaultSetTypeSelectSettings.value = normalizeSetTypeValue(state.defaultSetType) || "";
-    elDefaultSetTypeSelectSettings.addEventListener("change", () => {
-      const value = normalizeSetTypeValue(elDefaultSetTypeSelectSettings.value) || "";
-      state.defaultSetType = value;
-      if (elDefaultSetTypeSelect) {
-        elDefaultSetTypeSelect.value = value;
-      }
-      saveState();
-    });
   }
   const elForceMobileToggle = document.getElementById("force-mobile-toggle");
   if (elForceMobileToggle) {
