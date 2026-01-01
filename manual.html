@@ -11,7 +11,7 @@
     <div>
       <p class="manual-kicker">Manuale utente</p>
       <h1>Simple Volleyball Scout PWA</h1>
-      <p class="manual-updated">Versione aggiornata (rotazioni auto, flusso skill, interfaccia 2 colonne). Questo manuale viene aggiornato a ogni modifica rilevante.</p>
+      <p class="manual-updated">Guida professionale all’uso dell’app, con procedure operative e best practice per lo scouting live e l’analisi video.</p>
     </div>
     <div class="manual-links">
       <a href="index.html" class="manual-link">← Torna all'app</a>
@@ -21,85 +21,136 @@
   <nav class="manual-nav">
     <h2>Indice</h2>
     <ul>
-      <li><a href="#setup">Setup match</a></li>
-      <li><a href="#rotazioni">Rotazioni e auto-posizionamento</a></li>
-      <li><a href="#flusso-skill">Flusso di gioco automatico e inserimento codici</a></li>
-      <li><a href="#falli">Falli/errori e punti manuali</a></li>
-      <li><a href="#mobile">Uso da mobile</a></li>
+      <li><a href="#introduzione">Introduzione</a></li>
+      <li><a href="#requisiti">Requisiti e compatibilità</a></li>
+      <li><a href="#avvio-rapido">Avvio rapido</a></li>
+      <li><a href="#impostazioni-partita">Impostazioni partita</a></li>
+      <li><a href="#formazione-rotazioni">Formazione e rotazioni</a></li>
+      <li><a href="#scout-live">Scout live</a></li>
+      <li><a href="#log-eventi">Log eventi e modifiche</a></li>
+      <li><a href="#analisi">Analisi e tabellino</a></li>
+      <li><a href="#analisi-video">Analisi video</a></li>
+      <li><a href="#scorciatoie">Scorciatoie da tastiera</a></li>
       <li><a href="#salvataggi">Salvataggi e backup</a></li>
+      <li><a href="#mobile">Uso da mobile</a></li>
     </ul>
   </nav>
 
   <main class="manual-content">
-    <section id="overview">
-      <h2>Panoramica rapida</h2>
-      <p>Quest’app è pensata per scout live: imposti il match, trascini la formazione, inserisci i codici fondamentali e ottieni subito punteggi, rotazioni e analisi. Il flusso di inserimento è guidato e compatto (due colonne) sia su desktop sia su mobile.</p>
+    <section id="introduzione">
+      <h2>Introduzione</h2>
+      <p>Simple Volleyball Scout PWA è pensata per lo scouting professionale di una partita di pallavolo. L’app consente di registrare eventi in tempo reale, mantenere la rotazione aggiornata e trasformare i dati in analisi chiare. È ottimizzata per l’uso su desktop e mobile e funziona anche offline.</p>
     </section>
 
-    <section id="setup">
-      <h2>Setup match (prima di iniziare)</h2>
-      <ol>
-        <li><strong>Dati match:</strong> inserisci avversario, categoria, data, tipo e turno. Il nome del match è generato automaticamente.</li>
-        <li><strong>Roster:</strong> aggiungi giocatrici, numeri e liberi. Il template di default popola una squadra completa; i ruoli in campo vengono calcolati automaticamente dalla posizione del palleggiatore nella rotazione reale.</li>
-        <li><strong>Salvataggi:</strong> usa i menu “Squadre salvate” e “Match salvati” per caricare/esportare roster e partite. Import da file sovrascrive il corrente.</li>
-        <li><strong>Reset:</strong> cambiare l’elenco giocatrici azzera statistiche ed eventi del match in corso.</li>
-      </ol>
-    </section>
-
-    <section id="rotazioni">
-      <h2>Rotazioni e auto-posizionamento</h2>
-      <p>I tre toggle principali (nella sezione rotazioni) controllano automatismi e layout ruolo-based. I ruoli non si impostano più manualmente: sono dedotti dalla posizione del palleggiatore nella rotazione reale.</p>
+    <section id="requisiti">
+      <h2>Requisiti e compatibilità</h2>
       <ul>
-        <li><strong>Auto rotazione:</strong> avanza la rotazione sul cambio palla basandosi sul punto “for/against”. Manuale ↺/↻ resta sempre disponibile.</li>
-        <li><strong>Auto posizionamento per ruolo:</strong> dispone OH in zona 4, OP o P in zona 2, centrali in 3/5; il libero non resta mai in prima linea. Quando disattivi, il campo torna alla rotazione base salvata.</li>
-        <li><strong>P1 americana:</strong> in ricezione piazza l’OH in 4 e l’OP in 2 (override della variante standard). Disattivalo per l’inversione classica OH→2 / OP→4.</li>
-        <li><strong>Tipo alzata rapido:</strong> scegli una scorciatoia (Mezza, Super, Quick, Veloce, Fast, Alta); la scelta resta attiva come default finché non la cambi o la azzeri con “Reset”.</li>
-        <li><strong>Rotazione base separata:</strong> il campo “originale” e la versione auto sono mantenuti in due array distinti; spegnere l’auto ripristina la base senza perdite.</li>
+        <li>Browser moderno con supporto PWA (Chrome, Edge, Safari recenti).</li>
+        <li>Connessione necessaria solo per il primo caricamento o per i video YouTube.</li>
+        <li>Per la modalità video: file locale oppure URL YouTube.</li>
       </ul>
     </section>
 
-    <section id="flusso-skill">
-      <h2>Flusso skill e inserimento codici (UI 2 colonne)</h2>
+    <section id="avvio-rapido">
+      <h2>Avvio rapido</h2>
       <ol>
-        <li><strong>Seleziona fondamentale:</strong> ogni giocatrice mostra una griglia 2 colonne di skill attive. “Errore/Fallo individuale” è sempre disponibile qui.</li>
-        <li><strong>Valuta:</strong> dopo la scelta appare la griglia 2 colonne dei codici (ordinati, con titolo colorato). C’è di nuovo “Errore/Fallo individuale”. Dopo il click torni automaticamente alla lista skill.</li>
-        <li><strong>Flusso automatico:</strong> se attivo, salta la scelta del fondamentale e mostra direttamente i codici della skill prevista. Sequenza corrente:
-          <ul>
-            <li>Start: se serviamo → serve, altrimenti pass.</li>
-            <li>Esito “for” → serve; esito “against” → pass.</li>
-            <li>Catena: serve → defense; pass → second; second → attack; attack/block → defense; defense → second.</li>
-            <li>Eventi manuali (fallo/errore) contano: “against” forza la prossima skill a pass.</li>
-          </ul>
-        </li>
-        <li><strong>Note operative:</strong> dopo ogni codice il fondamentale selezionato si azzera; il flusso automatico aggiorna direttamente la skill suggerita sulle carte giocatrici.</li>
+        <li>Apri la scheda <strong>Scout live</strong>.</li>
+        <li>Compila le <strong>impostazioni partita</strong> e seleziona le squadre.</li>
+        <li>Inserisci la <strong>formazione in campo</strong> e la rotazione iniziale.</li>
+        <li>Attiva il <strong>flusso automatico</strong> se vuoi un inserimento guidato.</li>
+        <li>Registra gli eventi cliccando la giocatrice e il relativo codice.</li>
       </ol>
     </section>
 
-    <section id="falli">
-      <h2>Falli/errori e punti manuali</h2>
+    <section id="impostazioni-partita">
+      <h2>Impostazioni partita</h2>
+      <p>La prima schermata di impostazioni è il centro di controllo della gara. Qui si definiscono i dati anagrafici della partita, le squadre e le preferenze operative.</p>
       <ul>
-        <li><strong>Errore/Fallo individuale</strong>: assegnabile dalla scelta skill o dalla griglia codici; aggiunge 1 punto “against”.</li>
-        <li><strong>Errore/Fallo squadra</strong>: pulsanti dedicati nei controlli punteggio; aggiunge 1 punto “against”.</li>
-        <li>I falli aggiornano subito punteggio,  (prossima skill = pass) e rotazioni automatiche.</li>
+        <li><strong>Dati gara:</strong> avversario, categoria, data, note e tipo di partita.</li>
+        <li><strong>Gestione squadre:</strong> seleziona o crea un roster, assegna numeri, liberi e capitani.</li>
+        <li><strong>Parametri operativi:</strong> attiva flusso automatico, auto-posizionamento, p1 americana e tracciamento traiettorie.</li>
+        <li><strong>Match salvati:</strong> crea, seleziona, esporta o importa i match con un pannello dedicato.</li>
       </ul>
     </section>
 
-    <section id="mobile">
-      <h2>Uso da mobile</h2>
+    <section id="formazione-rotazioni">
+      <h2>Formazione e rotazioni</h2>
+      <p>La formazione in campo rappresenta la rotazione reale. Le posizioni vengono interpretate in base alla posizione del palleggiatore, senza dover impostare manualmente i ruoli.</p>
+      <ol>
+        <li>Apri <strong>Formazione/Sostituzione</strong> e posiziona le giocatrici.</li>
+        <li>Conferma con <strong>Metti in campo</strong> (override) o <strong>Sostituisci</strong> (conteggio cambi).</li>
+        <li>Usa i pulsanti di rotazione o lascia attiva l’auto-rotazione.</li>
+      </ol>
+      <p><strong>Auto-posizionamento per ruolo</strong> dispone i ruoli in base alla fase (battuta o ricezione), mantenendo la rotazione base come riferimento stabile.</p>
+    </section>
+
+    <section id="scout-live">
+      <h2>Scout live</h2>
+      <p>Lo scout live è organizzato attorno a un flusso rapido: scegli la giocatrice, seleziona il fondamentale e inserisci il codice.</p>
+      <h3>Flusso automatico</h3>
+      <p>Quando attivo, l’app propone automaticamente la skill successiva (es. ricezione → alzata → attacco). In caso di punto o errore, la sequenza si adatta alla nuova fase di gioco.</p>
+      <h3>Eventi speciali</h3>
       <ul>
-        <li>Interfaccia unica per skill/codici anche su mobile; la griglia 2 colonne si adatta allo spazio disponibile (scroll orizzontale evitato).</li>
-        <li>Drag & drop formazione: usa “Imposta formazione” o trascina le chip; il libero non può stare in prima linea.</li>
-        <li>Barra flottante: rotazione, undo, accesso rapido alle azioni punteggio.</li>
+        <li><strong>Errori e falli:</strong> registrabili come errori individuali o di squadra.</li>
+        <li><strong>Timeout e sostituzioni:</strong> tracciati nel log con contatori per set.</li>
+        <li><strong>Freeball:</strong> forza il flusso alla fase corretta quando il gioco lo richiede.</li>
+      </ul>
+    </section>
+
+    <section id="log-eventi">
+      <h2>Log eventi e modifiche</h2>
+      <p>Il log contiene tutte le skill, con ID e dettagli tecnici. Ogni riga è modificabile, con selezione multipla per le operazioni bulk.</p>
+      <ul>
+        <li><strong>Colonna ID:</strong> identificatore univoco della skill.</li>
+        <li><strong>Colonna Link:</strong> mostra gli ID collegati (battuta-ricezione, alzata-attacco, attacco-muro, ecc.).</li>
+        <li><strong>Modifica rapida:</strong> doppio click sulle celle modificabili o bulk edit dall’header.</li>
+      </ul>
+    </section>
+
+    <section id="analisi">
+      <h2>Analisi e tabellino</h2>
+      <p>La sezione Analisi mostra statistiche per fondamentali, rotazioni e distribuzione alzate. I filtri consentono di isolare set, giocatrici o ruoli specifici.</p>
+      <ul>
+        <li>Tabellino per squadra con righe e intestazioni complete.</li>
+        <li>Metriche di efficienza, positivi/negativi e distribuzioni.</li>
+      </ul>
+    </section>
+
+    <section id="analisi-video">
+      <h2>Analisi video</h2>
+      <p>Carica un video locale o un link YouTube, sincronizza le skill e correggi i tempi direttamente dal log video.</p>
+      <ol>
+        <li>Carica il video.</li>
+        <li>Usa <strong>Sincronizza prima skill</strong> o imposta un offset.</li>
+        <li>Seleziona una skill per saltare al timestamp.</li>
+        <li>Usa <strong>Unifica tempi</strong> per allineare eventi collegati.</li>
+      </ol>
+      <p>La modalità <strong>Play by play</strong> riproduce le skill in sequenza, rispettando la durata impostata.</p>
+    </section>
+
+    <section id="scorciatoie">
+      <h2>Scorciatoie da tastiera</h2>
+      <ul>
+        <li><strong>Spazio:</strong> play/pausa video.</li>
+        <li><strong>Frecce sinistra/destra:</strong> ±3 secondi.</li>
+        <li><strong>Shift + frecce:</strong> frame-by-frame.</li>
+        <li><strong>Q/W:</strong> -0,5s / +0,5s sulla skill selezionata (analisi video).</li>
       </ul>
     </section>
 
     <section id="salvataggi">
       <h2>Salvataggi e backup</h2>
+      <p>Tutti i dati vengono salvati localmente. Puoi esportare o importare squadre, match e backup completi in formato JSON.</p>
       <ul>
-        <li>Tutti i dati (roster, match, impostazioni) sono salvati in localStorage.</li>
-        <li>Pulsanti di export/import per squadra, match, database completo.</li>
-        <li>Il manifest e il service worker permettono uso offline con i dati salvati localmente.</li>
+        <li><strong>Esporta match:</strong> genera un file con tutte le skill e le impostazioni.</li>
+        <li><strong>Importa match:</strong> ricarica una partita salvata in precedenza.</li>
+        <li><strong>Backup:</strong> salva l’intero database locale.</li>
       </ul>
+    </section>
+
+    <section id="mobile">
+      <h2>Uso da mobile</h2>
+      <p>Su schermi piccoli l’interfaccia si adatta per mantenere campo e strumenti principali sempre visibili. I menu laterali sono apribili e richiudibili con gesture o pulsanti dedicati.</p>
     </section>
   </main>
 </body>
