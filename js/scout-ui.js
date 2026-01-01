@@ -4436,10 +4436,18 @@ function renderPlayers() {
   renderLineupChips();
   renderOpponentPlayers({ nextSkillId: predictedOpponentSkillId });
 }
-function renderOpponentPlayers({ nextSkillId = null } = {}) {
+function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
   if (!state.useOpponentTeam) return;
   const elOpponentContainer = document.getElementById("opponent-players-container");
   if (!elOpponentContainer) return;
+  const shouldAnimate = animate && typeof captureRects === "function" && typeof animateFlip === "function";
+  const prevRects = shouldAnimate
+    ? captureRects('.court-card[data-team-scope="opponent"]', el => {
+        const name = el.dataset.playerName || "";
+        const pos = el.dataset.posIndex || "";
+        return name || "pos-" + pos;
+      })
+    : null;
   if (typeof ensureOpponentLiberosFromTeam === "function") {
     ensureOpponentLiberosFromTeam();
   }
@@ -4481,6 +4489,13 @@ function renderOpponentPlayers({ nextSkillId = null } = {}) {
     isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches,
     nextSkillId
   });
+  if (shouldAnimate) {
+    animateFlip(prevRects, '.court-card[data-team-scope="opponent"]', el => {
+      const name = el.dataset.playerName || "";
+      const pos = el.dataset.posIndex || "";
+      return name || "pos-" + pos;
+    });
+  }
 }
 function syncCourtSideLayout() {
   const courtArea = document.getElementById("court-area");

@@ -5206,20 +5206,38 @@ function setOpponentRotation(value) {
   saveState();
   updateOpponentRotationDisplay();
   if (typeof renderOpponentPlayers === "function") {
-    renderOpponentPlayers();
+    renderOpponentPlayers({ animate: true });
   }
 }
 function rotateOpponentCourt(direction = "cw") {
+  const baseCourt =
+    state.autoRolePositioning && opponentAutoRoleBaseCourt
+      ? ensureCourtShapeFor(opponentAutoRoleBaseCourt)
+      : ensureCourtShapeFor(state.opponentCourt);
+  let rotated = [];
   const rot = state.opponentRotation || 1;
   if (direction === "ccw") {
+    rotated = [baseCourt[1], baseCourt[2], baseCourt[3], baseCourt[4], baseCourt[5], baseCourt[0]];
     state.opponentRotation = rot === 1 ? 6 : rot - 1;
   } else {
+    rotated = [baseCourt[5], baseCourt[0], baseCourt[1], baseCourt[2], baseCourt[3], baseCourt[4]];
     state.opponentRotation = ((rot % 6) || 0) + 1;
   }
+  const rotatedClean = rotated.map(slot => Object.assign({}, slot));
+  const rotatedBase = rotatedClean.map((slot, idx) => {
+    if (isLiberoForScope(slot.main, "opponent") && FRONT_ROW_INDEXES.has(idx)) {
+      return { main: slot.replaced || "", replaced: "" };
+    }
+    return slot;
+  });
+  const withLibero = applyAutoLiberoSubstitutionToCourtForScope(rotatedBase, "opponent", {
+    skipServerOnServe: true
+  });
+  setTeamCourt("opponent", withLibero);
   saveState();
   updateOpponentRotationDisplay();
   if (typeof renderOpponentPlayers === "function") {
-    renderOpponentPlayers();
+    renderOpponentPlayers({ animate: true });
   }
 }
 function captureRects(selector, keyBuilder) {

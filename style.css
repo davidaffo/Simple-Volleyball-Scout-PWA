@@ -467,6 +467,12 @@ button.small {
   flex-direction: column;
   gap: 0.35rem;
 }
+.team-panel--near #opponent-players-container {
+  order: 1;
+}
+.team-panel--near .court-actions-bar {
+  order: 2;
+}
 .team-panel .panel-title {
   flex: 1 0 100%;
 }
