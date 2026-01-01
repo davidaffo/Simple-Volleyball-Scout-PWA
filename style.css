@@ -3019,6 +3019,22 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
   cursor: pointer;
   font-size: 0.85rem;
 }
+.filter-scope-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+}
+.filter-scope-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+body[data-theme="light"] .filter-scope-group {
+  border-color: rgba(15, 23, 42, 0.15);
+}
 .analysis-filter__options input,
 .trajectory-filter__options input {
   accent-color: #2563eb;

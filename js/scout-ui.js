@@ -9500,6 +9500,17 @@ function getCheckedValues(container, { asNumber = false } = {}) {
     asNumber ? Number(inp.value) : inp.value
   );
 }
+function makeScopedIndexKey(scope, idx) {
+  return `${scope}:${idx}`;
+}
+function matchScopedIndexFilter(selectedSet, scope, idx) {
+  if (!selectedSet || selectedSet.size === 0) return true;
+  const key = makeScopedIndexKey(scope, idx);
+  if (selectedSet.has(key)) return true;
+  if (selectedSet.has(idx)) return true;
+  if (selectedSet.has(String(idx))) return true;
+  return false;
+}
 function getTeamFilterOptions() {
   const options = [
     { value: "our", label: getTeamNameForScope("our") }
@@ -9531,18 +9542,8 @@ function handleAnalysisTeamFilterChange(e) {
 }
 function handleVideoTeamFilterChange(e) {
   if (!elVideoFilterTeams) return;
-  if (e && e.target instanceof HTMLInputElement && e.target.checked) {
-    elVideoFilterTeams.querySelectorAll("input[type=checkbox]").forEach(inp => {
-      if (inp !== e.target) inp.checked = false;
-    });
-  }
   const values = getCheckedValues(elVideoFilterTeams);
   videoFilterState.teams = new Set(values);
-  if (videoFilterState.teams.size === 0) {
-    videoFilterState.teams.add("our");
-    const fallback = elVideoFilterTeams.querySelector('input[value="our"]');
-    if (fallback) fallback.checked = true;
-  }
   renderVideoAnalysis();
 }
 function renderAnalysisTeamFilter() {
@@ -9646,11 +9647,13 @@ function matchesVideoFilters(ev, filters) {
   }
   if (filters.players && filters.players.size) {
     const idx = resolvePlayerIdx(ev);
-    if (idx === -1 || !filters.players.has(idx)) return false;
+    const scope = getTeamScopeFromEvent(ev);
+    if (idx === -1 || !matchScopedIndexFilter(filters.players, scope, idx)) return false;
   }
   if (filters.setters && filters.setters.size) {
     const setterIdx = getSetterFromEvent(ev);
-    if (setterIdx === null || !filters.setters.has(setterIdx)) return false;
+    const scope = getTeamScopeFromEvent(ev);
+    if (setterIdx === null || !matchScopedIndexFilter(filters.setters, scope, setterIdx)) return false;
   }
   if (filters.skills && filters.skills.size) {
     if (!ev.skillId || !filters.skills.has(ev.skillId)) return false;
@@ -9837,11 +9840,8 @@ function syncVideoFilterState() {
   const els = getVideoFilterElements();
   if (!els) return;
   videoFilterState.teams = new Set(getCheckedValues(els.teams));
-  if (videoFilterState.teams.size === 0) {
-    videoFilterState.teams.add("our");
-  }
-  videoFilterState.players = new Set(getCheckedValues(els.players, { asNumber: true }));
-  videoFilterState.setters = new Set(getCheckedValues(els.setters, { asNumber: true }));
+  videoFilterState.players = new Set(getCheckedValues(els.players));
+  videoFilterState.setters = new Set(getCheckedValues(els.setters));
   videoFilterState.skills = new Set(getCheckedValues(els.skills));
   videoFilterState.codes = new Set(getCheckedValues(els.codes));
   videoFilterState.sets = new Set(getCheckedValues(els.sets, { asNumber: true }));
@@ -11024,46 +11024,99 @@ function renderVideoFilters(events) {
   const els = getVideoFilterElements();
   if (!els) return;
   const list = Array.isArray(events) ? events : [];
-  if (videoFilterState.teams.size === 0) {
-    videoFilterState.teams.add("our");
-  }
   const filteredByTeam = videoFilterState.teams.size
     ? list.filter(ev => matchesTeamFilter(ev, videoFilterState.teams))
     : list;
+  const showBothTeams = state.useOpponentTeam && videoFilterState.teams.size !== 1;
   const labelScope = filteredByTeam.length ? getTeamScopeFromEvent(filteredByTeam[0]) : getAnalysisTeamScope();
   const labelPlayers = getPlayersForScope(labelScope);
   const labelNumbers = getPlayerNumbersForScope(labelScope);
-  const playerOptsRaw = buildUniqueOptions(
-    filteredByTeam.map(ev => {
-      const idx = resolvePlayerIdx(ev);
-      return idx === -1 ? null : idx;
-    }),
-    {
-      asNumber: true,
-      labelFn: idx => {
-        const name = labelPlayers[idx];
-        if (!name) return "#" + (Number(idx) + 1);
-        return labelScope === "opponent"
-          ? formatNameWithNumberFor(name, labelNumbers)
-          : formatNameWithNumber(name);
-      }
+  const getPlayerLabel = (scope, idx, { setter = false, includeTeam = true } = {}) => {
+    const players = getPlayersForScope(scope);
+    const numbers = getPlayerNumbersForScope(scope);
+    const name = players[idx];
+    const baseLabel = name
+      ? scope === "opponent"
+        ? formatNameWithNumberFor(name, numbers)
+        : formatNameWithNumber(name)
+      : setter
+        ? "Alzatore " + (Number(idx) + 1)
+        : "#" + (Number(idx) + 1);
+    if (showBothTeams && includeTeam) {
+      return getTeamNameForScope(scope) + " · " + baseLabel;
     }
-  );
-  const setterOptsRaw = buildUniqueOptions(
-    filteredByTeam.map(ev => getSetterFromEvent(ev)),
-    {
-      asNumber: true,
-      labelFn: idx => {
-        const name = labelPlayers[idx];
-        if (!name) return "Alzatore " + (Number(idx) + 1);
-        return labelScope === "opponent"
-          ? formatNameWithNumberFor(name, labelNumbers)
-          : formatNameWithNumber(name);
+    return baseLabel;
+  };
+  const sortScopedOptionsForScope = (options, scope) => {
+    const scoped = options.map(opt => {
+      const key = String(opt.value);
+      const idxRaw = key.includes(":") ? key.split(":")[1] : key;
+      const idx = Number(idxRaw);
+      const players = getPlayersForScope(scope);
+      const numbers = getPlayerNumbersForScope(scope);
+      const name = players[idx];
+      const rawNum = numbers && name ? numbers[name] : null;
+      const parsedNum = rawNum !== null && rawNum !== undefined && rawNum !== "" ? parseInt(rawNum, 10) : null;
+      return {
+        opt,
+        idx,
+        number: Number.isFinite(parsedNum) ? parsedNum : null,
+        name: name || ""
+      };
+    });
+    scoped.sort((a, b) => {
+      const numA = a.number;
+      const numB = b.number;
+      if (numA === null && numB === null) {
+        return a.name.localeCompare(b.name, "it", { sensitivity: "base" });
       }
-    }
-  );
-  const playerOpts = sortPlayerOptionsByNumberForScope(playerOptsRaw, labelScope);
-  const setterOpts = sortPlayerOptionsByNumberForScope(setterOptsRaw, labelScope);
+      if (numA === null) return 1;
+      if (numB === null) return -1;
+      if (numA !== numB) return numA - numB;
+      return a.name.localeCompare(b.name, "it", { sensitivity: "base" });
+    });
+    return scoped.map(entry => entry.opt);
+  };
+  const buildPlayerKey = (scope, idx) =>
+    showBothTeams ? makeScopedIndexKey(scope, idx) : String(idx);
+  const buildPlayerOptionsForScope = (scope, { setter = false } = {}) => {
+    const values = filteredByTeam
+      .filter(ev => getTeamScopeFromEvent(ev) === scope)
+      .map(ev => {
+        const idx = setter ? getSetterFromEvent(ev) : resolvePlayerIdx(ev);
+        if (idx === null || idx === -1) return null;
+        return buildPlayerKey(scope, idx);
+      });
+    const raw = buildUniqueOptions(values, {
+      labelFn: key => {
+        if (!showBothTeams) {
+          const idx = Number(String(key).split(":")[1] || key);
+          const name = labelPlayers[idx];
+          if (!name) return setter ? "Alzatore " + (Number(idx) + 1) : "#" + (Number(idx) + 1);
+          return labelScope === "opponent"
+            ? formatNameWithNumberFor(name, labelNumbers)
+            : formatNameWithNumber(name);
+        }
+        const [keyScope, idxRaw] = String(key).split(":");
+        return getPlayerLabel(keyScope, Number(idxRaw), { setter, includeTeam: false });
+      }
+    });
+    return showBothTeams
+      ? sortScopedOptionsForScope(raw, scope)
+      : sortPlayerOptionsByNumberForScope(raw, labelScope);
+  };
+  const playerOptsOur = showBothTeams ? buildPlayerOptionsForScope("our") : [];
+  const playerOptsOpp = showBothTeams ? buildPlayerOptionsForScope("opponent") : [];
+  const setterOptsOur = showBothTeams ? buildPlayerOptionsForScope("our", { setter: true }) : [];
+  const setterOptsOpp = showBothTeams ? buildPlayerOptionsForScope("opponent", { setter: true }) : [];
+  const playerOptsRaw = showBothTeams
+    ? playerOptsOur.concat(playerOptsOpp)
+    : buildPlayerOptionsForScope(labelScope);
+  const setterOptsRaw = showBothTeams
+    ? setterOptsOur.concat(setterOptsOpp)
+    : buildPlayerOptionsForScope(labelScope, { setter: true });
+  const playerOpts = playerOptsRaw;
+  const setterOpts = setterOptsRaw;
   const skillOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.skillId), {
     labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
   });
@@ -11110,11 +11163,13 @@ function renderVideoFilters(events) {
   );
   const serveTypeOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.serveType), { labelFn: val => val });
 
+  const playerOptValues = new Set(playerOpts.map(opt => opt.value));
+  const setterOptValues = new Set(setterOpts.map(opt => opt.value));
   videoFilterState.players = new Set(
-    [...videoFilterState.players].filter(idx => playerOpts.some(p => Number(p.value) === idx))
+    [...videoFilterState.players].filter(val => playerOptValues.has(val))
   );
   videoFilterState.setters = new Set(
-    [...videoFilterState.setters].filter(idx => setterOpts.some(p => Number(p.value) === idx))
+    [...videoFilterState.setters].filter(val => setterOptValues.has(val))
   );
   videoFilterState.skills = new Set(
     [...videoFilterState.skills].filter(val => skillOpts.some(o => o.value === val))
@@ -11156,13 +11211,51 @@ function renderVideoFilters(events) {
   renderDynamicFilter(els.teams, getTeamFilterOptions(), videoFilterState.teams, {
     onChange: handleVideoTeamFilterChange
   });
-  renderDynamicFilter(els.players, playerOpts, videoFilterState.players, {
-    onChange: handleVideoFilterChange
-  });
-  renderDynamicFilter(els.setters, setterOpts, videoFilterState.setters, {
-    asNumber: true,
-    onChange: handleVideoFilterChange
-  });
+  if (showBothTeams) {
+    const renderSplitFilter = (container, groups, selectedSet) => {
+      if (!container) return;
+      container.innerHTML = "";
+      groups.forEach(group => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "filter-scope-group";
+        const title = document.createElement("div");
+        title.className = "filter-scope-title";
+        title.textContent = getTeamNameForScope(group.scope);
+        const optionsEl = document.createElement("div");
+        optionsEl.className = "analysis-filter__options";
+        optionsEl.id = `${container.id}-${group.scope}`;
+        buildFilterOptions(optionsEl, group.options, selectedSet, { onChange: handleVideoFilterChange });
+        groupEl.appendChild(title);
+        groupEl.appendChild(optionsEl);
+        container.appendChild(groupEl);
+      });
+    };
+    renderSplitFilter(
+      els.players,
+      [
+        { scope: "our", options: playerOptsOur },
+        { scope: "opponent", options: playerOptsOpp }
+      ],
+      videoFilterState.players
+    );
+    renderSplitFilter(
+      els.setters,
+      [
+        { scope: "our", options: setterOptsOur },
+        { scope: "opponent", options: setterOptsOpp }
+      ],
+      videoFilterState.setters
+    );
+    toggleFilterVisibility(els.players, playerOpts.length > 0);
+    toggleFilterVisibility(els.setters, setterOpts.length > 0);
+  } else {
+    renderDynamicFilter(els.players, playerOpts, videoFilterState.players, {
+      onChange: handleVideoFilterChange
+    });
+    renderDynamicFilter(els.setters, setterOpts, videoFilterState.setters, {
+      onChange: handleVideoFilterChange
+    });
+  }
   renderDynamicFilter(els.skills, skillOpts, videoFilterState.skills, {
     onChange: handleVideoFilterChange
   });

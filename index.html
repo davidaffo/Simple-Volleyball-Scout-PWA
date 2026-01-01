@@ -1015,6 +1015,52 @@
             <p class="section-note">Carica un video e sincronizza le skill registrate per saltare al momento corretto.</p>
           </div>
         </div>
+      <div class="video-analysis__grid">
+        <div class="video-skills">
+          <div class="table-wrapper video-table-wrapper">
+            <div id="video-skills-container"></div>
+          </div>
+        </div>
+        <div class="video-player-wrap">
+          <div class="video-analysis__actions">
+            <label class="file-btn" for="video-file-input">Carica video</label>
+            <input id="video-file-input" type="file" accept="video/*" hidden />
+            <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
+            <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
+            <button id="btn-offset-skills" class="secondary">Offset skill</button>
+            <button id="btn-video-undo" class="secondary">Annulla ultima</button>
+            <label class="auto-rotate-toggle">
+              <input type="checkbox" id="video-playbyplay-toggle" />
+              Play by play
+            </label>
+            <div class="youtube-input">
+              <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
+              <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
+            </div>
+          </div>
+          <div class="video-media">
+            <video id="analysis-video" controls preload="metadata"></video>
+            <iframe
+              id="youtube-frame"
+              class="youtube-frame"
+              title="YouTube player"
+              tabindex="-1"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+            ></iframe>
+            <div class="youtube-focus-guard" data-youtube-guard></div>
+          </div>
+          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato. Puoi usare un file o un link YouTube.
+            <br>Shortcuts:
+            <ul>
+            <li>spazio play/pausa, frecce sinistra/destra ±3s, shift+frecce sinistra/destra frame-by-frame.</li>
+            <li>Q-W diminuisci/aumenta il timestamp della skill attuale di 0.5s</li>
+          </ul>
+
+
+            <br></p>
+        </div>
+      </div>
       <div class="analysis-filters" id="video-filters">
         <div class="analysis-filter">
           <div class="analysis-filter__label">Squadra</div>
@@ -1074,52 +1120,6 @@
         </div>
         <div class="analysis-filter filter-actions">
           <button id="video-filter-reset" class="secondary small" type="button">Reset filtri</button>
-        </div>
-      </div>
-      <div class="video-analysis__grid">
-        <div class="video-skills">
-          <div class="table-wrapper video-table-wrapper">
-            <div id="video-skills-container"></div>
-          </div>
-        </div>
-        <div class="video-player-wrap">
-          <div class="video-analysis__actions">
-            <label class="file-btn" for="video-file-input">Carica video</label>
-            <input id="video-file-input" type="file" accept="video/*" hidden />
-            <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
-            <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
-            <button id="btn-offset-skills" class="secondary">Offset skill</button>
-            <button id="btn-video-undo" class="secondary">Annulla ultima</button>
-            <label class="auto-rotate-toggle">
-              <input type="checkbox" id="video-playbyplay-toggle" />
-              Play by play
-            </label>
-            <div class="youtube-input">
-              <input id="youtube-url-input" type="url" placeholder="https://youtu.be/..." />
-              <button id="btn-load-youtube" class="secondary">Usa YouTube</button>
-            </div>
-          </div>
-          <div class="video-media">
-            <video id="analysis-video" controls preload="metadata"></video>
-            <iframe
-              id="youtube-frame"
-              class="youtube-frame"
-              title="YouTube player"
-              tabindex="-1"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowfullscreen
-            ></iframe>
-            <div class="youtube-focus-guard" data-youtube-guard></div>
-          </div>
-          <p class="section-note">Seleziona una skill per spostarti al timestamp calcolato. Puoi usare un file o un link YouTube.
-            <br>Shortcuts:
-            <ul>
-            <li>spazio play/pausa, frecce sinistra/destra ±3s, shift+frecce sinistra/destra frame-by-frame.</li>
-            <li>Q-W diminuisci/aumenta il timestamp della skill attuale di 0.5s</li>
-          </ul>
-
-
-            <br></p>
         </div>
       </div>
       </div>
