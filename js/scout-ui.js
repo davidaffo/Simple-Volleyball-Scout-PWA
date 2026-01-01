@@ -2576,6 +2576,11 @@ const elUnifyTimesModal = document.getElementById("unify-times-modal");
 const elUnifyTimesGrid = document.getElementById("unify-times-grid");
 const elUnifyTimesClose = document.getElementById("unify-times-close");
 const elUnifyTimesApply = document.getElementById("unify-times-apply");
+const elBtnSkillDuration = document.getElementById("btn-skill-duration");
+const elSkillDurationModal = document.getElementById("skill-duration-modal");
+const elSkillDurationGrid = document.getElementById("skill-duration-grid");
+const elSkillDurationClose = document.getElementById("skill-duration-close");
+const elSkillDurationApply = document.getElementById("skill-duration-apply");
 const elBtnTimeout = document.getElementById("btn-timeout");
 const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elTimeoutCount = document.getElementById("timeout-count");
@@ -3043,7 +3048,7 @@ function buildBaseEventPayload(base) {
       : null;
   const lastEvent = state.events && state.events.length > 0 ? state.events[state.events.length - 1] : null;
   const lastEventTime = lastEvent ? lastEvent.t : null;
-  const durationMs = 5000;
+  const durationMs = getDefaultSkillDurationMs();
   return {
     eventId: getNextEventId(),
     t: nowIso,
@@ -6456,6 +6461,71 @@ function closeOffsetModal() {
   elOffsetModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
 }
+function getDefaultSkillDurationMs() {
+  return 5000;
+}
+function renderSkillDurationGrid() {
+  if (!elSkillDurationGrid) return;
+  elSkillDurationGrid.innerHTML = "";
+  const last = state.skillDurationLastApplied || {};
+  SKILLS.forEach(skill => {
+    const row = document.createElement("div");
+    row.className = "offset-skill-row";
+    const label = document.createElement("label");
+    label.textContent = skill.label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "250";
+    input.min = "250";
+    const storedValue = last[skill.id];
+    const baseValue =
+      typeof storedValue === "number" && isFinite(storedValue) && storedValue > 0
+        ? String(storedValue)
+        : String(getDefaultSkillDurationMs());
+    input.value = baseValue;
+    input.dataset.skillId = skill.id;
+    row.appendChild(label);
+    row.appendChild(input);
+    elSkillDurationGrid.appendChild(row);
+  });
+}
+function openSkillDurationModal() {
+  if (!elSkillDurationModal) return;
+  renderSkillDurationGrid();
+  elSkillDurationModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeSkillDurationModal() {
+  if (!elSkillDurationModal) return;
+  elSkillDurationModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+function applySkillDurationDefaults() {
+  if (!elSkillDurationGrid) return;
+  const defaults = {};
+  elSkillDurationGrid.querySelectorAll("input[data-skill-id]").forEach(input => {
+    const id = input.dataset.skillId;
+    const value = parseFloat(input.value || "0");
+    if (!id || !isFinite(value) || value <= 0) return;
+    defaults[id] = value;
+  });
+  if (!Object.keys(defaults).length) {
+    alert("Inserisci una durata valida per almeno una skill.");
+    return;
+  }
+  pushVideoUndoSnapshot(true);
+  (state.events || []).forEach(ev => {
+    if (!ev || !ev.skillId) return;
+    const next = defaults[ev.skillId];
+    if (!next) return;
+    ev.durationMs = next;
+  });
+  state.skillDurationLastApplied = defaults;
+  saveState({ persistLocal: true });
+  renderEventsLog({ suppressScroll: true });
+  renderVideoAnalysis();
+  closeSkillDurationModal();
+}
 const LINK_TIME_OPTIONS = [
   {
     type: "serve-pass",
@@ -8209,8 +8279,10 @@ function getPlayByPlayStartTime(row, baseMs) {
   return computeEventVideoTime(ev, baseMs);
 }
 function getPlayByPlayDurationSeconds(ev) {
-  const durationMs = ev && typeof ev.durationMs === "number" && isFinite(ev.durationMs) ? ev.durationMs : null;
-  const seconds = durationMs != null ? durationMs / 1000 : 5;
+  const baseMs = ev && typeof ev.durationMs === "number" && isFinite(ev.durationMs)
+    ? ev.durationMs
+    : getDefaultSkillDurationMs();
+  const seconds = baseMs != null ? baseMs / 1000 : 5;
   return Math.max(0.1, seconds);
 }
 function stopPlayByPlay() {
@@ -14977,6 +15049,9 @@ async function init() {
   if (elBtnUnifyTimes) {
     elBtnUnifyTimes.addEventListener("click", openUnifyTimesModal);
   }
+  if (elBtnSkillDuration) {
+    elBtnSkillDuration.addEventListener("click", openSkillDurationModal);
+  }
   if (elBtnVideoUndo) {
     elBtnVideoUndo.addEventListener("click", undoLastVideoEdit);
   }
@@ -15017,17 +15092,32 @@ async function init() {
       }
     });
   }
+  if (elSkillDurationModal) {
+    elSkillDurationModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeSkillDuration !== undefined || target.classList.contains("settings-modal__backdrop")) {
+        closeSkillDurationModal();
+      }
+    });
+  }
   if (elOffsetClose) {
     elOffsetClose.addEventListener("click", closeOffsetModal);
   }
   if (elUnifyTimesClose) {
     elUnifyTimesClose.addEventListener("click", closeUnifyTimesModal);
   }
+  if (elSkillDurationClose) {
+    elSkillDurationClose.addEventListener("click", closeSkillDurationModal);
+  }
   if (elOffsetApply) {
     elOffsetApply.addEventListener("click", applyOffsetsToSelectedSkills);
   }
   if (elUnifyTimesApply) {
     elUnifyTimesApply.addEventListener("click", applyUnifyTimes);
+  }
+  if (elSkillDurationApply) {
+    elSkillDurationApply.addEventListener("click", applySkillDurationDefaults);
   }
   if (elAttackTrajectoryModal) {
     const handleCloseTrajectory = () => closeAttackTrajectoryModal(null);

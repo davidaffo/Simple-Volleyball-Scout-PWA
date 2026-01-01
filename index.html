@@ -1030,6 +1030,7 @@
             <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
             <button id="btn-offset-skills" class="secondary">Offset skill</button>
             <button id="btn-unify-times" class="secondary">Unifica tempi</button>
+            <button id="btn-skill-duration" class="secondary">Durata skill</button>
             <button id="btn-video-undo" class="secondary">Annulla ultima</button>
             <label class="auto-rotate-toggle">
               <input type="checkbox" id="video-playbyplay-toggle" />
@@ -1558,6 +1559,23 @@ Bianchi Laura 18"></textarea>
         <div class="offset-actions">
           <button id="unify-times-apply" class="small">Applica</button>
           <button class="small secondary" data-close-unify-times>Annulla</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="skill-duration-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="skill-duration-title">
+    <div class="settings-modal__backdrop" data-close-skill-duration></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="skill-duration-title">Durata skill (ms)</h3>
+        <button id="skill-duration-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <p class="section-note">Imposta la durata di default per ogni fondamentale. Lo step è 250 ms.</p>
+        <div id="skill-duration-grid" class="offset-skill-grid"></div>
+        <div class="offset-actions">
+          <button id="skill-duration-apply" class="small">Applica</button>
+          <button class="small secondary" data-close-skill-duration>Annulla</button>
         </div>
       </div>
     </div>
