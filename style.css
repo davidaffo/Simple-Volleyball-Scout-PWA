@@ -1608,6 +1608,32 @@ body[data-theme="light"] .scout-mobile-bar button {
   gap: 0.35rem;
   position: relative;
 }
+.court-net-divider {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.court-net-divider::before,
+.court-net-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.4);
+}
+body[data-theme="light"] .court-net-divider {
+  color: #64748b;
+}
+body[data-theme="light"] .court-net-divider::before,
+body[data-theme="light"] .court-net-divider::after {
+  background: rgba(100, 116, 139, 0.35);
+}
 .players-area > [data-team-panel="opponent"] {
   order: 1;
 }
@@ -1621,6 +1647,9 @@ body[data-theme="light"] .scout-mobile-bar button {
   order: 1;
 }
 .players-area.court-area--swapped > [data-team-panel="opponent"] {
+  order: 4;
+}
+.players-area.court-area--swapped > .court-net-divider {
   order: 3;
 }
 body.desktop-court-modal-open #court-area {
