@@ -2174,10 +2174,33 @@ function forceNextSkill(skillId, scope = "our") {
   const toggle = document.getElementById("predictive-skill-toggle");
   if (toggle) toggle.checked = true;
 }
+let videoScoutHomeParent = null;
+let videoScoutHomeNextSibling = null;
+function relocateVideoScoutContainer() {
+  if (!elVideoScoutContainer) return;
+  if (!videoScoutHomeParent) {
+    videoScoutHomeParent = elVideoScoutContainer.parentElement;
+    videoScoutHomeNextSibling = elVideoScoutContainer.nextSibling;
+  }
+  const logSection = document.querySelector('[data-log-section]');
+  if (state.useOpponentTeam && logSection) {
+    const anchor = logSection.querySelector("#events-log-summary");
+    logSection.insertBefore(elVideoScoutContainer, anchor || logSection.firstChild);
+    return;
+  }
+  if (videoScoutHomeParent) {
+    if (videoScoutHomeNextSibling && videoScoutHomeNextSibling.parentElement === videoScoutHomeParent) {
+      videoScoutHomeParent.insertBefore(elVideoScoutContainer, videoScoutHomeNextSibling);
+    } else {
+      videoScoutHomeParent.appendChild(elVideoScoutContainer);
+    }
+  }
+}
 function updateVideoScoutModeLayout() {
   if (!elVideoScoutContainer) return;
   const useScout = !!state.videoScoutMode;
   elVideoScoutContainer.classList.toggle("hidden", !useScout);
+  relocateVideoScoutContainer();
   renderEventsLog({ suppressScroll: true });
   if (!useScout) {
     if (elAnalysisVideoScout) {
@@ -2334,6 +2357,7 @@ function syncOpponentSettingsUI() {
   if (typeof syncCourtSideLayout === "function") {
     syncCourtSideLayout();
   }
+  relocateVideoScoutContainer();
   if (typeof renderPlayers === "function") {
     renderPlayers();
   }
