@@ -25,7 +25,13 @@ function isServingForScope(scope) {
 function getServeDisplayCourt(scope = "our") {
   const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
   if (!Array.isArray(baseCourt) || baseCourt.length === 0) return [];
-  if (typeof removeLiberosAndRestoreForScope === "function") {
+  const autoLiberoActive =
+    typeof getTeamAutoLiberoBackline === "function"
+      ? getTeamAutoLiberoBackline(scope)
+      : scope === "opponent"
+        ? !!state.opponentAutoLiberoBackline
+        : !!state.autoLiberoBackline;
+  if (!autoLiberoActive && typeof removeLiberosAndRestoreForScope === "function") {
     return removeLiberosAndRestoreForScope(baseCourt, scope);
   }
   return getCourtShape(baseCourt);
@@ -1308,7 +1314,7 @@ function getPredictedSkillIdSingle() {
     if (!ev.team) return true;
     return ev.team !== "opponent";
   });
-  const last = ownEvents.slice(-1)[0] || null;
+  const last = getLastFlowEvent(ownEvents);
   const possessionServe = !!state.isServing;
   const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
@@ -1316,7 +1322,7 @@ function getPredictedSkillIdSingle() {
     return resolveEnabledSkill("block") || fallback;
   }
   if (last.skillId === "attack" && last.code === "!") {
-    return resolveEnabledSkill("defense") || fallback;
+    return resolveEnabledSkill("second") || fallback;
   }
   if (last.skillId === "defense" && (last.code === "-" || last.code === "/")) {
     return resolveEnabledSkill("block") || fallback;
@@ -1365,7 +1371,7 @@ function computeTwoTeamFlowFromEvent(ev) {
         return { teamScope: other, skillId: "block" };
       }
       if (ev.code === "!") {
-        return { teamScope: other, skillId: "defense" };
+        return { teamScope: scope, skillId: "second" };
       }
       return { teamScope: other, skillId: "defense" };
     }
@@ -4427,10 +4433,28 @@ function renderPlayers() {
   elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
   ensureCourtShape();
   ensureMetricsConfigDefaults();
-  const predictedSkillId = state.useOpponentTeam
+  let predictedSkillId = state.useOpponentTeam
     ? getPredictedSkillIdForScope("our")
     : getPredictedSkillId();
-  const predictedOpponentSkillId = state.useOpponentTeam ? getPredictedSkillIdForScope("opponent") : null;
+  let predictedOpponentSkillId = state.useOpponentTeam ? getPredictedSkillIdForScope("opponent") : null;
+  if (state.useOpponentTeam && state.predictiveSkillFlow && !predictedOpponentSkillId) {
+    const oppFallbackSeed = isServingForScope("opponent") ? "serve" : "pass";
+    if (isSkillEnabledForScope(oppFallbackSeed, "opponent")) {
+      predictedOpponentSkillId = oppFallbackSeed;
+    } else {
+      const enabledOpp = getEnabledSkillsForScope("opponent");
+      predictedOpponentSkillId = enabledOpp.length ? enabledOpp[0].id : null;
+    }
+  }
+  if (state.predictiveSkillFlow && !state.useOpponentTeam && !predictedSkillId) {
+    const fallbackSeed = state.isServing ? "serve" : "pass";
+    if (isSkillEnabled(fallbackSeed)) {
+      predictedSkillId = fallbackSeed;
+    } else {
+      const enabled = getEnabledSkills();
+      predictedSkillId = enabled.length ? enabled[0].id : null;
+    }
+  }
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   updateSetTypeVisibility(predictedSkillId || predictedOpponentSkillId);
   const hasSelectedServe = isAnySelectedSkill("serve");
@@ -4492,7 +4516,16 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     typeof ensureCourtShapeFor === "function"
       ? ensureCourtShapeFor(baseOppCourt)
       : Array.from({ length: 6 }, (_, idx) => baseOppCourt[idx] || { main: "" });
-  const predictedSkillId = nextSkillId;
+  let predictedSkillId = nextSkillId || getPredictedSkillIdForScope("opponent");
+  if (state.predictiveSkillFlow && !predictedSkillId) {
+    const fallbackSeed = isServingForScope("opponent") ? "serve" : "pass";
+    if (isSkillEnabledForScope(fallbackSeed, "opponent")) {
+      predictedSkillId = fallbackSeed;
+    } else {
+      const enabledOpp = getEnabledSkillsForScope("opponent");
+      predictedSkillId = enabledOpp.length ? enabledOpp[0].id : null;
+    }
+  }
   const layoutSkill =
     state.predictiveSkillFlow && predictedSkillId
       ? predictedSkillId
@@ -4514,7 +4547,7 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     allowReturn: true,
     allowDrop: true,
     isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches,
-    nextSkillId
+    nextSkillId: predictedSkillId
   });
   if (shouldAnimate) {
     animateFlip(prevRects, '.court-card[data-team-scope="opponent"]', el => {
@@ -4893,6 +4926,9 @@ async function handleEventClick(
   }
   const inferredAttackUpdated = skillId === "block" ? applyBlockInference(event, scope, code) : false;
   if (skillId === "serve" && code === "/") {
+    triggerFreeballFlow({ persist: false, rerender: false, scope });
+  }
+  if (skillId === "attack" && code === "!") {
     triggerFreeballFlow({ persist: false, rerender: false, scope });
   }
   if (
