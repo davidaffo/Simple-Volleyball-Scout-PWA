@@ -1028,6 +1028,7 @@
             <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
             <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
             <button id="btn-offset-skills" class="secondary">Offset skill</button>
+            <button id="btn-unify-times" class="secondary">Unifica tempi</button>
             <button id="btn-video-undo" class="secondary">Annulla ultima</button>
             <label class="auto-rotate-toggle">
               <input type="checkbox" id="video-playbyplay-toggle" />
@@ -1539,6 +1540,23 @@ Bianchi Laura 18"></textarea>
         <div class="offset-actions">
           <button id="offset-apply" class="small">Applica</button>
           <button class="small secondary" data-close-offset>Annulla</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="unify-times-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="unify-times-title">
+    <div class="settings-modal__backdrop" data-close-unify-times></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="unify-times-title">Unifica tempi collegamenti</h3>
+        <button id="unify-times-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <p class="section-note">Scegli quali collegamenti unificare e da quale evento prendere il tempo.</p>
+        <div id="unify-times-grid" class="unify-times-grid"></div>
+        <div class="offset-actions">
+          <button id="unify-times-apply" class="small">Applica</button>
+          <button class="small secondary" data-close-unify-times>Annulla</button>
         </div>
       </div>
     </div>

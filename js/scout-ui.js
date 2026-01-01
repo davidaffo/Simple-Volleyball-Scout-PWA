@@ -2571,6 +2571,11 @@ const elOffsetModal = document.getElementById("offset-modal");
 const elOffsetSkillGrid = document.getElementById("offset-skill-grid");
 const elOffsetClose = document.getElementById("offset-close");
 const elOffsetApply = document.getElementById("offset-apply");
+const elBtnUnifyTimes = document.getElementById("btn-unify-times");
+const elUnifyTimesModal = document.getElementById("unify-times-modal");
+const elUnifyTimesGrid = document.getElementById("unify-times-grid");
+const elUnifyTimesClose = document.getElementById("unify-times-close");
+const elUnifyTimesApply = document.getElementById("unify-times-apply");
 const elBtnTimeout = document.getElementById("btn-timeout");
 const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elTimeoutCount = document.getElementById("timeout-count");
@@ -6450,6 +6455,166 @@ function closeOffsetModal() {
   if (!elOffsetModal) return;
   elOffsetModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
+}
+const LINK_TIME_OPTIONS = [
+  {
+    type: "serve-pass",
+    label: "Battuta / Ricezione",
+    source: { id: "serve", label: "Battuta" },
+    target: { id: "pass", label: "Ricezione" }
+  },
+  {
+    type: "set-attack",
+    label: "Attacco / Alzata",
+    source: { id: "attack", label: "Attacco" },
+    target: { id: "second", label: "Alzata" }
+  },
+  {
+    type: "attack-block",
+    label: "Attacco / Muro",
+    source: { id: "attack", label: "Attacco" },
+    target: { id: "block", label: "Muro" }
+  },
+  {
+    type: "attack-defense",
+    label: "Attacco / Difesa",
+    source: { id: "attack", label: "Attacco" },
+    target: { id: "defense", label: "Difesa" }
+  },
+  {
+    type: "block-defense",
+    label: "Muro / Difesa",
+    source: { id: "block", label: "Muro" },
+    target: { id: "defense", label: "Difesa" }
+  }
+];
+function renderUnifyTimesOptions() {
+  if (!elUnifyTimesGrid) return;
+  elUnifyTimesGrid.innerHTML = "";
+  LINK_TIME_OPTIONS.forEach(opt => {
+    const row = document.createElement("div");
+    row.className = "unify-times-row";
+    const head = document.createElement("div");
+    head.className = "unify-times-row__head";
+    const enable = document.createElement("input");
+    enable.type = "checkbox";
+    enable.checked = true;
+    enable.dataset.linkType = opt.type;
+    const label = document.createElement("span");
+    label.className = "unify-times-row__label";
+    label.textContent = opt.label;
+    head.appendChild(enable);
+    head.appendChild(label);
+    row.appendChild(head);
+    const options = document.createElement("div");
+    options.className = "unify-times-row__options";
+    const name = `unify-source-${opt.type}`;
+    const sourceLabel = document.createElement("label");
+    const sourceInput = document.createElement("input");
+    sourceInput.type = "radio";
+    sourceInput.name = name;
+    sourceInput.value = opt.source.id;
+    sourceInput.checked = true;
+    sourceLabel.appendChild(sourceInput);
+    sourceLabel.appendChild(document.createTextNode(opt.source.label));
+    const targetLabel = document.createElement("label");
+    const targetInput = document.createElement("input");
+    targetInput.type = "radio";
+    targetInput.name = name;
+    targetInput.value = opt.target.id;
+    targetLabel.appendChild(targetInput);
+    targetLabel.appendChild(document.createTextNode(opt.target.label));
+    options.appendChild(sourceLabel);
+    options.appendChild(targetLabel);
+    row.appendChild(options);
+    elUnifyTimesGrid.appendChild(row);
+  });
+}
+function openUnifyTimesModal() {
+  if (!elUnifyTimesModal) return;
+  renderUnifyTimesOptions();
+  elUnifyTimesModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeUnifyTimesModal() {
+  if (!elUnifyTimesModal) return;
+  elUnifyTimesModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+function getFilteredVideoEventsForAnalysis() {
+  const skillEvents = getVideoSkillEvents();
+  const filtered = skillEvents
+    .map(item => item.ev)
+    .filter(ev => matchesVideoFilters(ev, videoFilterState));
+  return { events: filtered, baseMs: getVideoBaseTimeMs(skillEvents) };
+}
+function resolveSourceEventForLink(evA, evB, preferredSkill) {
+  if (preferredSkill) {
+    if (evA.skillId === preferredSkill) return evA;
+    if (evB.skillId === preferredSkill) return evB;
+  }
+  if (typeof evA.videoTime === "number") return evA;
+  if (typeof evB.videoTime === "number") return evB;
+  return evA;
+}
+function applyUnifyTimes() {
+  if (!elUnifyTimesGrid) return;
+  const enabledTypes = new Set();
+  const preferredSources = {};
+  elUnifyTimesGrid.querySelectorAll("input[type=\"checkbox\"][data-link-type]").forEach(input => {
+    if (input.checked) enabledTypes.add(input.dataset.linkType);
+  });
+  LINK_TIME_OPTIONS.forEach(opt => {
+    const selected = elUnifyTimesGrid.querySelector(`input[name="unify-source-${opt.type}"]:checked`);
+    preferredSources[opt.type] = selected ? selected.value : opt.source.id;
+  });
+  if (!enabledTypes.size) {
+    alert("Seleziona almeno un collegamento da unificare.");
+    return;
+  }
+  const { events, baseMs } = getFilteredVideoEventsForAnalysis();
+  if (!events.length) {
+    alert("Non ci sono skill con i filtri attivi.");
+    return;
+  }
+  const byId = new Map();
+  events.forEach(ev => {
+    if (ev && ev.eventId != null) byId.set(ev.eventId, ev);
+  });
+  const seen = new Set();
+  const pairs = [];
+  events.forEach(ev => {
+    const links = Array.isArray(ev.relatedLinks) ? ev.relatedLinks : [];
+    links.forEach(link => {
+      if (!link || !enabledTypes.has(link.type)) return;
+      const other = byId.get(link.eventId);
+      if (!other || other === ev) return;
+      const aId = ev.eventId;
+      const bId = other.eventId;
+      if (aId == null || bId == null) return;
+      const key = aId < bId ? `${aId}|${bId}|${link.type}` : `${bId}|${aId}|${link.type}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      pairs.push({ a: ev, b: other, type: link.type });
+    });
+  });
+  if (!pairs.length) {
+    alert("Nessun collegamento trovato nei filtri attivi.");
+    return;
+  }
+  pushVideoUndoSnapshot(true);
+  pairs.forEach(pair => {
+    const preferred = preferredSources[pair.type] || null;
+    const source = resolveSourceEventForLink(pair.a, pair.b, preferred);
+    const time = computeEventVideoTime(source, baseMs);
+    if (!isFinite(time)) return;
+    pair.a.videoTime = time;
+    pair.b.videoTime = time;
+  });
+  saveState({ persistLocal: true });
+  renderEventsLog({ suppressScroll: true });
+  renderVideoAnalysis();
+  closeUnifyTimesModal();
 }
 function applyOffsetsToSelectedSkills() {
   const ctxKey = getActiveEventContextKey();
@@ -14809,6 +14974,9 @@ async function init() {
   if (elBtnOffsetSkills) {
     elBtnOffsetSkills.addEventListener("click", openOffsetModal);
   }
+  if (elBtnUnifyTimes) {
+    elBtnUnifyTimes.addEventListener("click", openUnifyTimesModal);
+  }
   if (elBtnVideoUndo) {
     elBtnVideoUndo.addEventListener("click", undoLastVideoEdit);
   }
@@ -14840,11 +15008,26 @@ async function init() {
       }
     });
   }
+  if (elUnifyTimesModal) {
+    elUnifyTimesModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeUnifyTimes !== undefined || target.classList.contains("settings-modal__backdrop")) {
+        closeUnifyTimesModal();
+      }
+    });
+  }
   if (elOffsetClose) {
     elOffsetClose.addEventListener("click", closeOffsetModal);
   }
+  if (elUnifyTimesClose) {
+    elUnifyTimesClose.addEventListener("click", closeUnifyTimesModal);
+  }
   if (elOffsetApply) {
     elOffsetApply.addEventListener("click", applyOffsetsToSelectedSkills);
+  }
+  if (elUnifyTimesApply) {
+    elUnifyTimesApply.addEventListener("click", applyUnifyTimes);
   }
   if (elAttackTrajectoryModal) {
     const handleCloseTrajectory = () => closeAttackTrajectoryModal(null);

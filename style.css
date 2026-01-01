@@ -1192,6 +1192,44 @@ body[data-theme="light"] .match-list {
   gap: 0.4rem;
   margin-top: 0.4rem;
 }
+.unify-times-grid {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+.unify-times-row {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+body[data-theme="light"] .unify-times-row {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+.unify-times-row:last-child {
+  border-bottom: none;
+}
+.unify-times-row__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.unify-times-row__label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.unify-times-row__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.unify-times-row__options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
 .video-time-input {
   display: inline-flex;
   gap: 0.35rem;
