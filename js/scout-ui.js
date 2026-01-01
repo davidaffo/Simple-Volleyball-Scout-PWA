@@ -13726,6 +13726,20 @@ function registerServiceWorker() {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("service-worker.js")
+      .then(reg => {
+        if (reg && typeof reg.update === "function") {
+          reg.update();
+        }
+        if (navigator.serviceWorker.controller) {
+          sessionStorage.removeItem("sw-force-reload");
+        }
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          const key = "sw-force-reload";
+          if (sessionStorage.getItem(key) === "1") return;
+          sessionStorage.setItem(key, "1");
+          window.location.reload();
+        });
+      })
       .catch(err => console.error("SW registration failed", err));
   });
 }
