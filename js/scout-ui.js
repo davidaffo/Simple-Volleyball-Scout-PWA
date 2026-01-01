@@ -1600,7 +1600,7 @@ function applyBlockInference(blockEvent, blockScope, blockCode) {
       break;
     }
   }
-  if (!attackEvent) return false;
+  if (!attackEvent) return null;
   if (blockCode === "/") {
     const prevCode = attackEvent.code;
     attackEvent.code = "";
@@ -1608,7 +1608,7 @@ function applyBlockInference(blockEvent, blockScope, blockCode) {
     attackEvent.derivedFromBlock = true;
     const attackIdx = resolvePlayerIdx(attackEvent);
     updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, "");
-    return true;
+    return attackEvent;
   }
   const prevCode = attackEvent.code;
   const nextCode = getAttackCodeFromBlockCode(blockCode);
@@ -1617,7 +1617,7 @@ function applyBlockInference(blockEvent, blockScope, blockCode) {
   attackEvent.derivedFromBlock = true;
   const attackIdx = resolvePlayerIdx(attackEvent);
   updateSkillStatsForEvent(attackScope, attackIdx, "attack", prevCode, attackEvent.code);
-  return true;
+  return attackEvent;
 }
 function getPredictedSkillIdForScope(scope) {
   if (scope === "opponent" && !state.useOpponentTeam) return null;
@@ -4747,6 +4747,47 @@ function applyReceiveContextToEvent(ev) {
     clearReceiveContext(scope);
   }
 }
+function addRelatedEvent(ev, relatedId) {
+  if (!ev || relatedId === null || relatedId === undefined) return;
+  if (!Array.isArray(ev.relatedEvents)) {
+    ev.relatedEvents = [];
+  }
+  if (!ev.relatedEvents.includes(relatedId)) {
+    ev.relatedEvents.push(relatedId);
+  }
+}
+function addRelatedLink(ev, relatedId, type) {
+  if (!ev || relatedId === null || relatedId === undefined) return;
+  if (!type) return;
+  if (!Array.isArray(ev.relatedLinks)) {
+    ev.relatedLinks = [];
+  }
+  if (!ev.relatedLinks.some(link => link && link.eventId === relatedId && link.type === type)) {
+    ev.relatedLinks.push({ eventId: relatedId, type });
+  }
+}
+function linkEvents(evA, evB, type = null) {
+  if (!evA || !evB) return;
+  if (evA.eventId === null || evA.eventId === undefined) return;
+  if (evB.eventId === null || evB.eventId === undefined) return;
+  addRelatedEvent(evA, evB.eventId);
+  addRelatedEvent(evB, evA.eventId);
+  if (type) {
+    addRelatedLink(evA, evB.eventId, type);
+    addRelatedLink(evB, evA.eventId, type);
+  }
+}
+function findLastEventBySkills(events, { scope = null, skillIds = [] } = {}) {
+  const list = Array.isArray(events) ? events : [];
+  const ids = Array.isArray(skillIds) ? skillIds : [skillIds];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const ev = list[i];
+    if (!ev || !ids.includes(ev.skillId)) continue;
+    if (scope && getTeamScopeFromEvent(ev) !== scope) continue;
+    return ev;
+  }
+  return null;
+}
 function incrementSkillStats(scope, playerIdx, skillId, code) {
   if (typeof playerIdx !== "number" || playerIdx < 0) return;
   if (scope === "our") {
@@ -4786,6 +4827,7 @@ async function handleEventClick(
   let allowPendingServePass = false;
   let flowState = null;
   let activeOverride = null;
+  let inferredServeEvent = null;
   if (state.useOpponentTeam && state.predictiveSkillFlow) {
     flowState = getAutoFlowState();
     activeOverride = scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
@@ -4892,6 +4934,7 @@ async function handleEventClick(
       serveEvent.serveEnd = serveMetaToUse.serveEnd || serveEvent.serveEnd || null;
       applyReceiveContextToEvent(serveEvent);
       state.events.push(serveEvent);
+      inferredServeEvent = serveEvent;
       incrementSkillStats(servingScope, serverIdx, "serve", serveCode);
       if (state.pendingServe && state.pendingServe.scope === servingScope) {
         state.pendingServe = null;
@@ -4906,6 +4949,36 @@ async function handleEventClick(
     videoTime: selectionVideoTime,
     teamScope: scope
   });
+  if (inferredServeEvent) {
+    linkEvents(inferredServeEvent, event, "serve-pass");
+  } else if (skillId === "pass" && state.useOpponentTeam) {
+    const lastServe = findLastEventBySkills(state.events, {
+      scope: getOppositeScope(scope),
+      skillIds: ["serve"]
+    });
+    if (lastServe) {
+      linkEvents(lastServe, event, "serve-pass");
+    }
+  }
+  if (skillId === "defense" && state.useOpponentTeam) {
+    const lastAttackOrBlock = findLastEventBySkills(state.events, {
+      scope: getOppositeScope(scope),
+      skillIds: ["attack", "block"]
+    });
+    if (lastAttackOrBlock) {
+      const relType = lastAttackOrBlock.skillId === "block" ? "block-defense" : "attack-defense";
+      linkEvents(lastAttackOrBlock, event, relType);
+    }
+  }
+  if (skillId === "attack" && state.useOpponentTeam) {
+    const lastSet = findLastEventBySkills(state.events, {
+      scope,
+      skillIds: ["second"]
+    });
+    if (lastSet) {
+      linkEvents(lastSet, event, "set-attack");
+    }
+  }
   if (skillId === "serve") {
     if (serveMeta) {
       event.serveType = serveMeta.serveType || event.serveType || "JF";
@@ -4977,7 +5050,10 @@ async function handleEventClick(
     state.forceSkillActive = false;
     state.forceSkillScope = null;
   }
-  const inferredAttackUpdated = skillId === "block" ? applyBlockInference(event, scope, code) : false;
+  const inferredAttackEvent = skillId === "block" ? applyBlockInference(event, scope, code) : null;
+  if (inferredAttackEvent) {
+    linkEvents(inferredAttackEvent, event, "attack-block");
+  }
   if (skillId === "serve" && code === "/") {
     triggerFreeballFlow({ persist: false, rerender: false, scope });
   }
@@ -4995,8 +5071,8 @@ async function handleEventClick(
   animateEventToLog(sourceEl, skillId, code);
   const persistLocal = typeof getPointDirection === "function" && !!getPointDirection(event);
   schedulePostEventUpdates({
-    includeAggregates: !state.predictiveSkillFlow || inferredAttackUpdated,
-    append: !inferredAttackUpdated,
+    includeAggregates: !state.predictiveSkillFlow || !!inferredAttackEvent,
+    append: !inferredAttackEvent,
     playerIdx,
     skillId,
     persistLocal,
@@ -6227,9 +6303,7 @@ function renderEventsLog(options = {}) {
           showSeek: false,
           showVideoTime: true,
           baseMs,
-          showIndex: false,
           enableSelection: true,
-          showCheckbox: false,
           contextKey: "log",
           onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts),
           append: true
@@ -6258,9 +6332,7 @@ function renderEventsLog(options = {}) {
       showSeek: false,
       showVideoTime: true,
       baseMs,
-      showIndex: false,
       enableSelection: true,
-      showCheckbox: false,
       contextKey: "log",
       onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts)
     });
@@ -7438,8 +7510,8 @@ function renderEventTableRows(target, events, options = {}) {
     const headerRow = document.createElement("tr");
     const headers = [
       ...(enableSelection && showCheckbox ? [{ label: "✓" }] : []),
+      ...(showIndex ? [{ label: "ID" }] : []),
       ...(showVideoTime ? [{ label: "Tempo", bulkKey: "videoTime" }] : []),
-      ...(showIndex ? [{ label: "#" }] : []),
       { label: "Set", bulkKey: "set" },
       { label: "Pt N" },
       { label: "Pt A" },
@@ -7448,6 +7520,7 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Alzatore", bulkKey: "setter" },
       { label: "Fondamentale", bulkKey: "skill" },
       { label: "Codice", bulkKey: "code" },
+      { label: "Link" },
       { label: "Tipo errore" },
       { label: "FB N" },
       { label: "Rot", bulkKey: "rotation" },
@@ -7471,7 +7544,6 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Out", bulkKey: "playerOut" },
       { label: "Dur (ms)", bulkKey: "durationMs" }
     ];
-    if (showVideoTime) headers.push({ label: "Video" });
     headers.push({ label: "Elimina" });
     const bulkHeaders = [];
     headers.forEach((h, idx) => {
@@ -7556,6 +7628,10 @@ function renderEventTableRows(target, events, options = {}) {
       }
       return valueToString(dir);
     };
+    const formatRelatedEvents = () => {
+      if (!Array.isArray(ev.relatedEvents) || ev.relatedEvents.length === 0) return "";
+      return ev.relatedEvents.map(id => (id != null ? String(id) : "")).filter(Boolean).join(" ");
+    };
     const resolveTeamLabel = () => {
       if (ev.team === "opponent") return state.selectedOpponentTeam || "Avversaria";
       if (ev.team && ev.team !== "opponent") return ev.teamName || state.selectedTeam || "Squadra";
@@ -7579,6 +7655,7 @@ function renderEventTableRows(target, events, options = {}) {
       rowCheckbox = chk;
     }
     const cells = [
+      ...(showIndex ? [{ text: ev.eventId != null ? String(ev.eventId) : "" }] : []),
       ...(showVideoTime
         ? [
             {
@@ -7589,7 +7666,6 @@ function renderEventTableRows(target, events, options = {}) {
             }
           ]
         : []),
-      ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
       {
         text: ev.set || "1",
         editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
@@ -7635,6 +7711,7 @@ function renderEventTableRows(target, events, options = {}) {
         text: ev.code || "",
         editable: td => makeEditableCell(td, "Codice", done => createCodeSelect(ev, done), editGuard)
       },
+      { text: formatRelatedEvents() },
       {
         text:
           ev.errorType && (ev.code === "error" || ev.code === "team-error")
