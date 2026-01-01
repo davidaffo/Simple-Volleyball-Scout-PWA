@@ -1,6 +1,3 @@
-# Major features
-Aggiungi squadra avversaria
-
 # Minor features
 Trasforma tutte le immagini in svg
 Modifica immagine battuta per mettere il campo fuori

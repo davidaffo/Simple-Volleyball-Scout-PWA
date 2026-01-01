@@ -2715,9 +2715,17 @@ function resetMatchState() {
   }
   state.isServing = preservedServing;
   state.currentSet = 1;
+  state.setResults = {};
+  state.setStarts = {};
   state.matchFinished = false;
   state.scoreOverrides = {};
   state.autoRotatePending = false;
+  state.opponentAutoRotatePending = false;
+  state.skillFlowOverride = null;
+  state.opponentSkillFlowOverride = null;
+  state.freeballPending = false;
+  state.freeballPendingScope = "our";
+  state.flowTeamScope = "our";
   state.liberoAutoMap = preservedLiberoMap;
   state.preferredLibero = preservedPreferredLibero;
   state.courtViewMirrored = false;

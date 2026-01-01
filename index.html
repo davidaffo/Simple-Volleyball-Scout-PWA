@@ -152,6 +152,10 @@
               <div class="score-center">
                 <label>Punteggio</label>
                 <div id="live-score" class="score-value emph">0 - 0</div>
+                <div class="score-set-row">
+                  <span class="score-set-label">Set</span>
+                  <strong id="live-set-score" class="score-set-value">0 - 0</strong>
+                </div>
               </div>
               <div class="score-side score-side-against">
                 <button id="btn-score-against-plus" class="small">+ Subiti</button>
@@ -403,6 +407,96 @@
               </div>
             </div>
           </div>
+          <div id="next-set-inline" class="next-set-inline hidden" aria-hidden="true">
+            <div class="next-set-inline__card">
+              <div class="next-set-inline__head">
+                <h3 id="next-set-title">Preparazione set</h3>
+                <button id="next-set-close" class="pill-remove" aria-label="Chiudi">✕</button>
+              </div>
+              <div class="next-set__body">
+                <div class="next-set-lineups" id="next-set-lineups">
+                  <div class="next-set-lineup-block" id="next-set-block-opp">
+                    <div class="next-set-lineup-head">
+                      <h4 id="next-set-team-opp">Avversarie</h4>
+                      <div class="rotation-controls next-set-rotation-controls">
+                        <button id="next-set-rotate-cw-opp" class="small rotate-cw" type="button">↺</button>
+                        <div class="rotation-display">
+                          <select id="next-set-rotation-select-opp" class="rotation-select">
+                            <option value="1">P1</option>
+                            <option value="2">P2</option>
+                            <option value="3">P3</option>
+                            <option value="4">P4</option>
+                            <option value="5">P5</option>
+                            <option value="6">P6</option>
+                          </select>
+                        </div>
+                        <button id="next-set-rotate-ccw-opp" class="small rotate-ccw" type="button">↻</button>
+                      </div>
+                      <button id="next-set-default-opp" class="secondary small" type="button">Imposta default</button>
+                    </div>
+                    <div id="next-set-court-opp" class="lineup-court-grid next-set-court-grid"></div>
+                    <div class="next-set-bench">
+                      <div id="next-set-bench-opp" class="lineup-bench-chips"></div>
+                    </div>
+                  </div>
+                  <div class="next-set-lineup-block" id="next-set-block-our">
+                    <div class="next-set-lineup-head">
+                      <h4 id="next-set-team-our">Squadra nostra</h4>
+                      <div class="rotation-controls next-set-rotation-controls">
+                        <button id="next-set-rotate-cw-our" class="small rotate-cw" type="button">↺</button>
+                        <div class="rotation-display">
+                          <select id="next-set-rotation-select-our" class="rotation-select">
+                            <option value="1">P1</option>
+                            <option value="2">P2</option>
+                            <option value="3">P3</option>
+                            <option value="4">P4</option>
+                            <option value="5">P5</option>
+                            <option value="6">P6</option>
+                          </select>
+                        </div>
+                        <button id="next-set-rotate-ccw-our" class="small rotate-ccw" type="button">↻</button>
+                      </div>
+                      <button id="next-set-default-our" class="secondary small" type="button">Imposta default</button>
+                    </div>
+                    <div id="next-set-court-our" class="lineup-court-grid next-set-court-grid"></div>
+                    <div class="next-set-bench">
+                      <div id="next-set-bench-our" class="lineup-bench-chips"></div>
+                    </div>
+                  </div>
+                </div>
+                <label class="auto-rotate-toggle" id="next-set-swap-row">
+                  <input type="checkbox" id="next-set-swap-court" />
+                  Cambia campo
+                </label>
+                <div class="next-set-sides hidden" id="next-set-sides">
+                  <div class="next-set__serve-label">Campo vicino</div>
+                  <label class="auto-rotate-toggle">
+                    <input type="radio" name="next-set-side" id="next-set-side-our" value="our" />
+                    <span id="next-set-side-our-label">Noi</span>
+                  </label>
+                  <label class="auto-rotate-toggle">
+                    <input type="radio" name="next-set-side" id="next-set-side-opp" value="opponent" />
+                    <span id="next-set-side-opp-label">Avversarie</span>
+                  </label>
+                </div>
+                <div class="next-set__serve">
+                  <div class="next-set__serve-label">Prima battuta</div>
+                  <label class="auto-rotate-toggle">
+                    <input type="radio" name="next-set-serve" id="next-set-serve-our" value="our" />
+                    <span id="next-set-serve-our-label">Noi</span>
+                  </label>
+                  <label class="auto-rotate-toggle">
+                    <input type="radio" name="next-set-serve" id="next-set-serve-opp" value="opponent" />
+                    <span id="next-set-serve-opp-label">Avversarie</span>
+                  </label>
+                </div>
+                <div class="settings-actions">
+                  <button id="next-set-start" class="primary">Avvia set</button>
+                  <button id="next-set-cancel" class="secondary">Annulla</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">
@@ -440,6 +534,8 @@
             <div class="score-card">
               <label>Punteggio totale</label>
               <div id="agg-score" class="score-value">0 - 0</div>
+              <label class="score-set-label">Set vinti</label>
+              <div id="agg-set-score" class="score-value small">0 - 0</div>
               <div id="agg-set-cards" class="score-sets cards"></div>
             </div>
           </div>

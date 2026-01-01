@@ -114,6 +114,39 @@ const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
 const elLineupModalToggleNumbers = document.getElementById("lineup-modal-toggle-numbers");
+const elLiveSetScore = document.getElementById("live-set-score");
+const elAggSetScore = document.getElementById("agg-set-score");
+const elNextSetInline = document.getElementById("next-set-inline");
+const elNextSetClose = document.getElementById("next-set-close");
+const elNextSetBlockOur = document.getElementById("next-set-block-our");
+const elNextSetBlockOpp = document.getElementById("next-set-block-opp");
+const elNextSetTeamOur = document.getElementById("next-set-team-our");
+const elNextSetTeamOpp = document.getElementById("next-set-team-opp");
+const elNextSetCourtOur = document.getElementById("next-set-court-our");
+const elNextSetCourtOpp = document.getElementById("next-set-court-opp");
+const elNextSetBenchOur = document.getElementById("next-set-bench-our");
+const elNextSetBenchOpp = document.getElementById("next-set-bench-opp");
+const elNextSetDefaultOur = document.getElementById("next-set-default-our");
+const elNextSetDefaultOpp = document.getElementById("next-set-default-opp");
+const elNextSetRotateCwOur = document.getElementById("next-set-rotate-cw-our");
+const elNextSetRotateCcwOur = document.getElementById("next-set-rotate-ccw-our");
+const elNextSetRotateCwOpp = document.getElementById("next-set-rotate-cw-opp");
+const elNextSetRotateCcwOpp = document.getElementById("next-set-rotate-ccw-opp");
+const elNextSetRotationSelectOur = document.getElementById("next-set-rotation-select-our");
+const elNextSetRotationSelectOpp = document.getElementById("next-set-rotation-select-opp");
+const elNextSetSwapRow = document.getElementById("next-set-swap-row");
+const elNextSetSides = document.getElementById("next-set-sides");
+const elNextSetSideOur = document.getElementById("next-set-side-our");
+const elNextSetSideOpp = document.getElementById("next-set-side-opp");
+const elNextSetSideOurLabel = document.getElementById("next-set-side-our-label");
+const elNextSetSideOppLabel = document.getElementById("next-set-side-opp-label");
+const elNextSetSwapCourt = document.getElementById("next-set-swap-court");
+const elNextSetServeOur = document.getElementById("next-set-serve-our");
+const elNextSetServeOpp = document.getElementById("next-set-serve-opp");
+const elNextSetServeOurLabel = document.getElementById("next-set-serve-our-label");
+const elNextSetServeOppLabel = document.getElementById("next-set-serve-opp-label");
+const elNextSetStart = document.getElementById("next-set-start");
+const elNextSetCancel = document.getElementById("next-set-cancel");
 const elUseOpponentTeamToggle = document.getElementById("use-opponent-team-toggle");
 const elOpponentTeamSettings = document.getElementById("opponent-team-settings");
 const elOpponentSkillServe = document.getElementById("opponent-skill-serve");
@@ -247,6 +280,12 @@ let lineupNumberMode = false;
 let lineupModalScope = "our";
 let lineupDragFromIdx = null;
 let lineupModalDefaultRotation = null;
+let lineupModalContext = "match";
+let nextSetDraft = null;
+let nextSetModalOpen = false;
+let nextSetDragName = "";
+let nextSetDragFromIdx = null;
+let nextSetDragScope = null;
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
@@ -411,6 +450,530 @@ function cloneCourt(court) {
   if (typeof cloneCourtLineup === "function") return cloneCourtLineup(court);
   return getCourtShape(court).map(slot => ({ main: slot.main, replaced: slot.replaced }));
 }
+function buildCourtFromNames(names = []) {
+  return Array.from({ length: 6 }, (_, idx) => ({ main: names[idx] || "", replaced: "" }));
+}
+function cloneSetMap(map) {
+  return JSON.parse(JSON.stringify(map || {}));
+}
+function getNextSetEntry(scope) {
+  if (!nextSetDraft) return null;
+  return scope === "opponent" ? nextSetDraft.opponent : nextSetDraft.our;
+}
+function updateNextSetEntry(scope, entry) {
+  if (!nextSetDraft || !entry) return;
+  if (scope === "opponent") {
+    nextSetDraft.opponent = entry;
+  } else {
+    nextSetDraft.our = entry;
+  }
+}
+function setNextSetPlayer(scope, posIdx, name) {
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  const liberos = getLiberosForScope(scope);
+  const core = typeof LineupCore !== "undefined" ? LineupCore : null;
+  let nextCourt = [];
+  if (core && typeof core.setPlayerOnCourt === "function") {
+    nextCourt = core.setPlayerOnCourt({
+      court: entry.court || [],
+      posIdx,
+      playerName: name,
+      liberos
+    });
+  } else {
+    nextCourt = getCourtShape(entry.court || []).map((slot, idx) => {
+      const updated = Object.assign({}, slot);
+      if (updated.main === name) updated.main = "";
+      if (updated.replaced === name) updated.replaced = "";
+      if (idx === posIdx) updated.main = name;
+      return updated;
+    });
+  }
+  updateNextSetEntry(scope, Object.assign({}, entry, { court: nextCourt }));
+}
+function swapNextSetSlots(scope, fromIdx, toIdx) {
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  const core = typeof LineupCore !== "undefined" ? LineupCore : null;
+  let nextCourt = [];
+  if (core && typeof core.swapCourtSlots === "function") {
+    nextCourt = core.swapCourtSlots({
+      court: entry.court || [],
+      fromIdx,
+      toIdx
+    });
+  } else {
+    nextCourt = getCourtShape(entry.court || []);
+    const tmp = nextCourt[fromIdx];
+    nextCourt[fromIdx] = nextCourt[toIdx];
+    nextCourt[toIdx] = tmp;
+  }
+  updateNextSetEntry(scope, Object.assign({}, entry, { court: nextCourt }));
+}
+function clearNextSetSlot(scope, posIdx) {
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  const nextCourt = getCourtShape(entry.court || []).map((slot, idx) => {
+    if (idx !== posIdx) return slot;
+    return { main: "", replaced: "" };
+  });
+  updateNextSetEntry(scope, Object.assign({}, entry, { court: nextCourt }));
+}
+function renderNextSetLineup(scope, courtEl, benchEl) {
+  if (!courtEl || !benchEl) return;
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  courtEl.innerHTML = "";
+  const court = getCourtShape(entry.court || []);
+  const numbersMap = getPlayerNumbersForScope(scope);
+  const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  court.forEach((slot, idx) => {
+    const card = document.createElement("div");
+    card.className = "lineup-slot pos-" + (idx + 1) + (!slot.main ? " empty" : "");
+    card.style.gridArea = "pos" + (idx + 1);
+    card.dataset.pos = "P" + (idx + 1);
+    if (slot.main) {
+      card.draggable = true;
+      card.addEventListener("dragstart", e => {
+        nextSetDragName = slot.main;
+        nextSetDragFromIdx = idx;
+        nextSetDragScope = scope;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", slot.main);
+          e.dataTransfer.effectAllowed = "move";
+        }
+      });
+      card.addEventListener("dragend", () => {
+        nextSetDragName = "";
+        nextSetDragFromIdx = null;
+        nextSetDragScope = null;
+      });
+    }
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      card.classList.add("drop-over");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drop-over"));
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drop-over");
+      const name = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || nextSetDragName || "";
+      if (!name) return;
+      if (nextSetDragScope && nextSetDragScope !== scope) return;
+      if (typeof nextSetDragFromIdx === "number" && nextSetDragFromIdx !== idx) {
+        swapNextSetSlots(scope, nextSetDragFromIdx, idx);
+      } else {
+        setNextSetPlayer(scope, idx, name);
+      }
+      nextSetDragFromIdx = null;
+      nextSetDragName = "";
+      nextSetDragScope = null;
+      renderNextSetLineups();
+    });
+    card.addEventListener("click", () => {
+      if (slot.main) {
+        clearNextSetSlot(scope, idx);
+        renderNextSetLineups();
+      }
+    });
+    card.addEventListener("touchend", e => {
+      if (!nextSetDragName) return;
+      if (nextSetDragScope && nextSetDragScope !== scope) return;
+      e.preventDefault();
+      if (typeof nextSetDragFromIdx === "number" && nextSetDragFromIdx !== idx) {
+        swapNextSetSlots(scope, nextSetDragFromIdx, idx);
+      } else {
+        setNextSetPlayer(scope, idx, nextSetDragName);
+      }
+      nextSetDragName = "";
+      nextSetDragFromIdx = null;
+      nextSetDragScope = null;
+      renderNextSetLineups();
+    });
+    const body = document.createElement("div");
+    body.className = "slot-body";
+    const nameLabel = document.createElement("div");
+    nameLabel.className = "slot-name";
+    nameLabel.textContent = slot.main ? formatLineupModalName(slot.main, { compactCourt: true }) : "Trascina qui";
+    body.appendChild(nameLabel);
+    card.appendChild(body);
+    courtEl.appendChild(card);
+  });
+  const benchNames = getBenchForLineupWithRoster(
+    court,
+    getPlayersForScope(scope),
+    getLiberosForScope(scope),
+    numbersMap
+  );
+  benchEl.innerHTML = "";
+  if (benchNames.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "bench-empty";
+    empty.textContent = "Nessuna riserva disponibile.";
+    benchEl.appendChild(empty);
+  } else {
+    benchNames.forEach(name => {
+      const chip = document.createElement("div");
+      chip.className = "lineup-chip";
+      chip.draggable = true;
+      chip.dataset.playerName = name;
+      chip.addEventListener("dragstart", e => {
+        nextSetDragName = name;
+        nextSetDragFromIdx = null;
+        nextSetDragScope = scope;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", name);
+          e.dataTransfer.effectAllowed = "move";
+        }
+      });
+      chip.addEventListener("dragend", () => {
+        nextSetDragName = "";
+        nextSetDragFromIdx = null;
+        nextSetDragScope = null;
+      });
+      chip.addEventListener("click", () => {
+        const nextEmpty = court.findIndex(slot => !slot.main);
+        const targetIdx = nextEmpty !== -1 ? nextEmpty : 0;
+        setNextSetPlayer(scope, targetIdx, name);
+        renderNextSetLineups();
+      });
+      chip.addEventListener("touchstart", e => {
+        if (!isCoarse) return;
+        e.preventDefault();
+        nextSetDragName = name;
+        nextSetDragScope = scope;
+      });
+      const span = document.createElement("span");
+      span.textContent = formatLineupModalName(name, { compactCourt: true });
+      chip.appendChild(span);
+      benchEl.appendChild(chip);
+    });
+  }
+}
+function renderNextSetLineups() {
+  if (!nextSetDraft) return;
+  updateNextSetRotationUI();
+  renderNextSetLineup("opponent", elNextSetCourtOpp, elNextSetBenchOpp);
+  renderNextSetLineup("our", elNextSetCourtOur, elNextSetBenchOur);
+  updateNextSetDefaultButtons();
+}
+function updateNextSetDefaultButtons() {
+  if (elNextSetDefaultOur) {
+    const defaults = getRawDefaultStartForScope("our");
+    const hasLineup = !!defaults;
+    elNextSetDefaultOur.disabled = !hasLineup;
+  }
+  if (elNextSetDefaultOpp) {
+    const defaults = getRawDefaultStartForScope("opponent");
+    const hasLineup = !!defaults;
+    elNextSetDefaultOpp.disabled = !hasLineup;
+  }
+}
+function updateNextSetRotationUI() {
+  if (!nextSetDraft) return;
+  if (elNextSetRotationSelectOur) {
+    elNextSetRotationSelectOur.value = String(nextSetDraft.our && nextSetDraft.our.rotation ? nextSetDraft.our.rotation : 1);
+  }
+  if (elNextSetRotationSelectOpp) {
+    elNextSetRotationSelectOpp.value = String(
+      nextSetDraft.opponent && nextSetDraft.opponent.rotation ? nextSetDraft.opponent.rotation : 1
+    );
+  }
+}
+function setNextSetRotation(scope, value) {
+  if (!nextSetDraft) return;
+  const rotation = Math.min(6, Math.max(1, parseInt(value, 10) || 1));
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  updateNextSetEntry(scope, Object.assign({}, entry, { rotation }));
+  updateNextSetRotationUI();
+}
+function rotateNextSetCourt(scope, direction) {
+  if (!nextSetDraft) return;
+  const entry = getNextSetEntry(scope);
+  if (!entry) return;
+  const court = getCourtShape(entry.court || []);
+  let rotated = [];
+  if (direction === "cw") {
+    rotated = [court[5], court[0], court[1], court[2], court[3], court[4]];
+  } else {
+    rotated = [court[1], court[2], court[3], court[4], court[5], court[0]];
+  }
+  const currentRotation = entry.rotation || 1;
+  const rotation = direction === "cw" ? ((currentRotation % 6) + 1) : (currentRotation === 1 ? 6 : currentRotation - 1);
+  updateNextSetEntry(scope, Object.assign({}, entry, { court: rotated, rotation }));
+  renderNextSetLineups();
+}
+function getDefaultSetStartForScope(scope = "our") {
+  const defaultGetter =
+    scope === "opponent" ? getSelectedOpponentTeamDefaultSettings : getSelectedTeamDefaultSettings;
+  const defaults = typeof defaultGetter === "function" ? defaultGetter() : null;
+  const players = getPlayersForScope(scope);
+  const lineup = defaults && defaults.defaultLineup ? defaults.defaultLineup : players;
+  const rotation = defaults && defaults.defaultRotation ? defaults.defaultRotation : 1;
+  return {
+    court: buildCourtFromNames(lineup),
+    rotation: rotation
+  };
+}
+function getRawDefaultStartForScope(scope = "our") {
+  if (typeof loadTeamFromStorage !== "function" || typeof extractRosterFromTeam !== "function") return null;
+  const teamName = scope === "opponent" ? state.selectedOpponentTeam || "" : state.selectedTeam || "";
+  if (!teamName) return null;
+  const team = scope === "opponent" ? loadOpponentTeamFromStorage(teamName) : loadTeamFromStorage(teamName);
+  if (!team) return null;
+  const roster = extractRosterFromTeam(team);
+  const lineup = Array.isArray(roster.defaultLineup) ? roster.defaultLineup : [];
+  const hasLineup = lineup.some(name => (name || "").trim());
+  if (!hasLineup) return null;
+  const rotation = roster.defaultRotation || 1;
+  return { court: buildCourtFromNames(lineup), rotation };
+}
+function getPreviousSetStart(scope, setNum) {
+  if (!state.setStarts || setNum <= 1) return null;
+  const prev = state.setStarts[setNum - 1];
+  if (!prev) return null;
+  const entry = scope === "opponent" ? prev.opponent : prev.our;
+  if (!entry) return null;
+  return {
+    court: cloneCourt(entry.court || []),
+    rotation: typeof entry.rotation === "number" ? entry.rotation : 1
+  };
+}
+function computeSetWinner(setNum) {
+  if (!setNum) return null;
+  const summary = computePointsSummary(setNum, { teamScope: "our" });
+  if (!summary) return null;
+  if (summary.totalFor === summary.totalAgainst) return null;
+  return summary.totalFor > summary.totalAgainst ? "our" : "opponent";
+}
+function computeSetWinScore() {
+  const results = state.setResults || {};
+  let totalFor = 0;
+  let totalAgainst = 0;
+  Object.keys(results).forEach(key => {
+    const winner = results[key];
+    if (winner === "our") totalFor += 1;
+    if (winner === "opponent") totalAgainst += 1;
+  });
+  return { for: totalFor, against: totalAgainst };
+}
+function updateSetScoreDisplays() {
+  const score = computeSetWinScore();
+  const label = score.for + " - " + score.against;
+  if (elLiveSetScore) elLiveSetScore.textContent = label;
+  if (elAggSetScore) elAggSetScore.textContent = label;
+}
+function buildNextSetDraft(setNum) {
+  const nextSet = Math.min(5, Math.max(1, setNum || 1));
+  const baseOurCourt =
+    typeof removeLiberosAndRestoreForScope === "function"
+      ? removeLiberosAndRestoreForScope(state.court || [], "our")
+      : cloneCourt(state.court || []);
+  const baseOppCourt =
+    typeof removeLiberosAndRestoreForScope === "function"
+      ? removeLiberosAndRestoreForScope(state.opponentCourt || [], "opponent")
+      : cloneCourt(state.opponentCourt || []);
+  const our = {
+    court: cloneCourt(baseOurCourt),
+    rotation: state.rotation || 1
+  };
+  const opponent = {
+    court: cloneCourt(baseOppCourt),
+    rotation: state.opponentRotation || 1
+  };
+  const serveDefault = !!state.isServing;
+  return {
+    setNum: nextSet,
+    our,
+    opponent,
+    swapCourt: nextSet > 1,
+    isServing: serveDefault
+  };
+}
+function openNextSetLineupModal(scope = "our") {
+  if (!nextSetDraft) return;
+  lineupModalContext = "next-set";
+  lineupModalScope = scope === "opponent" ? "opponent" : "our";
+  const entry = lineupModalScope === "opponent" ? nextSetDraft.opponent : nextSetDraft.our;
+  lineupModalCourt = cloneCourt((entry && entry.court) || []);
+  lineupModalDefaultRotation = entry && typeof entry.rotation === "number" ? entry.rotation : null;
+  lineupDragName = "";
+  lineupSelectedName = "";
+  lineupNumberMode = false;
+  renderLineupModal();
+  updateLineupModalControls();
+  if (elLineupModal) {
+    if (isDesktopCourtModalLayout()) {
+      setCourtAreaLocked(true);
+    }
+    updateCourtModalPlacement();
+    elLineupModal.classList.remove("hidden");
+    setModalOpenState(true);
+  }
+}
+function openNextSetModal(setNum) {
+  if (!elNextSetInline) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab !== "scout") return;
+  nextSetDraft = buildNextSetDraft(setNum);
+  if (elNextSetServeOurLabel) {
+    elNextSetServeOurLabel.textContent = getTeamNameForScope("our");
+  }
+  if (elNextSetServeOppLabel) {
+    elNextSetServeOppLabel.textContent = getTeamNameForScope("opponent");
+  }
+  if (elNextSetSideOurLabel) {
+    elNextSetSideOurLabel.textContent = getTeamNameForScope("our");
+  }
+  if (elNextSetSideOppLabel) {
+    elNextSetSideOppLabel.textContent = getTeamNameForScope("opponent");
+  }
+  if (elNextSetTeamOur) {
+    elNextSetTeamOur.textContent = getTeamNameForScope("our");
+  }
+  if (elNextSetTeamOpp) {
+    elNextSetTeamOpp.textContent = getTeamNameForScope("opponent");
+  }
+  if (elNextSetSwapCourt) {
+    elNextSetSwapCourt.checked = !!nextSetDraft.swapCourt;
+    elNextSetSwapCourt.disabled = false;
+  }
+  if (elNextSetServeOur) elNextSetServeOur.checked = !!nextSetDraft.isServing;
+  if (elNextSetServeOpp) elNextSetServeOpp.checked = !nextSetDraft.isServing;
+  if (elNextSetBlockOpp) {
+    elNextSetBlockOpp.classList.toggle("hidden", !state.useOpponentTeam);
+  }
+  const isFirstSet = nextSetDraft.setNum === 1;
+  if (elNextSetSwapRow) elNextSetSwapRow.classList.toggle("hidden", isFirstSet);
+  if (elNextSetSides) elNextSetSides.classList.toggle("hidden", !isFirstSet);
+  if (elNextSetSideOur) elNextSetSideOur.checked = !nextSetDraft.swapCourt;
+  if (elNextSetSideOpp) elNextSetSideOpp.checked = !!nextSetDraft.swapCourt;
+  if (elNextSetCancel) elNextSetCancel.classList.toggle("hidden", isFirstSet);
+  if (elNextSetClose) elNextSetClose.classList.toggle("hidden", isFirstSet);
+  const title = document.getElementById("next-set-title");
+  if (title) title.textContent = "Preparazione set " + nextSetDraft.setNum;
+  elNextSetInline.classList.remove("hidden");
+  elNextSetInline.setAttribute("aria-hidden", "false");
+  nextSetModalOpen = true;
+  setScoutControlsDisabled(true);
+  const courtArea = document.getElementById("court-area");
+  if (courtArea) {
+    courtArea.classList.add("court-area--next-set");
+  }
+  renderNextSetLineups();
+}
+function closeNextSetModal({ force = false } = {}) {
+  if (!elNextSetInline) return;
+  if (!force && nextSetDraft && nextSetDraft.setNum === 1) return;
+  elNextSetInline.classList.add("hidden");
+  elNextSetInline.setAttribute("aria-hidden", "true");
+  nextSetDraft = null;
+  nextSetModalOpen = false;
+  setScoutControlsDisabled(!!state.matchFinished);
+  nextSetDragName = "";
+  nextSetDragFromIdx = null;
+  nextSetDragScope = null;
+  const courtArea = document.getElementById("court-area");
+  if (courtArea) {
+    courtArea.classList.remove("court-area--next-set");
+  }
+}
+function applyNextSetDraft() {
+  if (!nextSetDraft) return;
+  const prevSet = state.currentSet || 1;
+  const nextSet = nextSetDraft.setNum || prevSet;
+  const prevSetResults = cloneSetMap(state.setResults);
+  const prevSetStarts = cloneSetMap(state.setStarts);
+  const nextSetResults = cloneSetMap(prevSetResults);
+  if (nextSet > 1 && !nextSetResults[prevSet]) {
+    const winner = computeSetWinner(prevSet);
+    if (winner) nextSetResults[prevSet] = winner;
+  }
+  const nextSetStarts = cloneSetMap(prevSetStarts);
+  const ourRotation =
+    typeof nextSetDraft.our.rotation === "number"
+      ? nextSetDraft.our.rotation
+      : state.rotation || 1;
+  const oppRotation =
+    typeof nextSetDraft.opponent.rotation === "number"
+      ? nextSetDraft.opponent.rotation
+      : state.opponentRotation || 1;
+  nextSetStarts[nextSet] = {
+    our: { court: cloneCourt(nextSetDraft.our.court || []), rotation: ourRotation },
+    opponent: { court: cloneCourt(nextSetDraft.opponent.court || []), rotation: oppRotation },
+    swapCourt: !!nextSetDraft.swapCourt,
+    isServing: !!nextSetDraft.isServing
+  };
+  state.setResults = nextSetResults;
+  state.setStarts = nextSetStarts;
+  state.courtSideSwapped = !!nextSetDraft.swapCourt;
+  syncCourtSideLayout();
+  if (typeof commitCourtChange === "function") {
+    commitCourtChange(cloneCourt(nextSetDraft.our.court || []), { clean: true });
+  } else {
+    state.court = cloneCourt(nextSetDraft.our.court || []);
+  }
+  if (state.useOpponentTeam) {
+    if (typeof commitCourtChangeForScope === "function") {
+      commitCourtChangeForScope(cloneCourt(nextSetDraft.opponent.court || []), "opponent");
+    } else {
+      state.opponentCourt = cloneCourt(nextSetDraft.opponent.court || []);
+    }
+  }
+  if (typeof setRotation === "function") {
+    setRotation(ourRotation);
+  } else {
+    state.rotation = ourRotation;
+  }
+  if (state.useOpponentTeam) {
+    if (typeof setOpponentRotation === "function") {
+      setOpponentRotation(oppRotation);
+    } else {
+      state.opponentRotation = oppRotation;
+    }
+  }
+  if (typeof setIsServing === "function") {
+    setIsServing(!!nextSetDraft.isServing);
+  } else {
+    state.isServing = !!nextSetDraft.isServing;
+  }
+  if (nextSet !== prevSet) {
+    applySetChange(nextSet, {
+      prevSet,
+      nextSet,
+      prevFinished: !!state.matchFinished,
+      nextFinished: false,
+      actionType: "set-change",
+      prevSetResults,
+      nextSetResults,
+      prevSetStarts,
+      nextSetStarts
+    });
+  } else {
+    state.matchFinished = false;
+    saveState({ persistLocal: true });
+    renderEventsLog();
+    renderLiveScore();
+    updateMatchStatusUI();
+  }
+  renderPlayers();
+  renderBenchChips();
+  renderLineupChips();
+  if (state.useOpponentTeam) {
+    renderOpponentPlayers();
+  }
+  updateSetScoreDisplays();
+  closeNextSetModal({ force: true });
+}
+function shouldOpenNextSetModal() {
+  const hasEvents = state.events && state.events.length > 0;
+  const currentSet = state.currentSet || 1;
+  const hasStart = state.setStarts && state.setStarts[currentSet];
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  return activeTab === "scout" && !hasEvents && !hasStart;
+}
 function getLineupModalPlayers() {
   return lineupModalScope === "opponent" ? state.opponentPlayers || [] : state.players || [];
 }
@@ -437,8 +1000,14 @@ function getBenchForLineupWithRoster(court, rosterNames, liberos, numbersMap) {
   return bench;
 }
 function updateLineupModalControls() {
-  if (elLineupModalSaveOverride) elLineupModalSaveOverride.classList.remove("hidden");
-  if (elLineupModalSaveSubstitution) elLineupModalSaveSubstitution.classList.remove("hidden");
+  const isNextSet = lineupModalContext === "next-set";
+  if (elLineupModalSaveOverride) {
+    elLineupModalSaveOverride.classList.remove("hidden");
+    elLineupModalSaveOverride.textContent = isNextSet ? "Salva formazione" : "Metti in campo (Override)";
+  }
+  if (elLineupModalSaveSubstitution) {
+    elLineupModalSaveSubstitution.classList.toggle("hidden", isNextSet);
+  }
   if (elLineupModalTitle) {
     elLineupModalTitle.textContent =
       lineupModalScope === "opponent" ? "Imposta formazione avversaria" : "Imposta formazione";
@@ -1080,6 +1649,7 @@ function renderLineupModal() {
   }
 }
 function openMobileLineupModal(scope = "our") {
+  lineupModalContext = "match";
   lineupModalScope = scope === "opponent" ? "opponent" : "our";
   lineupModalDefaultRotation = null;
   const libSet = new Set(getLineupModalLiberos());
@@ -1111,11 +1681,27 @@ function closeLineupModal() {
   lineupDragName = "";
   lineupSelectedName = "";
   lineupNumberMode = false;
+  lineupModalContext = "match";
 }
 function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
   const nextCourt = getCourtShape(lineupModalCourt);
   const applyDefaultRotation = lineupModalDefaultRotation;
+  if (lineupModalContext === "next-set" && nextSetDraft) {
+    const draftEntry = lineupModalScope === "opponent" ? nextSetDraft.opponent : nextSetDraft.our;
+    const nextRotation =
+      typeof applyDefaultRotation === "number"
+        ? applyDefaultRotation
+        : (draftEntry && typeof draftEntry.rotation === "number" ? draftEntry.rotation : null);
+    if (lineupModalScope === "opponent") {
+      nextSetDraft.opponent = { court: cloneCourt(nextCourt), rotation: nextRotation };
+    } else {
+      nextSetDraft.our = { court: cloneCourt(nextCourt), rotation: nextRotation };
+    }
+    lineupModalDefaultRotation = null;
+    closeLineupModal();
+    return;
+  }
   if (lineupModalScope === "opponent") {
     if (typeof commitCourtChangeForScope === "function") {
       commitCourtChangeForScope(nextCourt, "opponent");
@@ -8970,6 +9556,7 @@ function renderLiveScore() {
   if (elLiveScoreModal) {
     elLiveScoreModal.textContent = totalLabel;
   }
+  updateSetScoreDisplays();
   updateMatchStatusUI();
 }
 function handleAutoRotationFromEvent(eventObj, scope = "our") {
@@ -9249,7 +9836,9 @@ function updateMatchStatusUI() {
     btn.classList.toggle("resume-btn", finished);
     btn.classList.toggle("primary", finished);
   });
-  setScoutControlsDisabled(finished);
+  if (!nextSetModalOpen) {
+    setScoutControlsDisabled(finished);
+  }
   document.body.dataset.matchFinished = finished ? "true" : "false";
 }
 function setScoutControlsDisabled(disabled) {
@@ -9258,6 +9847,7 @@ function setScoutControlsDisabled(disabled) {
   if (!scope) return;
   scope.querySelectorAll("button").forEach(btn => {
     if (!btn || allowIds.has(btn.id)) return;
+    if (btn.closest("#next-set-inline")) return;
     btn.disabled = !!disabled;
   });
 }
@@ -9280,7 +9870,11 @@ function applySetChange(nextSet, options = {}) {
     nextFinished = false,
     actionType = "set-change",
     prevClock = snapshotSkillClock(),
-    prevVideoClock = snapshotVideoClock()
+    prevVideoClock = snapshotVideoClock(),
+    prevSetResults = null,
+    nextSetResults = null,
+    prevSetStarts = null,
+    nextSetStarts = null
   } = options;
   if (actionType === "match-end") {
     pauseSkillClock();
@@ -9303,6 +9897,12 @@ function applySetChange(nextSet, options = {}) {
   }
   state.matchFinished = nextFinished;
   setCurrentSet(nextSet);
+  if (nextSetResults) {
+    state.setResults = nextSetResults;
+  }
+  if (nextSetStarts) {
+    state.setStarts = nextSetStarts;
+  }
   recordSetAction(actionType, {
     prevSet,
     nextSet,
@@ -9311,7 +9911,11 @@ function applySetChange(nextSet, options = {}) {
     prevClock,
     nextClock: snapshotSkillClock(),
     prevVideoClock,
-    nextVideoClock: snapshotVideoClock()
+    nextVideoClock: snapshotVideoClock(),
+    prevSetResults,
+    nextSetResults,
+    prevSetStarts,
+    nextSetStarts
   });
   saveState({ persistLocal: true });
   renderEventsLog();
@@ -9355,6 +9959,7 @@ function renderScoreAndRotations(summary, teamScope = "our") {
   if (elAggScore) {
     elAggScore.textContent = totalLabel;
   }
+  updateSetScoreDisplays();
   if (elAggSetCards) {
     elAggSetCards.innerHTML = "";
     const setsData = computeSetScores(teamScope);
@@ -12881,6 +13486,8 @@ function buildMatchExportPayload() {
       stats: state.stats,
       metricsConfig: state.metricsConfig,
       scoreOverrides: state.scoreOverrides,
+      setResults: state.setResults,
+      setStarts: state.setStarts,
       matchFinished: state.matchFinished,
       savedTeams: state.savedTeams,
       savedOpponentTeams: state.savedOpponentTeams || state.savedTeams,
@@ -12982,6 +13589,8 @@ function applyImportedMatch(nextState, options = {}) {
   merged.matchFinished = !!nextState.matchFinished;
   merged.skillClock = nextState.skillClock || { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
   merged.scoreOverrides = normalizeScoreOverrides(nextState.scoreOverrides || {});
+  merged.setResults = nextState.setResults || state.setResults || {};
+  merged.setStarts = nextState.setStarts || state.setStarts || {};
   merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "", lastPlaybackSeconds: 0 };
   if (typeof merged.video.lastPlaybackSeconds !== "number") {
     merged.video.lastPlaybackSeconds = 0;
@@ -13505,9 +14114,18 @@ function resetMatch() {
   state.autoRoleBaseCourt = preservedAutoRoleCourt;
   autoRoleBaseCourt = preservedAutoRoleCourt.length ? [...preservedAutoRoleCourt] : autoRoleBaseCourt;
   state.currentSet = 1;
+  state.setResults = {};
+  state.setStarts = {};
   state.scoreOverrides = {};
   state.matchFinished = false;
   state.autoRotatePending = false;
+  state.opponentAutoRotatePending = false;
+  state.skillFlowOverride = null;
+  state.opponentSkillFlowOverride = null;
+  state.freeballPending = false;
+  state.freeballPendingScope = "our";
+  state.flowTeamScope = "our";
+  Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
   state.isServing = preservedServing;
   state.liberoAutoMap = preservedLiberoMap;
   state.preferredLibero = preservedPreferredLibero;
@@ -13590,6 +14208,12 @@ function undoLastEvent() {
   if (ev.actionType === "set-change" || ev.actionType === "match-end") {
     const prevSet = ev.prevSet || 1;
     const prevFinished = !!ev.prevMatchFinished;
+    if (ev.prevSetResults) {
+      state.setResults = ev.prevSetResults;
+    }
+    if (ev.prevSetStarts) {
+      state.setStarts = ev.prevSetStarts;
+    }
     state.matchFinished = prevFinished;
     setCurrentSet(prevSet, { save: false });
     saveState();
@@ -13826,6 +14450,9 @@ function setActiveTab(target) {
   if (prevTab === "video" && target !== "video") {
     stopPlayByPlay();
   }
+  if (target === "scout" && shouldOpenNextSetModal()) {
+    openNextSetModal(state.currentSet || 1);
+  }
 }
 function initTabs() {
   if (!tabButtons || !tabPanels) return;
@@ -14000,6 +14627,8 @@ async function init() {
   if (typeof loadStateFromIndexedDb === "function") {
     await loadStateFromIndexedDb();
   }
+  state.setResults = state.setResults || {};
+  state.setStarts = state.setStarts || {};
   setActiveTab(state.uiActiveTab || activeTab || "info");
   setActiveAggTab(state.uiAggTab || activeAggTab || "summary");
   ensureBaseRotationDefault();
@@ -15511,7 +16140,7 @@ async function init() {
     elBtnScoreOppPoint.addEventListener("click", handleOpponentPoint);
   }
   if (elBtnNextSet) {
-    elBtnNextSet.addEventListener("click", goToNextSet);
+    elBtnNextSet.addEventListener("click", () => openNextSetModal((state.currentSet || 1) + 1));
   }
   if (elBtnEndMatch) {
     elBtnEndMatch.addEventListener("click", endMatch);
@@ -15520,10 +16149,106 @@ async function init() {
     elBtnScoreTeamErrorModal.addEventListener("click", openErrorModal);
   }
   if (elBtnNextSetModal) {
-    elBtnNextSetModal.addEventListener("click", goToNextSet);
+    elBtnNextSetModal.addEventListener("click", () => openNextSetModal((state.currentSet || 1) + 1));
   }
   if (elBtnEndMatchModal) {
     elBtnEndMatchModal.addEventListener("click", endMatch);
+  }
+  if (elNextSetDefaultOur) {
+    elNextSetDefaultOur.addEventListener("click", () => {
+      if (!nextSetDraft) return;
+      const defaults = getRawDefaultStartForScope("our");
+      if (!defaults) return;
+      nextSetDraft.our = defaults;
+      renderNextSetLineups();
+    });
+  }
+  if (elNextSetRotateCwOur) {
+    elNextSetRotateCwOur.addEventListener("click", () => rotateNextSetCourt("our", "cw"));
+  }
+  if (elNextSetRotateCcwOur) {
+    elNextSetRotateCcwOur.addEventListener("click", () => rotateNextSetCourt("our", "ccw"));
+  }
+  if (elNextSetRotationSelectOur) {
+    elNextSetRotationSelectOur.addEventListener("change", () => {
+      setNextSetRotation("our", elNextSetRotationSelectOur.value);
+    });
+  }
+  if (elNextSetDefaultOpp) {
+    elNextSetDefaultOpp.addEventListener("click", () => {
+      if (!nextSetDraft) return;
+      const defaults = getRawDefaultStartForScope("opponent");
+      if (!defaults) return;
+      nextSetDraft.opponent = defaults;
+      renderNextSetLineups();
+    });
+  }
+  if (elNextSetRotateCwOpp) {
+    elNextSetRotateCwOpp.addEventListener("click", () => rotateNextSetCourt("opponent", "cw"));
+  }
+  if (elNextSetRotateCcwOpp) {
+    elNextSetRotateCcwOpp.addEventListener("click", () => rotateNextSetCourt("opponent", "ccw"));
+  }
+  if (elNextSetRotationSelectOpp) {
+    elNextSetRotationSelectOpp.addEventListener("change", () => {
+      setNextSetRotation("opponent", elNextSetRotationSelectOpp.value);
+    });
+  }
+  if (elNextSetSwapCourt) {
+    elNextSetSwapCourt.addEventListener("change", () => {
+      if (nextSetDraft) {
+        nextSetDraft.swapCourt = !!elNextSetSwapCourt.checked;
+      }
+    });
+  }
+  if (elNextSetSideOur) {
+    elNextSetSideOur.addEventListener("change", () => {
+      if (!nextSetDraft) return;
+      if (elNextSetSideOur.checked) {
+        nextSetDraft.swapCourt = false;
+      }
+    });
+  }
+  if (elNextSetSideOpp) {
+    elNextSetSideOpp.addEventListener("change", () => {
+      if (!nextSetDraft) return;
+      if (elNextSetSideOpp.checked) {
+        nextSetDraft.swapCourt = true;
+      }
+    });
+  }
+  if (elNextSetServeOur) {
+    elNextSetServeOur.addEventListener("change", () => {
+      if (nextSetDraft && elNextSetServeOur.checked) {
+        nextSetDraft.isServing = true;
+      }
+    });
+  }
+  if (elNextSetServeOpp) {
+    elNextSetServeOpp.addEventListener("change", () => {
+      if (nextSetDraft && elNextSetServeOpp.checked) {
+        nextSetDraft.isServing = false;
+      }
+    });
+  }
+  if (elNextSetStart) {
+    elNextSetStart.addEventListener("click", applyNextSetDraft);
+  }
+  if (elNextSetCancel) {
+    elNextSetCancel.addEventListener("click", closeNextSetModal);
+  }
+  if (elNextSetClose) {
+    elNextSetClose.addEventListener("click", closeNextSetModal);
+  }
+  if (elNextSetInline) {
+    elNextSetInline.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target === elNextSetInline) {
+        e.preventDefault();
+        closeNextSetModal();
+      }
+    });
   }
   if (elSkillModalClose) {
     elSkillModalClose.addEventListener("click", closeSkillModal);
@@ -15567,6 +16292,7 @@ async function init() {
       closeSkillModal();
       closeSettingsModal();
       closeAggSkillModal();
+      closeNextSetModal();
     }
   });
   document.addEventListener("mousedown", e => {
@@ -15628,6 +16354,9 @@ async function init() {
   updateVideoScoutModeLayout();
   renderVideoAnalysis();
   attachModalCloseHandlers();
+  if (shouldOpenNextSetModal()) {
+    openNextSetModal(state.currentSet || 1);
+  }
   registerServiceWorker();
   isLoadingMatch = false;
   if (typeof window !== "undefined") {
