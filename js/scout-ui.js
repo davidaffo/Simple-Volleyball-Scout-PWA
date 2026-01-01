@@ -7411,16 +7411,16 @@ function renderEventTableRows(target, events, options = {}) {
       ...(enableSelection && showCheckbox ? [{ label: "✓" }] : []),
       ...(showVideoTime ? [{ label: "Tempo", bulkKey: "videoTime" }] : []),
       ...(showIndex ? [{ label: "#" }] : []),
+      { label: "Set", bulkKey: "set" },
       { label: "Pt N" },
       { label: "Pt A" },
-      { label: "Set", bulkKey: "set" },
-      { label: "FB N" },
       { label: "Squadra" },
       { label: "Giocatrice", bulkKey: "player" },
       { label: "Alzatore", bulkKey: "setter" },
       { label: "Fondamentale", bulkKey: "skill" },
       { label: "Codice", bulkKey: "code" },
       { label: "Tipo errore" },
+      { label: "FB N" },
       { label: "Rot", bulkKey: "rotation" },
       { label: "Zona", bulkKey: "zone" },
       { label: "Pos Palleggio", bulkKey: "setterPosition" },
@@ -7429,9 +7429,9 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Base", bulkKey: "base" },
       { label: "Tipo Alzata", bulkKey: "setType" },
       { label: "Combinazione", bulkKey: "combination" },
+      { label: "Tipo Servizio", bulkKey: "serveType" },
       { label: "Servizio Start" },
       { label: "Servizio End" },
-      { label: "Tipo Servizio", bulkKey: "serveType" },
       { label: "Valut Rice", bulkKey: "receiveEvaluation" },
       { label: "Valut Att", bulkKey: "attackEvaluation" },
       { label: "Att BP", bulkKey: "attackBp" },
@@ -7561,25 +7561,24 @@ function renderEventTableRows(target, events, options = {}) {
           ]
         : []),
       ...(showIndex ? [{ text: String(displayIdx + 1) }] : []),
-      { text: valueToString(ev.homeScore) },
-      { text: valueToString(ev.visitorScore) },
       {
         text: ev.set || "1",
         editable: td => makeEditableCell(td, "Set", done => createNumberSelect(ev, "set", 1, 5, done), editGuard)
       },
-      { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
+      { text: valueToString(ev.homeScore) },
+      { text: valueToString(ev.visitorScore) },
       { text: resolveTeamLabel() },
       {
-              text: (() => {
-                const scope = getTeamScopeFromEvent(ev);
-                const players = getPlayersForScope(scope);
-                const numbers = getPlayerNumbersForScope(scope);
-                const name = ev.playerName || players[resolvePlayerIdx(ev)];
-                if (!name) return "—";
-                return scope === "opponent"
-                  ? formatNameWithNumberFor(name, numbers)
-                  : formatNameWithNumber(name);
-              })(),
+        text: (() => {
+          const scope = getTeamScopeFromEvent(ev);
+          const players = getPlayersForScope(scope);
+          const numbers = getPlayerNumbersForScope(scope);
+          const name = ev.playerName || players[resolvePlayerIdx(ev)];
+          if (!name) return "—";
+          return scope === "opponent"
+            ? formatNameWithNumberFor(name, numbers)
+            : formatNameWithNumber(name);
+        })(),
         editable: td => makeEditableCell(td, "Giocatrice", done => createPlayerSelect(ev, done), editGuard)
       },
       {
@@ -7613,6 +7612,7 @@ function renderEventTableRows(target, events, options = {}) {
             ? getErrorTypeLabel(ev.errorType)
             : ""
       },
+      { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
       {
         text: ev.rotation || "-",
         editable: td =>
@@ -7655,6 +7655,10 @@ function renderEventTableRows(target, events, options = {}) {
         editable: td => makeEditableCell(td, "Combinazione", done => createTextInput(ev, "combination", done), editGuard)
       },
       {
+        text: valueToString(ev.serveType),
+        editable: td => makeEditableCell(td, "Tipo servizio", done => createServeTypeSelect(ev, done), editGuard)
+      },
+      {
         text: formatTrajPoint(ev.serveStart),
         classes: ["traj-cell"],
         onClick: e => {
@@ -7673,10 +7677,6 @@ function renderEventTableRows(target, events, options = {}) {
             renderEventTableRows(target, events, options);
           });
         }
-      },
-      {
-        text: valueToString(ev.serveType),
-        editable: td => makeEditableCell(td, "Tipo servizio", done => createServeTypeSelect(ev, done), editGuard)
       },
       {
         text: receiveEvalDisplay,
