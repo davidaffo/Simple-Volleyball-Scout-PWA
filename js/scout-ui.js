@@ -242,6 +242,7 @@ let lineupSelectedName = "";
 let lineupNumberMode = false;
 let lineupModalScope = "our";
 let lineupDragFromIdx = null;
+let lineupModalDefaultRotation = null;
 let serveTypeInlineHandler = null;
 let serveTypeInlinePlayer = null;
 let serveTypeFocusPlayer = null;
@@ -464,6 +465,7 @@ function applyDefaultLineupToModal() {
   const names =
     roster.defaultLineup && roster.defaultLineup.length > 0 ? roster.defaultLineup : fallback;
   lineupModalCourt = Array.from({ length: 6 }, (_, idx) => ({ main: names[idx] || "", replaced: "" }));
+  lineupModalDefaultRotation = roster.defaultRotation || 1;
   renderLineupModal();
 }
 function applyNumberToLineupSlot(slotIdx, rawValue) {
@@ -1069,6 +1071,7 @@ function renderLineupModal() {
 }
 function openMobileLineupModal(scope = "our") {
   lineupModalScope = scope === "opponent" ? "opponent" : "our";
+  lineupModalDefaultRotation = null;
   const libSet = new Set(getLineupModalLiberos());
   const baseCourt =
     lineupModalScope === "opponent" ? state.opponentCourt || [] : state.court;
@@ -1102,6 +1105,7 @@ function closeLineupModal() {
 function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
   const nextCourt = getCourtShape(lineupModalCourt);
+  const applyDefaultRotation = lineupModalDefaultRotation;
   if (lineupModalScope === "opponent") {
     if (typeof commitCourtChangeForScope === "function") {
       commitCourtChangeForScope(nextCourt, "opponent");
@@ -1109,6 +1113,14 @@ function saveLineupModal({ countSubstitutions = false } = {}) {
       state.opponentCourt = nextCourt;
       saveState();
       if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+    }
+    if (applyDefaultRotation && typeof setOpponentRotation === "function") {
+      setOpponentRotation(applyDefaultRotation);
+    } else if (applyDefaultRotation) {
+      state.opponentRotation = Math.min(6, Math.max(1, parseInt(applyDefaultRotation, 10) || 1));
+      if (typeof updateOpponentRotationDisplay === "function") updateOpponentRotationDisplay();
+      if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+      saveState();
     }
   } else if (typeof commitCourtChange === "function") {
     commitCourtChange(nextCourt, { clean: true });
@@ -1120,10 +1132,20 @@ function saveLineupModal({ countSubstitutions = false } = {}) {
     if (typeof renderLineupChips === "function") renderLineupChips();
     if (typeof updateRotationDisplay === "function") updateRotationDisplay();
   }
+  if (lineupModalScope !== "opponent" && applyDefaultRotation) {
+    if (typeof setRotation === "function") {
+      setRotation(applyDefaultRotation);
+    } else {
+      state.rotation = Math.min(6, Math.max(1, parseInt(applyDefaultRotation, 10) || 1));
+      if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+      saveState();
+    }
+  }
   if (countSubstitutions && lineupModalScope !== "opponent") {
     const subs = getLineupSubstitutions(prevCourt || [], nextCourt);
     subs.forEach(sub => recordSubstitutionEvent(sub));
   }
+  lineupModalDefaultRotation = null;
   closeLineupModal();
 }
 function closeCurrentEdit({ refresh = false } = {}) {
@@ -4261,6 +4283,7 @@ function renderTeamCourtCards(options = {}) {
     container,
     scope = "our",
     court = [],
+    baseCourt = null,
     displayCourt = null,
     numbersMap = {},
     captainSet = new Set(),
@@ -4279,10 +4302,12 @@ function renderTeamCourtCards(options = {}) {
     const slotInfo = map[idx] || { slot: { main: "" }, idx: idx };
     const slot = slotInfo.slot || { main: "" };
     const posIdx = slotInfo.idx != null ? slotInfo.idx : idx;
-    const activeName = slot.main;
+    const fallbackSlot = baseCourt && baseCourt[idx] ? baseCourt[idx] : null;
+    const effectiveSlot = !slot.main && fallbackSlot && fallbackSlot.main ? fallbackSlot : slot;
+    const activeName = effectiveSlot.main;
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
-    const isLibSlot = libSet.has(slot.main);
+    const isLibSlot = libSet.has(effectiveSlot.main);
     if (isLibSlot) {
       card.classList.add("libero-card");
     }
@@ -4316,11 +4341,11 @@ function renderTeamCourtCards(options = {}) {
     tagLibero.style.visibility = isLibSlot ? "visible" : "hidden";
     tagBar.appendChild(posLabel);
     tagBar.appendChild(tagLibero);
-    if (allowReturn && isLibSlot && slot.replaced) {
+    if (allowReturn && isLibSlot && effectiveSlot.replaced) {
       const btnReturn = document.createElement("button");
       btnReturn.type = "button";
       btnReturn.className = "libero-return-btn";
-      btnReturn.title = "Rientra " + slot.replaced;
+      btnReturn.title = "Rientra " + effectiveSlot.replaced;
       btnReturn.textContent = "↩";
       const handleReturn = e => {
         e.stopPropagation();
@@ -4346,11 +4371,11 @@ function renderTeamCourtCards(options = {}) {
     if (isLibSlot) {
       nameLabel.classList.add("libero-flag");
     }
-    if (activeName && scope === "opponent" && typeof formatNameWithNumberFor === "function") {
-      nameLabel.textContent = formatNameWithNumberFor(activeName, numbersMap, {
-        captainSet,
-        compactCourt: true
-      });
+      if (activeName && scope === "opponent" && typeof formatNameWithNumberFor === "function") {
+        nameLabel.textContent = formatNameWithNumberFor(activeName, numbersMap, {
+          captainSet,
+          compactCourt: true
+        });
     } else {
       nameLabel.textContent = activeName
         ? formatNameWithNumber(activeName, { compactCourt: true })
@@ -4422,6 +4447,7 @@ function renderPlayers() {
     container: elPlayersContainer,
     scope: "our",
     court: displayCourt.map(item => item.slot || { main: "" }),
+    baseCourt: ensureCourtShapeFor(state.court),
     displayCourt,
     numbersMap: state.playerNumbers || {},
     captainSet: new Set((state.captains || []).map(name => name.toLowerCase())),
@@ -4480,6 +4506,7 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     container: elOpponentContainer,
     scope: "opponent",
     court: displayCourt.map(item => item.slot || { main: "" }),
+    baseCourt: ensureCourtShapeFor(state.opponentCourt || []),
     displayCourt,
     numbersMap: state.opponentPlayerNumbers || {},
     captainSet: new Set((state.opponentCaptains || []).map(name => name.toLowerCase())),

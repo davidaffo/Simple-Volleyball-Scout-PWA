@@ -3555,6 +3555,10 @@ function renderTeamManagerTable() {
       p.id = generatePlayerId();
     }
     const tr = document.createElement("tr");
+    tr.className = "team-manager-row";
+    const isLibero = String(p.role || "").toUpperCase() === "L";
+    if (isLibero) tr.classList.add("team-manager-row--libero");
+    if (p.out) tr.classList.add("team-manager-row--out");
     const numberInput = document.createElement("input");
     numberInput.type = "number";
     numberInput.min = "0";
@@ -3623,15 +3627,17 @@ function renderTeamManagerTable() {
     });
     liberoChk = document.createElement("input");
     liberoChk.type = "checkbox";
-    liberoChk.checked = p.role === "L";
+    liberoChk.checked = isLibero;
     liberoChk.addEventListener("change", () => {
       p.role = liberoChk.checked ? "L" : "";
+      renderTeamManagerTable();
     });
     const outChk = document.createElement("input");
     outChk.type = "checkbox";
     outChk.checked = !!p.out;
     outChk.addEventListener("change", () => {
       p.out = outChk.checked;
+      renderTeamManagerTable();
     });
     const delBtn = document.createElement("button");
     delBtn.type = "button";
@@ -3686,11 +3692,12 @@ function renderTeamManagerTable() {
 function getDefaultLineupRoster() {
   if (!teamManagerState) return [];
   const roster = (teamManagerState.players || [])
-    .filter(p => !p.out && (p.name || "").trim() !== "" && p.role !== "L")
+    .filter(p => (p.name || "").trim() !== "" && String(p.role || "").toUpperCase() !== "L")
     .map(p => ({
       name: buildFullName(p.lastName, p.firstName) || p.name.trim(),
       number: p.number || "",
-      isCaptain: !!p.isCaptain
+      isCaptain: !!p.isCaptain,
+      out: !!p.out
     }));
   roster.sort((a, b) => {
     const numA = a.number !== "" ? parseInt(a.number, 10) : NaN;
@@ -3798,9 +3805,11 @@ function renderDefaultLineupEditor() {
   const rosterNames = roster.map(p => p.name);
   const numbersMap = {};
   const captainSet = new Set();
+  const outSet = new Set();
   roster.forEach(player => {
     if (player.number) numbersMap[player.name] = String(player.number);
     if (player.isCaptain) captainSet.add(player.name);
+    if (player.out) outSet.add(player.name);
   });
   const current = normalizeDefaultLineup(teamManagerState.defaultLineup || [], rosterNames);
   teamManagerState.defaultLineup = current;
@@ -3822,9 +3831,15 @@ function renderDefaultLineupEditor() {
     slot.draggable = !!name;
     const nameLabel = document.createElement("span");
     nameLabel.className = "default-lineup-name";
-    nameLabel.textContent = name
-      ? formatDefaultLineupName(name, numbersMap, captainSet, { compactCourt: true })
-      : "";
+    if (name) {
+      const label = formatDefaultLineupName(name, numbersMap, captainSet, { compactCourt: true });
+      nameLabel.textContent = label;
+    if (outSet.has(name)) {
+      nameLabel.classList.add("default-lineup-out");
+    }
+    } else {
+      nameLabel.textContent = "";
+    }
     slot.appendChild(nameLabel);
     slot.addEventListener("dragstart", e => {
       if (!name) return;
@@ -3885,7 +3900,12 @@ function renderDefaultLineupEditor() {
     chip.className = "default-lineup-chip";
     chip.draggable = true;
     chip.dataset.playerName = p.name;
-    chip.textContent = formatDefaultLineupName(p.name, numbersMap, captainSet, { compactCourt: true }) || p.name;
+    const label =
+      formatDefaultLineupName(p.name, numbersMap, captainSet, { compactCourt: true }) || p.name;
+    chip.textContent = label;
+    if (p.out) {
+      chip.classList.add("default-lineup-out");
+    }
     chip.addEventListener("dragstart", e => {
       defaultLineupDragName = p.name;
       defaultLineupDragAt = Date.now();
@@ -4453,19 +4473,12 @@ function updatePlayersList(newPlayers, options = {}) {
     applyPlayersFromStateToTextarea();
     renderPlayersManagerList();
   } else {
-    if (state.events.length > 0 && askReset) {
-      const ok = confirm(
-        "Cambiare l'elenco di giocatrici azzererà tutte le statistiche del match. Procedere?"
-      );
-      if (!ok) return;
-    }
     if (typeof resetSetTypeState === "function") {
       resetSetTypeState();
     }
     state.players = normalized;
     state.playerNumbers = nextNumbers;
     if (!preserveCourt) {
-      state.events = [];
       ensureCourtShape();
       state.court = Array.from({ length: 6 }, () => ({ main: "" }));
       state.rotation = 1;
@@ -4483,7 +4496,6 @@ function updatePlayersList(newPlayers, options = {}) {
     resetAutoRoleCache();
     ensureMetricsConfigDefaults();
     state.savedTeams = state.savedTeams || {};
-    initStats();
     saveState();
     applyPlayersFromStateToTextarea();
     renderPlayersManagerList();

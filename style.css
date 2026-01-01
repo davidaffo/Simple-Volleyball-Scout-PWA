@@ -4345,6 +4345,19 @@ body[data-theme="light"] .default-lineup-chip {
   border-color: #e2e8f0;
   color: #0f172a;
 }
+.default-lineup-chip.default-lineup-out,
+.default-lineup-name.default-lineup-out {
+  color: #94a3b8;
+}
+.default-lineup-chip.default-lineup-out {
+  background: #0b0f16;
+  border-color: #334155;
+}
+body[data-theme="light"] .default-lineup-chip.default-lineup-out {
+  background: #f1f5f9;
+  border-color: #cbd5f5;
+  color: #64748b;
+}
 body[data-theme="light"] .default-lineup-rotation .rotation-select {
   background: #ffffff;
   color: #0f172a;
@@ -4387,6 +4400,68 @@ body[data-theme="light"] .default-lineup-slot::before {
 .team-manager-table td:nth-child(8) {
   width: 88px;
   text-align: center;
+}
+.team-manager-row--out td {
+  color: #94a3b8;
+}
+.team-manager-table tbody tr.team-manager-row--out {
+  background: #12151c !important;
+  box-shadow: inset 4px 0 0 #64748b;
+}
+.team-manager-table tbody tr.team-manager-row--out:hover {
+  background: #151a22 !important;
+}
+.team-manager-row--out .team-manager-input {
+  border-color: #4b5563;
+  background: rgba(15, 23, 42, 0.6);
+}
+body[data-theme="light"] .team-manager-row--out td {
+  color: #64748b;
+}
+body[data-theme="light"] .team-manager-table tbody tr.team-manager-row--out {
+  background: #e2e8f0 !important;
+  box-shadow: inset 4px 0 0 #94a3b8;
+}
+body[data-theme="light"] .team-manager-table tbody tr.team-manager-row--out:hover {
+  background: #dbe2ec !important;
+}
+body[data-theme="light"] .team-manager-row--out .team-manager-input {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.team-manager-row--libero td {
+  color: #dbeafe;
+}
+.team-manager-table tbody tr.team-manager-row--libero {
+  background: #0b2a4f !important;
+  box-shadow: inset 4px 0 0 #60a5fa;
+}
+.team-manager-table tbody tr.team-manager-row--libero:hover {
+  background: #0d2f57 !important;
+}
+.team-manager-row--libero .team-manager-input {
+  border-color: #3b82f6;
+  background: rgba(15, 37, 79, 0.6);
+}
+body[data-theme="light"] .team-manager-row--libero td {
+  color: #1e3a8a;
+}
+body[data-theme="light"] .team-manager-table tbody tr.team-manager-row--libero {
+  background: #dbeafe !important;
+  box-shadow: inset 4px 0 0 #3b82f6;
+}
+body[data-theme="light"] .team-manager-table tbody tr.team-manager-row--libero:hover {
+  background: #cfe2ff !important;
+}
+body[data-theme="light"] .team-manager-row--libero .team-manager-input {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+.team-manager-row--libero input[type="checkbox"] {
+  accent-color: #60a5fa;
+}
+.team-manager-row--out input[type="checkbox"] {
+  accent-color: #94a3b8;
 }
 .team-manager-id {
   font-family: "SFMono-Regular", ui-monospace, "DejaVu Sans Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
