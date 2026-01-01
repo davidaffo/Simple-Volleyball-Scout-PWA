@@ -2726,6 +2726,8 @@ function resetMatchState() {
   state.freeballPending = false;
   state.freeballPendingScope = "our";
   state.flowTeamScope = "our";
+  state.matchEndSetSnapshot = null;
+  state.matchEndSetRecorded = null;
   state.liberoAutoMap = preservedLiberoMap;
   state.preferredLibero = preservedPreferredLibero;
   state.courtViewMirrored = false;

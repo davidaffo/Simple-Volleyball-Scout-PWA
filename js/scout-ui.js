@@ -9939,11 +9939,27 @@ function endMatch() {
     resumeSkillClock();
     resumeVideoClock();
     state.matchFinished = false;
+    if (state.matchEndSetSnapshot) {
+      state.setResults = state.matchEndSetSnapshot;
+      state.matchEndSetSnapshot = null;
+    }
+    state.matchEndSetRecorded = null;
     saveState();
+    updateSetScoreDisplays();
     updateMatchStatusUI();
     return;
   }
   const current = state.currentSet || 1;
+  const winner = computeSetWinner(current);
+  if (winner) {
+    state.matchEndSetSnapshot = cloneSetMap(state.setResults);
+    state.matchEndSetRecorded = { set: current, winner };
+    state.setResults = cloneSetMap(state.setResults);
+    state.setResults[current] = winner;
+  } else {
+    state.matchEndSetSnapshot = cloneSetMap(state.setResults);
+    state.matchEndSetRecorded = { set: current, winner: null };
+  }
   applySetChange(current, {
     prevSet: current,
     nextSet: current,
@@ -14125,6 +14141,8 @@ function resetMatch() {
   state.freeballPending = false;
   state.freeballPendingScope = "our";
   state.flowTeamScope = "our";
+  state.matchEndSetSnapshot = null;
+  state.matchEndSetRecorded = null;
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
   state.isServing = preservedServing;
   state.liberoAutoMap = preservedLiberoMap;
