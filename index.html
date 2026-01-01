@@ -422,27 +422,29 @@
   <div class="tab-panel" data-tab="aggregated" id="aggregated-panel">
     <div id="print-match-title" class="print-match-title"></div>
     <div class="section">
-      <div class="agg-subnav">
-        <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
-        <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
-        <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Traiettorie</button>
-        <button class="agg-subtab-btn" data-agg-tab-target="serve">Battute</button>
-        <button class="agg-subtab-btn" data-agg-tab-target="player">Giocatrici</button>
-      </div>
-      <div class="analysis-filters analysis-team-filter">
-        <div class="analysis-filter">
-          <div class="analysis-filter__label">Squadra</div>
-          <div id="analysis-filter-teams" class="analysis-filter__options"></div>
+      <div class="agg-topbar">
+        <div class="agg-subnav">
+          <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Traiettorie</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="serve">Battute</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="player">Giocatrici</button>
+        </div>
+        <div class="analysis-filters analysis-team-filter analysis-team-filter--summary">
+          <div class="analysis-filter">
+            <div class="analysis-filter__label">Squadra</div>
+            <div id="analysis-filter-teams" class="analysis-filter__options"></div>
+          </div>
+          <div class="score-summary score-summary--inline">
+            <div class="score-card">
+              <label>Punteggio totale</label>
+              <div id="agg-score" class="score-value">0 - 0</div>
+              <div id="agg-set-cards" class="score-sets cards"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="agg-subpanel active" data-agg-tab="summary">
-        <div class="score-summary">
-          <div class="score-card">
-            <label>Punteggio totale</label>
-            <div id="agg-score" class="score-value">0 - 0</div>
-            <div id="agg-set-cards" class="score-sets cards"></div>
-          </div>
-        </div>
         <div class="table-wrapper">
           <table class="agg-table">
             <thead>

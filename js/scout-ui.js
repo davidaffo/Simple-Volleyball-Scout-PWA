@@ -5126,6 +5126,30 @@ function renderAggDetailHeader(thead, columns) {
   });
   thead.appendChild(tr);
 }
+function buildAggBodyHeaderRows(thead) {
+  if (!thead) return [];
+  const rows = Array.from(thead.querySelectorAll("tr"));
+  if (!rows.length) return [];
+  return rows
+    .map(sourceRow => {
+      const cells = Array.from(sourceRow.children || []);
+      if (!cells.length) return null;
+      const tr = document.createElement("tr");
+      tr.className = "agg-body-header";
+      cells.forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell.textContent || "";
+        if (cell.className) td.className = cell.className;
+        const colspan = cell.getAttribute("colspan");
+        if (colspan) td.setAttribute("colspan", colspan);
+        const rowspan = cell.getAttribute("rowspan");
+        if (rowspan) td.setAttribute("rowspan", rowspan);
+        tr.appendChild(td);
+      });
+      return tr;
+    })
+    .filter(Boolean);
+}
 function applySkillClassToCells(cells, skillId, startIndex = 0) {
   if (!skillId) return;
   cells.forEach((td, idx) => {
@@ -9486,7 +9510,7 @@ function getTeamFilterOptions() {
   return options;
 }
 function ensureAnalysisTeamFilterDefault() {
-  if (analysisTeamFilterState.teams.size === 0) {
+  if (!state.useOpponentTeam && analysisTeamFilterState.teams.size === 0) {
     analysisTeamFilterState.teams.add("our");
   }
 }
@@ -9499,11 +9523,6 @@ function handleAnalysisTeamFilterChange(e) {
   }
   const values = getCheckedValues(elAnalysisFilterTeams);
   analysisTeamFilterState.teams = new Set(values);
-  if (analysisTeamFilterState.teams.size === 0) {
-    analysisTeamFilterState.teams.add("our");
-    const fallback = elAnalysisFilterTeams.querySelector('input[value="our"]');
-    if (fallback) fallback.checked = true;
-  }
   renderAggregatedTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -11438,14 +11457,17 @@ function renderServeTrajectoryAnalysis() {
 }
 function renderAggregatedTable() {
   if (!elAggTableBody) return;
-  const { thead } = getAggTableElements();
+  const { table, thead } = getAggTableElements();
   ensureAggTableHeadCache(thead);
   renderAnalysisTeamFilter();
   const analysisScope = getAnalysisTeamScope();
-  const analysisPlayers = getPlayersForScope(analysisScope);
-  const analysisNumbers = getPlayerNumbersForScope(analysisScope);
-  const filteredEvents = filterEventsByAnalysisTeam(state.events || []);
-  ensureAnalysisStatsCache();
+  const showBothTeams =
+    state.useOpponentTeam &&
+    analysisTeamFilterState.teams.size === 0 &&
+    aggTableView.mode === "summary";
+  if (table) {
+    table.classList.toggle("agg-table--double", showBothTeams);
+  }
   const summaryAll = computePointsSummary(null, {
     excludeOpponentErrors: true,
     teamScope: analysisScope
@@ -11462,6 +11484,215 @@ function renderAggregatedTable() {
     thead.innerHTML = aggTableHeadCache;
   }
   elAggTableBody.innerHTML = "";
+  const renderAggSummaryForScope = (scope, { showHeader = false } = {}) => {
+    const analysisPlayers = getPlayersForScope(scope);
+    const analysisNumbers = getPlayerNumbersForScope(scope);
+    const filteredEvents = (state.events || []).filter(ev => matchesTeamFilter(ev, new Set([scope])));
+    const scopeSummary = computePointsSummary(null, {
+      excludeOpponentErrors: true,
+      teamScope: scope
+    });
+    if (showHeader) {
+      const headerRow = document.createElement("tr");
+      headerRow.className = "rotation-row total";
+      const headerCell = document.createElement("td");
+      headerCell.colSpan = 26;
+      headerCell.textContent = getTeamNameForScope(scope);
+      headerRow.appendChild(headerCell);
+      elAggTableBody.appendChild(headerRow);
+      const columnsRows = buildAggBodyHeaderRows(thead);
+      columnsRows.forEach(row => elAggTableBody.appendChild(row));
+    }
+    if (!analysisPlayers || analysisPlayers.length === 0) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 26;
+      td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
+      tr.appendChild(td);
+      elAggTableBody.appendChild(tr);
+      return;
+    }
+    const statsByPlayer = {};
+    filteredEvents.forEach(ev => {
+      if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+        return;
+      }
+      if (typeof ev.playerIdx !== "number" || !analysisPlayers[ev.playerIdx]) return;
+      if (!statsByPlayer[ev.playerIdx]) {
+        statsByPlayer[ev.playerIdx] = {};
+      }
+      if (!statsByPlayer[ev.playerIdx][ev.skillId]) {
+        statsByPlayer[ev.playerIdx][ev.skillId] = {
+          "#": 0,
+          "+": 0,
+          "!": 0,
+          "-": 0,
+          "=": 0,
+          "/": 0
+        };
+      }
+      statsByPlayer[ev.playerIdx][ev.skillId][ev.code] =
+        (statsByPlayer[ev.playerIdx][ev.skillId][ev.code] || 0) + 1;
+    });
+    if (!showBothTeams) {
+      analysisStatsCache = statsByPlayer;
+      analysisStatsScope = scope;
+    }
+    const playerPoints = computePlayerPointsMap(filteredEvents, scope);
+    const playerErrors = computePlayerErrorsMap(filteredEvents);
+    const totalsBySkill = {
+      serve: emptyCounts(),
+      pass: emptyCounts(),
+      attack: emptyCounts(),
+      block: emptyCounts(),
+      defense: emptyCounts()
+    };
+    let totalErrors = 0;
+    const sortedEntries =
+      scope === "opponent" ? getSortedPlayerEntriesForScope(scope) : getSortedPlayerEntries();
+    sortedEntries.forEach(({ name, idx }) => {
+      const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
+      const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
+      const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
+      const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
+      const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
+
+      const serveMetrics = computeMetrics(serveCounts, "serve");
+      const passMetrics = computeMetrics(passCounts, "pass");
+      const attackMetrics = computeMetrics(attackCounts, "attack");
+      const defenseMetrics = computeMetrics(defenseCounts, "defense");
+
+      mergeCounts(totalsBySkill.serve, serveCounts);
+      mergeCounts(totalsBySkill.pass, passCounts);
+      mergeCounts(totalsBySkill.attack, attackCounts);
+      mergeCounts(totalsBySkill.block, blockCounts);
+      mergeCounts(totalsBySkill.defense, defenseCounts);
+
+      const points = playerPoints[idx] || { for: 0, against: 0 };
+      const personalErrors = playerErrors[idx] || 0;
+      totalErrors += personalErrors;
+      const attackTotal = totalFromCounts(attackCounts);
+      const row = document.createElement("tr");
+      const cells = [
+        {
+          text:
+            scope === "opponent"
+              ? formatNameWithNumberFor(name, analysisNumbers)
+              : formatNameWithNumber(name),
+          isPlayer: true,
+          playerIdx: idx
+        },
+        { text: points.for || 0 },
+        { text: points.against || 0 },
+        { text: formatDelta((points.for || 0) - (points.against || 0)) },
+        { text: personalErrors || 0 },
+
+        { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
+        { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
+        { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
+        { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
+        { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
+
+        { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
+        { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+        { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
+        { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
+        { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
+
+        { text: attackTotal, className: "skill-col skill-attack" },
+        { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
+        { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
+        { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
+        { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
+        { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
+
+        { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
+        { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
+
+        { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
+        { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+        { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
+      ];
+      cells.forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell.text;
+        if (cell.className) td.className = cell.className;
+        if (cell.isPlayer) {
+          td.classList.add("agg-player-cell");
+          td.title = "Dettagli giocatrice";
+          td.addEventListener("click", () => {
+            if (showBothTeams) {
+              analysisTeamFilterState.teams = new Set([scope]);
+            }
+            aggTableView = { mode: "player", skillId: null, playerIdx: cell.playerIdx };
+            renderAggregatedTable();
+          });
+        }
+        row.appendChild(td);
+      });
+      elAggTableBody.appendChild(row);
+    });
+    const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
+    const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
+    const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
+    const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
+    const teamAttackTotal = totalFromCounts(totalsBySkill.attack);
+    const totalsRow = document.createElement("tr");
+    totalsRow.className = "rotation-row total";
+    const totalCells = [
+      { text: "Totale squadra" },
+      { text: scopeSummary.totalFor || 0 },
+      { text: scopeSummary.totalAgainst || 0 },
+      { text: formatDelta((scopeSummary.totalFor || 0) - (scopeSummary.totalAgainst || 0)) },
+      { text: totalErrors || 0 },
+
+      { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
+      { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
+      { text: totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
+      { text: serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff), className: "skill-col skill-serve" },
+      { text: serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos), className: "skill-col skill-serve" },
+
+      { text: totalFromCounts(totalsBySkill.pass), className: "skill-col skill-pass" },
+      { text: passTotalsMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+      { text: passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos), className: "skill-col skill-pass" },
+      { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
+      { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
+
+      { text: teamAttackTotal, className: "skill-col skill-attack" },
+      { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
+      { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
+      { text: totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
+      { text: formatPercentValue(totalsBySkill.attack["#"] || 0, teamAttackTotal), className: "skill-col skill-attack" },
+      { text: attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff), className: "skill-col skill-attack" },
+
+      { text: totalFromCounts(totalsBySkill.block), className: "skill-col skill-block" },
+      { text: (totalsBySkill.block["#"] || 0) + (totalsBySkill.block["+"] || 0), className: "skill-col skill-block" },
+
+      { text: totalFromCounts(totalsBySkill.defense), className: "skill-col skill-defense" },
+      { text: defenseTotalsMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+      { text: defenseTotalsMetrics.eff === null ? "-" : formatPercent(defenseTotalsMetrics.eff), className: "skill-col skill-defense" }
+    ];
+    totalCells.forEach(cell => {
+      const td = document.createElement("td");
+      td.textContent = cell.text;
+      if (cell.className) td.className = cell.className;
+      totalsRow.appendChild(td);
+    });
+    elAggTableBody.appendChild(totalsRow);
+  };
+  if (showBothTeams) {
+    renderAggSummaryForScope("our", { showHeader: true });
+    renderAggSummaryForScope("opponent", { showHeader: true });
+    renderScoreAndRotations(summaryAll, "our");
+    renderSecondTable();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+    bindAggSummaryInteractions(thead);
+    applyAggColumnsVisibility();
+    return;
+  }
+  const analysisPlayers = getPlayersForScope(analysisScope);
   if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -11476,171 +11707,7 @@ function renderAggregatedTable() {
     applyAggColumnsVisibility();
     return;
   }
-  const statsByPlayer = {};
-  filteredEvents.forEach(ev => {
-    if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
-      return;
-    }
-    if (typeof ev.playerIdx !== "number" || !analysisPlayers[ev.playerIdx]) return;
-    if (!statsByPlayer[ev.playerIdx]) {
-      statsByPlayer[ev.playerIdx] = {};
-    }
-    if (!statsByPlayer[ev.playerIdx][ev.skillId]) {
-      statsByPlayer[ev.playerIdx][ev.skillId] = {
-        "#": 0,
-        "+": 0,
-        "!": 0,
-        "-": 0,
-        "=": 0,
-        "/": 0
-      };
-    }
-    statsByPlayer[ev.playerIdx][ev.skillId][ev.code] =
-      (statsByPlayer[ev.playerIdx][ev.skillId][ev.code] || 0) + 1;
-  });
-  analysisStatsCache = statsByPlayer;
-  analysisStatsScope = analysisScope;
-  const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
-  const playerErrors = computePlayerErrorsMap(filteredEvents);
-  const totalsBySkill = {
-    serve: emptyCounts(),
-    pass: emptyCounts(),
-    attack: emptyCounts(),
-    block: emptyCounts(),
-    defense: emptyCounts()
-  };
-  let totalErrors = 0;
-  const sortedEntries =
-    analysisScope === "opponent"
-      ? getSortedPlayerEntriesForScope(analysisScope)
-      : getSortedPlayerEntries();
-  sortedEntries.forEach(({ name, idx }) => {
-    const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
-    const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
-    const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
-    const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
-    const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
-
-    const serveMetrics = computeMetrics(serveCounts, "serve");
-    const passMetrics = computeMetrics(passCounts, "pass");
-    const attackMetrics = computeMetrics(attackCounts, "attack");
-    const defenseMetrics = computeMetrics(defenseCounts, "defense");
-
-    mergeCounts(totalsBySkill.serve, serveCounts);
-    mergeCounts(totalsBySkill.pass, passCounts);
-    mergeCounts(totalsBySkill.attack, attackCounts);
-    mergeCounts(totalsBySkill.block, blockCounts);
-    mergeCounts(totalsBySkill.defense, defenseCounts);
-
-    const points = playerPoints[idx] || { for: 0, against: 0 };
-    const personalErrors = playerErrors[idx] || 0;
-    totalErrors += personalErrors;
-    const attackTotal = totalFromCounts(attackCounts);
-    const row = document.createElement("tr");
-    const cells = [
-      {
-        text:
-          analysisScope === "opponent"
-            ? formatNameWithNumberFor(name, analysisNumbers)
-            : formatNameWithNumber(name),
-        isPlayer: true,
-        playerIdx: idx
-      },
-      { text: points.for || 0 },
-      { text: points.against || 0 },
-      { text: formatDelta((points.for || 0) - (points.against || 0)) },
-      { text: personalErrors || 0 },
-
-      { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
-      { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
-      { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
-      { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
-      { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
-
-      { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
-      { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
-      { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
-      { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
-      { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
-
-      { text: attackTotal, className: "skill-col skill-attack" },
-      { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
-      { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
-      { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
-      { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
-      { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
-
-      { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
-      { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
-
-      { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
-      { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
-      { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
-    ];
-    cells.forEach(cell => {
-      const td = document.createElement("td");
-      td.textContent = cell.text;
-      if (cell.className) td.className = cell.className;
-      if (cell.isPlayer) {
-        td.classList.add("agg-player-cell");
-        td.title = "Dettagli giocatrice";
-        td.addEventListener("click", () => {
-          aggTableView = { mode: "player", skillId: null, playerIdx: cell.playerIdx };
-          renderAggregatedTable();
-        });
-      }
-      row.appendChild(td);
-    });
-    elAggTableBody.appendChild(row);
-  });
-  const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
-  const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
-  const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
-  const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
-  const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
-  const teamAttackTotal = totalFromCounts(totalsBySkill.attack);
-  const totalsRow = document.createElement("tr");
-  totalsRow.className = "rotation-row total";
-  const totalCells = [
-    { text: "Totale squadra" },
-    { text: summaryAll.totalFor || 0 },
-    { text: summaryAll.totalAgainst || 0 },
-    { text: formatDelta((summaryAll.totalFor || 0) - (summaryAll.totalAgainst || 0)) },
-    { text: totalErrors || 0 },
-
-    { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
-    { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
-    { text: totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
-    { text: serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff), className: "skill-col skill-serve" },
-    { text: serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos), className: "skill-col skill-serve" },
-
-    { text: totalFromCounts(totalsBySkill.pass), className: "skill-col skill-pass" },
-    { text: passTotalsMetrics.negativeCount || 0, className: "skill-col skill-pass" },
-    { text: passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos), className: "skill-col skill-pass" },
-    { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
-    { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
-
-    { text: teamAttackTotal, className: "skill-col skill-attack" },
-    { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
-    { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
-    { text: totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
-    { text: formatPercentValue(totalsBySkill.attack["#"] || 0, teamAttackTotal), className: "skill-col skill-attack" },
-    { text: attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff), className: "skill-col skill-attack" },
-
-    { text: totalFromCounts(totalsBySkill.block), className: "skill-col skill-block" },
-    { text: (totalsBySkill.block["#"] || 0) + (totalsBySkill.block["+"] || 0), className: "skill-col skill-block" },
-
-    { text: totalFromCounts(totalsBySkill.defense), className: "skill-col skill-defense" },
-    { text: defenseTotalsMetrics.negativeCount || 0, className: "skill-col skill-defense" },
-    { text: defenseTotalsMetrics.eff === null ? "-" : formatPercent(defenseTotalsMetrics.eff), className: "skill-col skill-defense" }
-  ];
-  totalCells.forEach(cell => {
-    const td = document.createElement("td");
-    td.textContent = cell.text;
-    if (cell.className) td.className = cell.className;
-    totalsRow.appendChild(td);
-  });
-  elAggTableBody.appendChild(totalsRow);
+  renderAggSummaryForScope(analysisScope);
   renderScoreAndRotations(summaryAll, analysisScope);
   renderSecondTable();
   renderTrajectoryAnalysis();
