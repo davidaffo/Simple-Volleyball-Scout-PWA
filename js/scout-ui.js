@@ -157,6 +157,7 @@ const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
 const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
+const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
@@ -186,6 +187,7 @@ const SERVE_START_IMG_NEAR = "images/trajectory/service_start_near.png";
 const SERVE_START_IMG_FAR = "images/trajectory/service_start_far.png";
 const SERVE_END_IMG_NEAR = "images/trajectory/service_end_near.png";
 const SERVE_END_IMG_FAR = "images/trajectory/service_end_far.png";
+const NORMAL_EVAL_CODES = new Set(["#", "+", "!", "-", "=", "/"]);
 const TRAJECTORY_IMG_NEAR = "images/trajectory/attack_empty_near.png";
 const TRAJECTORY_IMG_FAR = "images/trajectory/attack_empty_far.png";
 const TRAJECTORY_NET_POINTS = [
@@ -10855,10 +10857,56 @@ function matchesSummarySetFilter(ev) {
   if (setNum === null) return false;
   return analysisSummaryFilterState.sets.has(setNum);
 }
+function getPointDirectionFor(scope, ev) {
+  if (!ev) return null;
+  if (state.useOpponentTeam) {
+    return getPointDirectionForScope(ev, scope);
+  }
+  return getPointDirection(ev);
+}
+function computeRotationDeltasForEvents(events, scope) {
+  const rotations = Array.from({ length: 6 }, () => ({ for: 0, against: 0 }));
+  (events || []).forEach(ev => {
+    const direction = getPointDirectionFor(scope, ev);
+    if (!direction) return;
+    const rot = ev.rotation && ev.rotation >= 1 && ev.rotation <= 6 ? ev.rotation : 1;
+    const val = typeof ev.value === "number" ? ev.value : 1;
+    const entry = rotations[rot - 1];
+    if (direction === "for") {
+      entry.for += val;
+    } else if (direction === "against") {
+      entry.against += val;
+    }
+  });
+  return rotations.map(entry => entry.for - entry.against);
+}
+function computeAttackSplitSummary(events) {
+  const summary = {
+    err: 0,
+    mur: 0,
+    pt: 0,
+    tot: 0
+  };
+  (events || []).forEach(ev => {
+    if (!ev || ev.skillId !== "attack") return;
+    summary.tot += 1;
+    if (ev.code === "=") summary.err += 1;
+    if (ev.code === "/") summary.mur += 1;
+    if (ev.code === "#") summary.pt += 1;
+  });
+  return summary;
+}
+function formatPercentValueSafe(num, den) {
+  if (!den) return "0%";
+  return formatPercentValue(num, den);
+}
 function getSummarySetNumbers() {
   const played = getPlayedSetNumbers();
   if (!analysisSummaryFilterState.sets || analysisSummaryFilterState.sets.size === 0) return played;
   return played.filter(num => analysisSummaryFilterState.sets.has(num));
+}
+function filterNormalEvalOptions(options) {
+  return (options || []).filter(opt => NORMAL_EVAL_CODES.has(opt.value));
 }
 function matchesPreviousSkill(ev, filterVal) {
   if (!filterVal || filterVal === "any") return true;
@@ -11293,7 +11341,9 @@ function renderTrajectoryFilters() {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const codesOpts = buildUniqueOptions(trajEvents.map(ev => ev.code), { labelFn: val => val });
+  const codesOpts = filterNormalEvalOptions(
+    buildUniqueOptions(trajEvents.map(ev => ev.code), { labelFn: val => val })
+  );
   const zonesOpts = buildUniqueOptions(
     trajEvents.map(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};
@@ -11450,7 +11500,9 @@ function renderServeTrajectoryFilters() {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const codesOpts = buildUniqueOptions(serveEvents.map(ev => ev.code), { labelFn: val => val });
+  const codesOpts = filterNormalEvalOptions(
+    buildUniqueOptions(serveEvents.map(ev => ev.code), { labelFn: val => val })
+  );
   const zonesOpts = buildUniqueOptions(serveEvents.map(ev => getServeStartZone(ev)), {
     asNumber: true,
     labelFn: val => "Z" + val
@@ -11605,7 +11657,9 @@ function renderPlayerTrajectoryFilters() {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const codesOpts = buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val });
+  const codesOpts = filterNormalEvalOptions(
+    buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val })
+  );
   const zonesOpts = buildUniqueOptions(
     events.map(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};
@@ -11833,7 +11887,9 @@ function renderPlayerServeTrajectoryFilters() {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const codesOpts = buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val });
+  const codesOpts = filterNormalEvalOptions(
+    buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val })
+  );
   const zonesOpts = buildUniqueOptions(events.map(ev => getServeStartZone(ev)), {
     asNumber: true,
     labelFn: val => "Z" + val
@@ -12446,8 +12502,10 @@ function renderVideoFilters(events) {
   const setterOpts = setterOptsRaw;
   const skillOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.skillId), {
     labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
-  });
-  const codeOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.code), { labelFn: val => val });
+  }).filter(opt => opt.value !== "manual");
+  const codeOpts = filterNormalEvalOptions(
+    buildUniqueOptions(filteredByTeam.map(ev => ev.code), { labelFn: val => val })
+  );
   const setOpts = buildUniqueOptions(filteredByTeam.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -12898,10 +12956,12 @@ function renderAggregatedTable() {
   const summaryAll = computePointsSummary(null, { teamScope: analysisScope });
   if (aggTableView.mode === "skill" && aggTableView.skillId) {
     renderAggSkillDetailTable(summaryAll);
+    if (elAggSummaryExtraBody) elAggSummaryExtraBody.innerHTML = "";
     return;
   }
   if (aggTableView.mode === "player" && aggTableView.playerIdx !== null) {
     renderAggPlayerDetailTable(summaryAll);
+    if (elAggSummaryExtraBody) elAggSummaryExtraBody.innerHTML = "";
     return;
   }
   if (thead) {
@@ -12940,6 +13000,166 @@ function renderAggregatedTable() {
       totalErrors += val || 0;
     });
     return { totalsBySkill, totalFor, totalAgainst, totalErrors };
+  };
+  const renderSummaryExtraTable = (scopes) => {
+    if (!elAggSummaryExtraBody) return;
+    elAggSummaryExtraBody.innerHTML = "";
+    const buildRow = (cells, { isHeader = false } = {}) => {
+      const tr = document.createElement("tr");
+      cells.forEach(cell => {
+        const el = document.createElement(isHeader ? "th" : "td");
+        el.textContent = cell.text;
+        if (cell.colspan) el.setAttribute("colspan", cell.colspan);
+        if (cell.className) el.className = cell.className;
+        tr.appendChild(el);
+      });
+      elAggSummaryExtraBody.appendChild(tr);
+    };
+    const positiveReceiveCodes = new Set(["#", "+"]);
+    const tableScopes = Array.isArray(scopes) && scopes.length ? scopes : [];
+    tableScopes.forEach((scope, idx) => {
+      const scopeEvents = (state.events || []).filter(
+        ev => matchesTeamFilter(ev, new Set([scope])) && matchesSummarySetFilter(ev)
+      );
+      const teamName = getTeamNameForScope(scope);
+      if (idx > 0) {
+        buildRow([{ text: "", colspan: 14 }]);
+      }
+      buildRow([{ text: teamName, colspan: 14 }], { isHeader: true });
+      buildRow(
+        [
+          { text: "Cambio palla", colspan: 3 },
+          { text: "Attacchi su ricezione positiva", colspan: 5 },
+          { text: "Attacchi su ricezione non positiva", colspan: 6 }
+        ],
+        { isHeader: true }
+      );
+      buildRow(
+        [
+          { text: "Ricezione" },
+          { text: "CP punti" },
+          { text: "%" },
+          { text: "Err" },
+          { text: "Mur" },
+          { text: "Pt" },
+          { text: "Pt%" },
+          { text: "Tot" },
+          { text: "Err" },
+          { text: "Mur" },
+          { text: "Pt" },
+          { text: "Pt%" },
+          { text: "Tot" },
+          { text: "" }
+        ],
+        { isHeader: true }
+      );
+      const receiveEvents = scopeEvents.filter(ev => ev && ev.skillId === "pass");
+      const receiveCount = receiveEvents.length;
+      const sideoutAttacks = scopeEvents.filter(ev => {
+        if (!ev || ev.skillId !== "attack") return false;
+        if (ev.attackBp === false) return true;
+        if (ev.attackBp == null && ev.receiveEvaluation) return true;
+        return false;
+      });
+      const cpPoints = sideoutAttacks.filter(ev => ev.code === "#").length;
+      const posReceiveAttacks = sideoutAttacks.filter(ev => positiveReceiveCodes.has(ev.receiveEvaluation));
+      const nonPosReceiveAttacks = sideoutAttacks.filter(
+        ev => !positiveReceiveCodes.has(ev.receiveEvaluation)
+      );
+      const posSummary = computeAttackSplitSummary(posReceiveAttacks);
+      const nonPosSummary = computeAttackSplitSummary(nonPosReceiveAttacks);
+      buildRow([
+        { text: receiveCount },
+        { text: cpPoints },
+        { text: formatPercentValueSafe(cpPoints, receiveCount) },
+        { text: posSummary.err },
+        { text: posSummary.mur },
+        { text: posSummary.pt },
+        { text: formatPercentValueSafe(posSummary.pt, posSummary.tot) },
+        { text: posSummary.tot },
+        { text: nonPosSummary.err },
+        { text: nonPosSummary.mur },
+        { text: nonPosSummary.pt },
+        { text: formatPercentValueSafe(nonPosSummary.pt, nonPosSummary.tot) },
+        { text: nonPosSummary.tot },
+        { text: "-" }
+      ]);
+      buildRow([{ text: "", colspan: 14 }]);
+      buildRow(
+        [
+          { text: "Break Point", colspan: 3 },
+          { text: "Contrattacchi", colspan: 5 },
+          { text: "Differenza rotazione", colspan: 6 }
+        ],
+        { isHeader: true }
+      );
+      buildRow(
+        [
+          { text: "Battuta" },
+          { text: "BP punti" },
+          { text: "%" },
+          { text: "Err" },
+          { text: "Mur" },
+          { text: "Pt" },
+          { text: "Pt%" },
+          { text: "Tot" },
+          { text: "1" },
+          { text: "2" },
+          { text: "3" },
+          { text: "4" },
+          { text: "5" },
+          { text: "6" }
+        ],
+        { isHeader: true }
+      );
+      const serveEvents = scopeEvents.filter(ev => ev && ev.skillId === "serve");
+      const serveCount = serveEvents.length;
+      const bpPointEvents = scopeEvents.filter(ev => {
+        if (!ev) return false;
+        const direction = getPointDirectionFor(scope, ev);
+        if (direction !== "for") return false;
+        if (ev.skillId === "serve" || ev.skillId === "block") return true;
+        return ev.skillId === "attack" && ev.attackBp === true;
+      });
+      const bpPoints = bpPointEvents.reduce((sum, ev) => sum + (typeof ev.value === "number" ? ev.value : 1), 0);
+      const counterAttacks = scopeEvents.filter(ev => ev && ev.skillId === "attack" && ev.attackBp === true);
+      const counterSummary = computeAttackSplitSummary(counterAttacks);
+      const rotationDeltas = computeRotationDeltasForEvents(scopeEvents, scope);
+      buildRow([
+        { text: serveCount },
+        { text: bpPoints },
+        { text: formatPercentValueSafe(bpPoints, serveCount) },
+        { text: counterSummary.err },
+        { text: counterSummary.mur },
+        { text: counterSummary.pt },
+        { text: formatPercentValueSafe(counterSummary.pt, counterSummary.tot) },
+        { text: counterSummary.tot },
+        {
+          text: rotationDeltas[0] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[0] > 0 ? "pos" : rotationDeltas[0] < 0 ? "neg" : "zero")
+        },
+        {
+          text: rotationDeltas[1] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[1] > 0 ? "pos" : rotationDeltas[1] < 0 ? "neg" : "zero")
+        },
+        {
+          text: rotationDeltas[2] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[2] > 0 ? "pos" : rotationDeltas[2] < 0 ? "neg" : "zero")
+        },
+        {
+          text: rotationDeltas[3] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[3] > 0 ? "pos" : rotationDeltas[3] < 0 ? "neg" : "zero")
+        },
+        {
+          text: rotationDeltas[4] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[4] > 0 ? "pos" : rotationDeltas[4] < 0 ? "neg" : "zero")
+        },
+        {
+          text: rotationDeltas[5] || 0,
+          className: "rotation-delta-cell " + (rotationDeltas[5] > 0 ? "pos" : rotationDeltas[5] < 0 ? "neg" : "zero")
+        }
+      ]);
+    });
   };
   const renderAggSummaryForScope = (scope, { showHeader = false } = {}) => {
     const analysisPlayers = getPlayersForScope(scope);
@@ -13234,6 +13454,7 @@ function renderAggregatedTable() {
   if (showBothTeams) {
     renderAggSummaryForScope("our", { showHeader: true });
     renderAggSummaryForScope("opponent", { showHeader: true });
+    renderSummaryExtraTable(["our", "opponent"]);
     renderScoreAndRotations(summaryAll, "our");
     renderSecondTable();
     renderTrajectoryAnalysis();
@@ -13258,6 +13479,7 @@ function renderAggregatedTable() {
     return;
   }
   renderAggSummaryForScope(analysisScope);
+  renderSummaryExtraTable([analysisScope]);
   renderScoreAndRotations(summaryAll, analysisScope);
   renderSecondTable();
   renderTrajectoryAnalysis();
@@ -13343,7 +13565,9 @@ function renderSecondFilters() {
     asNumber: true,
     labelFn: val => "Set " + val
   });
-  const codesOpts = buildUniqueOptions(attackEvents.map(ev => ev.code), { labelFn: val => val });
+  const codesOpts = filterNormalEvalOptions(
+    buildUniqueOptions(attackEvents.map(ev => ev.code), { labelFn: val => val })
+  );
   const zonesOpts = buildUniqueOptions(
     attackEvents.map(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};

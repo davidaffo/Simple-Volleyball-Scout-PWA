@@ -3741,6 +3741,24 @@ body[data-theme="light"] .video-time-label {
 .rotation-row.total {
   font-weight: 700;
 }
+.rotation-delta-cell.pos {
+  color: #16a34a;
+}
+.rotation-delta-cell.neg {
+  color: #dc2626;
+}
+.rotation-delta-cell.zero {
+  color: #94a3b8;
+}
+body[data-theme="light"] .rotation-delta-cell.pos {
+  color: #15803d;
+}
+body[data-theme="light"] .rotation-delta-cell.neg {
+  color: #b91c1c;
+}
+body[data-theme="light"] .rotation-delta-cell.zero {
+  color: #64748b;
+}
 .formation-starter-cell {
   background: #1e3a8a;
   color: #ffffff;
