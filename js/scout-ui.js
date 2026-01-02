@@ -10672,6 +10672,7 @@ function matchesVideoFilters(ev, filters) {
   return true;
 }
 const trajectoryFilterState = {
+  setters: new Set(),
   players: new Set(),
   sets: new Set(),
   codes: new Set(),
@@ -10720,6 +10721,9 @@ const playerServeTrajectoryFilterState = {
 };
 const secondFilterState = {
   setters: new Set(),
+  players: new Set(),
+  codes: new Set(),
+  zones: new Set(),
   setTypes: new Set(),
   bases: new Set(),
   phases: new Set(),
@@ -10781,6 +10785,7 @@ function clamp01Val(n) {
   return Math.min(1, Math.max(0, n));
 }
 function syncTrajectoryFilterState() {
+  trajectoryFilterState.setters = new Set(getCheckedValues(elTrajFilterSetters, { asNumber: true }));
   trajectoryFilterState.players = new Set(getCheckedValues(elTrajFilterPlayers, { asNumber: true }));
   trajectoryFilterState.sets = new Set(getCheckedValues(elTrajFilterSets, { asNumber: true }));
   trajectoryFilterState.codes = new Set(getCheckedValues(elTrajFilterCodes));
@@ -10834,6 +10839,7 @@ function handleVideoFilterChange() {
   renderVideoAnalysis();
 }
 function resetTrajectoryFilters() {
+  trajectoryFilterState.setters.clear();
   trajectoryFilterState.players.clear();
   trajectoryFilterState.sets.clear();
   trajectoryFilterState.codes.clear();
@@ -10901,6 +10907,24 @@ function getVideoFilterElements() {
     reset: document.getElementById("video-filter-reset")
   };
 }
+function getSecondFilterElements() {
+  const setters = document.getElementById("second-filter-setters");
+  if (!setters) return null;
+  return {
+    setters,
+    players: document.getElementById("second-filter-players"),
+    codes: document.getElementById("second-filter-codes"),
+    zones: document.getElementById("second-filter-zones"),
+    setTypes: document.getElementById("second-filter-set-types"),
+    bases: document.getElementById("second-filter-bases"),
+    phases: document.getElementById("second-filter-phases"),
+    receiveEvals: document.getElementById("second-filter-receive-evals"),
+    receiveZones: document.getElementById("second-filter-receive-zones"),
+    sets: document.getElementById("second-filter-sets"),
+    prev: document.getElementById("second-filter-prev"),
+    reset: document.getElementById("second-filter-reset")
+  };
+}
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
   renderAnalysisTeamFilter();
@@ -10913,6 +10937,24 @@ function renderTrajectoryFilters() {
   const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
+  const setterLabels = new Map();
+  trajEvents.forEach(ev => {
+    const setterIdx = getSetterFromEvent(ev);
+    if (typeof setterIdx !== "number") return;
+    const label =
+      (analysisScope === "opponent"
+        ? formatNameWithNumberFor(ev.setterName || analysisPlayers[setterIdx], analysisNumbers)
+        : formatNameWithNumber(ev.setterName || analysisPlayers[setterIdx])) ||
+      ev.setterName ||
+      analysisPlayers[setterIdx] ||
+      "Alzatrice " + (setterIdx + 1);
+    setterLabels.set(setterIdx, label);
+  });
+  const setterOptsRaw = Array.from(setterLabels.entries()).map(([idx, label]) => ({
+    value: idx,
+    label
+  }));
+  const setterOpts = sortPlayerOptionsByNumberForScope(setterOptsRaw, analysisScope);
   const playersOptsRaw = buildUniqueOptions(trajEvents.map(ev => ev.playerIdx), {
     asNumber: true,
     labelFn: idx => {
@@ -10961,6 +11003,9 @@ function renderTrajectoryFilters() {
   trajectoryFilterState.players = new Set(
     [...trajectoryFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
   );
+  trajectoryFilterState.setters = new Set(
+    [...trajectoryFilterState.setters].filter(idx => setterOpts.some(p => Number(p.value) === idx))
+  );
   trajectoryFilterState.sets = new Set(
     [...trajectoryFilterState.sets].filter(setNum => setsOpts.some(o => Number(o.value) === setNum))
   );
@@ -10990,6 +11035,12 @@ function renderTrajectoryFilters() {
   }
 
   const visibleFilters = [];
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterSetters, setterOpts, trajectoryFilterState.setters, {
+      asNumber: true,
+      onChange: handleTrajectoryFilterChange
+    })
+  );
   visibleFilters.push(
     renderDynamicFilter(elTrajFilterPlayers, playersOpts, trajectoryFilterState.players, {
       asNumber: true,
@@ -11701,43 +11752,34 @@ function resetPlayerSecondFilters() {
 function renderPlayerSecondFilters() {
   if (!elPlayerSecondFilterSetTypes) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const secondEvents = (state.events || []).filter(
-    ev =>
-      ev &&
-      ev.skillId === "second" &&
-      playerIdx !== null &&
-      ev.playerIdx === playerIdx &&
-      matchesTeamFilter(ev, analysisTeamFilterState.teams)
-  );
   const attackEvents = (state.events || []).filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return getSetterFromEvent(ev) === playerIdx;
   });
-  const setTypeEvents = secondEvents.concat(attackEvents);
   const setTypeOpts = buildUniqueOptions(
-    setTypeEvents.map(ev =>
+    attackEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
     ),
     { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
   const baseOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeBaseValue(ev.base)),
+    attackEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = buildUniqueOptions(secondEvents.map(ev => getEventPhaseValue(ev)), {
+  const phaseOpts = buildUniqueOptions(attackEvents.map(ev => getEventPhaseValue(ev)), {
     labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
   });
   const recvEvalOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    attackEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
   );
   const recvZoneOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    attackEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
     { asNumber: true, labelFn: val => "Z" + val }
   );
-  const setOpts = buildUniqueOptions(secondEvents.map(ev => normalizeSetNumber(ev.set)), {
+  const setOpts = buildUniqueOptions(attackEvents.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
   });
@@ -11797,7 +11839,7 @@ function renderPlayerSecondFilters() {
       onChange: handlePlayerSecondFilterChange
     })
   );
-  toggleFilterVisibility(elPlayerSecondFilterPrev, secondEvents.length > 0);
+  toggleFilterVisibility(elPlayerSecondFilterPrev, attackEvents.length > 0);
   toggleFilterVisibility(elPlayerSecondFilterReset, visibleFilters.some(Boolean));
   if (elPlayerSecondFilterPrev) {
     elPlayerSecondFilterPrev.value = playerSecondFilterState.prevSkill || "any";
@@ -11813,30 +11855,25 @@ function renderPlayerSecondFilters() {
 }
 function getFilteredPlayerSecondEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(
-    ev =>
-      ev &&
-      ev.skillId === "second" &&
-      playerIdx !== null &&
-      ev.playerIdx === playerIdx &&
-      matchesTeamFilter(ev, analysisTeamFilterState.teams)
-  );
-  return events.filter(ev => matchesAdvancedFilters(ev, playerSecondFilterState));
-}
-function getFilteredPlayerAttacksForSecondDistribution() {
-  const playerIdx = getPlayerAnalysisPlayerIdx();
-  const attacks = (state.events || []).filter(ev => {
+  const events = (state.events || []).filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return getSetterFromEvent(ev) === playerIdx;
   });
-  return attacks.filter(ev => {
+  return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    if (!matchesAdvancedFilters(ev, playerSecondFilterState)) return false;
+    return true;
+  });
+}
+function getFilteredPlayerAttacksForSecondDistribution() {
+  return getFilteredPlayerSecondEvents().filter(ev => {
     const setType = normalizeSetTypeValue(
       ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
     );
-    if (setType && setType.toLowerCase() === "damp") return false;
-    return matchesAdvancedFilters(ev, playerSecondFilterState);
+    return !(setType && setType.toLowerCase() === "damp");
   });
 }
 function renderDistributionGrid(targetEl, events) {
@@ -12327,6 +12364,10 @@ function getFilteredTrajectoryEvents() {
     const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     if (!matchesAdvancedFilters(ev, trajectoryFilterState)) return false;
+    if (trajectoryFilterState.setters.size) {
+      const setterIdx = getSetterFromEvent(ev);
+      if (setterIdx === null || !trajectoryFilterState.setters.has(setterIdx)) return false;
+    }
     if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
     if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
@@ -12528,10 +12569,7 @@ function renderAggregatedTable() {
   if (table) {
     table.classList.toggle("agg-table--double", showBothTeams);
   }
-  const summaryAll = computePointsSummary(null, {
-    excludeOpponentErrors: true,
-    teamScope: analysisScope
-  });
+  const summaryAll = computePointsSummary(null, { teamScope: analysisScope });
   if (aggTableView.mode === "skill" && aggTableView.skillId) {
     renderAggSkillDetailTable(summaryAll);
     return;
@@ -12795,14 +12833,19 @@ function renderAggregatedTable() {
   applyAggColumnsVisibility();
 }
 function syncSecondFilterState() {
-  secondFilterState.setters = new Set(getCheckedValues(elSecondFilterSetters, { asNumber: true }));
-  secondFilterState.setTypes = new Set(getCheckedValues(elSecondFilterSetTypes));
-  secondFilterState.bases = new Set(getCheckedValues(elSecondFilterBases));
-  secondFilterState.phases = new Set(getCheckedValues(elSecondFilterPhases));
-  secondFilterState.receiveEvaluations = new Set(getCheckedValues(elSecondFilterReceiveEvals));
-  secondFilterState.receiveZones = new Set(getCheckedValues(elSecondFilterReceiveZones, { asNumber: true }));
-  secondFilterState.sets = new Set(getCheckedValues(elSecondFilterSets, { asNumber: true }));
-  secondFilterState.prevSkill = (elSecondFilterPrev && elSecondFilterPrev.value) || "any";
+  const els = getSecondFilterElements();
+  if (!els) return;
+  secondFilterState.setters = new Set(getCheckedValues(els.setters, { asNumber: true }));
+  secondFilterState.players = new Set(getCheckedValues(els.players, { asNumber: true }));
+  secondFilterState.codes = new Set(getCheckedValues(els.codes));
+  secondFilterState.zones = new Set(getCheckedValues(els.zones, { asNumber: true }));
+  secondFilterState.setTypes = new Set(getCheckedValues(els.setTypes));
+  secondFilterState.bases = new Set(getCheckedValues(els.bases));
+  secondFilterState.phases = new Set(getCheckedValues(els.phases));
+  secondFilterState.receiveEvaluations = new Set(getCheckedValues(els.receiveEvals));
+  secondFilterState.receiveZones = new Set(getCheckedValues(els.receiveZones, { asNumber: true }));
+  secondFilterState.sets = new Set(getCheckedValues(els.sets, { asNumber: true }));
+  secondFilterState.prevSkill = (els.prev && els.prev.value) || "any";
 }
 function handleSecondFilterChange() {
   syncSecondFilterState();
@@ -12810,6 +12853,9 @@ function handleSecondFilterChange() {
 }
 function resetSecondFilters() {
   secondFilterState.setters.clear();
+  secondFilterState.players.clear();
+  secondFilterState.codes.clear();
+  secondFilterState.zones.clear();
   secondFilterState.setTypes.clear();
   secondFilterState.bases.clear();
   secondFilterState.phases.clear();
@@ -12817,32 +12863,21 @@ function resetSecondFilters() {
   secondFilterState.receiveZones.clear();
   secondFilterState.sets.clear();
   secondFilterState.prevSkill = "any";
-  if (elSecondFilterPrev) elSecondFilterPrev.value = "any";
+  const els = getSecondFilterElements();
+  if (els && els.prev) els.prev.value = "any";
   renderSecondFilters();
   renderSecondTable();
 }
 function renderSecondFilters() {
-  if (!elSecondFilterSetters) return;
+  const els = getSecondFilterElements();
+  if (!els) return;
   renderAnalysisTeamFilter();
   const events = filterEventsByAnalysisTeam(state.events || []);
-  const secondEvents = events.filter(ev => ev && ev.skillId === "second");
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
-  const setTypeEvents = secondEvents.concat(attackEvents);
   const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
-  const playerLabels = new Map();
-  secondEvents.forEach(ev => {
-    if (typeof ev.playerIdx !== "number") return;
-    const label =
-      (analysisScope === "opponent"
-        ? formatNameWithNumberFor(ev.playerName || analysisPlayers[ev.playerIdx], analysisNumbers)
-        : formatNameWithNumber(ev.playerName || analysisPlayers[ev.playerIdx])) ||
-      ev.playerName ||
-      analysisPlayers[ev.playerIdx] ||
-      "Alzatrice " + (ev.playerIdx + 1);
-    playerLabels.set(ev.playerIdx, label);
-  });
+  const setterLabels = new Map();
   attackEvents.forEach(ev => {
     const setterIdx = getSetterFromEvent(ev);
     if (typeof setterIdx !== "number") return;
@@ -12853,41 +12888,69 @@ function renderSecondFilters() {
       ev.setterName ||
       analysisPlayers[setterIdx] ||
       "Alzatrice " + (setterIdx + 1);
-    playerLabels.set(setterIdx, label);
+    setterLabels.set(setterIdx, label);
   });
-  const playersOptsRaw = Array.from(playerLabels.entries()).map(([idx, label]) => ({
+  const setterOptsRaw = Array.from(setterLabels.entries()).map(([idx, label]) => ({
     value: idx,
     label
   }));
+  const setterOpts = sortPlayerOptionsByNumberForScope(setterOptsRaw, analysisScope);
+  const playersOptsRaw = buildUniqueOptions(attackEvents.map(ev => ev.playerIdx), {
+    asNumber: true,
+    labelFn: idx => {
+      const name = analysisPlayers[idx];
+      if (!name) return "—";
+      return analysisScope === "opponent"
+        ? formatNameWithNumberFor(name, analysisNumbers)
+        : formatNameWithNumber(name);
+    }
+  });
   const playersOpts = sortPlayerOptionsByNumberForScope(playersOptsRaw, analysisScope);
+  const setOpts = buildUniqueOptions(attackEvents.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  const codesOpts = buildUniqueOptions(attackEvents.map(ev => ev.code), { labelFn: val => val });
+  const zonesOpts = buildUniqueOptions(
+    attackEvents.map(ev => {
+      const traj = ev.attackDirection || ev.attackTrajectory || {};
+      return ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    }),
+    { asNumber: true, labelFn: val => "Z" + val }
+  );
   const setTypeOpts = buildUniqueOptions(
-    setTypeEvents.map(ev =>
+    attackEvents.map(ev =>
       normalizeSetTypeValue(ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType))
     ),
     { labelFn: val => getOptionLabel(DEFAULT_SET_TYPE_OPTIONS, val) }
   );
   const baseOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeBaseValue(ev.base)),
+    attackEvents.map(ev => normalizeBaseValue(ev.base)),
     { labelFn: val => getOptionLabel(DEFAULT_BASE_OPTIONS, val) }
   );
-  const phaseOpts = buildUniqueOptions(secondEvents.map(ev => getEventPhaseValue(ev)), {
+  const phaseOpts = buildUniqueOptions(attackEvents.map(ev => getEventPhaseValue(ev)), {
     labelFn: val => getOptionLabel(DEFAULT_PHASE_OPTIONS, val)
   });
   const recvEvalOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
+    attackEvents.map(ev => normalizeEvalCode(ev.receiveEvaluation)),
     { labelFn: val => val }
   );
   const recvZoneOpts = buildUniqueOptions(
-    secondEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
+    attackEvents.map(ev => normalizeReceiveZone(ev.receivePosition || ev.receiveZone)),
     { asNumber: true, labelFn: val => "Z" + val }
   );
-  const setOpts = buildUniqueOptions(secondEvents.map(ev => normalizeSetNumber(ev.set)), {
-    asNumber: true,
-    labelFn: val => "Set " + val
-  });
 
   secondFilterState.setters = new Set(
-    [...secondFilterState.setters].filter(idx => playersOpts.some(p => Number(p.value) === idx))
+    [...secondFilterState.setters].filter(idx => setterOpts.some(p => Number(p.value) === idx))
+  );
+  secondFilterState.players = new Set(
+    [...secondFilterState.players].filter(idx => playersOpts.some(p => Number(p.value) === idx))
+  );
+  secondFilterState.codes = new Set(
+    [...secondFilterState.codes].filter(val => codesOpts.some(o => o.value === val))
+  );
+  secondFilterState.zones = new Set(
+    [...secondFilterState.zones].filter(val => zonesOpts.some(o => Number(o.value) === val))
   );
   secondFilterState.setTypes = new Set(
     [...secondFilterState.setTypes].filter(val => setTypeOpts.some(o => o.value === val))
@@ -12907,73 +12970,98 @@ function renderSecondFilters() {
 
   const visibleFilters = [];
   visibleFilters.push(
-    renderDynamicFilter(elSecondFilterSetters, playersOpts, secondFilterState.setters, {
+    renderDynamicFilter(els.setters, setterOpts, secondFilterState.setters, {
       asNumber: true,
       onChange: handleSecondFilterChange
     })
   );
   visibleFilters.push(
-    renderDynamicFilter(elSecondFilterSetTypes, setTypeOpts, secondFilterState.setTypes, {
-      onChange: handleSecondFilterChange
-    })
-  );
-  visibleFilters.push(
-    renderDynamicFilter(elSecondFilterBases, baseOpts, secondFilterState.bases, {
-      onChange: handleSecondFilterChange
-    })
-  );
-  visibleFilters.push(
-    renderDynamicFilter(elSecondFilterPhases, phaseOpts, secondFilterState.phases, {
-      onChange: handleSecondFilterChange
-    })
-  );
-  visibleFilters.push(
-    renderDynamicFilter(elSecondFilterReceiveEvals, recvEvalOpts, secondFilterState.receiveEvaluations, {
-      onChange: handleSecondFilterChange
-    })
-  );
-  visibleFilters.push(
-    renderDynamicFilter(elSecondFilterReceiveZones, recvZoneOpts, secondFilterState.receiveZones, {
+    renderDynamicFilter(els.players, playersOpts, secondFilterState.players, {
       asNumber: true,
       onChange: handleSecondFilterChange
     })
   );
   visibleFilters.push(
-    renderDynamicFilter(elSecondFilterSets, setOpts, secondFilterState.sets, {
+    renderDynamicFilter(els.sets, setOpts, secondFilterState.sets, {
       asNumber: true,
       onChange: handleSecondFilterChange
     })
   );
-  toggleFilterVisibility(elSecondFilterPrev, secondEvents.length > 0);
-  toggleFilterVisibility(elSecondFilterReset, visibleFilters.some(Boolean));
-  if (elSecondFilterPrev) {
-    elSecondFilterPrev.value = secondFilterState.prevSkill || "any";
-    if (!elSecondFilterPrev._secondPrevBound) {
-      elSecondFilterPrev.addEventListener("change", handleSecondFilterChange);
-      elSecondFilterPrev._secondPrevBound = true;
+  visibleFilters.push(
+    renderDynamicFilter(els.setTypes, setTypeOpts, secondFilterState.setTypes, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.bases, baseOpts, secondFilterState.bases, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.phases, phaseOpts, secondFilterState.phases, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.receiveEvals, recvEvalOpts, secondFilterState.receiveEvaluations, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.receiveZones, recvZoneOpts, secondFilterState.receiveZones, {
+      asNumber: true,
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.codes, codesOpts, secondFilterState.codes, {
+      onChange: handleSecondFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(els.zones, zonesOpts, secondFilterState.zones, {
+      asNumber: true,
+      onChange: handleSecondFilterChange
+    })
+  );
+  toggleFilterVisibility(els.prev, attackEvents.length > 0);
+  toggleFilterVisibility(els.reset, visibleFilters.some(Boolean));
+  if (els.prev) {
+    els.prev.value = secondFilterState.prevSkill || "any";
+    if (!els.prev._secondPrevBound) {
+      els.prev.addEventListener("change", handleSecondFilterChange);
+      els.prev._secondPrevBound = true;
     }
   }
-  if (elSecondFilterReset && !elSecondFilterReset._secondResetBound) {
-    elSecondFilterReset.addEventListener("click", resetSecondFilters);
-    elSecondFilterReset._secondResetBound = true;
+  if (els.reset && !els.reset._secondResetBound) {
+    els.reset.addEventListener("click", resetSecondFilters);
+    els.reset._secondResetBound = true;
   }
 }
 function getFilteredSecondEvents() {
-  const events = (state.events || []).filter(ev => ev && ev.skillId === "second");
+  const events = (state.events || []).filter(ev => ev && ev.skillId === "attack");
   return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
-    return matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true });
+    if (!matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true })) return false;
+    if (secondFilterState.setters.size) {
+      const setterIdx = getSetterFromEvent(ev);
+      if (setterIdx === null || !secondFilterState.setters.has(setterIdx)) return false;
+    }
+    if (secondFilterState.players.size && !secondFilterState.players.has(ev.playerIdx)) return false;
+    if (secondFilterState.sets.size && !secondFilterState.sets.has(ev.set)) return false;
+    if (secondFilterState.codes.size && !secondFilterState.codes.has(ev.code)) return false;
+    if (secondFilterState.zones.size && !secondFilterState.zones.has(startZone)) return false;
+    return true;
   });
 }
 function getFilteredAttacksForSecondDistribution() {
-  const attacks = (state.events || []).filter(ev => ev && ev.skillId === "attack");
-  return attacks.filter(ev => {
-    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
+  return getFilteredSecondEvents().filter(ev => {
     const setType = normalizeSetTypeValue(
       ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
     );
-    if (setType && setType.toLowerCase() === "damp") return false;
-    return matchesAdvancedFilters(ev, secondFilterState, { includeSetter: true });
+    return !(setType && setType.toLowerCase() === "damp");
   });
 }
 function renderSecondTable() {
@@ -12996,7 +13084,10 @@ function renderSecondTable() {
   const totals = emptyCounts();
   const rows = [];
   const countsByPlayer = new Map();
-  getFilteredSecondEvents().forEach(ev => {
+  const secondEvents = (state.events || []).filter(
+    ev => ev && ev.skillId === "second" && matchesTeamFilter(ev, analysisTeamFilterState.teams)
+  );
+  secondEvents.forEach(ev => {
     const code = normalizeEvalCode(ev.code || ev.evaluation);
     if (!code) return;
     const playerIdx = typeof ev.playerIdx === "number" ? ev.playerIdx : null;
