@@ -138,6 +138,7 @@ const elDefaultLineupBench = document.getElementById("default-lineup-bench");
 const elDefaultLineupRotation = document.getElementById("default-lineup-rotation");
 const elDefaultLineupRotateCw = document.getElementById("default-lineup-rotate-cw");
 const elDefaultLineupRotateCcw = document.getElementById("default-lineup-rotate-ccw");
+const elDefaultLineupPreferredLibero = document.getElementById("default-lineup-preferred-libero");
 let defaultLineupDragName = "";
 let defaultLineupDragAt = 0;
 const elTeamManagerAdd = document.getElementById("team-manager-add");
@@ -2003,6 +2004,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     Number.isFinite(rawDefaultRotation) && rawDefaultRotation >= 1 && rawDefaultRotation <= 6
       ? rawDefaultRotation
       : 1;
+  const rawPreferredLibero = typeof raw.preferredLibero === "string" ? raw.preferredLibero : "";
   if ((raw.version === 2 || raw.version === 3) && Array.isArray(raw.playersDetailed)) {
     const playersDetailed = enforceSingleCaptainFlag(
       raw.playersDetailed.map(p => {
@@ -2028,6 +2030,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     const defaultLineup = rawDefaultLineup.filter(name =>
       playersDetailed.some(p => p.name === name && !p.out)
     );
+    const preferredLibero = liberos.includes(rawPreferredLibero) ? rawPreferredLibero : liberos[0] || "";
     return {
       version: 2,
       name,
@@ -2038,7 +2041,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
       players: raw.players || playersDetailed.map(p => p.name),
       captains,
       defaultLineup,
-      defaultRotation
+      defaultRotation,
+      preferredLibero
     };
   }
   const legacyPlayers = raw.players || [];
@@ -2055,6 +2059,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
   }));
   const captains = [];
   const defaultLineup = rawDefaultLineup.filter(name => legacyPlayers.includes(name));
+  const preferredLibero = liberos.includes(rawPreferredLibero) ? rawPreferredLibero : liberos[0] || "";
   return {
     version: 2,
     name,
@@ -2065,7 +2070,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     players: legacyPlayers,
     captains,
     defaultLineup,
-    defaultRotation
+    defaultRotation,
+    preferredLibero
   };
 }
 function loadTeamNormalized(name) {
@@ -2096,7 +2102,8 @@ function compactTeamPayload(data, fallbackName = "") {
     staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
     playersDetailed,
     defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup.slice(0, 6) : [],
-    defaultRotation: normalized.defaultRotation || 1
+    defaultRotation: normalized.defaultRotation || 1,
+    preferredLibero: normalized.preferredLibero || ""
   };
 }
 function saveTeamToStorage(name, data) {
@@ -2160,6 +2167,7 @@ function extractRosterFromTeam(team) {
   const captains = normalizePlayers(captainCandidates).filter(name =>
     (normalized.playersDetailed || []).some(p => p.name === name && !p.out)
   ).slice(0, 1);
+  const preferredLibero = normalized.preferredLibero || "";
   return {
     players: (normalized.playersDetailed || []).filter(p => !p.out).map(p => p.name),
     liberos:
@@ -2171,7 +2179,8 @@ function extractRosterFromTeam(team) {
     playersDetailed: normalized.playersDetailed || [],
     captains,
     defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup : [],
-    defaultRotation: normalized.defaultRotation || 1
+    defaultRotation: normalized.defaultRotation || 1,
+    preferredLibero
   };
 }
 function getSelectedTeamDefaultSettings() {
@@ -2441,6 +2450,8 @@ function getCurrentTeamPayload(name = "") {
         }));
   enforceSingleCaptainFlag(playersDetailed, state.captains && state.captains[0]);
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+  const preferredLibero =
+    liberos.includes(state.preferredLibero) ? state.preferredLibero : liberos[0] || "";
   const numbers = {};
   playersDetailed.forEach(p => {
     if (p.number !== undefined && p.number !== null && p.number !== "") {
@@ -2458,7 +2469,8 @@ function getCurrentTeamPayload(name = "") {
     liberos,
     numbers,
     captains,
-    defaultLineup
+    defaultLineup,
+    preferredLibero
   };
 }
 function getCurrentOpponentPayload(name = "") {
@@ -2473,6 +2485,8 @@ function getCurrentOpponentPayload(name = "") {
     }
   });
   const liberos = normalizePlayers(state.opponentLiberos || []).filter(n => players.includes(n));
+  const preferredLibero =
+    liberos.includes(state.opponentPreferredLibero) ? state.opponentPreferredLibero : liberos[0] || "";
   const captains = normalizePlayers(state.opponentCaptains || []).filter(n => players.includes(n)).slice(0, 1);
   const existingDetailed = existing?.playersDetailed || [];
   const existingMap = new Map(existingDetailed.map(p => [p.name, p]));
@@ -2498,7 +2512,8 @@ function getCurrentOpponentPayload(name = "") {
     players,
     liberos,
     numbers,
-    captains
+    captains,
+    preferredLibero
   };
 }
 function saveCurrentTeam() {
@@ -2889,7 +2904,8 @@ function applyImportedTeamData(data) {
     captains: roster.captains || [],
     setDefaultLineup: true,
     defaultLineupNames: defaultLineup,
-    defaultLineupRotation: roster.defaultRotation || 1
+    defaultLineupRotation: roster.defaultRotation || 1,
+    preferredLibero: roster.preferredLibero || ""
   });
   state.selectedTeam = normalizedTeam && normalizedTeam.name ? normalizedTeam.name : "";
   if (state.selectedTeam) {
@@ -2919,6 +2935,7 @@ function applyImportedOpponentTeamData(data) {
     playerNumbers: roster.numbers || {},
     captains: roster.captains || []
   });
+  state.opponentPreferredLibero = roster.preferredLibero || roster.liberos?.[0] || "";
   state.selectedOpponentTeam = (normalizedTeam && normalizedTeam.name) || "";
   if (state.selectedOpponentTeam) {
     saveOpponentTeamToStorage(state.selectedOpponentTeam, normalizedTeam);
@@ -3061,7 +3078,8 @@ function handleTeamSelectChange() {
     captains: roster.captains || [],
     setDefaultLineup: true,
     defaultLineupNames: defaultLineup,
-    defaultLineupRotation: roster.defaultRotation || 1
+    defaultLineupRotation: roster.defaultRotation || 1,
+    preferredLibero: roster.preferredLibero || ""
   });
   renderLiberoTags();
   renderTeamsSelect();
@@ -3108,6 +3126,8 @@ function handleOpponentTeamSelectChange() {
     playerNumbers: roster.numbers || {},
     captains: roster.captains || []
   });
+  state.opponentPreferredLibero = roster.preferredLibero || roster.liberos?.[0] || "";
+  renderOpponentLiberoChipsInline();
   const opponentDefaultLineup =
     roster.defaultLineup && roster.defaultLineup.length > 0
       ? roster.defaultLineup
@@ -3169,7 +3189,12 @@ function renderLiberoTags() {
       container.appendChild(span);
       return;
     }
-    ordered.forEach(name => {
+    const liberoOrdered = orderLiberosByPreference(
+      ordered.filter(name => libSet.has(name)),
+      "our",
+      state.playerNumbers || {}
+    );
+    liberoOrdered.forEach(name => {
       if (!libSet.has(name)) return;
       const chip = document.createElement("div");
       const classes = ["bench-chip", "libero-flag"];
@@ -3203,7 +3228,12 @@ function renderOpponentLiberoTags() {
   }
   const libSet = new Set(state.opponentLiberos || []);
   const ordered = sortNamesByNumber(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
-  ordered.forEach(name => {
+  const liberoOrdered = orderLiberosByPreference(
+    ordered.filter(name => libSet.has(name)),
+    "opponent",
+    state.opponentPlayerNumbers || {}
+  );
+  liberoOrdered.forEach(name => {
     const btn = document.createElement("button");
     const active = libSet.has(name);
     btn.type = "button";
@@ -3439,7 +3469,8 @@ function applyTemplateTeam(options = {}) {
     playerNumbers: buildTemplateNumbers(),
     captains: [],
     setDefaultLineup: true,
-    defaultLineupNames: buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players)
+    defaultLineupNames: buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players),
+    preferredLibero: TEMPLATE_TEAM.liberos[0] || ""
   });
 }
 function applyTemplateRoster(scope = "our", options = {}) {
@@ -3450,6 +3481,7 @@ function applyTemplateRoster(scope = "our", options = {}) {
       captains: []
     });
     applyOpponentDefaultLineup(buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players), 1);
+    state.opponentPreferredLibero = TEMPLATE_TEAM.liberos[0] || "";
     if (typeof renderOpponentPlayers === "function") {
       renderOpponentPlayers();
     }
@@ -3531,6 +3563,9 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
     normalized && Array.isArray(normalized.defaultLineup)
       ? normalized.defaultLineup.filter(name => playersDetailed.some(p => p.name === name && !p.out))
       : [];
+  const basePreferred = normalized && typeof normalized.preferredLibero === "string" ? normalized.preferredLibero : "";
+  const liberoNames = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+  const preferredLibero = liberoNames.includes(basePreferred) ? basePreferred : liberoNames[0] || "";
   return {
     name:
       (normalized && normalized.name) ||
@@ -3540,7 +3575,8 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
     players: playersDetailed,
     defaultLineup,
-    defaultRotation: (normalized && normalized.defaultRotation) || 1
+    defaultRotation: (normalized && normalized.defaultRotation) || 1,
+    preferredLibero
   };
 }
 function renderTeamManagerTable() {
@@ -3820,11 +3856,44 @@ function renderDefaultLineupEditor() {
   const numbersMap = {};
   const captainSet = new Set();
   const outSet = new Set();
-  roster.forEach(player => {
-    if (player.number) numbersMap[player.name] = String(player.number);
-    if (player.isCaptain) captainSet.add(player.name);
-    if (player.out) outSet.add(player.name);
+  const allPlayers = (teamManagerState.players || []).filter(p => (p.name || "").trim() !== "");
+  allPlayers.forEach(player => {
+    const fullName = buildFullName(player.lastName, player.firstName) || player.name.trim();
+    if (player.number) numbersMap[fullName] = String(player.number);
+    if (player.isCaptain) captainSet.add(fullName);
+    if (player.out) outSet.add(fullName);
   });
+  if (elDefaultLineupPreferredLibero) {
+    const liberos = allPlayers
+      .filter(p => String(p.role || "").toUpperCase() === "L" && !p.out)
+      .map(p => buildFullName(p.lastName, p.firstName) || p.name.trim());
+    const preferred =
+      teamManagerState.preferredLibero && liberos.includes(teamManagerState.preferredLibero)
+        ? teamManagerState.preferredLibero
+        : liberos[0] || "";
+    teamManagerState.preferredLibero = preferred;
+    elDefaultLineupPreferredLibero.innerHTML = "";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "-";
+    elDefaultLineupPreferredLibero.appendChild(emptyOpt);
+    const ordered = sortNamesByNumber(liberos, numbersMap);
+    ordered.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = formatNameWithNumberFor(name, numbersMap);
+      elDefaultLineupPreferredLibero.appendChild(opt);
+    });
+    elDefaultLineupPreferredLibero.value = preferred;
+    elDefaultLineupPreferredLibero.disabled = ordered.length === 0;
+    if (!elDefaultLineupPreferredLibero._preferredBound) {
+      elDefaultLineupPreferredLibero.addEventListener("change", () => {
+        const next = elDefaultLineupPreferredLibero.value || "";
+        teamManagerState.preferredLibero = next;
+      });
+      elDefaultLineupPreferredLibero._preferredBound = true;
+    }
+  }
   const current = normalizeDefaultLineup(teamManagerState.defaultLineup || [], rosterNames);
   teamManagerState.defaultLineup = current;
   elDefaultLineupGrid.innerHTML = "";
@@ -4017,7 +4086,8 @@ function openNewTeamManager() {
     staff: Object.assign({}, DEFAULT_STAFF),
     players: [],
     defaultLineup: [],
-    defaultRotation: 1
+    defaultRotation: 1,
+    preferredLibero: ""
   };
   if (elTeamMetaName) elTeamMetaName.value = "";
   if (elTeamMetaHead) elTeamMetaHead.value = "";
@@ -4071,6 +4141,10 @@ function collectTeamManagerPayload() {
       ? teamManagerState.defaultRotation
       : 1;
   const liberos = playersDetailed.filter(p => p.role === "L" && !p.out).map(p => p.name);
+  const preferredLibero =
+    teamManagerState.preferredLibero && liberos.includes(teamManagerState.preferredLibero)
+      ? teamManagerState.preferredLibero
+      : liberos[0] || "";
   const numbers = {};
   playersDetailed.forEach(p => {
     if (p.number !== undefined && p.number !== null && p.number !== "") {
@@ -4089,7 +4163,8 @@ function collectTeamManagerPayload() {
     numbers,
     captains,
     defaultLineup,
-    defaultRotation
+    defaultRotation,
+    preferredLibero
   };
 }
 function saveTeamManagerPayload(options = {}) {
@@ -4156,6 +4231,8 @@ function saveTeamManagerPayload(options = {}) {
       playerNumbers: roster.numbers,
       captains: roster.captains
     });
+    state.opponentPreferredLibero = roster.preferredLibero || roster.liberos?.[0] || "";
+    renderOpponentLiberoChipsInline();
   } else {
     const defaultLineup =
       roster.defaultLineup && roster.defaultLineup.length > 0
@@ -4169,7 +4246,8 @@ function saveTeamManagerPayload(options = {}) {
       playerNumbers: roster.numbers,
       captains: roster.captains,
       setDefaultLineup: !preserveCourt,
-      defaultLineupNames: defaultLineup
+      defaultLineupNames: defaultLineup,
+      preferredLibero: roster.preferredLibero || ""
     });
   }
   saveState();
@@ -4459,7 +4537,8 @@ function updatePlayersList(newPlayers, options = {}) {
     setDefaultLineup = false,
     defaultLineupNames = null,
     defaultLineupRotation = null,
-    preserveCourt = false
+    preserveCourt = false,
+    preferredLibero = null
   } = options;
   const normalized = normalizePlayers(newPlayers);
   const providedNumbers = playerNumbers && typeof playerNumbers === "object" ? playerNumbers : null;
@@ -4471,6 +4550,12 @@ function updatePlayersList(newPlayers, options = {}) {
   const changed = playersChanged(normalized);
   const nextNumbers = buildNumbersForNames(normalized, providedNumbers || state.playerNumbers || {});
   const nextLiberos = (providedLiberos || state.liberos || []).filter(name => normalized.includes(name));
+  const preferred =
+    typeof preferredLibero === "string" && preferredLibero && nextLiberos.includes(preferredLibero)
+      ? preferredLibero
+      : nextLiberos.includes(state.preferredLibero)
+        ? state.preferredLibero
+        : nextLiberos[0] || "";
   const lineupNames =
     Array.isArray(defaultLineupNames) && defaultLineupNames.length > 0
       ? normalizePlayers(defaultLineupNames).filter(name => normalized.includes(name))
@@ -4480,6 +4565,7 @@ function updatePlayersList(newPlayers, options = {}) {
     state.playerNumbers = nextNumbers;
     state.liberos = nextLiberos;
     state.captains = nextCaptains;
+    setTeamPreferredLibero("our", preferred);
     if (setDefaultLineup) {
       applyDefaultLineup(lineupNames, defaultLineupRotation);
     }
@@ -4502,6 +4588,7 @@ function updatePlayersList(newPlayers, options = {}) {
     }
     state.liberos = nextLiberos;
     state.captains = nextCaptains;
+    setTeamPreferredLibero("our", preferred);
     if (setDefaultLineup) {
       applyDefaultLineup(lineupNames, defaultLineupRotation);
     }
@@ -4929,7 +5016,15 @@ function getBenchLiberos() {
   replaced.forEach(name => {
     if (!used.has(name)) names.push(name);
   });
-  return sortNamesByNumber(Array.from(new Set(names)), state.playerNumbers || {});
+  return orderLiberosByPreference(Array.from(new Set(names)), "our", state.playerNumbers || {});
+}
+function orderLiberosByPreference(names, scope = "our", numbersMap = {}) {
+  const list = typeof sortNamesByNumber === "function" ? sortNamesByNumber(names, numbersMap) : names.slice();
+  const preferred = getTeamPreferredLibero(scope);
+  if (preferred && list.includes(preferred)) {
+    return [preferred].concat(list.filter(n => n !== preferred));
+  }
+  return list;
 }
 function getReplacedByLiberos() {
   ensureCourtShape();
@@ -4970,6 +5065,12 @@ function toggleLibero(name) {
     set.add(name);
   }
   state.liberos = Array.from(set);
+  if (state.preferredLibero && !state.liberos.includes(state.preferredLibero)) {
+    state.preferredLibero = state.liberos[0] || "";
+  }
+  if (!state.preferredLibero && state.liberos.length > 0) {
+    state.preferredLibero = state.liberos[0];
+  }
   saveState();
   renderBenchChips();
   renderLiberoTags();
@@ -5050,7 +5151,11 @@ function renderOpponentLiberoChipsInline() {
   elLiberoTagsInlineOpp.innerHTML = "";
   const libSet = new Set(state.opponentLiberos || []);
   const ordered = sortNamesByNumber(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
-  const names = ordered.filter(name => libSet.has(name));
+  const names = orderLiberosByPreference(
+    ordered.filter(name => libSet.has(name)),
+    "opponent",
+    state.opponentPlayerNumbers || {}
+  );
   if (names.length === 0) {
     const span = document.createElement("span");
     span.className = "bench-empty";

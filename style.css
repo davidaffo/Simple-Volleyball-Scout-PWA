@@ -1496,6 +1496,35 @@ body[data-theme="light"] .lineup-number-input {
   gap: 0.4rem;
   padding-top: 0.2rem;
 }
+.lineup-modal__libero {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.lineup-modal__libero select,
+.default-lineup-preferred-libero select {
+  min-width: 180px;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0b1224;
+  color: #e2e8f0;
+}
+body[data-theme="light"] .lineup-modal__libero select,
+body[data-theme="light"] .default-lineup-preferred-libero select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #dfe3eb;
+}
+.default-lineup-preferred-libero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0.2rem;
+}
 @media (max-width: 900px) {
   .lineup-court-grid {
     grid-template-columns: repeat(3, minmax(90px, 1fr));

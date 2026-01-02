@@ -114,6 +114,7 @@ const elLineupModalSaveSubstitution = document.getElementById("lineup-modal-save
 const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
 const elLineupModalToggleNumbers = document.getElementById("lineup-modal-toggle-numbers");
+const elLineupPreferredLibero = document.getElementById("lineup-preferred-libero");
 const elLiveSetScore = document.getElementById("live-set-score");
 const elAggSetScore = document.getElementById("agg-set-score");
 const elNextSetInline = document.getElementById("next-set-inline");
@@ -994,6 +995,58 @@ function getLineupModalLiberos() {
 function getLineupModalNumbers() {
   return lineupModalScope === "opponent" ? state.opponentPlayerNumbers || {} : state.playerNumbers || {};
 }
+function getLineupModalPreferredLibero() {
+  if (typeof getTeamPreferredLibero === "function") {
+    return getTeamPreferredLibero(lineupModalScope);
+  }
+  return lineupModalScope === "opponent" ? state.opponentPreferredLibero || "" : state.preferredLibero || "";
+}
+function setLineupModalPreferredLibero(name) {
+  if (typeof setTeamPreferredLibero === "function") {
+    setTeamPreferredLibero(lineupModalScope, name);
+  } else if (lineupModalScope === "opponent") {
+    state.opponentPreferredLibero = name || "";
+  } else {
+    state.preferredLibero = name || "";
+  }
+}
+function syncLineupPreferredLiberoSelect() {
+  if (!elLineupPreferredLibero) return;
+  const liberos = getLineupModalLiberos();
+  const numbers = getLineupModalNumbers();
+  const preferred = getLineupModalPreferredLibero();
+  const ordered = typeof sortNamesByNumber === "function" ? sortNamesByNumber(liberos, numbers) : liberos.slice();
+  elLineupPreferredLibero.innerHTML = "";
+  const emptyOpt = document.createElement("option");
+  emptyOpt.value = "";
+  emptyOpt.textContent = "-";
+  elLineupPreferredLibero.appendChild(emptyOpt);
+  ordered.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent =
+      lineupModalScope === "opponent"
+        ? formatNameWithNumberFor(name, numbers)
+        : formatNameWithNumber(name);
+    elLineupPreferredLibero.appendChild(opt);
+  });
+  elLineupPreferredLibero.value = preferred && ordered.includes(preferred) ? preferred : "";
+  elLineupPreferredLibero.disabled = ordered.length === 0;
+  if (!elLineupPreferredLibero._preferredBound) {
+    elLineupPreferredLibero.addEventListener("change", () => {
+      const next = elLineupPreferredLibero.value || "";
+      setLineupModalPreferredLibero(next);
+      saveState();
+      if (typeof renderLiberoChipsInline === "function") {
+        renderLiberoChipsInline();
+      }
+      if (typeof renderOpponentLiberoChipsInline === "function") {
+        renderOpponentLiberoChipsInline();
+      }
+    });
+    elLineupPreferredLibero._preferredBound = true;
+  }
+}
 function formatLineupModalName(name, options = {}) {
   return formatNameWithNumber(name, options);
 }
@@ -1485,6 +1538,7 @@ function clearLineupSlot(posIdx) {
 function renderLineupModal() {
   if (!elLineupModalCourt || !elLineupModalBench) return;
   elLineupModalCourt.innerHTML = "";
+  syncLineupPreferredLiberoSelect();
   const court = getCourtShape(lineupModalCourt);
   const numbersMap = getLineupModalNumbers();
   const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;

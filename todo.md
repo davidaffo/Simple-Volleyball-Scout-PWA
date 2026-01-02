@@ -4,7 +4,6 @@ Modifica immagine battuta per mettere il campo fuori
 Cambio set e inizio partita migliorato
 Aggregare dati di piu partite
 mostrare traiettorie battute della persona che batte
-impostare libero principale
 
 # Bugfix
 Importazione match sembra avere problemi
