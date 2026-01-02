@@ -5,10 +5,7 @@ Cambio set e inizio partita migliorato
 Aggregare dati di piu partite
 mostrare traiettorie battute della persona che batte
 impostare libero principale
-formazione iniziale per set sul tabellino
-aggiungi nel tabellino analisi cambio palla e break point
-Aggiungi al tabellino i dati per set
-Aggiungi nel tabellino la possibilita di filtrare per set
+
 # Bugfix
 Importazione match sembra avere problemi
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
