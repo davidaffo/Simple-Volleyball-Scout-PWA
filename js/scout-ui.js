@@ -156,6 +156,7 @@ const elOpponentSkillDefense = document.getElementById("opponent-skill-defense")
 const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
 const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
+const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
@@ -10795,6 +10796,11 @@ function handleAnalysisTeamFilterChange(e) {
   renderSecondTable();
   renderPlayerAnalysis();
 }
+function handleAnalysisSummarySetFilterChange() {
+  if (!elAnalysisFilterSets) return;
+  analysisSummaryFilterState.sets = new Set(getCheckedValues(elAnalysisFilterSets, { asNumber: true }));
+  renderAggregatedTable();
+}
 function handleVideoTeamFilterChange(e) {
   if (!elVideoFilterTeams) return;
   const values = getCheckedValues(elVideoFilterTeams);
@@ -10813,6 +10819,21 @@ function renderAnalysisTeamFilter() {
   });
   toggleFilterVisibility(elAnalysisFilterTeams, visible);
 }
+function renderAnalysisSummarySetFilter() {
+  if (!elAnalysisFilterSets) return;
+  const events = filterEventsByAnalysisTeam(state.events || []);
+  const setOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
+    asNumber: true,
+    labelFn: val => "Set " + val
+  });
+  analysisSummaryFilterState.sets = new Set(
+    [...analysisSummaryFilterState.sets].filter(val => setOpts.some(opt => Number(opt.value) === val))
+  );
+  const visible = renderDynamicFilter(elAnalysisFilterSets, setOpts, analysisSummaryFilterState.sets, {
+    onChange: handleAnalysisSummarySetFilterChange
+  });
+  toggleFilterVisibility(elAnalysisFilterSets, visible);
+}
 function matchesTeamFilter(ev, selectedSet) {
   if (!selectedSet || selectedSet.size === 0) return true;
   const scope = getTeamScopeFromEvent(ev);
@@ -10827,6 +10848,17 @@ function getAnalysisTeamScope() {
 }
 function filterEventsByAnalysisTeam(events) {
   return (events || []).filter(ev => matchesTeamFilter(ev, analysisTeamFilterState.teams));
+}
+function matchesSummarySetFilter(ev) {
+  if (!analysisSummaryFilterState.sets || analysisSummaryFilterState.sets.size === 0) return true;
+  const setNum = normalizeSetNumber(ev && ev.set);
+  if (setNum === null) return false;
+  return analysisSummaryFilterState.sets.has(setNum);
+}
+function getSummarySetNumbers() {
+  const played = getPlayedSetNumbers();
+  if (!analysisSummaryFilterState.sets || analysisSummaryFilterState.sets.size === 0) return played;
+  return played.filter(num => analysisSummaryFilterState.sets.has(num));
 }
 function matchesPreviousSkill(ev, filterVal) {
   if (!filterVal || filterVal === "any") return true;
@@ -10974,6 +11006,9 @@ const trajectoryFilterState = {
 };
 const analysisTeamFilterState = {
   teams: new Set()
+};
+const analysisSummaryFilterState = {
+  sets: new Set()
 };
 const serveTrajectoryFilterState = {
   players: new Set(),
@@ -12849,8 +12884,9 @@ function renderAggregatedTable() {
   const { table, thead } = getAggTableElements();
   ensureAggTableHeadCache(thead);
   renderAnalysisTeamFilter();
+  renderAnalysisSummarySetFilter();
   const analysisScope = getAnalysisTeamScope();
-  const playedSets = getPlayedSetNumbers();
+  const playedSets = getSummarySetNumbers();
   const summaryColCount = 26 + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
@@ -12875,14 +12911,41 @@ function renderAggregatedTable() {
   }
   elAggTableBody.innerHTML = "";
   bindSetStartBodyHeaderClicks();
+  const computeTeamTotalsForEvents = (events, scope) => {
+    const totalsBySkill = {
+      serve: emptyCounts(),
+      pass: emptyCounts(),
+      attack: emptyCounts(),
+      block: emptyCounts(),
+      defense: emptyCounts()
+    };
+    (events || []).forEach(ev => {
+      if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+        return;
+      }
+      const bucket = totalsBySkill[ev.skillId];
+      if (!bucket || !ev.code) return;
+      bucket[ev.code] = (bucket[ev.code] || 0) + 1;
+    });
+    const playerPoints = computePlayerPointsMap(events, scope);
+    const playerErrors = computePlayerErrorsMap(events);
+    let totalFor = 0;
+    let totalAgainst = 0;
+    Object.values(playerPoints || {}).forEach(points => {
+      totalFor += points.for || 0;
+      totalAgainst += points.against || 0;
+    });
+    let totalErrors = 0;
+    Object.values(playerErrors || {}).forEach(val => {
+      totalErrors += val || 0;
+    });
+    return { totalsBySkill, totalFor, totalAgainst, totalErrors };
+  };
   const renderAggSummaryForScope = (scope, { showHeader = false } = {}) => {
     const analysisPlayers = getPlayersForScope(scope);
     const analysisNumbers = getPlayerNumbersForScope(scope);
     const filteredEvents = (state.events || []).filter(ev => matchesTeamFilter(ev, new Set([scope])));
-    const scopeSummary = computePointsSummary(null, {
-      excludeOpponentErrors: true,
-      teamScope: scope
-    });
+    const summaryEvents = filteredEvents.filter(ev => matchesSummarySetFilter(ev));
     if (showHeader) {
       const headerRow = document.createElement("tr");
       headerRow.className = "rotation-row total";
@@ -12921,7 +12984,7 @@ function renderAggregatedTable() {
       return;
     }
     const statsByPlayer = {};
-    filteredEvents.forEach(ev => {
+    summaryEvents.forEach(ev => {
       if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
         return;
       }
@@ -12946,8 +13009,8 @@ function renderAggregatedTable() {
       analysisStatsCache = statsByPlayer;
       analysisStatsScope = scope;
     }
-    const playerPoints = computePlayerPointsMap(filteredEvents, scope);
-    const playerErrors = computePlayerErrorsMap(filteredEvents);
+    const playerPoints = computePlayerPointsMap(summaryEvents, scope);
+    const playerErrors = computePlayerErrorsMap(summaryEvents);
     const totalsBySkill = {
       serve: emptyCounts(),
       pass: emptyCounts(),
@@ -13059,6 +13122,7 @@ function renderAggregatedTable() {
       });
       elAggTableBody.appendChild(row);
     });
+    const teamTotals = computeTeamTotalsForEvents(summaryEvents, scope);
     const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
     const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
@@ -13071,9 +13135,9 @@ function renderAggregatedTable() {
     const totalCells = [
       { text: "Totale squadra" },
       ...startTotalsCells,
-      { text: scopeSummary.totalFor || 0 },
-      { text: scopeSummary.totalAgainst || 0 },
-      { text: formatDelta((scopeSummary.totalFor || 0) - (scopeSummary.totalAgainst || 0)) },
+      { text: teamTotals.totalFor || 0 },
+      { text: teamTotals.totalAgainst || 0 },
+      { text: formatDelta((teamTotals.totalFor || 0) - (teamTotals.totalAgainst || 0)) },
       { text: totalErrors || 0 },
 
       { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
@@ -13109,6 +13173,63 @@ function renderAggregatedTable() {
       totalsRow.appendChild(td);
     });
     elAggTableBody.appendChild(totalsRow);
+    playedSets.forEach(setNum => {
+      const setEvents = summaryEvents.filter(ev => normalizeSetNumber(ev.set) === setNum);
+      const setTotals = computeTeamTotalsForEvents(setEvents, scope);
+      const setServeMetrics = computeMetrics(setTotals.totalsBySkill.serve, "serve");
+      const setPassMetrics = computeMetrics(setTotals.totalsBySkill.pass, "pass");
+      const setAttackMetrics = computeMetrics(setTotals.totalsBySkill.attack, "attack");
+      const setDefenseMetrics = computeMetrics(setTotals.totalsBySkill.defense, "defense");
+      const setAttackTotal = totalFromCounts(setTotals.totalsBySkill.attack);
+      const setRow = document.createElement("tr");
+      setRow.className = "rotation-row";
+      const setStartCells = playedSets.map(() => ({ text: "-" }));
+      const setCells = [
+        { text: "Set " + setNum },
+        ...setStartCells,
+        { text: setTotals.totalFor || 0 },
+        { text: setTotals.totalAgainst || 0 },
+        { text: formatDelta((setTotals.totalFor || 0) - (setTotals.totalAgainst || 0)) },
+        { text: setTotals.totalErrors || 0 },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.serve), className: "skill-col skill-serve" },
+        { text: setTotals.totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
+        { text: setTotals.totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
+        { text: setServeMetrics.eff === null ? "-" : formatPercent(setServeMetrics.eff), className: "skill-col skill-serve" },
+        { text: setServeMetrics.pos === null ? "-" : formatPercent(setServeMetrics.pos), className: "skill-col skill-serve" },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.pass), className: "skill-col skill-pass" },
+        { text: setPassMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+        { text: setPassMetrics.pos === null ? "-" : formatPercent(setPassMetrics.pos), className: "skill-col skill-pass" },
+        { text: setPassMetrics.prf === null ? "-" : formatPercent(setPassMetrics.prf), className: "skill-col skill-pass" },
+        { text: setPassMetrics.eff === null ? "-" : formatPercent(setPassMetrics.eff), className: "skill-col skill-pass" },
+
+        { text: setAttackTotal, className: "skill-col skill-attack" },
+        { text: setTotals.totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
+        { text: setTotals.totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
+        { text: setTotals.totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
+        { text: formatPercentValue(setTotals.totalsBySkill.attack["#"] || 0, setAttackTotal), className: "skill-col skill-attack" },
+        { text: setAttackMetrics.eff === null ? "-" : formatPercent(setAttackMetrics.eff), className: "skill-col skill-attack" },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.block), className: "skill-col skill-block" },
+        {
+          text:
+            (setTotals.totalsBySkill.block["#"] || 0) + (setTotals.totalsBySkill.block["+"] || 0),
+          className: "skill-col skill-block"
+        },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.defense), className: "skill-col skill-defense" },
+        { text: setDefenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+        { text: setDefenseMetrics.eff === null ? "-" : formatPercent(setDefenseMetrics.eff), className: "skill-col skill-defense" }
+      ];
+      setCells.forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell.text;
+        if (cell.className) td.className = cell.className;
+        setRow.appendChild(td);
+      });
+      elAggTableBody.appendChild(setRow);
+    });
   };
   if (showBothTeams) {
     renderAggSummaryForScope("our", { showHeader: true });
