@@ -3741,6 +3741,56 @@ body[data-theme="light"] .video-time-label {
 .rotation-row.total {
   font-weight: 700;
 }
+.formation-starter-cell {
+  background: #1e3a8a;
+  color: #ffffff;
+}
+.formation-setter-cell {
+  background: #991b1b;
+  color: #ffffff;
+}
+.set-start-header {
+  cursor: pointer;
+}
+.set-start-list {
+  display: grid;
+  gap: 0.5rem;
+}
+.set-start-row {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  align-items: center;
+  gap: 0.6rem;
+}
+.set-start-name {
+  font-weight: 600;
+}
+.set-start-select {
+  width: 100%;
+  background: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 6px;
+  color: #f8fafc;
+  text-align: center;
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+}
+.set-start-select:focus {
+  outline: 1px solid rgba(148, 163, 184, 0.7);
+}
+.set-start-select option {
+  background: #111827;
+  color: #f8fafc;
+}
+body[data-theme="light"] .set-start-select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5f5;
+}
+body[data-theme="light"] .set-start-select option {
+  background: #ffffff;
+  color: #0f172a;
+}
 .rotation-row.best {
   color: var(--text-color, #f5f5f5);
   background: rgba(34, 197, 94, 0.2);

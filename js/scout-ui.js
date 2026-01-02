@@ -171,6 +171,11 @@ const elTeamsManagerExport = document.getElementById("teams-manager-export");
 const elTeamsManagerImport = document.getElementById("teams-manager-import");
 const elTeamsManagerFileInput = document.getElementById("teams-manager-file-input");
 const elTeamsManagerOpenPlayersDb = document.getElementById("teams-manager-open-players-db");
+const elSetStartModal = document.getElementById("set-start-modal");
+const elSetStartModalTitle = document.getElementById("set-start-modal-title");
+const elSetStartModalBody = document.getElementById("set-start-modal-body");
+const elSetStartModalClose = document.getElementById("set-start-modal-close");
+const elSetStartModalCancel = document.getElementById("set-start-modal-cancel");
 let teamsManagerSelectedName = "";
 const courtModalElements = [];
 let courtOverlayEl = null;
@@ -281,6 +286,9 @@ let lineupModalScope = "our";
 let lineupDragFromIdx = null;
 let lineupModalDefaultRotation = null;
 let lineupModalContext = "match";
+let setStartEditSetNum = null;
+let setStartModalSetNum = null;
+let setStartModalScope = "our";
 let nextSetDraft = null;
 let nextSetModalOpen = false;
 let nextSetDragName = "";
@@ -1001,10 +1009,11 @@ function getBenchForLineupWithRoster(court, rosterNames, liberos, numbersMap) {
 }
 function updateLineupModalControls() {
   const isNextSet = lineupModalContext === "next-set";
-  if (elLineupModalSaveOverride) {
-    elLineupModalSaveOverride.classList.remove("hidden");
-    elLineupModalSaveOverride.textContent = isNextSet ? "Salva formazione" : "Metti in campo (Override)";
-  }
+  const isSetStartEdit = lineupModalContext === "set-start";
+    if (elLineupModalSaveOverride) {
+      elLineupModalSaveOverride.classList.remove("hidden");
+      elLineupModalSaveOverride.textContent = isNextSet ? "Salva formazione" : "Metti in campo (Override)";
+    }
   if (elLineupModalSaveSubstitution) {
     elLineupModalSaveSubstitution.classList.toggle("hidden", isNextSet);
   }
@@ -1673,15 +1682,89 @@ function openMobileLineupModal(scope = "our") {
     setModalOpenState(true);
   }
 }
+function renderSetStartModal() {
+  if (!elSetStartModalBody) return;
+  const setNum = setStartModalSetNum || state.currentSet || 1;
+  const scope = setStartModalScope || "our";
+  ensureSetStartSnapshot(setNum);
+  if (elSetStartModalTitle) {
+    const label = "Formazione di partenza S" + String(setNum);
+    elSetStartModalTitle.textContent = scope === "opponent" ? label + " avversaria" : label;
+  }
+  const startInfo = buildSetStartInfoList([setNum], scope)[0];
+  const sortedEntries =
+    scope === "opponent" ? getSortedPlayerEntriesForScope(scope) : getSortedPlayerEntries();
+  const list = document.createElement("div");
+  list.className = "set-start-list";
+  sortedEntries.forEach(({ name }) => {
+    const row = document.createElement("div");
+    row.className = "set-start-row";
+    const label = document.createElement("span");
+    label.className = "set-start-name";
+    label.textContent =
+      scope === "opponent"
+        ? formatNameWithNumberFor(name, getPlayerNumbersForScope(scope))
+        : formatNameWithNumber(name);
+    row.appendChild(label);
+    const select = document.createElement("select");
+    select.className = "set-start-select";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "-";
+    select.appendChild(emptyOpt);
+    const inOpt = document.createElement("option");
+    inOpt.value = "in";
+    inOpt.textContent = "in";
+    select.appendChild(inOpt);
+    for (let pos = 1; pos <= 6; pos += 1) {
+      const opt = document.createElement("option");
+      opt.value = String(pos);
+      opt.textContent = String(pos);
+      select.appendChild(opt);
+    }
+    const key = makePlayerKey(name);
+    const pos = startInfo && startInfo.positions ? startInfo.positions.get(key) : null;
+    const isSub = startInfo && startInfo.subsIn ? startInfo.subsIn.has(key) : false;
+    select.value = pos ? String(pos) : isSub ? "in" : "";
+    select.addEventListener("change", () => {
+      updateSetStartSelection(setNum, scope, name, select.value);
+      renderSetStartModal();
+    });
+    row.appendChild(select);
+    list.appendChild(row);
+  });
+  elSetStartModalBody.innerHTML = "";
+  elSetStartModalBody.appendChild(list);
+}
+function openSetStartEditor(setNum, scope = "our") {
+  const targetSet = parseInt(setNum, 10) || state.currentSet || 1;
+  setStartModalSetNum = targetSet;
+  setStartModalScope = scope === "opponent" ? "opponent" : "our";
+  renderSetStartModal();
+  if (elSetStartModal) {
+    elSetStartModal.classList.remove("hidden");
+    setModalOpenState(true, true);
+  }
+}
 function closeLineupModal() {
   if (elLineupModal) {
     elLineupModal.classList.add("hidden");
+    elLineupModal.classList.remove("force-popup");
     setModalOpenState(false);
   }
   lineupDragName = "";
   lineupSelectedName = "";
   lineupNumberMode = false;
   lineupModalContext = "match";
+  setStartEditSetNum = null;
+}
+function closeSetStartModal() {
+  if (elSetStartModal) {
+    elSetStartModal.classList.add("hidden");
+  }
+  setStartModalSetNum = null;
+  setStartModalScope = "our";
+  setModalOpenState(false, true);
 }
 function saveLineupModal({ countSubstitutions = false } = {}) {
   const prevCourt = countSubstitutions ? getLineupBaseCourtFromState() : null;
@@ -1698,6 +1781,11 @@ function saveLineupModal({ countSubstitutions = false } = {}) {
     } else {
       nextSetDraft.our = { court: cloneCourt(nextCourt), rotation: nextRotation };
     }
+    lineupModalDefaultRotation = null;
+    closeLineupModal();
+    return;
+  }
+  if (lineupModalContext === "set-start") {
     lineupModalDefaultRotation = null;
     closeLineupModal();
     return;
@@ -5419,6 +5507,7 @@ async function handleEventClick(
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return false;
   }
+  ensureSetStartSnapshot(state.currentSet || 1);
   let forceMatch = false;
   let allowPendingServePass = false;
   let flowState = null;
@@ -5827,6 +5916,158 @@ function renderAggDetailHeader(thead, columns) {
   });
   thead.appendChild(tr);
 }
+function ensureSetStartSnapshot(setNum) {
+  const targetSet = parseInt(setNum, 10) || state.currentSet || 1;
+  state.setStarts = state.setStarts || {};
+  if (state.setStarts[targetSet]) return;
+  const ourCourt =
+    typeof removeLiberosAndRestoreForScope === "function"
+      ? removeLiberosAndRestoreForScope(state.court || [], "our")
+      : cloneCourt(state.court || []);
+  const oppCourt =
+    typeof removeLiberosAndRestoreForScope === "function"
+      ? removeLiberosAndRestoreForScope(state.opponentCourt || [], "opponent")
+      : cloneCourt(state.opponentCourt || []);
+  state.setStarts[targetSet] = {
+    our: { court: cloneCourt(ourCourt || []), rotation: state.rotation || 1 },
+    opponent: { court: cloneCourt(oppCourt || []), rotation: state.opponentRotation || 1 },
+    swapCourt: !!state.courtSideSwapped,
+    isServing: !!state.isServing
+  };
+}
+function getPlayedSetNumbers() {
+  const setNums = new Set();
+  (state.events || []).forEach(ev => {
+    const num = parseInt(ev && ev.set, 10);
+    if (num) setNums.add(num);
+  });
+  return Array.from(setNums).sort((a, b) => a - b);
+}
+function getSetStartEntryForScope(setNum, scope) {
+  const entry = state.setStarts && state.setStarts[setNum];
+  if (entry) {
+    const data = scope === "opponent" ? entry.opponent : entry.our;
+    if (data && Array.isArray(data.court)) {
+      return { court: data.court, rotation: typeof data.rotation === "number" ? data.rotation : 1 };
+    }
+  }
+  if (setNum === 1) {
+    const fallback = getDefaultSetStartForScope(scope);
+    if (fallback) return fallback;
+  }
+  return null;
+}
+function makePlayerKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+function buildSetStartInfoList(setNumbers, scope) {
+  const substitutionsBySet = new Map();
+  (setNumbers || []).forEach(num => substitutionsBySet.set(num, new Set()));
+  (state.events || []).forEach(ev => {
+    if (!ev || ev.actionType !== "substitution") return;
+    const setNum = parseInt(ev.set, 10) || 1;
+    if (!substitutionsBySet.has(setNum)) return;
+    if (getTeamScopeFromEvent(ev) !== scope) return;
+    const playerIn = makePlayerKey(ev.playerIn || "");
+    if (playerIn) substitutionsBySet.get(setNum).add(playerIn);
+  });
+  return (setNumbers || []).map(setNum => {
+    const entry = getSetStartEntryForScope(setNum, scope);
+    const positions = new Map();
+    if (entry && Array.isArray(entry.court)) {
+      entry.court.forEach((slot, idx) => {
+        const name = typeof slot === "string" ? slot : slot && typeof slot === "object" ? slot.main || "" : "";
+        const key = makePlayerKey(name);
+        if (!key) return;
+        positions.set(key, idx + 1);
+      });
+    }
+    const rotation = entry && typeof entry.rotation === "number" ? entry.rotation : 1;
+    let setterPos = null;
+    if (typeof getRoleLabelForRotation === "function") {
+      for (let pos = 1; pos <= 6; pos += 1) {
+        if (String(getRoleLabelForRotation(pos, rotation)).toUpperCase() === "P") {
+          setterPos = pos;
+          break;
+        }
+      }
+    }
+    const subsIn = substitutionsBySet.get(setNum) || new Set();
+    return { setNum, positions, setterPos, subsIn };
+  });
+}
+function renderAggSummaryHeader(thead, setNumbers) {
+  if (!thead) return;
+  thead.innerHTML = "";
+  const rowTop = document.createElement("tr");
+  const rowBottom = document.createElement("tr");
+  const addCell = (row, label, { colspan, rowspan, className } = {}) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    if (colspan) th.setAttribute("colspan", colspan);
+    if (rowspan) th.setAttribute("rowspan", rowspan);
+    if (className) th.className = className;
+    row.appendChild(th);
+  };
+  addCell(rowTop, "Atleta", { rowspan: 2 });
+  if (setNumbers && setNumbers.length) {
+    addCell(rowTop, "Formazione di partenza", { colspan: setNumbers.length });
+    setNumbers.forEach(num => {
+      const th = document.createElement("th");
+      th.textContent = "S" + num;
+      th.className = "set-start-header";
+      th.dataset.setNum = String(num);
+      th.addEventListener("click", () => {
+        const scope =
+          analysisTeamFilterState.teams && analysisTeamFilterState.teams.has("opponent")
+            ? "opponent"
+            : "our";
+        openSetStartEditor(num, scope);
+      });
+      rowBottom.appendChild(th);
+    });
+  }
+  addCell(rowTop, "Punti", { colspan: 4 });
+  addCell(rowTop, "Battuta", { colspan: 5, className: "skill-col skill-serve" });
+  addCell(rowTop, "Ricezione", { colspan: 5, className: "skill-col skill-pass" });
+  addCell(rowTop, "Attacco", { colspan: 6, className: "skill-col skill-attack" });
+  addCell(rowTop, "Muro", { colspan: 2, className: "skill-col skill-block" });
+  addCell(rowTop, "Difesa", { colspan: 3, className: "skill-col skill-defense" });
+
+  addCell(rowBottom, "Fatti");
+  addCell(rowBottom, "Subiti");
+  addCell(rowBottom, "Δ");
+  addCell(rowBottom, "Falli/Errori");
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-serve" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-serve" });
+  addCell(rowBottom, "Punti", { className: "skill-col skill-serve" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-serve" });
+  addCell(rowBottom, "Pos", { className: "skill-col skill-serve" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-pass" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-pass" });
+  addCell(rowBottom, "Pos", { className: "skill-col skill-pass" });
+  addCell(rowBottom, "Prf", { className: "skill-col skill-pass" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-pass" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-attack" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-attack" });
+  addCell(rowBottom, "Mur", { className: "skill-col skill-attack" });
+  addCell(rowBottom, "Punti", { className: "skill-col skill-attack" });
+  addCell(rowBottom, "% Punti", { className: "skill-col skill-attack" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-attack" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-block" });
+  addCell(rowBottom, "Punti", { className: "skill-col skill-block" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-defense" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-defense" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-defense" });
+
+  thead.appendChild(rowTop);
+  thead.appendChild(rowBottom);
+}
 function buildAggBodyHeaderRows(thead) {
   if (!thead) return [];
   const rows = Array.from(thead.querySelectorAll("tr"));
@@ -5841,6 +6082,11 @@ function buildAggBodyHeaderRows(thead) {
         const td = document.createElement("td");
         td.textContent = cell.textContent || "";
         if (cell.className) td.className = cell.className;
+        if (cell.dataset) {
+          Object.keys(cell.dataset).forEach(key => {
+            td.dataset[key] = cell.dataset[key];
+          });
+        }
         const colspan = cell.getAttribute("colspan");
         if (colspan) td.setAttribute("colspan", colspan);
         const rowspan = cell.getAttribute("rowspan");
@@ -5858,6 +6104,41 @@ function applySkillClassToCells(cells, skillId, startIndex = 0) {
     td.classList.add("skill-col", "skill-" + skillId);
   });
 }
+function getScopeFromSetHeaderTarget(target) {
+  if (!target) return null;
+  const row = target.closest("tr");
+  if (row && row.dataset && row.dataset.teamScope) return row.dataset.teamScope;
+  if (analysisTeamFilterState.teams && analysisTeamFilterState.teams.has("opponent")) return "opponent";
+  return "our";
+}
+function bindSetStartHeaderClicks(thead) {
+  if (!thead || thead._setStartBound) return;
+  thead.addEventListener("click", ev => {
+    const target = ev.target;
+    if (!(target instanceof HTMLElement)) return;
+    const cell = target.closest(".set-start-header");
+    if (!cell || !cell.dataset || !cell.dataset.setNum) return;
+    const setNum = parseInt(cell.dataset.setNum, 10);
+    if (!setNum) return;
+    const scope = getScopeFromSetHeaderTarget(cell);
+    openSetStartEditor(setNum, scope);
+  });
+  thead._setStartBound = true;
+}
+function bindSetStartBodyHeaderClicks() {
+  if (!elAggTableBody || elAggTableBody._setStartBound) return;
+  elAggTableBody.addEventListener("click", ev => {
+    const target = ev.target;
+    if (!(target instanceof HTMLElement)) return;
+    const cell = target.closest(".set-start-header");
+    if (!cell || !cell.dataset || !cell.dataset.setNum) return;
+    const setNum = parseInt(cell.dataset.setNum, 10);
+    if (!setNum) return;
+    const scope = getScopeFromSetHeaderTarget(cell);
+    openSetStartEditor(setNum, scope);
+  });
+  elAggTableBody._setStartBound = true;
+}
 function bindAggSummaryInteractions(thead) {
   if (!thead) return;
   const headerRow = thead.querySelector("tr");
@@ -5873,6 +6154,12 @@ function bindAggSummaryInteractions(thead) {
       renderAggregatedTable();
     });
   });
+}
+if (elSetStartModalClose) {
+  elSetStartModalClose.addEventListener("click", closeSetStartModal);
+}
+if (elSetStartModalCancel) {
+  elSetStartModalCancel.addEventListener("click", closeSetStartModal);
 }
 function renderAggSkillDetailTable(summaryAll) {
   const { thead } = getAggTableElements();
@@ -9852,6 +10139,7 @@ function setScoutControlsDisabled(disabled) {
   });
 }
 function recordSetAction(actionType, payload) {
+  ensureSetStartSnapshot(state.currentSet || 1);
   const code = payload && payload.code ? payload.code : actionType;
   const event = buildBaseEventPayload(
     Object.assign({}, payload, {
@@ -12562,6 +12850,8 @@ function renderAggregatedTable() {
   ensureAggTableHeadCache(thead);
   renderAnalysisTeamFilter();
   const analysisScope = getAnalysisTeamScope();
+  const playedSets = getPlayedSetNumbers();
+  const summaryColCount = 26 + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
     analysisTeamFilterState.teams.size === 0 &&
@@ -12578,10 +12868,13 @@ function renderAggregatedTable() {
     renderAggPlayerDetailTable(summaryAll);
     return;
   }
-  if (thead && aggTableHeadCache !== null) {
-    thead.innerHTML = aggTableHeadCache;
+  if (thead) {
+    renderAggSummaryHeader(thead, playedSets);
+    bindSetStartHeaderClicks(thead);
+    aggTableHeadCache = thead.innerHTML;
   }
   elAggTableBody.innerHTML = "";
+  bindSetStartBodyHeaderClicks();
   const renderAggSummaryForScope = (scope, { showHeader = false } = {}) => {
     const analysisPlayers = getPlayersForScope(scope);
     const analysisNumbers = getPlayerNumbersForScope(scope);
@@ -12594,12 +12887,13 @@ function renderAggregatedTable() {
       const headerRow = document.createElement("tr");
       headerRow.className = "rotation-row total";
       const headerCell = document.createElement("td");
-      headerCell.colSpan = 26;
+      headerCell.colSpan = summaryColCount;
       headerCell.textContent = getTeamNameForScope(scope);
       headerRow.appendChild(headerCell);
       elAggTableBody.appendChild(headerRow);
       const columnsRows = buildAggBodyHeaderRows(thead);
       columnsRows.forEach(row => {
+        row.dataset.teamScope = scope;
         elAggTableBody.appendChild(row);
         const skillHeaders = row.querySelectorAll(".skill-col");
         skillHeaders.forEach(cell => {
@@ -12620,7 +12914,7 @@ function renderAggregatedTable() {
     if (!analysisPlayers || analysisPlayers.length === 0) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.colSpan = 26;
+      td.colSpan = summaryColCount;
       td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
       tr.appendChild(td);
       elAggTableBody.appendChild(tr);
@@ -12664,6 +12958,7 @@ function renderAggregatedTable() {
     let totalErrors = 0;
     const sortedEntries =
       scope === "opponent" ? getSortedPlayerEntriesForScope(scope) : getSortedPlayerEntries();
+    const startInfoList = buildSetStartInfoList(playedSets, scope);
     sortedEntries.forEach(({ name, idx }) => {
       const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
       const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
@@ -12687,6 +12982,18 @@ function renderAggregatedTable() {
       totalErrors += personalErrors;
       const attackTotal = totalFromCounts(attackCounts);
       const row = document.createElement("tr");
+      const startCells = startInfoList.map(info => {
+        const key = makePlayerKey(name);
+        const pos = info.positions ? info.positions.get(key) : null;
+        const hasPos = !!pos;
+        const isSubIn = !hasPos && info.subsIn && info.subsIn.has(key);
+        const text = hasPos ? String(pos) : isSubIn ? "in" : "-";
+        return {
+          text,
+          isSetter: hasPos && info.setterPos === pos,
+          isStarter: hasPos
+        };
+      });
       const cells = [
         {
           text:
@@ -12696,6 +13003,7 @@ function renderAggregatedTable() {
           isPlayer: true,
           playerIdx: idx
         },
+        ...startCells,
         { text: points.for || 0 },
         { text: points.against || 0 },
         { text: formatDelta((points.for || 0) - (points.against || 0)) },
@@ -12730,6 +13038,8 @@ function renderAggregatedTable() {
       cells.forEach(cell => {
         const td = document.createElement("td");
         td.textContent = cell.text;
+        if (cell.isStarter) td.classList.add("formation-starter-cell");
+        if (cell.isSetter) td.classList.add("formation-setter-cell");
         if (cell.className) td.className = cell.className;
         if (cell.isPlayer) {
           td.classList.add("agg-player-cell");
@@ -12757,8 +13067,10 @@ function renderAggregatedTable() {
     const teamAttackTotal = totalFromCounts(totalsBySkill.attack);
     const totalsRow = document.createElement("tr");
     totalsRow.className = "rotation-row total";
+    const startTotalsCells = playedSets.map(() => ({ text: "-" }));
     const totalCells = [
       { text: "Totale squadra" },
+      ...startTotalsCells,
       { text: scopeSummary.totalFor || 0 },
       { text: scopeSummary.totalAgainst || 0 },
       { text: formatDelta((scopeSummary.totalFor || 0) - (scopeSummary.totalAgainst || 0)) },
@@ -12813,7 +13125,7 @@ function renderAggregatedTable() {
   if (!analysisPlayers || analysisPlayers.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 26;
+    td.colSpan = summaryColCount;
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
