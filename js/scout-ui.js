@@ -89,6 +89,32 @@ let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
 let serveTrajectoryScope = null;
+function getAttackMetaForPlayer(scope, playerIdx) {
+  const scopedKey = scope + ":" + playerIdx;
+  if (attackMetaByPlayer[scopedKey]) return attackMetaByPlayer[scopedKey];
+  const fallbackKey = makePlayerKey(scope, playerIdx);
+  const direct = attackMetaByPlayer[fallbackKey];
+  if (direct && direct.playerIdx === playerIdx && direct.scope === scope) return direct;
+  const keys = Object.keys(attackMetaByPlayer);
+  for (let i = 0; i < keys.length; i += 1) {
+    const meta = attackMetaByPlayer[keys[i]];
+    if (meta && meta.playerIdx === playerIdx && meta.scope === scope) return meta;
+  }
+  return null;
+}
+function getActiveAttackKeyForScope(scope) {
+  if (attackInlinePlayer && isPlayerKeyInScope(attackInlinePlayer, scope)) {
+    return attackInlinePlayer;
+  }
+  const keys = Object.keys(attackMetaByPlayer);
+  for (let i = 0; i < keys.length; i += 1) {
+    const meta = attackMetaByPlayer[keys[i]];
+    if (!meta || meta.scope !== scope) continue;
+    if (typeof meta.playerIdx !== "number") continue;
+    return keys[i];
+  }
+  return null;
+}
 const ERROR_TYPES = [
   { id: "Double", label: "Doppia" },
   { id: "Carry", label: "Accompagnata" },
@@ -1350,7 +1376,7 @@ async function startAttackSelection(playerIdx, setTypeChoice, onDone, scope = "o
     return;
   }
   attackInlinePlayer = key;
-  const meta = { setType: setTypeChoice || null };
+  const meta = { setType: setTypeChoice || null, playerIdx, scope };
   if (state.videoScoutMode) {
     const videoTime = getActiveVideoPlaybackSeconds();
     if (typeof videoTime === "number") meta.videoTime = videoTime;
@@ -1794,7 +1820,7 @@ function renderSetStartModal() {
       opt.textContent = String(pos);
       select.appendChild(opt);
     }
-    const key = makePlayerKey(name);
+    const key = makePlayerNameKey(name);
     const pos = startInfo && startInfo.positions ? startInfo.positions.get(key) : null;
     const isSub = startInfo && startInfo.subsIn ? startInfo.subsIn.has(key) : false;
     select.value = pos ? String(pos) : isSub ? "in" : "";
@@ -3977,7 +4003,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
     elSkillModalBody.appendChild(typeWrap);
     return;
   }
-  if (skillId === "attack" && !attackMetaByPlayer[playerKey]) {
+  if (skillId === "attack" && !getAttackMetaForPlayer(scope, playerIdx)) {
     if (
       attackInlinePlayer !== null &&
       attackInlinePlayer !== playerKey &&
@@ -4043,10 +4069,11 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
     btn.dataset.skillId = skillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
+      const attackMeta = getAttackMetaForPlayer(scope, playerIdx);
       const usedQueuedSetType =
         skillId === "attack" &&
-        attackMetaByPlayer[playerKey] &&
-        attackMetaByPlayer[playerKey].fromNextSetType;
+        attackMeta &&
+        attackMeta.fromNextSetType;
       const success = await handleEventClick(
         playerIdx,
         skillId,
@@ -4055,7 +4082,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
         e.currentTarget,
         {
           serveMeta: serveMetaByPlayer[playerKey] || null,
-          attackMeta: attackMetaByPlayer[playerKey] || null,
+          attackMeta: attackMeta || null,
           scope
         }
       );
@@ -4536,6 +4563,14 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     targetEl.appendChild(empty);
     return;
   }
+  const activeAttackKey = getActiveAttackKeyForScope(scope);
+  if (activeAttackKey && activeAttackKey !== playerKey) {
+    const locked = document.createElement("div");
+    locked.className = "players-empty";
+    locked.textContent = "Attacco in corso: completa la valutazione.";
+    targetEl.appendChild(locked);
+    return;
+  }
   if (state.useOpponentTeam && state.predictiveSkillFlow) {
     const isForcedScope = state.forceSkillActive && state.forceSkillScope === scope;
     if (!isForcedScope) {
@@ -4866,7 +4901,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     targetEl.appendChild(grid);
     return;
   }
-  if (pickedSkillId === "attack" && !attackMetaByPlayer[playerKey]) {
+  if (pickedSkillId === "attack" && !getAttackMetaForPlayer(scope, playerIdx)) {
     if (
       attackInlinePlayer !== null &&
       attackInlinePlayer !== playerKey &&
@@ -4965,8 +5000,24 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
       grid.appendChild(btn);
       targetEl.appendChild(grid);
     } else {
-      if (attackInlinePlayer === playerKey) return;
-      startAttackSelection(playerIdx, null, renderPlayers, scope);
+      const grid = document.createElement("div");
+      grid.className = "code-grid attack-select-grid";
+      const title = document.createElement("div");
+      title.className = "skill-header";
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "skill-title skill-attack";
+      titleSpan.textContent = "Attacco";
+      title.appendChild(titleSpan);
+      grid.appendChild(title);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "event-btn attack-main-btn";
+      btn.textContent = "Attacco";
+      btn.addEventListener("click", async () => {
+        await startAttackSelection(playerIdx, null, renderPlayers, scope);
+      });
+      grid.appendChild(btn);
+      targetEl.appendChild(grid);
     }
     return;
   }
@@ -5024,6 +5075,27 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return;
     }
   }
+  if (pickedSkillId === "attack") {
+    const metaKey = makePlayerKey(scope, playerIdx);
+    if (
+      attackInlinePlayer !== null &&
+      attackInlinePlayer !== metaKey &&
+      isPlayerKeyInScope(attackInlinePlayer, scope)
+    ) {
+      const locked = document.createElement("div");
+      locked.className = "players-empty";
+      locked.textContent = "Attacco in corso: completa la valutazione.";
+      targetEl.appendChild(locked);
+      return;
+    }
+    if (!getAttackMetaForPlayer(scope, playerIdx)) {
+      const locked = document.createElement("div");
+      locked.className = "players-empty";
+      locked.textContent = "Attacco in corso: completa la valutazione.";
+      targetEl.appendChild(locked);
+      return;
+    }
+  }
   const skillMeta = SKILLS.find(s => s.id === pickedSkillId);
   const codes = (state.metricsConfig[pickedSkillId]?.activeCodes || RESULT_CODES).slice();
   if (!codes.includes("/")) codes.push("/");
@@ -5052,6 +5124,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     btn.dataset.skillId = pickedSkillId;
     btn.dataset.code = code;
     btn.addEventListener("click", async e => {
+      const attackMeta = getAttackMetaForPlayer(scope, playerIdx);
       const success = await handleEventClick(
         playerIdx,
         pickedSkillId,
@@ -5060,7 +5133,7 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
         e.currentTarget,
         {
           serveMeta: serveMetaByPlayer[playerKey] || null,
-          attackMeta: attackMetaByPlayer[playerKey] || null,
+          attackMeta: attackMeta || null,
           scope
         }
       );
@@ -6035,7 +6108,7 @@ function getSetStartEntryForScope(setNum, scope) {
   }
   return null;
 }
-function makePlayerKey(name) {
+function makePlayerNameKey(name) {
   return String(name || "").trim().toLowerCase();
 }
 function buildSetStartInfoList(setNumbers, scope) {
@@ -6046,7 +6119,7 @@ function buildSetStartInfoList(setNumbers, scope) {
     const setNum = parseInt(ev.set, 10) || 1;
     if (!substitutionsBySet.has(setNum)) return;
     if (getTeamScopeFromEvent(ev) !== scope) return;
-    const playerIn = makePlayerKey(ev.playerIn || "");
+    const playerIn = makePlayerNameKey(ev.playerIn || "");
     if (playerIn) substitutionsBySet.get(setNum).add(playerIn);
   });
   return (setNumbers || []).map(setNum => {
@@ -6055,7 +6128,7 @@ function buildSetStartInfoList(setNumbers, scope) {
     if (entry && Array.isArray(entry.court)) {
       entry.court.forEach((slot, idx) => {
         const name = typeof slot === "string" ? slot : slot && typeof slot === "object" ? slot.main || "" : "";
-        const key = makePlayerKey(name);
+        const key = makePlayerNameKey(name);
         if (!key) return;
         positions.set(key, idx + 1);
       });
@@ -13596,7 +13669,7 @@ function renderAggregatedTable() {
       const attackTotal = totalFromCounts(attackCounts);
       const row = document.createElement("tr");
       const startCells = startInfoList.map(info => {
-        const key = makePlayerKey(name);
+        const key = makePlayerNameKey(name);
         const pos = info.positions ? info.positions.get(key) : null;
         const hasPos = !!pos;
         const isSubIn = !hasPos && info.subsIn && info.subsIn.has(key);
