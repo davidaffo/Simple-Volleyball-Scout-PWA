@@ -1,7 +1,6 @@
 # Minor features
 Trasforma tutte le immagini in svg
 Modifica immagine battuta per mettere il campo fuori
-Cambio set e inizio partita migliorato
 Aggregare dati di piu partite
 visualizzazione far near attivabile
 
