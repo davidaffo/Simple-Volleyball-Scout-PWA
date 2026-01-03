@@ -566,19 +566,24 @@
         <div class="analysis-filters analysis-team-filter analysis-team-filter--summary">
           <div class="analysis-filter">
             <div class="analysis-filter__label">Squadra</div>
-            <div id="analysis-filter-teams" class="analysis-filter__options"></div>
+            <div class="analysis-filter__row">
+              <div id="analysis-filter-teams" class="analysis-filter__options"></div>
+            </div>
           </div>
           <div class="analysis-filter">
             <div class="analysis-filter__label">Set</div>
-            <div id="analysis-filter-sets" class="analysis-filter__options"></div>
-          </div>
-          <div class="score-summary score-summary--inline">
-            <div class="score-card">
-              <label>Punteggio totale</label>
-              <div id="agg-score" class="score-value">0 - 0</div>
-              <label class="score-set-label">Set vinti</label>
-              <div id="agg-set-score" class="score-value small">0 - 0</div>
-              <div id="agg-set-cards" class="score-sets cards"></div>
+            <div class="analysis-filter__row">
+              <div id="analysis-filter-sets" class="analysis-filter__options"></div>
+              <button id="btn-open-multiscout" class="primary small" type="button">Utilizza dati di piu partite</button>
+              <div id="analysis-score-summary" class="score-summary score-summary--inline">
+                <div class="score-card">
+                  <label>Punteggio totale</label>
+                  <div id="agg-score" class="score-value">0 - 0</div>
+                  <label class="score-set-label">Set vinti</label>
+                  <div id="agg-set-score" class="score-value small">0 - 0</div>
+                  <div id="agg-set-cards" class="score-sets cards"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1734,6 +1739,29 @@ Bianchi Laura 18"></textarea>
         <div class="offset-actions">
           <button id="unify-times-apply" class="small">Applica</button>
           <button class="small secondary" data-close-unify-times>Annulla</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="multiscout-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="multiscout-title">
+    <div class="settings-modal__backdrop" data-close-multiscout></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="multiscout-title">Utilizza dati di piu partite</h3>
+        <button id="multiscout-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <div class="analysis-filter multiscout-controls">
+          <div class="analysis-filter__label">Squadra</div>
+          <div class="analysis-filter__row">
+            <select id="multiscout-team-select"></select>
+          </div>
+        </div>
+        <div id="multiscout-subtitle" class="multiscout-subtitle"></div>
+        <div id="multiscout-list" class="analysis-filter__options multiscout-list"></div>
+        <div class="offset-actions">
+          <button id="multiscout-reset" class="small secondary" type="button">Reset</button>
+          <button id="multiscout-cancel" class="small secondary">Chiudi</button>
         </div>
       </div>
     </div>

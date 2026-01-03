@@ -1,5 +1,4 @@
 # Minor features
-Aggregare dati di piu partite
 
 # Bugfix
 Importazione match sembra avere problemi

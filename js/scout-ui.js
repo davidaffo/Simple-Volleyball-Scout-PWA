@@ -38,6 +38,9 @@ function getTeamNameForScope(scope) {
     ? state.selectedOpponentTeam || "Avversaria"
     : state.selectedTeam || "Squadra";
 }
+function getSelectedTeamNameForScope(scope) {
+  return scope === "opponent" ? (state.selectedOpponentTeam || "").trim() : (state.selectedTeam || "").trim();
+}
 function getPlayersForScope(scope) {
   return scope === "opponent" ? state.opponentPlayers || [] : state.players || [];
 }
@@ -199,6 +202,16 @@ const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
 const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
+const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
+const elAnalysisScoreSummary = document.getElementById("analysis-score-summary");
+const elBtnOpenMultiscout = document.getElementById("btn-open-multiscout");
+const elMultiscoutModal = document.getElementById("multiscout-modal");
+const elMultiscoutList = document.getElementById("multiscout-list");
+const elMultiscoutSubtitle = document.getElementById("multiscout-subtitle");
+const elMultiscoutClose = document.getElementById("multiscout-close");
+const elMultiscoutCancel = document.getElementById("multiscout-cancel");
+const elMultiscoutTeamSelect = document.getElementById("multiscout-team-select");
+const elMultiscoutReset = document.getElementById("multiscout-reset");
 const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
 const elPlayersDbModal = document.getElementById("players-db-modal");
@@ -6326,6 +6339,40 @@ if (elSetStartModalClose) {
 if (elSetStartModalCancel) {
   elSetStartModalCancel.addEventListener("click", closeSetStartModal);
 }
+  if (elBtnOpenMultiscout && !elBtnOpenMultiscout._bound) {
+    elBtnOpenMultiscout.addEventListener("click", () => {
+      renderMultiscoutModal();
+      if (elMultiscoutModal) {
+        elMultiscoutModal.classList.remove("hidden");
+        setModalOpenState(true, true);
+      }
+    });
+    elBtnOpenMultiscout._bound = true;
+  }
+if (elMultiscoutClose && !elMultiscoutClose._bound) {
+  elMultiscoutClose.addEventListener("click", () => {
+    if (elMultiscoutModal) elMultiscoutModal.classList.add("hidden");
+    setModalOpenState(false, true);
+  });
+  elMultiscoutClose._bound = true;
+}
+if (elMultiscoutCancel && !elMultiscoutCancel._bound) {
+  elMultiscoutCancel.addEventListener("click", () => {
+    if (elMultiscoutModal) elMultiscoutModal.classList.add("hidden");
+    setModalOpenState(false, true);
+  });
+  elMultiscoutCancel._bound = true;
+}
+if (elMultiscoutModal && !elMultiscoutModal._backdropBound) {
+  const backdrop = elMultiscoutModal.querySelector("[data-close-multiscout]");
+  if (backdrop) {
+    backdrop.addEventListener("click", () => {
+      elMultiscoutModal.classList.add("hidden");
+      setModalOpenState(false, true);
+    });
+  }
+  elMultiscoutModal._backdropBound = true;
+}
 function renderAggSkillDetailTable(summaryAll) {
   const { thead } = getAggTableElements();
   if (!elAggTableBody || !thead) return;
@@ -6333,6 +6380,7 @@ function renderAggSkillDetailTable(summaryAll) {
   const skillLabel = getSkillLabel(skillId);
   const skillHeaderClass = "skill-col skill-" + skillId;
   const analysisScope = getAnalysisTeamScope();
+  const analysisEvents = getAnalysisEvents();
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   renderAggDetailHeader(thead, [
@@ -6362,7 +6410,7 @@ function renderAggSkillDetailTable(summaryAll) {
     td.textContent = "Aggiungi giocatrici per vedere il dettaglio " + skillLabel + ".";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll, analysisScope);
+    renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -6420,7 +6468,7 @@ function renderAggSkillDetailTable(summaryAll) {
     buildRow(label, counts, idx, false);
   });
   buildRow("Totale squadra", totals, null, true);
-  renderScoreAndRotations(summaryAll, analysisScope);
+  renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -6431,6 +6479,7 @@ function renderAggPlayerDetailTable(summaryAll) {
   const playerIdx = aggTableView.playerIdx;
   const playerLabel = getAggSkillPlayerLabel(playerIdx);
   const analysisScope = getAnalysisTeamScope();
+  const analysisEvents = getAnalysisEvents();
   const analysisPlayers = getPlayersForScope(analysisScope);
   renderAggDetailHeader(thead, [
     {
@@ -6459,7 +6508,7 @@ function renderAggPlayerDetailTable(summaryAll) {
     td.textContent = "Aggiungi giocatrici per vedere il dettaglio.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll, analysisScope);
+    renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -6493,7 +6542,7 @@ function renderAggPlayerDetailTable(summaryAll) {
     applySkillClassToCells(tdList, skillId, 0);
     elAggTableBody.appendChild(row);
   });
-  renderScoreAndRotations(summaryAll, analysisScope);
+  renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -6623,7 +6672,7 @@ function renderPlayerAnalysisTable() {
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
-  const filteredEvents = filterEventsByAnalysisTeam(state.events || []);
+  const filteredEvents = filterEventsByAnalysisTeam();
   const statsByPlayer = ensureAnalysisStatsCache();
   if (idx === null || !players || !players[idx]) {
     const tr = document.createElement("tr");
@@ -9846,6 +9895,7 @@ function computePointsSummary(targetSet, options = {}) {
   const includeOverrides = options.includeOverrides !== false;
   const excludeOpponentErrors = !!options.excludeOpponentErrors;
   const teamScope = options.teamScope || "our";
+  const sourceEvents = Array.isArray(options.events) ? options.events : state.events || [];
   const target = targetSet ? parseInt(targetSet, 10) : null;
   const rotations = {};
   for (let r = 1; r <= 6; r++) {
@@ -9853,7 +9903,7 @@ function computePointsSummary(targetSet, options = {}) {
   }
   let totalFor = 0;
   let totalAgainst = 0;
-  const filteredEvents = (state.events || []).filter(ev => {
+  const filteredEvents = sourceEvents.filter(ev => {
     if (target === null) return true;
     return ev.set === target;
   });
@@ -9905,9 +9955,10 @@ function computePointsSummary(targetSet, options = {}) {
     overrideAgainst: overrideTotals.against
   };
 }
-function computeSetScores(teamScope = "our") {
+function computeSetScores(teamScope = "our", options = {}) {
+  const sourceEvents = Array.isArray(options.events) ? options.events : state.events || [];
   const setMap = {};
-  (state.events || []).forEach(ev => {
+  sourceEvents.forEach(ev => {
     const setNum = parseInt(ev.set, 10) || 1;
     const direction =
       state.useOpponentTeam ? getPointDirectionForScope(ev, teamScope) : getPointDirection(ev);
@@ -9998,7 +10049,7 @@ function ensureAnalysisStatsCache() {
   const scope = getAnalysisTeamScope();
   if (analysisStatsCache && analysisStatsScope === scope) return analysisStatsCache;
   const players = getPlayersForScope(scope);
-  const events = filterEventsByAnalysisTeam(state.events || []);
+  const events = filterEventsByAnalysisTeam();
   analysisStatsCache = computeStatsByPlayerForEvents(events, players);
   analysisStatsScope = scope;
   return analysisStatsCache;
@@ -10431,8 +10482,8 @@ function endMatch() {
     actionType: "match-end"
   });
 }
-function renderScoreAndRotations(summary, teamScope = "our") {
-  const scoreSummary = summary || computePointsSummary(null, { teamScope });
+function renderScoreAndRotations(summary, teamScope = "our", options = {}) {
+  const scoreSummary = summary || computePointsSummary(null, { teamScope, events: options.events });
   const effectiveSummary = scoreSummary;
   const totalLabel = scoreSummary.totalFor + " - " + scoreSummary.totalAgainst;
   if (elAggScore) {
@@ -10441,7 +10492,7 @@ function renderScoreAndRotations(summary, teamScope = "our") {
   updateSetScoreDisplays();
   if (elAggSetCards) {
     elAggSetCards.innerHTML = "";
-    const setsData = computeSetScores(teamScope);
+    const setsData = computeSetScores(teamScope, { events: options.events });
     if (!setsData.sets || setsData.sets.length === 0) {
       const span = document.createElement("div");
       span.className = "score-set-chip";
@@ -10935,6 +10986,139 @@ function getCheckedRadioValue(container) {
   const input = container.querySelector("input[type=radio]:checked");
   return input ? input.value : null;
 }
+function normalizeMatchKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+function getCurrentMatchKey() {
+  const selected = (state.selectedMatch || "").trim();
+  if (selected) return selected;
+  if (typeof buildMatchDisplayName === "function") {
+    return buildMatchDisplayName(state.match || {}) || "";
+  }
+  return "";
+}
+function getCurrentMatchLabel() {
+  if (typeof buildMatchDisplayName === "function") {
+    return buildMatchDisplayName(state.match || {}) || "";
+  }
+  return (state.selectedMatch || "").trim();
+}
+function getMatchTeamNameForScope(payload, scope) {
+  if (!payload || !payload.state) return "";
+  if (scope === "opponent") {
+    return (payload.state.selectedOpponentTeam || "").trim();
+  }
+  return (payload.state.selectedTeam || "").trim();
+}
+function getMatchTeamNames(payload) {
+  if (!payload || !payload.state) return [];
+  const match = payload.state.match || {};
+  const matchTeam = (match.teamName || "").trim();
+  const matchOpponent = (match.opponent || "").trim();
+  const selectedTeam = (payload.state.selectedTeam || "").trim();
+  const selectedOpponent = (payload.state.selectedOpponentTeam || "").trim();
+  const names = [];
+  if (matchTeam) {
+    names.push(matchTeam);
+  } else if (selectedTeam) {
+    names.push(selectedTeam);
+  }
+  if (matchOpponent) {
+    names.push(matchOpponent);
+  } else if (selectedOpponent) {
+    names.push(selectedOpponent);
+  }
+  return Array.from(new Set(names));
+}
+function buildMatchLabelFromPayload(payload) {
+  if (!payload || !payload.state) return "";
+  const match = payload.state.match || {};
+  const dateIso = match.date || "";
+  const datePart = dateIso && typeof formatUsDate === "function" ? formatUsDate(dateIso) : dateIso;
+  const teamName = (match.teamName || payload.state.selectedTeam || "").trim();
+  const opponent = match.opponent || payload.state.selectedOpponentTeam || "Match";
+  const typeLabels = {
+    amichevole: "Amichevole",
+    campionato: "Campionato",
+    torneo: "Torneo",
+    playoff: "Playoff",
+    playout: "Playout",
+    coppa: "Coppa"
+  };
+  const legLabels = {
+    andata: "Andata",
+    ritorno: "Ritorno",
+    "gara-1": "Gara 1",
+    "gara-2": "Gara 2",
+    "gara-3": "Gara 3"
+  };
+  const parts = [
+    datePart || "",
+    teamName || "Squadra",
+    opponent,
+    match.category || "",
+    typeLabels[match.matchType] || match.matchType || "",
+    legLabels[match.leg] || match.leg || ""
+  ].filter(Boolean);
+  return parts.join(" - ") || "Match";
+}
+function getAnalysisExtraMatchState() {
+  const raw = state.uiAnalysisExtraMatchesByScope;
+  const ourList = raw && Array.isArray(raw.our) ? raw.our : [];
+  const oppList = raw && Array.isArray(raw.opponent) ? raw.opponent : [];
+  return { our: new Set(ourList), opponent: new Set(oppList) };
+}
+function saveAnalysisExtraMatchState(next) {
+  state.uiAnalysisExtraMatchesByScope = {
+    our: Array.from(next.our || []),
+    opponent: Array.from(next.opponent || [])
+  };
+}
+function getAnalysisMatchOptions(scope) {
+  const saved = state.savedMatches || {};
+  const currentTeam = getSelectedTeamNameForScope(scope);
+  const currentKey = normalizeMatchKey(getCurrentMatchKey());
+  const currentLabelKey = normalizeMatchKey(getCurrentMatchLabel());
+  if (!currentTeam) return [];
+  const currentTeamKey = normalizeMatchKey(currentTeam);
+  return Object.entries(saved)
+    .filter(([name, payload]) => {
+      if (!payload || !payload.state) return false;
+      const label = buildMatchLabelFromPayload(payload);
+      const labelKey = normalizeMatchKey(label);
+      if (normalizeMatchKey(name) === currentKey) return false;
+      if (labelKey && labelKey === currentLabelKey) return false;
+      const teamNames = getMatchTeamNames(payload).map(team => normalizeMatchKey(team));
+      if (teamNames.length === 0) return false;
+      return teamNames.includes(currentTeamKey);
+    })
+    .map(([name, payload]) => {
+      const label = buildMatchLabelFromPayload(payload) || name;
+      return { value: name, label };
+    });
+}
+function getAnalysisScopesForExtras() {
+  if (!state.useOpponentTeam) return ["our"];
+  if (!analysisTeamFilterState.teams || analysisTeamFilterState.teams.size === 0) {
+    return ["our", "opponent"];
+  }
+  return Array.from(analysisTeamFilterState.teams);
+}
+function getAnalysisEvents() {
+  const baseEvents = Array.isArray(state.events) ? state.events : [];
+  const extraState = getAnalysisExtraMatchState();
+  const extraEvents = [];
+  const scopes = getAnalysisScopesForExtras();
+  scopes.forEach(scope => {
+    const matchNames = extraState[scope] || new Set();
+    matchNames.forEach(name => {
+      const payload = state.savedMatches && state.savedMatches[name];
+      const events = payload && payload.state && Array.isArray(payload.state.events) ? payload.state.events : [];
+      extraEvents.push(...events);
+    });
+  });
+  return baseEvents.concat(extraEvents);
+}
 function renderAnalysisCourtSideRadios(container, selectedValue, onChange, groupName) {
   if (!container) return;
   const name = groupName || container.id || "analysis-court-side";
@@ -10985,6 +11169,14 @@ function ensureAnalysisTeamFilterDefault() {
     analysisTeamFilterState.teams.add("our");
   }
 }
+function invalidateAnalysisCaches() {
+  analysisStatsCache = null;
+  analysisStatsScope = null;
+}
+function handleAnalysisMatchFilterChange() {
+  if (!elAnalysisFilterMatches) return;
+  updateAnalysisExtraMatchesFromContainer(elAnalysisFilterMatches);
+}
 function handleAnalysisTeamFilterChange(e) {
   if (!elAnalysisFilterTeams) return;
   if (e && e.target instanceof HTMLInputElement && e.target.checked) {
@@ -10994,6 +11186,9 @@ function handleAnalysisTeamFilterChange(e) {
   }
   const values = getCheckedValues(elAnalysisFilterTeams);
   analysisTeamFilterState.teams = new Set(values);
+  renderAnalysisMatchFilter();
+  renderMultiscoutModal();
+  invalidateAnalysisCaches();
   renderAggregatedTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -11022,10 +11217,128 @@ function renderAnalysisTeamFilter() {
     onChange: handleAnalysisTeamFilterChange
   });
   toggleFilterVisibility(elAnalysisFilterTeams, visible);
+  renderAnalysisMatchFilter();
+}
+function renderAnalysisMatchFilter() {
+  if (!elAnalysisFilterMatches) {
+    updateMultiscoutButton();
+    return;
+  }
+  const scope = getAnalysisTeamScope();
+  const options = getAnalysisMatchOptions(scope);
+  const extraState = getAnalysisExtraMatchState();
+  const selected = extraState[scope] || new Set();
+  const filtered = new Set([...selected].filter(key => options.some(opt => opt.value === key)));
+  extraState[scope] = filtered;
+  saveAnalysisExtraMatchState(extraState);
+  const visible = renderDynamicFilter(elAnalysisFilterMatches, options, filtered, {
+    onChange: handleAnalysisMatchFilterChange
+  });
+  toggleFilterVisibility(elAnalysisFilterMatches, visible);
+  updateMultiscoutButton();
+}
+function updateMultiscoutButton() {
+  if (!elBtnOpenMultiscout) return;
+  const scope = state.useOpponentTeam
+    ? multiscoutTeamScope === "opponent"
+      ? "opponent"
+      : "our"
+    : "our";
+  const extraState = getAnalysisExtraMatchState();
+  const activeCount = extraState[scope] ? extraState[scope].size : 0;
+  elBtnOpenMultiscout.classList.toggle("is-active", activeCount > 0);
+  elBtnOpenMultiscout.textContent = "Utilizza dati di piu partite (" + activeCount + ")";
+}
+function updateAnalysisExtraMatchesFromContainer(container, scopeOverride) {
+  if (!container) return;
+  const scope = scopeOverride || getAnalysisTeamScope();
+  const extraState = getAnalysisExtraMatchState();
+  extraState[scope] = new Set(getCheckedValues(container));
+  saveAnalysisExtraMatchState(extraState);
+  saveState();
+  invalidateAnalysisCaches();
+  updateMultiscoutButton();
+  renderAggregatedTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+  renderSecondTable();
+  renderPlayerAnalysis();
+}
+function renderMultiscoutModal() {
+  if (!elMultiscoutList || !elMultiscoutModal) return;
+  elMultiscoutList.innerHTML = "";
+  const scope = state.useOpponentTeam
+    ? multiscoutTeamScope === "opponent"
+      ? "opponent"
+      : "our"
+    : "our";
+  const options = getAnalysisMatchOptions(scope);
+  const extraState = getAnalysisExtraMatchState();
+  const selected = extraState[scope] || new Set();
+  const filtered = new Set([...selected].filter(key => options.some(opt => opt.value === key)));
+  extraState[scope] = filtered;
+  saveAnalysisExtraMatchState(extraState);
+  if (elMultiscoutTeamSelect) {
+    elMultiscoutTeamSelect.innerHTML = "";
+    const teamOptions = state.useOpponentTeam
+      ? [
+          { value: "our", label: getTeamNameForScope("our") || "Squadra" },
+          { value: "opponent", label: getTeamNameForScope("opponent") || "Avversaria" }
+        ]
+      : [{ value: "our", label: getTeamNameForScope("our") || "Squadra" }];
+    teamOptions.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      elMultiscoutTeamSelect.appendChild(option);
+    });
+    elMultiscoutTeamSelect.value = scope;
+    if (!elMultiscoutTeamSelect._bound) {
+      elMultiscoutTeamSelect.addEventListener("change", () => {
+        multiscoutTeamScope = elMultiscoutTeamSelect.value === "opponent" ? "opponent" : "our";
+        renderMultiscoutModal();
+      });
+      elMultiscoutTeamSelect._bound = true;
+    }
+  }
+  if (elMultiscoutReset && !elMultiscoutReset._bound) {
+    elMultiscoutReset.addEventListener("click", () => {
+      const activeScope = state.useOpponentTeam
+        ? multiscoutTeamScope === "opponent"
+          ? "opponent"
+          : "our"
+        : "our";
+      const stateForReset = getAnalysisExtraMatchState();
+      stateForReset[activeScope] = new Set();
+      saveAnalysisExtraMatchState(stateForReset);
+      saveState();
+      invalidateAnalysisCaches();
+      updateMultiscoutButton();
+      renderMultiscoutModal();
+      renderAggregatedTable();
+      renderTrajectoryAnalysis();
+      renderServeTrajectoryAnalysis();
+      renderSecondTable();
+      renderPlayerAnalysis();
+    });
+    elMultiscoutReset._bound = true;
+  }
+  if (elMultiscoutSubtitle) {
+    const teamName = getTeamNameForScope(scope);
+    const matchLabel = getCurrentMatchLabel();
+    const pieces = [];
+    if (matchLabel) pieces.push("Match: " + matchLabel);
+    if (teamName) pieces.push("Squadra: " + teamName);
+    elMultiscoutSubtitle.textContent = pieces.length ? pieces.join(" · ") : "Match corrente";
+  }
+  renderDynamicFilter(elMultiscoutList, options, filtered, {
+    onChange: () => updateAnalysisExtraMatchesFromContainer(elMultiscoutList, scope)
+  });
+  updateMultiscoutButton();
 }
 function renderAnalysisSummarySetFilter() {
   if (!elAnalysisFilterSets) return;
-  const events = filterEventsByAnalysisTeam(state.events || []);
+  const events = filterEventsByAnalysisTeam();
   const setOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -11051,7 +11364,8 @@ function getAnalysisTeamScope() {
   return "our";
 }
 function filterEventsByAnalysisTeam(events) {
-  return (events || []).filter(ev => matchesTeamFilter(ev, analysisTeamFilterState.teams));
+  const source = events || getAnalysisEvents();
+  return (source || []).filter(ev => matchesTeamFilter(ev, analysisTeamFilterState.teams));
 }
 function matchesSummarySetFilter(ev) {
   if (!analysisSummaryFilterState.sets || analysisSummaryFilterState.sets.size === 0) return true;
@@ -11103,7 +11417,12 @@ function formatPercentValueSafe(num, den) {
   return formatPercentValue(num, den);
 }
 function getSummarySetNumbers() {
-  const played = getPlayedSetNumbers();
+  const setNums = new Set();
+  getAnalysisEvents().forEach(ev => {
+    const num = parseInt(ev && ev.set, 10);
+    if (num) setNums.add(num);
+  });
+  const played = Array.from(setNums).sort((a, b) => a - b);
   if (!analysisSummaryFilterState.sets || analysisSummaryFilterState.sets.size === 0) return played;
   return played.filter(num => analysisSummaryFilterState.sets.has(num));
 }
@@ -11353,6 +11672,7 @@ const TRAJECTORY_LINE_COLORS_SERVE = {
 const TRAJECTORY_LINE_WIDTH = 3;
 const trajectoryBgCache = {};
 let serveTrajectoryImgs = null;
+let multiscoutTeamScope = "our";
 function getAnalysisCourtSide(value) {
   return value === "far" ? "far" : "near";
 }
@@ -11518,7 +11838,7 @@ function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
   renderAnalysisTeamFilter();
   const analysisScope = getAnalysisTeamScope();
-  const events = filterEventsByAnalysisTeam(state.events || []);
+  const events = filterEventsByAnalysisTeam();
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const trajEvents = attackEvents.filter(ev => {
     const dir = ev.attackDirection || ev.attackTrajectory;
@@ -11709,7 +12029,7 @@ function renderServeTrajectoryFilters() {
   if (!elServeTrajectoryGrid) return;
   renderAnalysisTeamFilter();
   const analysisScope = getAnalysisTeamScope();
-  const events = filterEventsByAnalysisTeam(state.events || []);
+  const events = filterEventsByAnalysisTeam();
   const serveEvents = events.filter(ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd);
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
@@ -11883,7 +12203,7 @@ function resetPlayerTrajectoryFilters() {
 function renderPlayerTrajectoryFilters() {
   if (!elPlayerTrajectoryGrid) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     const dir = ev.attackDirection || ev.attackTrajectory;
     if (!dir || !dir.start || !dir.end) return false;
@@ -12015,7 +12335,7 @@ function renderPlayerTrajectoryFilters() {
 }
 function getFilteredPlayerTrajectoryEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     const dir = ev.attackDirection || ev.attackTrajectory;
     if (!dir || !dir.start || !dir.end) return false;
@@ -12120,7 +12440,7 @@ function resetPlayerServeTrajectoryFilters() {
 function renderPlayerServeTrajectoryFilters() {
   if (!elPlayerServeTrajectoryGrid) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "serve") return false;
     if (!ev.serveStart || !ev.serveEnd) return false;
     if (playerIdx === null) return false;
@@ -12242,7 +12562,7 @@ function renderPlayerServeTrajectoryFilters() {
 }
 function getFilteredPlayerServeTrajectoryEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "serve") return false;
     if (!ev.serveStart || !ev.serveEnd) return false;
     if (playerIdx === null) return false;
@@ -12322,7 +12642,7 @@ function resetPlayerSecondFilters() {
 function renderPlayerSecondFilters() {
   if (!elPlayerSecondFilterSetTypes) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const attackEvents = (state.events || []).filter(ev => {
+  const attackEvents = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
@@ -12425,7 +12745,7 @@ function renderPlayerSecondFilters() {
 }
 function getFilteredPlayerSecondEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
@@ -12958,7 +13278,7 @@ function getTrajectoryColorForCode(code, variant = "attack") {
   return palette[normalized] || "#38bdf8";
 }
 function getFilteredTrajectoryEvents() {
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     const dir = ev.attackDirection || ev.attackTrajectory;
     return dir && dir.start && dir.end;
@@ -13254,7 +13574,7 @@ function initLogServeTrajectoryControls() {
   renderLogServeTrajectories();
 }
 function getFilteredServeTrajectoryEvents() {
-  const events = (state.events || []).filter(ev => {
+  const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "serve") return false;
     return ev.serveStart && ev.serveEnd;
   });
@@ -13396,6 +13716,7 @@ function renderAggregatedTable() {
   renderAnalysisTeamFilter();
   renderAnalysisSummarySetFilter();
   const analysisScope = getAnalysisTeamScope();
+  const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
   const summaryColCount = 26 + playedSets.length;
   const showBothTeams =
@@ -13405,7 +13726,7 @@ function renderAggregatedTable() {
   if (table) {
     table.classList.toggle("agg-table--double", showBothTeams);
   }
-  const summaryAll = computePointsSummary(null, { teamScope: analysisScope });
+  const summaryAll = computePointsSummary(null, { teamScope: analysisScope, events: analysisEvents });
   if (aggTableView.mode === "skill" && aggTableView.skillId) {
     renderAggSkillDetailTable(summaryAll);
     if (elAggSummaryExtraBody) elAggSummaryExtraBody.innerHTML = "";
@@ -13470,7 +13791,7 @@ function renderAggregatedTable() {
     const positiveReceiveCodes = new Set(["#", "+"]);
     const tableScopes = Array.isArray(scopes) && scopes.length ? scopes : [];
     tableScopes.forEach((scope, idx) => {
-      const scopeEvents = (state.events || []).filter(
+      const scopeEvents = analysisEvents.filter(
         ev => matchesTeamFilter(ev, new Set([scope])) && matchesSummarySetFilter(ev)
       );
       const teamName = getTeamNameForScope(scope);
@@ -13616,7 +13937,7 @@ function renderAggregatedTable() {
   const renderAggSummaryForScope = (scope, { showHeader = false } = {}) => {
     const analysisPlayers = getPlayersForScope(scope);
     const analysisNumbers = getPlayerNumbersForScope(scope);
-    const filteredEvents = (state.events || []).filter(ev => matchesTeamFilter(ev, new Set([scope])));
+    const filteredEvents = analysisEvents.filter(ev => matchesTeamFilter(ev, new Set([scope])));
     const summaryEvents = filteredEvents.filter(ev => matchesSummarySetFilter(ev));
     if (showHeader) {
       const headerRow = document.createElement("tr");
@@ -13907,7 +14228,7 @@ function renderAggregatedTable() {
     renderAggSummaryForScope("our", { showHeader: true });
     renderAggSummaryForScope("opponent", { showHeader: true });
     renderSummaryExtraTable(["our", "opponent"]);
-    renderScoreAndRotations(summaryAll, "our");
+    renderScoreAndRotations(summaryAll, "our", { events: analysisEvents });
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -13923,7 +14244,7 @@ function renderAggregatedTable() {
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggTableBody.appendChild(tr);
-    renderScoreAndRotations(summaryAll, analysisScope);
+    renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
     renderSecondTable();
     renderTrajectoryAnalysis();
     renderServeTrajectoryAnalysis();
@@ -13932,7 +14253,7 @@ function renderAggregatedTable() {
   }
   renderAggSummaryForScope(analysisScope);
   renderSummaryExtraTable([analysisScope]);
-  renderScoreAndRotations(summaryAll, analysisScope);
+  renderScoreAndRotations(summaryAll, analysisScope, { events: analysisEvents });
   renderSecondTable();
   renderTrajectoryAnalysis();
   renderServeTrajectoryAnalysis();
@@ -13979,7 +14300,7 @@ function renderSecondFilters() {
   const els = getSecondFilterElements();
   if (!els) return;
   renderAnalysisTeamFilter();
-  const events = filterEventsByAnalysisTeam(state.events || []);
+  const events = filterEventsByAnalysisTeam();
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
@@ -14148,7 +14469,7 @@ function renderSecondFilters() {
   }
 }
 function getFilteredSecondEvents() {
-  const events = (state.events || []).filter(ev => ev && ev.skillId === "attack");
+  const events = getAnalysisEvents().filter(ev => ev && ev.skillId === "attack");
   return events.filter(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory || {};
     const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
@@ -14193,7 +14514,7 @@ function renderSecondTable() {
   const totals = emptyCounts();
   const rows = [];
   const countsByPlayer = new Map();
-  const secondEvents = (state.events || []).filter(
+  const secondEvents = getAnalysisEvents().filter(
     ev => ev && ev.skillId === "second" && matchesTeamFilter(ev, analysisTeamFilterState.teams)
   );
   secondEvents.forEach(ev => {
@@ -15602,6 +15923,9 @@ function setActiveAggTab(target) {
     elAggSubPanels.forEach(panel => {
       panel.classList.toggle("active", panel.dataset.aggTab === desired);
     });
+  }
+  if (elAnalysisScoreSummary) {
+    elAnalysisScoreSummary.classList.toggle("hidden", desired !== "summary");
   }
   if (desired === "trajectory") {
     const refresh = () => {

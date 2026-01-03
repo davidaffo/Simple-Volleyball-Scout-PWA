@@ -3307,6 +3307,20 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
 }
+.analysis-filter__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  align-items: center;
+}
+.analysis-filter__row .primary {
+  background: #4b5563;
+  border-color: #4b5563;
+}
+.analysis-filter__row .primary.is-active {
+  background: #0f766e;
+  border-color: #0f766e;
+}
 .analysis-filter__options label,
 .trajectory-filter__options label {
   display: inline-flex;
@@ -3350,6 +3364,21 @@ body[data-theme="light"] .filter-scope-group {
 .analysis-filter__options input,
 .trajectory-filter__options input {
   accent-color: #2563eb;
+}
+.multiscout-list {
+  padding: 0.4rem 0;
+}
+.multiscout-subtitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  opacity: 0.85;
+}
+.multiscout-controls {
+  margin-bottom: 0.6rem;
+}
+.multiscout-controls select {
+  min-width: 180px;
 }
 .analysis-filter select {
   width: 100%;
