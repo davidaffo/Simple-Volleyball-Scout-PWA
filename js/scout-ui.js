@@ -6007,12 +6007,26 @@ function setSelectedErrorType(typeId, container) {
 }
 function ensurePlayerAnalysisState() {
   if (!state.uiPlayerAnalysis || typeof state.uiPlayerAnalysis !== "object") {
-    state.uiPlayerAnalysis = { playerIdx: null, showAttack: true, showServe: true, showSecond: false };
+    state.uiPlayerAnalysis = {
+      playerIdx: null,
+      showAttack: true,
+      showServe: true,
+      showSecond: false,
+      courtSideByScope: { our: "near", opponent: "far" }
+    };
   }
   const prefs = state.uiPlayerAnalysis;
   prefs.showAttack = prefs.showAttack !== false;
   prefs.showServe = prefs.showServe !== false;
   prefs.showSecond = prefs.showSecond === true;
+  if (!prefs.courtSideByScope || typeof prefs.courtSideByScope !== "object") {
+    const fallback = typeof prefs.courtSide === "string" ? prefs.courtSide : "near";
+    prefs.courtSideByScope = { our: getAnalysisCourtSide(fallback), opponent: "far" };
+  } else {
+    prefs.courtSideByScope = Object.assign({ our: "near", opponent: "far" }, prefs.courtSideByScope);
+    prefs.courtSideByScope.our = getAnalysisCourtSide(prefs.courtSideByScope.our);
+    prefs.courtSideByScope.opponent = getAnalysisCourtSide(prefs.courtSideByScope.opponent);
+  }
   if (typeof prefs.playerIdx !== "number") {
     prefs.playerIdx = null;
   }
@@ -6558,6 +6572,15 @@ function renderPlayerAnalysisControls() {
       renderPlayerAnalysis();
     });
     elPlayerAnalysisSelect._playerAnalysisBound = true;
+  }
+  if (elPlayerAnalysisCourtSide) {
+    const scopeSide = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]);
+    renderAnalysisCourtSideRadios(elPlayerAnalysisCourtSide, scopeSide, () => {
+      const scope = getAnalysisTeamScope();
+      prefs.courtSideByScope[scope] = getAnalysisCourtSide(getCheckedRadioValue(elPlayerAnalysisCourtSide));
+      saveState();
+      renderPlayerAnalysis();
+    }, "analysis-player-court-side");
   }
   if (elPlayerAnalysisShowAttack) {
     elPlayerAnalysisShowAttack.checked = !!prefs.showAttack;
@@ -10907,6 +10930,36 @@ function getCheckedValues(container, { asNumber = false } = {}) {
     asNumber ? Number(inp.value) : inp.value
   );
 }
+function getCheckedRadioValue(container) {
+  if (!container) return null;
+  const input = container.querySelector("input[type=radio]:checked");
+  return input ? input.value : null;
+}
+function renderAnalysisCourtSideRadios(container, selectedValue, onChange, groupName) {
+  if (!container) return;
+  const name = groupName || container.id || "analysis-court-side";
+  const options = [
+    { value: "near", label: "Vicino" },
+    { value: "far", label: "Lontano" }
+  ];
+  container.innerHTML = "";
+  options.forEach((opt, idx) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = name;
+    input.value = opt.value;
+    input.checked = opt.value === selectedValue;
+    input.addEventListener("change", () => {
+      if (typeof onChange === "function") onChange();
+    });
+    const span = document.createElement("span");
+    span.textContent = opt.label;
+    label.appendChild(input);
+    label.appendChild(span);
+    container.appendChild(label);
+  });
+}
 function makeScopedIndexKey(scope, idx) {
   return `${scope}:${idx}`;
 }
@@ -11300,6 +11353,22 @@ const TRAJECTORY_LINE_COLORS_SERVE = {
 const TRAJECTORY_LINE_WIDTH = 3;
 const trajectoryBgCache = {};
 let serveTrajectoryImgs = null;
+function getAnalysisCourtSide(value) {
+  return value === "far" ? "far" : "near";
+}
+function ensureCourtSideState(key) {
+  const current = state[key];
+  let next;
+  if (current && typeof current === "object") {
+    next = Object.assign({ our: "near", opponent: "far" }, current);
+  } else if (typeof current === "string") {
+    next = { our: getAnalysisCourtSide(current), opponent: "far" };
+  } else {
+    next = { our: "near", opponent: "far" };
+  }
+  state[key] = next;
+  return next;
+}
 function clamp01Val(n) {
   if (n == null || isNaN(n)) return 0;
   return Math.min(1, Math.max(0, n));
@@ -11448,13 +11517,13 @@ function getSecondFilterElements() {
 function renderTrajectoryFilters() {
   if (!elTrajectoryGrid) return;
   renderAnalysisTeamFilter();
+  const analysisScope = getAnalysisTeamScope();
   const events = filterEventsByAnalysisTeam(state.events || []);
   const attackEvents = events.filter(ev => ev && ev.skillId === "attack");
   const trajEvents = attackEvents.filter(ev => {
     const dir = ev.attackDirection || ev.attackTrajectory;
     return dir && dir.start && dir.end;
   });
-  const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   const setterLabels = new Map();
@@ -11621,6 +11690,16 @@ function renderTrajectoryFilters() {
       elTrajFilterPrev._trajPrevBound = true;
     }
   }
+  if (elTrajCourtSide) {
+    const side = getAnalysisCourtSide(ensureCourtSideState("uiTrajectoryCourtSideByScope")[analysisScope]);
+    renderAnalysisCourtSideRadios(elTrajCourtSide, side, () => {
+      const scope = getAnalysisTeamScope();
+      const nextState = ensureCourtSideState("uiTrajectoryCourtSideByScope");
+      nextState[scope] = getAnalysisCourtSide(getCheckedRadioValue(elTrajCourtSide));
+      saveState();
+      renderTrajectoryAnalysis();
+    }, "analysis-court-side");
+  }
   if (elTrajFilterReset && !elTrajFilterReset._trajResetBound) {
     elTrajFilterReset.addEventListener("click", resetTrajectoryFilters);
     elTrajFilterReset._trajResetBound = true;
@@ -11629,9 +11708,9 @@ function renderTrajectoryFilters() {
 function renderServeTrajectoryFilters() {
   if (!elServeTrajectoryGrid) return;
   renderAnalysisTeamFilter();
+  const analysisScope = getAnalysisTeamScope();
   const events = filterEventsByAnalysisTeam(state.events || []);
   const serveEvents = events.filter(ev => ev && ev.skillId === "serve" && ev.serveStart && ev.serveEnd);
-  const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   const playersOptsRaw = buildUniqueOptions(serveEvents.map(ev => ev.playerIdx), {
@@ -11757,6 +11836,16 @@ function renderServeTrajectoryFilters() {
     })
   );
   toggleFilterVisibility(elServeTrajFilterReset, visibleFilters.some(Boolean));
+  if (elServeTrajCourtSide) {
+    const side = getAnalysisCourtSide(ensureCourtSideState("uiServeTrajectoryCourtSideByScope")[analysisScope]);
+    renderAnalysisCourtSideRadios(elServeTrajCourtSide, side, () => {
+      const scope = getAnalysisTeamScope();
+      const nextState = ensureCourtSideState("uiServeTrajectoryCourtSideByScope");
+      nextState[scope] = getAnalysisCourtSide(getCheckedRadioValue(elServeTrajCourtSide));
+      saveState();
+      renderServeTrajectoryAnalysis();
+    }, "analysis-serve-court-side");
+  }
   if (elServeTrajFilterReset && !elServeTrajFilterReset._serveTrajResetBound) {
     elServeTrajFilterReset.addEventListener("click", resetServeTrajectoryFilters);
     elServeTrajFilterReset._serveTrajResetBound = true;
@@ -11949,6 +12038,10 @@ function renderPlayerTrajectoryAnalysis() {
   renderPlayerTrajectoryFilters();
   const canvases = elPlayerTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
   if (!canvases || canvases.length === 0) return;
+  const prefs = ensurePlayerAnalysisState();
+  const analysisScope = getAnalysisTeamScope();
+  const isFarView = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]) === "far";
+  elPlayerTrajectoryGrid.classList.toggle("is-far", isFarView);
   const events = getFilteredPlayerTrajectoryEvents();
   const grouped = {};
   events.forEach(ev => {
@@ -11962,7 +12055,7 @@ function renderPlayerTrajectoryAnalysis() {
     const zone = parseInt(canvas.dataset.trajCanvas, 10);
     const card = canvas.closest(".trajectory-card");
     const list = grouped[zone] || [];
-    const img = getTrajectoryBg(zone, () => renderPlayerTrajectoryAnalysis());
+    const img = getTrajectoryBg(zone, isFarView, () => renderPlayerTrajectoryAnalysis());
     const ratio = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.65;
     const width = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 320;
     const height = Math.max(120, Math.round(width * ratio || width * 0.65));
@@ -11980,8 +12073,10 @@ function renderPlayerTrajectoryAnalysis() {
     if (card) card.classList.remove("empty");
     list.forEach(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};
-      const start = traj.start || ev.attackStart;
-      const end = traj.end || ev.attackEnd;
+      const startRaw = traj.start || ev.attackStart;
+      const endRaw = traj.end || ev.attackEnd;
+      const start = isFarView && startRaw ? mirrorTrajectoryPoint(startRaw) : startRaw;
+      const end = isFarView && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
       if (!start || !end) return;
       const sx = clamp01Val(start.x) * width;
       const sy = clamp01Val(start.y) * height;
@@ -12191,67 +12286,12 @@ function renderPlayerServeTrajectoryAnalysis() {
   card.appendChild(canvas);
   card.appendChild(empty);
   elPlayerServeTrajectoryGrid.appendChild(card);
-  const imgs = getServeTrajectoryImages(() => renderPlayerServeTrajectoryAnalysis());
-  const startImg = imgs && imgs.start;
-  const endImg = imgs && imgs.end;
-  const startRatio = startImg && startImg.naturalWidth ? startImg.naturalHeight / startImg.naturalWidth : 0.65;
-  const endRatio = endImg && endImg.naturalWidth ? endImg.naturalHeight / endImg.naturalWidth : 0.65;
-  const width =
-    (canvas.parentElement && canvas.parentElement.clientWidth) ||
-    (startImg && startImg.naturalWidth) ||
-    (endImg && endImg.naturalWidth) ||
-    320;
-  const startHeight = Math.max(80, Math.round(width * startRatio));
-  const endHeight = Math.max(80, Math.round(width * endRatio));
-  const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
-  const height = startHeight + gapHeight + endHeight;
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, width, height);
-  if (endImg && endImg.complete && endImg.naturalWidth) {
-    ctx.drawImage(endImg, 0, 0, width, endHeight);
-  }
-  if (gapHeight > 0) {
-    ctx.fillStyle = "#ffb142";
-    ctx.fillRect(0, endHeight, width, gapHeight);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, endHeight, width, gapHeight);
-  }
-  if (startImg && startImg.complete && startImg.naturalWidth) {
-    ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
-  }
-  const netY = endHeight;
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 8;
-  ctx.setLineDash([10, 8]);
-  ctx.beginPath();
-  ctx.moveTo(0, netY);
-  ctx.lineTo(width, netY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  if (!events.length) {
-    card.classList.add("empty");
-    return;
-  }
-  card.classList.remove("empty");
-  events.forEach(ev => {
-    const startRaw = ev.serveStart;
-    const endRaw = ev.serveEnd;
-    const start = isFarServe && startRaw ? mirrorTrajectoryPoint(startRaw) : startRaw;
-    const end = isFarServe && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
-    if (!start || !end) return;
-    const sx = clamp01Val(start.x) * width;
-    const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
-    const ex = clamp01Val(end.x) * width;
-    const ey = clamp01Val(end.y) * endHeight;
-    ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
-    ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
+  const prefs = ensurePlayerAnalysisState();
+  const isFarView = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]) === "far";
+  drawServeTrajectoryCanvas(canvas, card, events, {
+    scope: analysisScope,
+    isFarServe: isFarView,
+    onImagesLoad: () => renderPlayerServeTrajectoryAnalysis()
   });
 }
 function syncPlayerSecondFilterState() {
@@ -12850,15 +12890,17 @@ function renderVideoFilters(events) {
     els.reset._videoResetBound = true;
   }
 }
-function getTrajectoryBg(zone, cb) {
-  const key = String(zone);
+function getTrajectoryBg(zone, isFarSide, cb) {
+  const far = typeof isFarSide === "function" ? false : !!isFarSide;
+  const onLoad = typeof isFarSide === "function" ? isFarSide : cb;
+  const key = String(zone) + "-" + (far ? "far" : "near");
   if (trajectoryBgCache[key] && trajectoryBgCache[key].complete) {
     return trajectoryBgCache[key];
   }
   const img = new Image();
-  img.src = TRAJECTORY_BG_BY_ZONE[zone] || TRAJECTORY_BG_BY_ZONE[4];
-  if (cb) {
-    img.onload = cb;
+  img.src = getTrajectoryImageForZone(zone, far);
+  if (onLoad) {
+    img.onload = onLoad;
   }
   trajectoryBgCache[key] = img;
   return img;
@@ -13232,6 +13274,10 @@ function renderTrajectoryAnalysis() {
   renderTrajectoryFilters();
   const canvases = elTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
   if (!canvases || canvases.length === 0) return;
+  const analysisScope = getAnalysisTeamScope();
+  const courtSideState = ensureCourtSideState("uiTrajectoryCourtSideByScope");
+  const isFarView = getAnalysisCourtSide(courtSideState[analysisScope]) === "far";
+  elTrajectoryGrid.classList.toggle("is-far", isFarView);
   const events = getFilteredTrajectoryEvents();
   const grouped = {};
   events.forEach(ev => {
@@ -13245,7 +13291,7 @@ function renderTrajectoryAnalysis() {
     const zone = parseInt(canvas.dataset.trajCanvas, 10);
     const card = canvas.closest(".trajectory-card");
     const list = grouped[zone] || [];
-    const img = getTrajectoryBg(zone, () => renderTrajectoryAnalysis());
+    const img = getTrajectoryBg(zone, isFarView, () => renderTrajectoryAnalysis());
     const ratio = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.65;
     const width = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 320;
     const height = Math.max(120, Math.round(width * ratio || width * 0.65));
@@ -13263,8 +13309,10 @@ function renderTrajectoryAnalysis() {
     if (card) card.classList.remove("empty");
     list.forEach(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};
-      const start = traj.start || ev.attackStart;
-      const end = traj.end || ev.attackEnd;
+      const startRaw = traj.start || ev.attackStart;
+      const endRaw = traj.end || ev.attackEnd;
+      const start = isFarView && startRaw ? mirrorTrajectoryPoint(startRaw) : startRaw;
+      const end = isFarView && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
       if (!start || !end) return;
       const sx = clamp01Val(start.x) * width;
       const sy = clamp01Val(start.y) * height;
@@ -13284,6 +13332,8 @@ function renderServeTrajectoryAnalysis() {
   renderServeTrajectoryFilters();
   const events = getFilteredServeTrajectoryEvents();
   const analysisScope = getAnalysisTeamScope();
+  const courtSideState = ensureCourtSideState("uiServeTrajectoryCourtSideByScope");
+  const isFarView = getAnalysisCourtSide(courtSideState[analysisScope]) === "far";
   const analysisPlayers = getPlayersForScope(analysisScope);
   const analysisNumbers = getPlayerNumbersForScope(analysisScope);
   const selectedPlayers = serveTrajectoryFilterState.players.size
@@ -13331,8 +13381,7 @@ function renderServeTrajectoryAnalysis() {
     if (lastSwap !== null) {
       list = list.filter(ev => ev && ev.courtSideSwapped === lastSwap);
     }
-    const farFlag =
-      lastSwap !== null ? isFarSideForScopeAtSwap(analysisScope, lastSwap) : undefined;
+    const farFlag = isFarView;
     drawServeTrajectoryCanvas(canvas, card, list, {
       scope: analysisScope,
       isFarServe: farFlag,

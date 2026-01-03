@@ -696,6 +696,10 @@
                 <option value="dig-only">Solo difesa</option>
               </select>
             </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Campo</div>
+              <div id="traj-court-side" class="analysis-filter__options"></div>
+            </div>
             <div class="analysis-filter filter-actions">
               <button id="traj-filter-reset" class="secondary small" type="button">Reset filtri</button>
             </div>
@@ -772,6 +776,10 @@
             <div class="analysis-filter">
               <div class="analysis-filter__label">Zona partenza</div>
               <div id="serve-traj-filter-zones" class="analysis-filter__options"></div>
+            </div>
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Campo</div>
+              <div id="serve-traj-court-side" class="analysis-filter__options"></div>
             </div>
             <div class="analysis-filter filter-actions">
               <button id="serve-traj-filter-reset" class="secondary small" type="button">Reset filtri</button>
@@ -869,15 +877,19 @@
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="player">
-        <div class="player-analysis">
-          <div class="player-analysis-controls">
-            <div class="analysis-filter">
-              <div class="analysis-filter__label">Giocatrice</div>
-              <select id="player-analysis-select"></select>
-            </div>
-            <div class="player-analysis-toggles">
-              <label class="analysis-toggle">
-                <input type="checkbox" id="player-analysis-show-attack" checked />
+          <div class="player-analysis">
+            <div class="player-analysis-controls">
+              <div class="analysis-filter">
+                <div class="analysis-filter__label">Giocatrice</div>
+                <select id="player-analysis-select"></select>
+              </div>
+              <div class="analysis-filter">
+                <div class="analysis-filter__label">Campo</div>
+                <div id="player-analysis-court-side" class="analysis-filter__options"></div>
+              </div>
+              <div class="player-analysis-toggles">
+                <label class="analysis-toggle">
+                  <input type="checkbox" id="player-analysis-show-attack" checked />
                 Traiettorie attacco
               </label>
               <label class="analysis-toggle">

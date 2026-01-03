@@ -3438,6 +3438,11 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
     "z5 z6 z1";
   gap: 0.6rem;
 }
+.trajectory-grid.is-far {
+  grid-template-areas:
+    "z1 z6 z5"
+    "z2 z3 z4";
+}
 .serve-trajectory-grid {
   grid-template-columns: repeat(auto-fit, minmax(170px, 215px));
   grid-template-rows: auto;

@@ -1,6 +1,5 @@
 # Minor features
 Aggregare dati di piu partite
-visualizzazione far near attivabile
 
 # Bugfix
 Importazione match sembra avere problemi
