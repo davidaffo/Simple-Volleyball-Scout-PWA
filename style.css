@@ -687,6 +687,64 @@ body[data-theme="light"] .card-inline {
 .log-undo .undo-last-summary {
   justify-content: space-between;
 }
+.log-serve-trajectory {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.35rem;
+}
+.log-serve-trajectory__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.4rem;
+}
+.log-serve-card {
+  min-height: 90px;
+  padding: 0.16rem;
+}
+.log-serve-card .trajectory-card__title {
+  font-size: 0.7rem;
+  margin-bottom: 0.12rem;
+}
+.log-serve-card canvas {
+  min-height: 55px;
+}
+.log-serve-card__grid {
+  display: grid;
+  grid-template-columns: 50% 50%;
+  gap: 0.35rem;
+  align-items: start;
+}
+.log-serve-card__traj {
+  position: relative;
+}
+.log-serve-card__stats-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.12rem;
+  opacity: 0.85;
+}
+.log-serve-card__stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  font-size: 0.9rem;
+}
+.log-serve-card__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+.log-serve-card__stat strong {
+  font-weight: 700;
+}
+.log-serve-card.empty .log-serve-card__traj .trajectory-card__empty {
+  opacity: 1;
+}
+.log-serve-card.empty .log-serve-card__traj canvas {
+  opacity: 0.35;
+}
 .score-card {
   background: #191919;
   border: 1px solid #2f2f2f;

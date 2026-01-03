@@ -19,6 +19,9 @@ function isFarSideForScope(scope) {
   const swapped = !!state.courtSideSwapped;
   return scope === "our" ? swapped : !swapped;
 }
+function isFarSideForScopeAtSwap(scope, swapped) {
+  return scope === "our" ? swapped : !swapped;
+}
 function isServingForScope(scope) {
   return scope === "opponent" ? !state.isServing : !!state.isServing;
 }
@@ -85,6 +88,7 @@ let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
 let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
+let serveTrajectoryScope = null;
 const ERROR_TYPES = [
   { id: "Double", label: "Doppia" },
   { id: "Carry", label: "Accompagnata" },
@@ -115,6 +119,17 @@ const elLineupModalTitle = document.getElementById("lineup-modal-title");
 const elLineupModalApplyDefault = document.getElementById("lineup-modal-apply-default");
 const elLineupModalToggleNumbers = document.getElementById("lineup-modal-toggle-numbers");
 const elLineupPreferredLibero = document.getElementById("lineup-preferred-libero");
+const elLogServeTrajectory = document.getElementById("log-serve-trajectory");
+const elLogServeCardOur = document.getElementById("log-serve-card-our");
+const elLogServeCardOpp = document.getElementById("log-serve-card-opp");
+const elLogServeCanvasOur = document.getElementById("log-serve-canvas-our");
+const elLogServeCanvasOpp = document.getElementById("log-serve-canvas-opp");
+const elLogServeNameOur = document.getElementById("log-serve-name-our");
+const elLogServeNameOpp = document.getElementById("log-serve-name-opp");
+const elLogServeStatsOur = document.getElementById("log-serve-stats-our");
+const elLogServeStatsOpp = document.getElementById("log-serve-stats-opp");
+const elServeTrajectoryLogToggleInline = document.getElementById("serve-trajectory-log-toggle-inline");
+const elServeTrajectoryLogToggleInlineOpp = document.getElementById("serve-trajectory-log-toggle-inline-opp");
 const elLiveSetScore = document.getElementById("live-set-score");
 const elAggSetScore = document.getElementById("agg-set-score");
 const elNextSetInline = document.getElementById("next-set-inline");
@@ -2688,6 +2703,7 @@ function openAttackTrajectoryModal(prefill = null) {
     trajectoryMirror = !forcePopup && !!mirrorFlag && !trajectoryForceFar;
     const mode = (prefill && prefill.mode) || "attack";
     trajectoryMode = mode;
+    serveTrajectoryScope = mode === "serve-start" || mode === "serve-end" ? scope : null;
     trajectoryBaseZone = prefill && prefill.baseZone ? prefill.baseZone : null;
     trajectorySetType = prefill && prefill.setType ? prefill.setType : null;
     trajectoryResolver = resolve;
@@ -2755,6 +2771,7 @@ function openAttackTrajectoryModal(prefill = null) {
     window.addEventListener("keydown", trajectoryEscapeHandler);
     elAttackTrajectoryModal.classList.remove("hidden");
     setModalOpenState(true, forcePopup);
+    renderLogServeTrajectories();
     const applyPrefill = () => {
       if (!elAttackTrajectoryCanvas || elAttackTrajectoryCanvas.width === 0 || elAttackTrajectoryCanvas.height === 0) {
         return;
@@ -2821,6 +2838,7 @@ function closeAttackTrajectoryModal(result = null) {
   trajectoryBaseZone = null;
   trajectorySetType = null;
   trajectoryMode = "attack";
+  serveTrajectoryScope = null;
   if (serveTypeKeyHandler) {
     window.removeEventListener("keydown", serveTypeKeyHandler);
     serveTypeKeyHandler = null;
@@ -2833,6 +2851,7 @@ function closeAttackTrajectoryModal(result = null) {
     trajectoryResolver(result);
     trajectoryResolver = null;
   }
+  renderLogServeTrajectories();
 }
 async function captureServeTrajectory(event, { forcePopup = false } = {}) {
   try {
@@ -3787,6 +3806,7 @@ function buildBaseEventPayload(base) {
     clockMs,
     set: state.currentSet,
     rotation,
+    courtSideSwapped: !!state.courtSideSwapped,
     playerIdx: base.playerIdx,
     playerName:
       base.playerName ||
@@ -5277,6 +5297,7 @@ function renderPlayers() {
   recalcAllStatsAndUpdateUI();
   renderLineupChips();
   renderOpponentPlayers({ nextSkillId: predictedOpponentSkillId });
+  renderLogServeTrajectories();
 }
 function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
   if (!state.useOpponentTeam) return;
@@ -7293,6 +7314,7 @@ function renderEventsLog(options = {}) {
     elUndoLastSummary.textContent = compactSummary || "—";
   }
   updateTeamCounters();
+  renderLogServeTrajectories();
 }
 function getTimeoutCountForSet(setNum) {
   const set = Number(setNum) || 1;
@@ -12142,8 +12164,10 @@ function renderPlayerServeTrajectoryAnalysis() {
   }
   card.classList.remove("empty");
   events.forEach(ev => {
-    const start = ev.serveStart;
-    const end = ev.serveEnd;
+    const startRaw = ev.serveStart;
+    const endRaw = ev.serveEnd;
+    const start = isFarServe && startRaw ? mirrorTrajectoryPoint(startRaw) : startRaw;
+    const end = isFarServe && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
     if (!start || !end) return;
     const sx = clamp01Val(start.x) * width;
     const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
@@ -12767,20 +12791,37 @@ function getTrajectoryBg(zone, cb) {
   return img;
 }
 function getServeTrajectoryImages(cb) {
-  if (serveTrajectoryImgs && serveTrajectoryImgs.start && serveTrajectoryImgs.end) {
-    if (serveTrajectoryImgs.start.complete && serveTrajectoryImgs.end.complete) {
+  if (
+    serveTrajectoryImgs &&
+    serveTrajectoryImgs.start &&
+    serveTrajectoryImgs.end &&
+    serveTrajectoryImgs.startFar &&
+    serveTrajectoryImgs.endFar
+  ) {
+    if (
+      serveTrajectoryImgs.start.complete &&
+      serveTrajectoryImgs.end.complete &&
+      serveTrajectoryImgs.startFar.complete &&
+      serveTrajectoryImgs.endFar.complete
+    ) {
       return serveTrajectoryImgs;
     }
   }
   const start = new Image();
   const end = new Image();
+  const startFar = new Image();
+  const endFar = new Image();
   start.src = SERVE_START_IMG_NEAR;
   end.src = SERVE_END_IMG_NEAR;
+  startFar.src = SERVE_START_IMG_FAR;
+  endFar.src = SERVE_END_IMG_FAR;
   if (cb) {
     start.onload = cb;
     end.onload = cb;
+    startFar.onload = cb;
+    endFar.onload = cb;
   }
-  serveTrajectoryImgs = { start, end };
+  serveTrajectoryImgs = { start, end, startFar, endFar };
   return serveTrajectoryImgs;
 }
 function getTrajectoryColorForCode(code, variant = "attack") {
@@ -12813,6 +12854,264 @@ function getFilteredTrajectoryEvents() {
 function getServeStartZone(ev) {
   if (!ev || !ev.serveStart) return null;
   return getAttackZone(ev.serveStart, true);
+}
+function getServeTrajectoryEventsForServer(scope) {
+  const serverName = getActiveServerName(scope) || (getServerPlayerForScope(scope) || {}).name || "";
+  const players = getPlayersForScope(scope);
+  const serverIdx = serverName ? players.indexOf(serverName) : -1;
+  let events = (state.events || []).filter(ev => {
+    if (!ev || ev.skillId !== "serve") return false;
+    if (!ev.serveStart || !ev.serveEnd) return false;
+    if (getTeamScopeFromEvent(ev) !== scope) return false;
+    if (serverName && ev.playerName === serverName) return true;
+    if (serverIdx >= 0 && ev.playerIdx === serverIdx) return true;
+    return false;
+  });
+  const lastEvent = events.length ? events[events.length - 1] : null;
+  const eventSwap = lastEvent && typeof lastEvent.courtSideSwapped === "boolean" ? lastEvent.courtSideSwapped : null;
+  if (lastEvent && typeof lastEvent.courtSideSwapped === "boolean") {
+    events = events.filter(ev => ev && ev.courtSideSwapped === lastEvent.courtSideSwapped);
+  }
+  return { events, serverName, eventSwap };
+}
+function drawServeTrajectoryCanvas(canvas, card, events, { scope, isFarServe } = {}) {
+  if (!canvas || !card) return;
+  const imgs = getServeTrajectoryImages(() => renderLogServeTrajectories());
+  const farFlag =
+    typeof isFarServe === "boolean" ? isFarServe : scope ? isFarSideForScope(scope) : false;
+  const startImg = imgs && (farFlag ? imgs.startFar : imgs.start);
+  const endImg = imgs && (farFlag ? imgs.endFar : imgs.end);
+  const startRatio = startImg && startImg.naturalWidth ? startImg.naturalHeight / startImg.naturalWidth : 0.65;
+  const endRatio = endImg && endImg.naturalWidth ? endImg.naturalHeight / endImg.naturalWidth : 0.65;
+  const width =
+    (canvas.parentElement && canvas.parentElement.clientWidth) ||
+    (startImg && startImg.naturalWidth) ||
+    (endImg && endImg.naturalWidth) ||
+    320;
+  const startHeight = Math.max(80, Math.round(width * startRatio));
+  const endHeight = Math.max(80, Math.round(width * endRatio));
+  const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
+  const height = startHeight + gapHeight + endHeight;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, width, height);
+  if (farFlag) {
+    if (startImg && startImg.complete && startImg.naturalWidth) {
+      ctx.drawImage(startImg, 0, 0, width, startHeight);
+    }
+    if (gapHeight > 0) {
+      ctx.fillStyle = "#ffb142";
+      const gapStart = startHeight;
+      ctx.fillRect(0, gapStart, width, gapHeight);
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, gapStart, width, gapHeight);
+    }
+    if (endImg && endImg.complete && endImg.naturalWidth) {
+      ctx.drawImage(endImg, 0, startHeight + gapHeight, width, endHeight);
+    }
+  } else {
+    if (endImg && endImg.complete && endImg.naturalWidth) {
+      ctx.drawImage(endImg, 0, 0, width, endHeight);
+    }
+    if (gapHeight > 0) {
+      ctx.fillStyle = "#ffb142";
+      ctx.fillRect(0, endHeight, width, gapHeight);
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, endHeight, width, gapHeight);
+    }
+    if (startImg && startImg.complete && startImg.naturalWidth) {
+      ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
+    }
+  }
+  const netY = farFlag ? startHeight + gapHeight : endHeight;
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 8;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, netY);
+  ctx.lineTo(width, netY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (!events || events.length === 0) {
+    card.classList.add("empty");
+    return;
+  }
+  card.classList.remove("empty");
+  events.forEach(ev => {
+    const startRaw = ev.serveStart;
+    const endRaw = ev.serveEnd;
+    const start = farFlag && startRaw ? mirrorTrajectoryPoint(startRaw) : startRaw;
+    const end = farFlag && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
+    if (!start || !end) return;
+    const sx = clamp01Val(start.x) * width;
+    const sy = clamp01Val(start.y) * startHeight + (farFlag ? 0 : endHeight + gapHeight);
+    const ex = clamp01Val(end.x) * width;
+    const ey = clamp01Val(end.y) * endHeight + (farFlag ? startHeight + gapHeight : 0);
+    ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
+    ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+  });
+}
+function resolvePlayerIdxFromNameForScope(name, scope) {
+  const players = getPlayersForScope(scope);
+  if (!name || !players || !players.length) return -1;
+  const directIdx = players.findIndex(p => p === name);
+  if (directIdx !== -1) return directIdx;
+  const raw = String(name).trim().toLowerCase();
+  if (!raw) return -1;
+  const normalized = raw.replace(/^[0-9]+\\s*/, "");
+  return players.findIndex(p => {
+    const base = String(p || "").trim().toLowerCase();
+    if (!base) return false;
+    return base === normalized || base === raw;
+  });
+}
+function getServeStatsForServer(scope, serverName) {
+  const players = getPlayersForScope(scope);
+  const idx = resolvePlayerIdxFromNameForScope(serverName, scope);
+  if (idx < 0 || !players[idx]) return null;
+  const events = (state.events || []).filter(ev => getTeamScopeFromEvent(ev) === scope);
+  const statsByPlayer = computeStatsByPlayerForEvents(events, players);
+  const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
+  const serveMetrics = computeMetrics(serveCounts, "serve");
+  return {
+    total: totalFromCounts(serveCounts),
+    ace: serveCounts["#"] || 0,
+    error: serveCounts["="] || 0,
+    pos: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos),
+    eff: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff)
+  };
+}
+function renderServeStatsGrid(targetEl, stats) {
+  if (!targetEl) return;
+  targetEl.innerHTML = "";
+  if (!stats) {
+    const empty = document.createElement("div");
+    empty.className = "log-serve-card__stat";
+    empty.textContent = "Nessun dato";
+    targetEl.appendChild(empty);
+    return;
+  }
+  const rows = [
+    { label: "Tot", value: stats.total },
+    { label: "#", value: stats.ace },
+    { label: "=", value: stats.error },
+    { label: "Pos", value: stats.pos },
+    { label: "Eff", value: stats.eff }
+  ];
+  rows.forEach(row => {
+    const item = document.createElement("div");
+    item.className = "log-serve-card__stat";
+    const label = document.createElement("span");
+    label.textContent = row.label;
+    const value = document.createElement("strong");
+    value.textContent = row.value;
+    item.appendChild(label);
+    item.appendChild(value);
+    targetEl.appendChild(item);
+  });
+}
+function getServingScopeForLogTrajectory() {
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    const ourNext = getPredictedSkillIdForScope("our");
+    const oppNext = getPredictedSkillIdForScope("opponent");
+    if (ourNext === "serve") return "our";
+    if (oppNext === "serve") return "opponent";
+  }
+  if (state.pendingServe && state.pendingServe.scope) {
+    return state.pendingServe.scope;
+  }
+  if (isPostServeLockForScope("our")) return "our";
+  if (isPostServeLockForScope("opponent")) return "opponent";
+  if (serveTrajectoryScope === "our" || serveTrajectoryScope === "opponent") {
+    return serveTrajectoryScope;
+  }
+  return null;
+}
+function getActiveServeSelectionScope() {
+  const keys = Object.keys(selectedSkillPerPlayer || {});
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (selectedSkillPerPlayer[key] !== "serve") continue;
+    if (serveMetaByPlayer && serveMetaByPlayer[key]) continue;
+    const scope = key.split(":")[0];
+    if (scope === "our" || scope === "opponent") return scope;
+  }
+  return null;
+}
+function renderLogServeTrajectories() {
+  if (!elLogServeTrajectory) return;
+  const selectionScope = getActiveServeSelectionScope();
+  const servingScope = getServingScopeForLogTrajectory() || selectionScope;
+  const allowOur = !!state.showServeTrajectoryLogOur;
+  const allowOpp = !!state.showServeTrajectoryLogOpp;
+  const canShow = !!servingScope;
+  if (elServeTrajectoryLogToggleInline) {
+    elServeTrajectoryLogToggleInline.checked = allowOur;
+  }
+  if (elServeTrajectoryLogToggleInlineOpp) {
+    elServeTrajectoryLogToggleInlineOpp.checked = allowOpp;
+  }
+  elLogServeTrajectory.classList.toggle("hidden", !canShow);
+  if (!canShow) return;
+  const showOur = servingScope === "our" && allowOur;
+  const showOpp = servingScope === "opponent" && state.useOpponentTeam && allowOpp;
+  if (elLogServeCardOur) elLogServeCardOur.classList.toggle("hidden", !showOur);
+  if (elLogServeCardOpp) elLogServeCardOpp.classList.toggle("hidden", !showOpp);
+  if (showOur && elLogServeCanvasOur && elLogServeCardOur) {
+    const { events, serverName, eventSwap } = getServeTrajectoryEventsForServer("our");
+    if (elLogServeNameOur) {
+      elLogServeNameOur.textContent = serverName ? formatNameWithNumber(serverName) : "—";
+    }
+    const farFlag =
+      typeof eventSwap === "boolean" ? isFarSideForScopeAtSwap("our", eventSwap) : undefined;
+    drawServeTrajectoryCanvas(elLogServeCanvasOur, elLogServeCardOur, events, {
+      scope: "our",
+      isFarServe: farFlag
+    });
+    renderServeStatsGrid(elLogServeStatsOur, getServeStatsForServer("our", serverName));
+  }
+  if (showOpp && elLogServeCanvasOpp && elLogServeCardOpp) {
+    const { events, serverName, eventSwap } = getServeTrajectoryEventsForServer("opponent");
+    if (elLogServeNameOpp) {
+      elLogServeNameOpp.textContent = serverName
+        ? formatNameWithNumberFor(serverName, getPlayerNumbersForScope("opponent"))
+        : "—";
+    }
+    const farFlag =
+      typeof eventSwap === "boolean" ? isFarSideForScopeAtSwap("opponent", eventSwap) : undefined;
+    drawServeTrajectoryCanvas(elLogServeCanvasOpp, elLogServeCardOpp, events, {
+      scope: "opponent",
+      isFarServe: farFlag
+    });
+    renderServeStatsGrid(elLogServeStatsOpp, getServeStatsForServer("opponent", serverName));
+  }
+}
+function initLogServeTrajectoryControls() {
+  if (!elLogServeTrajectory) return;
+  if (elServeTrajectoryLogToggleInline && !elServeTrajectoryLogToggleInline._bound) {
+    elServeTrajectoryLogToggleInline.addEventListener("change", () => {
+      state.showServeTrajectoryLogOur = !!elServeTrajectoryLogToggleInline.checked;
+      saveState();
+      renderLogServeTrajectories();
+    });
+    elServeTrajectoryLogToggleInline._bound = true;
+  }
+  if (elServeTrajectoryLogToggleInlineOpp && !elServeTrajectoryLogToggleInlineOpp._bound) {
+    elServeTrajectoryLogToggleInlineOpp.addEventListener("change", () => {
+      state.showServeTrajectoryLogOpp = !!elServeTrajectoryLogToggleInlineOpp.checked;
+      saveState();
+      renderLogServeTrajectories();
+    });
+    elServeTrajectoryLogToggleInlineOpp._bound = true;
+  }
+  renderLogServeTrajectories();
 }
 function getFilteredServeTrajectoryEvents() {
   const events = (state.events || []).filter(ev => {
@@ -15475,6 +15774,7 @@ async function init() {
   renderMatchesSelect();
   renderLiveScore();
   renderPlayers();
+  initLogServeTrajectoryControls();
   const applyForceMobileLayout = enabled => {
     document.body.classList.toggle("force-mobile", !!enabled);
     renderPlayers();

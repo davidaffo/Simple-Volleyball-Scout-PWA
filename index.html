@@ -215,6 +215,10 @@
                   <input type="checkbox" id="serve-trajectory-toggle-inline" />
                   Traiettoria servizio
                 </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="serve-trajectory-log-toggle-inline" />
+                  Traiettorie del battitore
+                </label>
               </div>
               <div class="team-timeout-block">
                 <button id="btn-timeout" class="small secondary">Timeout</button>
@@ -241,6 +245,10 @@
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="serve-trajectory-toggle-inline-opp" />
                   Traiettoria servizio
+                </label>
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="serve-trajectory-log-toggle-inline-opp" />
+                  Traiettorie del battitore
                 </label>
               </div>
               <div class="team-timeout-block">
@@ -501,6 +509,36 @@
       </div>
       <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">
         <button class="drawer-close secondary small" type="button" data-close-drawer="log">Chiudi</button>
+        <div id="log-serve-trajectory" class="log-serve-trajectory">
+          <div class="log-serve-trajectory__grid">
+            <div class="trajectory-card serve-trajectory-card log-serve-card" id="log-serve-card-our" data-scope="our">
+              <div class="log-serve-card__grid">
+                <div class="log-serve-card__traj">
+                  <div class="trajectory-card__title">Battuta · <span id="log-serve-name-our">—</span></div>
+                  <canvas id="log-serve-canvas-our"></canvas>
+                  <div class="trajectory-card__empty">Nessuna traiettoria</div>
+                </div>
+                <div class="log-serve-card__stats">
+                  <div class="log-serve-card__stats-title">Dati battuta</div>
+                  <div class="log-serve-card__stats-grid" id="log-serve-stats-our"></div>
+                </div>
+              </div>
+            </div>
+            <div class="trajectory-card serve-trajectory-card log-serve-card" id="log-serve-card-opp" data-scope="opponent">
+              <div class="log-serve-card__grid">
+                <div class="log-serve-card__traj">
+                  <div class="trajectory-card__title">Battuta · <span id="log-serve-name-opp">—</span></div>
+                  <canvas id="log-serve-canvas-opp"></canvas>
+                  <div class="trajectory-card__empty">Nessuna traiettoria</div>
+                </div>
+                <div class="log-serve-card__stats">
+                  <div class="log-serve-card__stats-title">Dati battuta</div>
+                  <div class="log-serve-card__stats-grid" id="log-serve-stats-opp"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="events-log-summary" class="events-log-summary" aria-live="polite"></div>
         <div id="events-log"></div>
         <div class="card-inline log-undo">

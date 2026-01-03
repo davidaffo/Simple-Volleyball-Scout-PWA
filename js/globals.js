@@ -121,6 +121,8 @@ let state = {
   opponentPreferredLibero: "",
   opponentSkillFlowOverride: null,
   opponentStats: {},
+  showServeTrajectoryLogOur: true,
+  showServeTrajectoryLogOpp: true,
   metricsConfig: {},
   pointRules: {},
   autoRotate: true,
