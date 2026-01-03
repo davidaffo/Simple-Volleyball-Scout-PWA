@@ -1,6 +1,4 @@
 # Minor features
-Trasforma tutte le immagini in svg
-Modifica immagine battuta per mettere il campo fuori
 Aggregare dati di piu partite
 visualizzazione far near attivabile
 

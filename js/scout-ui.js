@@ -12824,6 +12824,19 @@ function getServeTrajectoryImages(cb) {
   serveTrajectoryImgs = { start, end, startFar, endFar };
   return serveTrajectoryImgs;
 }
+function getAttackEmptyImage(isFarSide, cb) {
+  const key = isFarSide ? "attack-empty-far" : "attack-empty-near";
+  if (trajectoryBgCache[key] && trajectoryBgCache[key].complete) {
+    return trajectoryBgCache[key];
+  }
+  const img = new Image();
+  img.src = isFarSide ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR;
+  if (cb) {
+    img.onload = cb;
+  }
+  trajectoryBgCache[key] = img;
+  return img;
+}
 function getTrajectoryColorForCode(code, variant = "attack") {
   const normalized = normalizeEvalCode(code) || String(code || "").trim();
   const palette = variant === "serve" ? TRAJECTORY_LINE_COLORS_SERVE : TRAJECTORY_LINE_COLORS;
@@ -12874,9 +12887,10 @@ function getServeTrajectoryEventsForServer(scope) {
   }
   return { events, serverName, eventSwap };
 }
-function drawServeTrajectoryCanvas(canvas, card, events, { scope, isFarServe } = {}) {
+function drawServeTrajectoryCanvas(canvas, card, events, { scope, isFarServe, onImagesLoad } = {}) {
   if (!canvas || !card) return;
-  const imgs = getServeTrajectoryImages(() => renderLogServeTrajectories());
+  const gapOverlapPx = 30;
+  const imgs = getServeTrajectoryImages(onImagesLoad || (() => renderLogServeTrajectories()));
   const farFlag =
     typeof isFarServe === "boolean" ? isFarServe : scope ? isFarSideForScope(scope) : false;
   const startImg = imgs && (farFlag ? imgs.startFar : imgs.start);
@@ -12891,42 +12905,57 @@ function drawServeTrajectoryCanvas(canvas, card, events, { scope, isFarServe } =
   const startHeight = Math.max(80, Math.round(width * startRatio));
   const endHeight = Math.max(80, Math.round(width * endRatio));
   const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
-  const height = startHeight + gapHeight + endHeight;
+  const gapCut = Math.min(gapOverlapPx, Math.max(0, gapHeight - 1));
+  const effectiveGap = Math.max(0, gapHeight - gapCut);
+  const height = startHeight + effectiveGap + endHeight;
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, width, height);
+  const gapImg = getAttackEmptyImage(!farFlag, () => renderLogServeTrajectories());
+  const overlap = gapCut;
   if (farFlag) {
     if (startImg && startImg.complete && startImg.naturalWidth) {
       ctx.drawImage(startImg, 0, 0, width, startHeight);
     }
-    if (gapHeight > 0) {
-      ctx.fillStyle = "#ffb142";
+    if (effectiveGap > 0) {
       const gapStart = startHeight;
-      ctx.fillRect(0, gapStart, width, gapHeight);
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, gapStart, width, gapHeight);
+      if (gapImg && gapImg.complete && gapImg.naturalWidth) {
+        const srcCut = Math.round((overlap / gapHeight) * gapImg.naturalHeight);
+        const srcY = Math.min(srcCut, gapImg.naturalHeight - 1);
+        const srcH = Math.max(1, gapImg.naturalHeight - srcY);
+        const destY = gapStart;
+        const destH = Math.max(1, effectiveGap);
+        ctx.drawImage(gapImg, 0, srcY, gapImg.naturalWidth, srcH, 0, destY, width, destH);
+      } else {
+        ctx.fillStyle = "#ffb142";
+        ctx.fillRect(0, gapStart, width, Math.max(1, effectiveGap));
+      }
     }
     if (endImg && endImg.complete && endImg.naturalWidth) {
-      ctx.drawImage(endImg, 0, startHeight + gapHeight, width, endHeight);
+      ctx.drawImage(endImg, 0, startHeight + effectiveGap, width, endHeight);
     }
   } else {
     if (endImg && endImg.complete && endImg.naturalWidth) {
       ctx.drawImage(endImg, 0, 0, width, endHeight);
     }
-    if (gapHeight > 0) {
-      ctx.fillStyle = "#ffb142";
-      ctx.fillRect(0, endHeight, width, gapHeight);
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, endHeight, width, gapHeight);
+    if (effectiveGap > 0) {
+      const gapStart = endHeight;
+      if (gapImg && gapImg.complete && gapImg.naturalWidth) {
+        const srcCut = Math.round((overlap / gapHeight) * gapImg.naturalHeight);
+        const srcH = Math.max(1, gapImg.naturalHeight - srcCut);
+        const destH = Math.max(1, effectiveGap);
+        ctx.drawImage(gapImg, 0, 0, gapImg.naturalWidth, srcH, 0, gapStart, width, destH);
+      } else {
+        ctx.fillStyle = "#ffb142";
+        ctx.fillRect(0, gapStart, width, Math.max(1, effectiveGap));
+      }
     }
     if (startImg && startImg.complete && startImg.naturalWidth) {
-      ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
+      ctx.drawImage(startImg, 0, endHeight + effectiveGap, width, startHeight);
     }
   }
-  const netY = farFlag ? startHeight + gapHeight : endHeight;
+  const netY = farFlag ? startHeight + effectiveGap : endHeight;
   ctx.strokeStyle = "#000000";
   ctx.lineWidth = 8;
   ctx.setLineDash([10, 8]);
@@ -12947,9 +12976,9 @@ function drawServeTrajectoryCanvas(canvas, card, events, { scope, isFarServe } =
     const end = farFlag && endRaw ? mirrorTrajectoryPoint(endRaw) : endRaw;
     if (!start || !end) return;
     const sx = clamp01Val(start.x) * width;
-    const sy = clamp01Val(start.y) * startHeight + (farFlag ? 0 : endHeight + gapHeight);
+    const sy = clamp01Val(start.y) * startHeight + (farFlag ? 0 : endHeight + effectiveGap);
     const ex = clamp01Val(end.x) * width;
-    const ey = clamp01Val(end.y) * endHeight + (farFlag ? startHeight + gapHeight : 0);
+    const ey = clamp01Val(end.y) * endHeight + (farFlag ? startHeight + effectiveGap : 0);
     ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
     ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
     ctx.beginPath();
@@ -13220,11 +13249,6 @@ function renderServeTrajectoryAnalysis() {
     cards.push({ card, canvas, playerIdx });
   });
   if (!cards.length) return;
-  const imgs = getServeTrajectoryImages(() => renderServeTrajectoryAnalysis());
-  const startImg = imgs && imgs.start;
-  const endImg = imgs && imgs.end;
-  const startRatio = startImg && startImg.naturalWidth ? startImg.naturalHeight / startImg.naturalWidth : 0.65;
-  const endRatio = endImg && endImg.naturalWidth ? endImg.naturalHeight / endImg.naturalWidth : 0.65;
   const grouped = {};
   events.forEach(ev => {
     if (typeof ev.playerIdx !== "number") return;
@@ -13232,61 +13256,18 @@ function renderServeTrajectoryAnalysis() {
     grouped[ev.playerIdx].push(ev);
   });
   cards.forEach(({ card, canvas, playerIdx }) => {
-    const list = grouped[playerIdx] || [];
-    const width =
-      (canvas.parentElement && canvas.parentElement.clientWidth) ||
-      (startImg && startImg.naturalWidth) ||
-      (endImg && endImg.naturalWidth) ||
-      320;
-    const startHeight = Math.max(80, Math.round(width * startRatio));
-    const endHeight = Math.max(80, Math.round(width * endRatio));
-    const gapHeight = Math.max(0, startHeight - Math.round(startHeight / 9));
-    const height = startHeight + gapHeight + endHeight;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, width, height);
-    if (endImg && endImg.complete && endImg.naturalWidth) {
-      ctx.drawImage(endImg, 0, 0, width, endHeight);
+    let list = grouped[playerIdx] || [];
+    const lastEv = list.length ? list[list.length - 1] : null;
+    const lastSwap = lastEv && typeof lastEv.courtSideSwapped === "boolean" ? lastEv.courtSideSwapped : null;
+    if (lastSwap !== null) {
+      list = list.filter(ev => ev && ev.courtSideSwapped === lastSwap);
     }
-    if (gapHeight > 0) {
-      ctx.fillStyle = "#ffb142";
-      ctx.fillRect(0, endHeight, width, gapHeight);
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, endHeight, width, gapHeight);
-    }
-    if (startImg && startImg.complete && startImg.naturalWidth) {
-      ctx.drawImage(startImg, 0, endHeight + gapHeight, width, startHeight);
-    }
-    const netY = endHeight;
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 8;
-    ctx.setLineDash([10, 8]);
-    ctx.beginPath();
-    ctx.moveTo(0, netY);
-    ctx.lineTo(width, netY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (!list.length) {
-      card.classList.add("empty");
-      return;
-    }
-    card.classList.remove("empty");
-    list.forEach(ev => {
-      const start = ev.serveStart;
-      const end = ev.serveEnd;
-      if (!start || !end) return;
-      const sx = clamp01Val(start.x) * width;
-      const sy = clamp01Val(start.y) * startHeight + endHeight + gapHeight;
-      const ex = clamp01Val(end.x) * width;
-      const ey = clamp01Val(end.y) * endHeight;
-      ctx.strokeStyle = getTrajectoryColorForCode(ev.code, "serve");
-      ctx.lineWidth = TRAJECTORY_LINE_WIDTH;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
+    const farFlag =
+      lastSwap !== null ? isFarSideForScopeAtSwap(analysisScope, lastSwap) : undefined;
+    drawServeTrajectoryCanvas(canvas, card, list, {
+      scope: analysisScope,
+      isFarServe: farFlag,
+      onImagesLoad: () => renderServeTrajectoryAnalysis()
     });
   });
 }
