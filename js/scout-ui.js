@@ -13094,30 +13094,26 @@ function renderLogServeTrajectories() {
   if (elLogServeCardOur) elLogServeCardOur.classList.toggle("hidden", !showOur);
   if (elLogServeCardOpp) elLogServeCardOpp.classList.toggle("hidden", !showOpp);
   if (showOur && elLogServeCanvasOur && elLogServeCardOur) {
-    const { events, serverName, eventSwap } = getServeTrajectoryEventsForServer("our");
+    const { events, serverName } = getServeTrajectoryEventsForServer("our");
     if (elLogServeNameOur) {
       elLogServeNameOur.textContent = serverName ? formatNameWithNumber(serverName) : "—";
     }
-    const farFlag =
-      typeof eventSwap === "boolean" ? isFarSideForScopeAtSwap("our", eventSwap) : undefined;
     drawServeTrajectoryCanvas(elLogServeCanvasOur, elLogServeCardOur, events, {
       scope: "our",
-      isFarServe: farFlag
+      isFarServe: isFarSideForScope("our")
     });
     renderServeStatsGrid(elLogServeStatsOur, getServeStatsForServer("our", serverName));
   }
   if (showOpp && elLogServeCanvasOpp && elLogServeCardOpp) {
-    const { events, serverName, eventSwap } = getServeTrajectoryEventsForServer("opponent");
+    const { events, serverName } = getServeTrajectoryEventsForServer("opponent");
     if (elLogServeNameOpp) {
       elLogServeNameOpp.textContent = serverName
         ? formatNameWithNumberFor(serverName, getPlayerNumbersForScope("opponent"))
         : "—";
     }
-    const farFlag =
-      typeof eventSwap === "boolean" ? isFarSideForScopeAtSwap("opponent", eventSwap) : undefined;
     drawServeTrajectoryCanvas(elLogServeCanvasOpp, elLogServeCardOpp, events, {
       scope: "opponent",
-      isFarServe: farFlag
+      isFarServe: isFarSideForScope("opponent")
     });
     renderServeStatsGrid(elLogServeStatsOpp, getServeStatsForServer("opponent", serverName));
   }
