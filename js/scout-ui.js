@@ -26,12 +26,22 @@ function isServingForScope(scope) {
   return scope === "opponent" ? !state.isServing : !!state.isServing;
 }
 function getServeDisplayCourt(scope = "our") {
-  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
-  if (!Array.isArray(baseCourt) || baseCourt.length === 0) return [];
-  if (isServingForScope(scope) && typeof removeLiberosAndRestoreForScope === "function") {
-    return removeLiberosAndRestoreForScope(baseCourt, scope);
+  let baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
+  if (state.autoRolePositioning) {
+    if (scope === "opponent") {
+      if (state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6) {
+        baseCourt = state.opponentAutoRoleBaseCourt;
+      }
+    } else if (autoRoleBaseCourt) {
+      baseCourt = autoRoleBaseCourt;
+    }
   }
-  return getCourtShape(baseCourt);
+  if (!Array.isArray(baseCourt) || baseCourt.length === 0) return [];
+  const shaped = typeof ensureCourtShapeFor === "function" ? ensureCourtShapeFor(baseCourt) : getCourtShape(baseCourt);
+  if (isServingForScope(scope) && typeof removeLiberosAndRestoreForScope === "function") {
+    return removeLiberosAndRestoreForScope(shaped, scope);
+  }
+  return shaped;
 }
 function getTeamNameForScope(scope) {
   return scope === "opponent"
@@ -2311,8 +2321,7 @@ function canOverrideServeError(scope, skillId, code, flowState, playerName) {
 }
 function getServerPlayerForScope(scope) {
   const players = getPlayersForScope(scope);
-  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
-  const court = getCourtShape(baseCourt);
+  const court = getServeDisplayCourt(scope);
   const slot = court[0] || {};
   const name = slot.main || slot.replaced || "";
   if (!name) return null;
@@ -4116,23 +4125,6 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
     codesWrap.appendChild(btn);
   });
   elSkillModalBody.appendChild(codesWrap);
-
-  const extraRow = document.createElement("div");
-  extraRow.className = "modal-skill-extra";
-  const errorBtn = document.createElement("button");
-  errorBtn.type = "button";
-  errorBtn.className = "small event-btn danger full-width";
-  errorBtn.textContent = "Errore/Fallo";
-  errorBtn.addEventListener("click", () => {
-    openErrorModal({
-      playerIdx,
-      playerName: nameValue,
-      scope
-    });
-    closeSkillModal();
-  });
-  extraRow.appendChild(errorBtn);
-  elSkillModalBody.appendChild(extraRow);
 }
 function openSkillModal(playerIdx, playerName, scope = "our") {
   if (!elSkillModal || !elSkillModalBody) return;
@@ -4748,6 +4740,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   if (isCompactMobile) {
     const pickedSkillId = nextSkillId || null;
+    if (pickedSkillId === "serve") {
+      const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
+      if (serveZone !== 1) {
+        return;
+      }
+    }
     if (
       pickedSkillId === "block" &&
       blockInlinePlayer !== null &&
@@ -5895,6 +5893,9 @@ async function handleEventClick(
     state.isServing = nextServeScope === "our";
   }
   incrementSkillStats(scope, playerIdx, skillId, code);
+  if (skillId === "attack") {
+    clearAttackSelection(playerIdx, scope);
+  }
   if (state.forceSkillActive && state.forceSkillScope === scope) {
     state.forceSkillActive = false;
     state.forceSkillScope = null;

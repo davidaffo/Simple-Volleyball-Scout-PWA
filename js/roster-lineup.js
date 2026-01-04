@@ -402,6 +402,8 @@ function applyStateSnapshot(parsed, options = {}) {
   state.attackTrajectorySimplified = parsed.attackTrajectorySimplified !== false;
   state.serveTrajectoryEnabled = parsed.serveTrajectoryEnabled !== false;
   state.setTypePromptEnabled = parsed.setTypePromptEnabled !== false;
+  state.showServeTrajectoryLogOur = parsed.showServeTrajectoryLogOur !== false;
+  state.showServeTrajectoryLogOpp = parsed.showServeTrajectoryLogOpp !== false;
   state.useOpponentTeam = !!parsed.useOpponentTeam;
   state.videoScoutMode = !!parsed.videoScoutMode;
   state.videoPlayByPlay = !!parsed.videoPlayByPlay;
