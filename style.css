@@ -178,7 +178,7 @@ body[data-theme="light"] .tab-btn.active {
   justify-content: center;
   gap: 0.3rem;
   position: fixed;
-  bottom: 0.5rem;
+  top: 0.5rem;
   left: 50%;
   transform: translateX(-50%);
   padding: 0.15rem 0.3rem;
@@ -5376,6 +5376,8 @@ body[data-theme="light"] .floating-actions__block {
   }
   .tabs-dots {
     display: inline-flex;
+    top: 0.5rem;
+    bottom: auto;
   }
   .attack-trajectory-content {
     width: 100vw;
@@ -5448,6 +5450,8 @@ body.force-mobile .tabs-nav {
 }
 body.force-mobile .tabs-dots {
   display: inline-flex;
+  top: 0.5rem;
+  bottom: auto;
 }
 body.force-mobile .scout-mobile-bar {
   display: flex;

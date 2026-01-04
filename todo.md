@@ -6,6 +6,7 @@ Ridurre la dimensione dei campi per farli stare in una schermata
 Gestire doppia squadra da smartphone
 
 # Bugfix
+LA visuale da telefono non funziona piu
 Importazione match sembra avere problemi
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice

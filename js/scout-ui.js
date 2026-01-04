@@ -16375,8 +16375,8 @@ function initSwipeTabs() {
     startTime = Date.now();
     startTarget = e.target;
     const height = window.innerHeight || document.documentElement.clientHeight || 0;
-    const zoneTop = height * (1 - swipeZoneRatio);
-    startedInSwipeZone = startY >= zoneTop;
+    const zoneBottom = height * swipeZoneRatio;
+    startedInSwipeZone = startY <= zoneBottom;
     lastX = startX;
     lastY = startY;
   };
