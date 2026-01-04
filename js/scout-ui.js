@@ -169,6 +169,7 @@ const elLogServeStatsOur = document.getElementById("log-serve-stats-our");
 const elLogServeStatsOpp = document.getElementById("log-serve-stats-opp");
 const elServeTrajectoryLogToggleInline = document.getElementById("serve-trajectory-log-toggle-inline");
 const elServeTrajectoryLogToggleInlineOpp = document.getElementById("serve-trajectory-log-toggle-inline-opp");
+const elFloatingServeErrorBtn = document.getElementById("floating-serve-error-btn");
 const elLiveSetScore = document.getElementById("live-set-score");
 const elAggSetScore = document.getElementById("agg-set-score");
 const elNextSetInline = document.getElementById("next-set-inline");
@@ -371,6 +372,9 @@ let activeSkillModalContext = null;
 let currentEditControl = null;
 let currentEditCell = null;
 let lockedCourtAreaHeight = null;
+let lastMobileScrollY = null;
+let mobileBodyLock = null;
+let pendingMobileActiveScroll = false;
 function isDesktopCourtModalLayout() {
   if (state.forceMobileLayout) return false;
   if (document.body && document.body.classList.contains("force-mobile")) return false;
@@ -497,13 +501,106 @@ function setModalOpenState(isOpen, forcePopup = false) {
   }
   setCourtAreaLocked(isOpen && useCourt);
   if (useCourt) return;
+  const isMobileModal = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   if (isOpen) {
-    document.body.style.overflow = "hidden";
+    if (isMobileModal) {
+      lastMobileScrollY = window.scrollY || 0;
+      if (!mobileBodyLock) {
+        mobileBodyLock = {
+          position: document.body.style.position,
+          top: document.body.style.top,
+          left: document.body.style.left,
+          right: document.body.style.right,
+          width: document.body.style.width
+        };
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${lastMobileScrollY}px`;
+        document.body.style.left = "0";
+        document.body.style.right = "0";
+        document.body.style.width = "100%";
+      }
+    }
+    if (!isMobileModal) {
+      document.body.style.overflow = "hidden";
+    }
     document.body.classList.add("modal-open");
   } else {
-    document.body.style.overflow = "";
+    if (!isMobileModal) {
+      document.body.style.overflow = "";
+    }
     document.body.classList.remove("modal-open");
+    if (isMobileModal) {
+      if (mobileBodyLock) {
+        document.body.style.position = mobileBodyLock.position;
+        document.body.style.top = mobileBodyLock.top;
+        document.body.style.left = mobileBodyLock.left;
+        document.body.style.right = mobileBodyLock.right;
+        document.body.style.width = mobileBodyLock.width;
+        mobileBodyLock = null;
+      }
+      if (lastMobileScrollY !== null) {
+        window.scrollTo({ top: lastMobileScrollY, behavior: "auto" });
+      }
+      pendingMobileActiveScroll = true;
+      setTimeout(() => {
+        maybeScrollToActiveCourtOnMobile();
+      }, 60);
+      lastMobileScrollY = null;
+    }
   }
+}
+function getActiveCourtContainerForScroll() {
+  const activeScope = getMobileActiveScope() || "our";
+  return activeScope === "opponent"
+    ? document.getElementById("opponent-players-container")
+    : document.getElementById("players-container");
+}
+function isElementInViewport(el) {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const viewHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  return rect.bottom > 0 && rect.top < viewHeight;
+}
+function isElementVisible(el) {
+  if (!el) return false;
+  if (el.classList && el.classList.contains("hidden")) return false;
+  return !!(el.offsetParent || el.getClientRects().length);
+}
+function maybeScrollToActiveCourtOnMobile() {
+  if (!pendingMobileActiveScroll) return;
+  pendingMobileActiveScroll = false;
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  if (!isCompactMobile) return;
+  const target = getActiveCourtContainerForScroll();
+  if (!target || !isElementVisible(target)) {
+    pendingMobileActiveScroll = true;
+    return;
+  }
+  if (isElementInViewport(target)) {
+    pendingMobileActiveScroll = false;
+    return;
+  }
+  pendingMobileActiveScroll = false;
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+function scrollToActiveCourtOnMobileAlways(tries = 3) {
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  if (!isCompactMobile) return;
+  const target = getActiveCourtContainerForScroll();
+  if (!target) return;
+  if (!isElementVisible(target)) {
+    if (tries > 0) {
+      setTimeout(() => {
+        scrollToActiveCourtOnMobileAlways(tries - 1);
+      }, 60);
+    }
+    return;
+  }
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 function isBackRowZone(z) {
   return z === 5 || z === 6 || z === 1;
@@ -1423,6 +1520,13 @@ async function startAttackSelection(playerIdx, setTypeChoice, onDone, scope = "o
     }
   }
   attackMetaByPlayer[key] = meta;
+  if (state.useOpponentTeam && state.predictiveSkillFlow) {
+    if (scope === "opponent") {
+      state.opponentSkillFlowOverride = "attack";
+    } else {
+      state.skillFlowOverride = "attack";
+    }
+  }
   if (typeof onDone === "function") {
     onDone();
   }
@@ -2310,6 +2414,11 @@ function getAutoFlowState() {
   const resolved = resolveFlowSkillForScope(flowScope, nextSkill);
   return { teamScope: flowScope, skillId: resolved };
 }
+function getMobileActiveScope() {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return null;
+  const flowState = getAutoFlowState();
+  return flowState && flowState.teamScope ? flowState.teamScope : null;
+}
 function canOverrideServeError(scope, skillId, code, flowState, playerName) {
   if (!flowState || flowState.teamScope === scope) return false;
   if (flowState.skillId !== "pass") return false;
@@ -2374,6 +2483,13 @@ function updateSkillStatsForEvent(scope, playerIdx, skillId, prevCode, nextCode)
 }
 function shouldSkipBlockConfirm(scope = "our") {
   if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  const last = getLastFlowEvent(state.events || []);
+  if (!last || last.skillId !== "attack" || last.code !== "/") return false;
+  const expectedScope = getOppositeScope(getTeamScopeFromEvent(last));
+  return expectedScope === scope;
+}
+function isBlockEligibleForScope(scope = "our") {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return true;
   const last = getLastFlowEvent(state.events || []);
   if (!last || last.skillId !== "attack" || last.code !== "/") return false;
   const expectedScope = getOppositeScope(getTeamScopeFromEvent(last));
@@ -3715,6 +3831,7 @@ function schedulePostEventUpdates({
       updateSkillStatsUI(playerIdx, skillId);
     }
     renderPlayers();
+    scrollToActiveCourtOnMobileAlways();
     renderEventsLog({ suppressScroll, append });
     if (includeAggregates) {
       renderLiveScore();
@@ -3989,6 +4106,17 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
   elSkillModalBody.appendChild(header);
 
   const playerKey = makePlayerKey(scope, playerIdx);
+  if (
+    skillId === "serve" &&
+    state.useOpponentTeam &&
+    state.predictiveSkillFlow &&
+    state.pendingServe &&
+    state.pendingServe.scope === scope
+  ) {
+    closeSkillModal();
+    renderPlayers();
+    return;
+  }
   if (skillId !== "serve" && serveTypeInlinePlayer === playerKey) {
     clearServeTypeInlineListener();
   }
@@ -4009,9 +4137,14 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
       { id: "S", label: "Spin (S)" }
     ];
     const handleSelect = async type => {
-      await startServeTypeSelection(playerIdx, type, () => {
-        renderSkillCodes(playerIdx, playerName, skillId, scope);
-      });
+      await startServeTypeSelection(
+        playerIdx,
+        type,
+        () => {
+          renderSkillCodes(playerIdx, playerName, skillId, scope);
+        },
+        scope
+      );
     };
     types.forEach(t => {
       const btn = document.createElement("button");
@@ -4060,7 +4193,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
         btn.addEventListener("click", async () => {
           await startAttackSelection(playerIdx, opt.value, () => {
             renderSkillCodes(playerIdx, playerName, skillId, scope);
-          });
+          }, scope);
         });
         wrap.appendChild(btn);
       });
@@ -4069,7 +4202,7 @@ function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
       if (attackInlinePlayer === playerKey) return;
       startAttackSelection(playerIdx, null, () => {
         renderSkillCodes(playerIdx, playerName, skillId, scope);
-      });
+      }, scope);
     }
     return;
   }
@@ -4555,6 +4688,8 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
   const { closeAfterAction = false, nextSkillId = null, scope = "our" } = options;
   const playerKey = makePlayerKey(scope, playerIdx);
+  const attackLockedForPlayer = attackInlinePlayer === playerKey;
+  let forcedSkillId = null;
   const getSkillColors = skillId => {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
@@ -4580,6 +4715,13 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     const isForcedScope = state.forceSkillActive && state.forceSkillScope === scope;
     if (!isForcedScope) {
       if (state.pendingServe && state.pendingServe.scope === scope) {
+        if (isCompactMobile) {
+          const locked = document.createElement("div");
+          locked.className = "players-empty";
+          locked.textContent = "In attesa dell'altra squadra.";
+          targetEl.appendChild(locked);
+          return;
+        }
         const fallbackServer = getServerPlayerForScope(scope);
         const pendingName = state.pendingServe.playerName || (fallbackServer && fallbackServer.name) || null;
         const pendingIdx = typeof state.pendingServe.playerIdx === "number" ? state.pendingServe.playerIdx : null;
@@ -4739,10 +4881,93 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
   }
   if (isCompactMobile) {
-    const pickedSkillId = nextSkillId || null;
+    const pickedSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
+    const attackMeta = pickedSkillId === "attack" ? getAttackMetaForPlayer(scope, playerIdx) : null;
+    const forceFullGrid = pickedSkillId === "attack" && attackMeta;
+    if (forceFullGrid) {
+      forcedSkillId = pickedSkillId;
+    } else {
     if (pickedSkillId === "serve") {
       const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
       if (serveZone !== 1) {
+        return;
+      }
+    }
+    if (pickedSkillId === "block" && !isBlockEligibleForScope(scope)) {
+      return;
+    }
+    if (pickedSkillId === "attack" && !attackMeta) {
+      if (shouldPromptAttackSetType(scope)) {
+        const queuedSetType = normalizeSetTypeValue(queuedSetTypeChoice);
+        if (queuedSetType && queuedSetType.toLowerCase() === "damp" && isSetterPlayerForScope(scope, playerIdx)) {
+          if (attackInlinePlayer === playerKey) return;
+          const dampChoice = queuedSetTypeChoice;
+          queuedSetTypeChoice = null;
+          setNextSetType("");
+          startAttackSelection(
+            playerIdx,
+            dampChoice,
+            () => {
+              const metaKey = makePlayerKey(scope, playerIdx);
+              if (attackMetaByPlayer[metaKey]) {
+                attackMetaByPlayer[metaKey].fromNextSetType = true;
+              }
+              renderPlayers();
+            },
+            scope
+          );
+          return;
+        }
+        if (queuedSetType) {
+          const grid = document.createElement("div");
+          grid.className = "code-grid attack-select-grid";
+          const title = document.createElement("div");
+          title.className = "skill-header";
+          const titleSpan = document.createElement("span");
+          titleSpan.className = "skill-title skill-attack";
+          titleSpan.textContent = "Attacco";
+          title.appendChild(titleSpan);
+          grid.appendChild(title);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "event-btn attack-main-btn";
+          btn.textContent = "Attacco";
+          btn.addEventListener("click", async () => {
+            await startAttackSelection(playerIdx, queuedSetType, renderPlayers, scope);
+            const metaKey = makePlayerKey(scope, playerIdx);
+            if (attackMetaByPlayer[metaKey]) {
+              attackMetaByPlayer[metaKey].fromNextSetType = true;
+            }
+            queuedSetTypeChoice = null;
+            setNextSetType("");
+          });
+          grid.appendChild(btn);
+          targetEl.appendChild(grid);
+          return;
+        }
+        const grid = document.createElement("div");
+        grid.className = "code-grid attack-select-grid";
+        const title = document.createElement("div");
+        title.className = "skill-header";
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "skill-title skill-attack";
+        titleSpan.textContent = "Attacco";
+        title.appendChild(titleSpan);
+        grid.appendChild(title);
+        const setTypeOptions = isSetterPlayerForScope(scope, playerIdx)
+          ? [{ value: "Damp", label: "Damp" }]
+          : DEFAULT_SET_TYPE_OPTIONS;
+        setTypeOptions.forEach(opt => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "event-btn";
+          btn.textContent = formatSetTypeLabelWithShortcut(opt.value, opt.label);
+          btn.addEventListener("click", async () => {
+            await startAttackSelection(playerIdx, opt.value, renderPlayers, scope);
+          });
+          grid.appendChild(btn);
+        });
+        targetEl.appendChild(grid);
         return;
       }
     }
@@ -4811,9 +5036,13 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
     targetEl.appendChild(btn);
     return;
+    }
   }
   const enabledSkillIds = new Set(enabledSkills.map(s => s.id));
-  let pickedSkillId = nextSkillId || getSelectedSkillForScope(scope, playerIdx);
+  let pickedSkillId =
+    forcedSkillId ??
+    (attackLockedForPlayer ? "attack" : nextSkillId) ??
+    getSelectedSkillForScope(scope, playerIdx);
   if (pickedSkillId && !enabledSkillIds.has(pickedSkillId)) {
     if (!nextSkillId) setSelectedSkillForScope(scope, playerIdx, null);
     pickedSkillId = null;
@@ -5321,6 +5550,32 @@ function renderTeamCourtCards(options = {}) {
     container.appendChild(card);
   });
 }
+function updateFloatingServeErrorButton(isCompactMobile) {
+  if (!elFloatingServeErrorBtn) return;
+  if (!isCompactMobile || !state.useOpponentTeam || !state.predictiveSkillFlow) {
+    elFloatingServeErrorBtn.classList.add("hidden");
+    return;
+  }
+  const flowState = getAutoFlowState();
+  if (!flowState || flowState.skillId !== "pass") {
+    elFloatingServeErrorBtn.classList.add("hidden");
+    return;
+  }
+  const servingScope = getOppositeScope(flowState.teamScope);
+  if (!isSkillEnabledForScope("serve", servingScope)) {
+    elFloatingServeErrorBtn.classList.add("hidden");
+    return;
+  }
+  const server = getServerPlayerForScope(servingScope);
+  if (!server || !server.name) {
+    elFloatingServeErrorBtn.classList.add("hidden");
+    return;
+  }
+  elFloatingServeErrorBtn.dataset.scope = servingScope;
+  elFloatingServeErrorBtn.dataset.playerIdx = server.idx != null ? String(server.idx) : "";
+  elFloatingServeErrorBtn.dataset.playerName = server.name;
+  elFloatingServeErrorBtn.classList.remove("hidden");
+}
 function renderPlayers() {
   if (!elPlayersContainer) return;
   syncCourtSideLayout();
@@ -5352,6 +5607,8 @@ function renderPlayers() {
     }
   }
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  const mobileActiveScope = isCompactMobile ? getMobileActiveScope() : null;
+  elPlayersContainer.classList.toggle("hidden", mobileActiveScope === "opponent");
   updateSetTypeVisibility(predictedSkillId || predictedOpponentSkillId);
   const hasSelectedServe = isAnySelectedSkill("serve");
   const layoutSkill =
@@ -5382,11 +5639,21 @@ function renderPlayers() {
   renderLineupChips();
   renderOpponentPlayers({ nextSkillId: predictedOpponentSkillId });
   renderLogServeTrajectories();
+  updateFloatingServeErrorButton(isCompactMobile);
+  maybeScrollToActiveCourtOnMobile();
 }
 function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
   if (!state.useOpponentTeam) return;
   const elOpponentContainer = document.getElementById("opponent-players-container");
   if (!elOpponentContainer) return;
+  const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  const mobileActiveScope = isCompactMobile ? getMobileActiveScope() : null;
+  const hideOpponentCourt = mobileActiveScope === "our";
+  elOpponentContainer.classList.toggle("hidden", hideOpponentCourt);
+  if (hideOpponentCourt) {
+    elOpponentContainer.innerHTML = "";
+    return;
+  }
   const shouldAnimate = animate && typeof captureRects === "function" && typeof animateFlip === "function";
   const prevRects = shouldAnimate
     ? captureRects('.court-card[data-team-scope="opponent"]', el => {
@@ -5443,7 +5710,7 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     libSet: new Set(state.opponentLiberos || []),
     allowReturn: true,
     allowDrop: true,
-    isCompactMobile: !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches,
+    isCompactMobile,
     nextSkillId: predictedSkillId
   });
   if (shouldAnimate) {
@@ -5701,6 +5968,9 @@ async function handleEventClick(
     });
   }
   if (playerIdx === -1 || !players[playerIdx]) return false;
+  if (skillId === "attack" && !attackMeta) {
+    attackMeta = getAttackMetaForPlayer(scope, playerIdx);
+  }
   if (skillId === "serve" && !serveMeta && state.pendingServe && state.pendingServe.scope === scope) {
     serveMeta = state.pendingServe.meta || null;
   }
@@ -16541,6 +16811,27 @@ async function init() {
   renderLiveScore();
   renderPlayers();
   initLogServeTrajectoryControls();
+  if (elFloatingServeErrorBtn && !elFloatingServeErrorBtn._serveErrorBound) {
+    elFloatingServeErrorBtn._serveErrorBound = true;
+    elFloatingServeErrorBtn.addEventListener("click", async () => {
+      const scope = elFloatingServeErrorBtn.dataset.scope || "";
+      const playerIdx = parseInt(elFloatingServeErrorBtn.dataset.playerIdx, 10);
+      const playerName = elFloatingServeErrorBtn.dataset.playerName || "";
+      if (!scope || Number.isNaN(playerIdx) || !playerName) return;
+      const success = await handleEventClick(
+        playerIdx,
+        "serve",
+        "=",
+        playerName,
+        elFloatingServeErrorBtn,
+        { scope }
+      );
+      if (!success) return;
+      clearServeTypeInlineListener();
+      setSelectedSkillForScope(scope, playerIdx, null);
+      renderPlayers();
+    });
+  }
   const applyForceMobileLayout = enabled => {
     document.body.classList.toggle("force-mobile", !!enabled);
     renderPlayers();

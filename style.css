@@ -1030,6 +1030,28 @@ button.danger:hover {
   width: 16px;
   height: 16px;
 }
+.floating-serve-error-btn {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 140;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: var(--skill-serve-bg, #1b5e20);
+  color: var(--skill-serve-text, #d1fae5);
+  font-size: 1.35rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+body[data-theme="light"] .floating-serve-error-btn {
+  border-color: rgba(15, 23, 42, 0.2);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+}
 .event-edit-table th.bulk-editable {
   cursor: default;
 }
@@ -1930,9 +1952,28 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
 #opponent-players-container {
   display: grid;
   gap: 0.4rem;
+  padding: 0.4rem;
   min-height: 200px;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   max-width: 100%;
+}
+#players-container {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  border-radius: 0.85rem;
+}
+body[data-theme="light"] #players-container {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+#opponent-players-container {
+  background: #3a0f12;
+  border: 1px solid #7f1d1d;
+  border-radius: 0.85rem;
+}
+body[data-theme="light"] #opponent-players-container {
+  background: #fee2e2;
+  border-color: #fca5a5;
 }
 .court-layout {
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -1963,7 +2004,36 @@ body[data-theme="light"] .player-card {
   border: 1px dashed #2f2f2f;
   min-height: 165px;
   position: relative;
-  background: rgba(255, 255, 255, 0.01);
+  background: #181818;
+}
+.court-card[data-team-scope="our"] .court-name {
+  color: #60a5fa;
+}
+.court-card[data-team-scope="opponent"] .court-name {
+  color: #fca5a5;
+}
+.court-card[data-team-scope="opponent"] .court-role-tag {
+  background: #7f1d1d;
+  color: #fee2e2;
+  border-color: #b91c1c;
+}
+body[data-theme="light"] .court-card[data-team-scope="our"] .court-name {
+  color: #2563eb;
+}
+body[data-theme="light"] .court-card[data-team-scope="opponent"] .court-name {
+  color: #b91c1c;
+}
+body[data-theme="light"] .court-card[data-team-scope="opponent"] .court-role-tag {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #fca5a5;
+}
+.court-card.compact-card {
+  background: #181818;
+}
+body[data-theme="light"] .court-card,
+body[data-theme="light"] .court-card.compact-card {
+  background: #ffffff;
 }
 .court-card.compact-card {
   min-height: 0;
