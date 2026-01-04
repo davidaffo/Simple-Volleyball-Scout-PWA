@@ -15626,6 +15626,348 @@ function exportAnalysisPdf() {
     alert("Impossibile aprire il layout di stampa.");
   });
 }
+function replaceExportCanvases(originalRoot, cloneRoot) {
+  if (!originalRoot || !cloneRoot) return;
+  const originalCanvases = originalRoot.querySelectorAll("canvas");
+  const cloneCanvases = cloneRoot.querySelectorAll("canvas");
+  cloneCanvases.forEach((canvas, idx) => {
+    const source = originalCanvases[idx];
+    if (!source || !source.toDataURL) return;
+    let dataUrl = "";
+    try {
+      dataUrl = source.toDataURL("image/png");
+    } catch (err) {
+      dataUrl = "";
+    }
+    if (!dataUrl) return;
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.alt = canvas.getAttribute("aria-label") || "";
+    img.className = canvas.className;
+    img.style.width = "100%";
+    img.style.height = "auto";
+    img.style.display = "block";
+    img.style.borderRadius = "0.5rem";
+    img.style.minHeight = "100px";
+    canvas.replaceWith(img);
+  });
+}
+function applyComputedStyles(originalRoot, cloneRoot, { skipDisplaySelectors = [] } = {}) {
+  if (!originalRoot || !cloneRoot || !window.getComputedStyle) return;
+  const originals = [originalRoot, ...originalRoot.querySelectorAll("*")];
+  const clones = [cloneRoot, ...cloneRoot.querySelectorAll("*")];
+  originals.forEach((orig, idx) => {
+    const clone = clones[idx];
+    if (!clone) return;
+    const computed = window.getComputedStyle(orig);
+    if (!computed) return;
+    const skipDisplay = skipDisplaySelectors.some(sel => orig.matches(sel));
+    let cssText = "";
+    for (let i = 0; i < computed.length; i += 1) {
+      const prop = computed[i];
+      if (skipDisplay && prop === "display") continue;
+      const val = computed.getPropertyValue(prop);
+      cssText += `${prop}:${val};`;
+    }
+    clone.setAttribute("style", cssText);
+  });
+}
+function ensureExportSplash() {
+  let overlay = document.getElementById("export-splash");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "export-splash";
+  overlay.className = "export-splash";
+  overlay.innerHTML = `
+    <div class="export-splash__card">
+      <span class="export-splash__spinner" aria-hidden="true"></span>
+      <span>Esportazione in corso…</span>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function showExportSplash() {
+  const overlay = ensureExportSplash();
+  requestAnimationFrame(() => {
+    overlay.classList.add("is-visible");
+  });
+}
+function hideExportSplash() {
+  const overlay = document.getElementById("export-splash");
+  if (overlay) overlay.classList.remove("is-visible");
+}
+async function collectInlineCss() {
+  let cssText = "";
+  if (document.styleSheets) {
+    Array.from(document.styleSheets).forEach(sheet => {
+      try {
+        const rules = sheet.cssRules || sheet.rules;
+        if (!rules) return;
+        const chunk = Array.from(rules)
+          .map(rule => rule.cssText)
+          .join("\n");
+        cssText += chunk + "\n";
+      } catch (err) {
+        // Ignore cross-origin stylesheets.
+      }
+    });
+  }
+  if (cssText) return cssText;
+  const link = document.querySelector('link[rel="stylesheet"]');
+  if (link && link.sheet) {
+    try {
+      const rules = link.sheet.cssRules || link.sheet.rules;
+      if (rules && rules.length) {
+        cssText = Array.from(rules)
+          .map(rule => rule.cssText)
+          .join("\n");
+        if (cssText) return cssText;
+      }
+    } catch (err) {
+      // Ignore link.sheet access errors.
+    }
+  }
+  const href = link ? link.getAttribute("href") : "style.css";
+  if (!href) return "";
+  if (window.location && window.location.protocol === "file:") {
+    return "";
+  }
+  try {
+    const url = new URL(href, window.location.href);
+    const resp = await fetch(url.toString(), { cache: "no-store" });
+    if (resp.ok) return await resp.text();
+    if ("caches" in window) {
+      const cached = await caches.match(url.toString());
+      if (cached) return await cached.text();
+    }
+  } catch (err) {
+    if ("caches" in window) {
+      try {
+        const url = new URL(href, window.location.href);
+        const cached = await caches.match(url.toString());
+        if (cached) return await cached.text();
+      } catch (_) {
+        return "";
+      }
+    }
+    return "";
+  }
+  return "";
+}
+function getExportAssetPaths() {
+  return [
+    "images/trajectory/attack_empty_near.png",
+    "images/trajectory/attack_empty_far.png",
+    "images/trajectory/attack_2_near.png",
+    "images/trajectory/attack_3_near.png",
+    "images/trajectory/attack_4_near.png",
+    "images/trajectory/attack_2_far.png",
+    "images/trajectory/attack_3_far.png",
+    "images/trajectory/attack_4_far.png",
+    "images/trajectory/service_start_near.png",
+    "images/trajectory/service_start_far.png",
+    "images/trajectory/service_end_near.png",
+    "images/trajectory/service_end_far.png"
+  ];
+}
+async function fetchExportAssetAsDataUrl(assetPath) {
+  if (!assetPath) return "";
+  const toDataUrl =
+    typeof blobToDataUrl === "function"
+      ? blobToDataUrl
+      : blob =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = err => reject(err);
+            reader.readAsDataURL(blob);
+          });
+  try {
+    const url = new URL(assetPath, window.location.href);
+    let resp = await fetch(url.toString(), { cache: "no-store" });
+    if (!resp.ok && "caches" in window) {
+      const cached = await caches.match(url.toString());
+      if (cached) resp = cached;
+    }
+    if (!resp || !resp.ok) return "";
+    const blob = await resp.blob();
+    return await toDataUrl(blob);
+  } catch (err) {
+    return "";
+  }
+}
+async function buildExportAssetMap() {
+  const assets = getExportAssetPaths();
+  const map = {};
+  for (const asset of assets) {
+    const dataUrl = await fetchExportAssetAsDataUrl(asset);
+    if (dataUrl) map[asset] = dataUrl;
+  }
+  return map;
+}
+function replaceExportAssetsInScript(source, assetMap) {
+  if (!source || !assetMap) return source || "";
+  let updated = source;
+  Object.entries(assetMap).forEach(([path, dataUrl]) => {
+    if (!path || !dataUrl) return;
+    updated = updated.split(path).join(dataUrl);
+  });
+  return updated;
+}
+async function exportAnalysisHtml() {
+  const aggPanel = document.getElementById("aggregated-panel");
+  if (!aggPanel) {
+    alert("Pannello analisi non trovato.");
+    return;
+  }
+  const prevTab = activeTab;
+  const prevAggTab = activeAggTab || "summary";
+  const prevTheme = state.theme || document.body.dataset.theme || "dark";
+  showExportSplash();
+  try {
+    setActiveTab("aggregated");
+    setActiveAggTab("summary");
+    setPrintMatchTitle();
+    const exportState = JSON.parse(JSON.stringify(state));
+    exportState.uiActiveTab = "aggregated";
+    exportState.uiAggTab = "summary";
+    const exportRoot = document.documentElement.cloneNode(true);
+    const exportHead = exportRoot.querySelector("head");
+    const exportBody = exportRoot.querySelector("body");
+    if (!exportHead || !exportBody) {
+      throw new Error("Impossibile creare il layout export.");
+    }
+    exportBody.dataset.activeTab = "aggregated";
+    exportBody.dataset.aggTab = "summary";
+    exportBody.classList.remove("pdf-capture");
+    exportBody.querySelectorAll("#export-splash").forEach(el => el.remove());
+    exportBody.querySelectorAll(".tabs-nav, .tabs-dots").forEach(el => el.remove());
+    exportBody.querySelectorAll("#btn-open-multiscout, #btn-export-pdf, #btn-export-html").forEach(btn => {
+      btn.remove();
+    });
+    exportBody.querySelectorAll(".tab-panel").forEach(panel => {
+      if (panel.dataset.tab !== "aggregated") {
+        panel.remove();
+      } else {
+        panel.classList.add("active");
+      }
+    });
+    exportBody.querySelectorAll(".agg-subtab-btn").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.aggTabTarget === "summary");
+    });
+    exportBody.querySelectorAll(".agg-subpanel").forEach(panel => {
+      panel.classList.toggle("active", panel.dataset.aggTab === "summary");
+    });
+    exportHead.querySelectorAll('link[rel="stylesheet"], link[rel="manifest"], link[rel="apple-touch-icon"]').forEach(el =>
+      el.remove()
+    );
+    exportRoot.querySelectorAll("script").forEach(script => script.remove());
+    let cssText = await collectInlineCss();
+    const exportOnlyCss = [
+      ".tab-panel{display:none !important;}",
+      ".tab-panel.active{display:block !important;}"
+    ].join("\n");
+    if (cssText) {
+      cssText += "\n" + exportOnlyCss;
+    } else {
+      const exportAggPanel = exportBody.querySelector("#aggregated-panel");
+      if (exportAggPanel) {
+        applyComputedStyles(aggPanel, exportAggPanel, {
+          skipDisplaySelectors: [".agg-subpanel", ".tab-panel", "#analysis-score-summary"]
+        });
+      }
+      cssText = [
+        "body{margin:0;background:#fff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}",
+        exportOnlyCss,
+        ".agg-subpanel{display:none;}",
+        ".agg-subpanel.active{display:block;}",
+        "#analysis-score-summary.hidden{display:none;}"
+      ].join("\n");
+    }
+    const scripts = Array.from(document.querySelectorAll("script[src]"));
+    const scriptChunks = [];
+    const failedScripts = [];
+    for (const script of scripts) {
+      const src = script.getAttribute("src");
+      if (!src) continue;
+      const url = new URL(src, window.location.href);
+      let text = "";
+      try {
+        const resp = await fetch(url.toString(), { cache: "no-store" });
+        if (resp.ok) {
+          text = await resp.text();
+        } else if ("caches" in window) {
+          const cached = await caches.match(url.toString());
+          if (cached) text = await cached.text();
+        }
+      } catch (err) {
+        if ("caches" in window) {
+          try {
+            const cached = await caches.match(url.toString());
+            if (cached) text = await cached.text();
+          } catch (_) {
+            text = "";
+          }
+        }
+      }
+      if (!text) {
+        failedScripts.push(src);
+        continue;
+      }
+      scriptChunks.push(text);
+    }
+    if (failedScripts.length) {
+      alert(
+        "Esportazione incompleta: non riesco a includere il JS (" +
+          failedScripts.join(", ") +
+          ")."
+      );
+      return;
+    }
+    const assetMap = await buildExportAssetMap();
+    const assetMapJson = JSON.stringify(assetMap);
+    const stateJson = JSON.stringify(exportState);
+    const prelude = `
+(function(){
+  try {
+    localStorage.setItem("volleyScoutV1", ${JSON.stringify(JSON.stringify(exportState))});
+  } catch (e) {}
+  window.__analysisAssetMap = ${assetMapJson};
+})();
+`;
+    const postlude = `
+if (typeof init === "function") {
+  init();
+}
+if (typeof getTrajectoryImageForZone === "function" && window.__analysisAssetMap) {
+  var originalGetTrajectoryImageForZone = getTrajectoryImageForZone;
+  var assetMap = window.__analysisAssetMap;
+  getTrajectoryImageForZone = function(zone, isFarSide) {
+    var path = originalGetTrajectoryImageForZone(zone, isFarSide);
+    return assetMap && assetMap[path] ? assetMap[path] : path;
+  };
+}
+if (typeof setActiveTab === "function") setActiveTab("aggregated");
+if (typeof setActiveAggTab === "function") setActiveAggTab("summary");
+`;
+    const title = "Analisi - " + (getCurrentMatchLabel() || "Match");
+    const styleTag = `<style>${cssText}</style>`;
+    const mergedScripts = scriptChunks.map(chunk => replaceExportAssetsInScript(chunk, assetMap));
+    const scriptTag = `<script>${prelude}\n${mergedScripts.join("\n")}\n${postlude}<\/script>`;
+    exportHead.insertAdjacentHTML("beforeend", styleTag);
+    exportBody.insertAdjacentHTML("beforeend", scriptTag);
+    exportHead.querySelectorAll("title").forEach(el => el.remove());
+    exportHead.insertAdjacentHTML("afterbegin", `<title>${title}</title>`);
+    const html = "<!doctype html>\n" + exportRoot.outerHTML;
+    const fileName = "analisi_" + safeMatchSlug() + ".html";
+    downloadBlob(new Blob([html], { type: "text/html" }), fileName);
+  } finally {
+    hideExportSplash();
+    if (prevTab) setActiveTab(prevTab);
+    if (prevAggTab) setActiveAggTab(prevAggTab);
+  }
+}
 function resetMatch() {
   if (!confirm("Sei sicuro di voler resettare tutti i dati del match?")) return;
   if ("serviceWorker" in navigator) {
@@ -17534,6 +17876,7 @@ async function init() {
   }
   // elementi mobile rimossi
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
+  if (elBtnExportHtml) elBtnExportHtml.addEventListener("click", exportAnalysisHtml);
   if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
   if (elBtnImportMatch && elMatchFileInput) {
     elBtnImportMatch.addEventListener("click", () => elMatchFileInput.click());
