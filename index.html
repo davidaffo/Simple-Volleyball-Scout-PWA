@@ -12,7 +12,7 @@
 <body>
   <div class="tabs-nav centered">
     <h1 class="app-title">Simple Volleyball Scout PWA</h1>
-    <a class="manual-link-btn" href="manual.html">Manuale</a>
+    <a class="manual-link-btn hidden" href="manual.html">Manuale</a>
     <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
     <button class="tab-btn" data-tab-target="scout">Scout live</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
@@ -104,7 +104,7 @@
     <div class="section">
       <details class="import-panel metrics-panel" open>
         <summary>Regole calcolo efficienza/positività</summary>
-        <p class="section-note">Positività = positivi / totali · Efficienza = (positivi - negativi) / totali · Perfezione = # / totali.</p>
+        <p class="section-note">Positività = positivi / totali · Efficienza = (positivi - negativi) / totali · Perfezione = # / totali.<br>Nota bene: è sconsigliato togliere codici, disattivare battuta, ricezione attacco e modificare le regole di assegnazione punto quando si utilizza la modalità automatica. </p>
         <div class="controls-row metrics-actions">
           <button id="btn-reset-codes" class="secondary">Riattiva tutte le valutazioni</button>
           <button id="btn-reset-metrics" class="secondary">Ripristina criteri calcolo efficienza</button>

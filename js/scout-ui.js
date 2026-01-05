@@ -4882,11 +4882,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   if (isCompactMobile) {
     const pickedSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
-    const attackMeta = pickedSkillId === "attack" ? getAttackMetaForPlayer(scope, playerIdx) : null;
-    const forceFullGrid = pickedSkillId === "attack" && attackMeta;
-    if (forceFullGrid) {
-      forcedSkillId = pickedSkillId;
-    } else {
     if (pickedSkillId === "serve") {
       const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
       if (serveZone !== 1) {
@@ -4895,81 +4890,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
     if (pickedSkillId === "block" && !isBlockEligibleForScope(scope)) {
       return;
-    }
-    if (pickedSkillId === "attack" && !attackMeta) {
-      if (shouldPromptAttackSetType(scope)) {
-        const queuedSetType = normalizeSetTypeValue(queuedSetTypeChoice);
-        if (queuedSetType && queuedSetType.toLowerCase() === "damp" && isSetterPlayerForScope(scope, playerIdx)) {
-          if (attackInlinePlayer === playerKey) return;
-          const dampChoice = queuedSetTypeChoice;
-          queuedSetTypeChoice = null;
-          setNextSetType("");
-          startAttackSelection(
-            playerIdx,
-            dampChoice,
-            () => {
-              const metaKey = makePlayerKey(scope, playerIdx);
-              if (attackMetaByPlayer[metaKey]) {
-                attackMetaByPlayer[metaKey].fromNextSetType = true;
-              }
-              renderPlayers();
-            },
-            scope
-          );
-          return;
-        }
-        if (queuedSetType) {
-          const grid = document.createElement("div");
-          grid.className = "code-grid attack-select-grid";
-          const title = document.createElement("div");
-          title.className = "skill-header";
-          const titleSpan = document.createElement("span");
-          titleSpan.className = "skill-title skill-attack";
-          titleSpan.textContent = "Attacco";
-          title.appendChild(titleSpan);
-          grid.appendChild(title);
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "event-btn attack-main-btn";
-          btn.textContent = "Attacco";
-          btn.addEventListener("click", async () => {
-            await startAttackSelection(playerIdx, queuedSetType, renderPlayers, scope);
-            const metaKey = makePlayerKey(scope, playerIdx);
-            if (attackMetaByPlayer[metaKey]) {
-              attackMetaByPlayer[metaKey].fromNextSetType = true;
-            }
-            queuedSetTypeChoice = null;
-            setNextSetType("");
-          });
-          grid.appendChild(btn);
-          targetEl.appendChild(grid);
-          return;
-        }
-        const grid = document.createElement("div");
-        grid.className = "code-grid attack-select-grid";
-        const title = document.createElement("div");
-        title.className = "skill-header";
-        const titleSpan = document.createElement("span");
-        titleSpan.className = "skill-title skill-attack";
-        titleSpan.textContent = "Attacco";
-        title.appendChild(titleSpan);
-        grid.appendChild(title);
-        const setTypeOptions = isSetterPlayerForScope(scope, playerIdx)
-          ? [{ value: "Damp", label: "Damp" }]
-          : DEFAULT_SET_TYPE_OPTIONS;
-        setTypeOptions.forEach(opt => {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "event-btn";
-          btn.textContent = formatSetTypeLabelWithShortcut(opt.value, opt.label);
-          btn.addEventListener("click", async () => {
-            await startAttackSelection(playerIdx, opt.value, renderPlayers, scope);
-          });
-          grid.appendChild(btn);
-        });
-        targetEl.appendChild(grid);
-        return;
-      }
     }
     if (
       pickedSkillId === "block" &&
@@ -5036,7 +4956,6 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
     targetEl.appendChild(btn);
     return;
-    }
   }
   const enabledSkillIds = new Set(enabledSkills.map(s => s.id));
   let pickedSkillId =
