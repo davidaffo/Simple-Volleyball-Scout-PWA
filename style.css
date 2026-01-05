@@ -2002,7 +2002,7 @@ body[data-theme="light"] .player-card {
 }
 .court-card {
   border: 1px dashed #2f2f2f;
-  min-height: 165px;
+  min-height: 0;
   position: relative;
   background: #181818;
 }

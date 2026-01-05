@@ -2,8 +2,6 @@
 Inserimento basi
 Inserimento numero persone a muro
 Inserimento tipo di attacco
-Ridurre la dimensione dei campi per farli stare in una schermata
-Gestire doppia squadra da smartphone
 
 # Bugfix
 LA visuale da telefono non funziona piu
