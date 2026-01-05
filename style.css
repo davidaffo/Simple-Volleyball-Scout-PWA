@@ -461,6 +461,45 @@ button.small {
   background: #0f172a;
   border: 1px solid #1f2937;
 }
+.team-field-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border-radius: 0.85rem;
+  border: 1px solid #1f2937;
+  background: #0f172a;
+}
+.team-field-box--opponent {
+  border-color: #7f1d1d;
+  background: #3a0f12;
+}
+body[data-theme="light"] .team-field-box {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+body[data-theme="light"] .team-field-box--opponent {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+.team-field-box .court-actions-bar {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.team-field-box--home > #players-container {
+  order: 1;
+}
+.team-field-box--home > .court-actions-bar {
+  order: 2;
+}
+.players-area.court-area--swapped .team-field-box--home > .court-actions-bar {
+  order: 1;
+}
+.players-area.court-area--swapped .team-field-box--home > #players-container {
+  order: 2;
+}
 .team-panel {
   position: relative;
   display: flex;
@@ -1871,6 +1910,12 @@ body[data-theme="light"] .next-set-inline__card {
   text-transform: uppercase;
   color: #94a3b8;
 }
+.base-k-btn {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  line-height: 1;
+  white-space: nowrap;
+}
 .court-net-divider::before,
 .court-net-divider::after {
   content: "";
@@ -1885,10 +1930,39 @@ body[data-theme="light"] .court-net-divider::before,
 body[data-theme="light"] .court-net-divider::after {
   background: rgba(100, 116, 139, 0.35);
 }
+.base-modal__content {
+  max-width: 360px;
+}
+.base-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+.base-modal-btn {
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.4rem;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.base-modal-btn:hover {
+  filter: brightness(1.05);
+}
+.base-modal__hint {
+  margin-top: 0.4rem;
+}
+body[data-theme="light"] .base-modal-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5f5;
+}
 .players-area > [data-team-panel="opponent"] {
   order: 1;
 }
-.players-area > #players-container {
+.players-area > .court-net-divider {
   order: 2;
 }
 .players-area > [data-team-panel="home"] {
@@ -1897,11 +1971,11 @@ body[data-theme="light"] .court-net-divider::after {
 .players-area.court-area--swapped > [data-team-panel="home"] {
   order: 1;
 }
-.players-area.court-area--swapped > [data-team-panel="opponent"] {
-  order: 4;
-}
 .players-area.court-area--swapped > .court-net-divider {
   order: 3;
+}
+.players-area.court-area--swapped > [data-team-panel="opponent"] {
+  order: 4;
 }
 body.desktop-court-modal-open #court-area {
   overflow: hidden;
@@ -1958,22 +2032,20 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
   max-width: 100%;
 }
 #players-container {
-  background: #0f172a;
-  border: 1px solid #1f2937;
-  border-radius: 0.85rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 body[data-theme="light"] #players-container {
-  background: #f8fafc;
-  border-color: #e2e8f0;
+  background: transparent;
 }
 #opponent-players-container {
-  background: #3a0f12;
-  border: 1px solid #7f1d1d;
-  border-radius: 0.85rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 body[data-theme="light"] #opponent-players-container {
-  background: #fee2e2;
-  border-color: #fca5a5;
+  background: transparent;
 }
 .court-layout {
   grid-template-columns: repeat(3, minmax(160px, 1fr));

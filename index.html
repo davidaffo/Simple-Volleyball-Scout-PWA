@@ -305,109 +305,116 @@
         </div>
         <div class="players-area" id="court-area">
           <div class="team-panel team-panel--far team-panel--opponent" data-team-panel="opponent">
-            <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--opponent">
-              <div class="rotation-block court-rotation-block">
-              <div class="rotation-controls">
-                <button id="btn-rotate-cw-opp" class="small rotate-cw">↺</button>
-                <div class="rotation-display">
-                  <select id="rotation-select-opp" class="rotation-select">
-                    <option value="1">P1</option>
-                    <option value="2">P2</option>
-                    <option value="3">P3</option>
-                    <option value="4">P4</option>
-                    <option value="5">P5</option>
-                    <option value="6">P6</option>
-                  </select>
-                </div>
-                <button id="btn-rotate-ccw-opp" class="small rotate-ccw">↻</button>
-              </div>
-              </div>
-              <div class="score-actions court-game-actions">
-                <button id="btn-score-opp-point" class="small success">Punto</button>
-                <button id="btn-score-opp-error" class="small danger">Errore</button>
-                <button id="btn-freeball-opp" class="secondary small">Freeball</button>
-              </div>
-              <div class="team-controls-panel">
-                <div class="libero-inline">
-                  <label>Libero</label>
-                  <div id="libero-tags-inline-opp" class="libero-tags"></div>
-                  <label class="auto-libero-inline">
-                    <span>Auto L</span>
-                    <select id="auto-libero-select-opp">
-                      <option value="">Nessuno</option>
-                      <option value="P">P</option>
-                      <option value="S">S</option>
-                      <option value="C">C</option>
-                      <option value="O">O</option>
+            <div class="team-field-box team-field-box--opponent">
+              <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--opponent">
+                <div class="rotation-block court-rotation-block">
+                <div class="rotation-controls">
+                  <button id="btn-rotate-cw-opp" class="small rotate-cw">↺</button>
+                  <div class="rotation-display">
+                    <select id="rotation-select-opp" class="rotation-select">
+                      <option value="1">P1</option>
+                      <option value="2">P2</option>
+                      <option value="3">P3</option>
+                      <option value="4">P4</option>
+                      <option value="5">P5</option>
+                      <option value="6">P6</option>
                     </select>
-                  </label>
-                  <button type="button" id="btn-swap-libero-opp" class="small secondary">Cambia L</button>
+                  </div>
+                  <button id="btn-rotate-ccw-opp" class="small rotate-ccw">↻</button>
                 </div>
-                <div class="skill-flow-panel">
-                  <label>Forza prossima skill</label>
-                  <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons-opp">
-                    <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
-                    <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
-                    <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
-                    <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
-                    <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
-                    <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                </div>
+                <div class="score-actions court-game-actions">
+                  <button id="btn-score-opp-point" class="small success">Punto</button>
+                  <button id="btn-score-opp-error" class="small danger">Errore</button>
+                  <button id="btn-freeball-opp" class="secondary small">Freeball</button>
+                </div>
+                <div class="team-controls-panel">
+                  <div class="libero-inline">
+                    <label>Libero</label>
+                    <div id="libero-tags-inline-opp" class="libero-tags"></div>
+                    <label class="auto-libero-inline">
+                      <span>Auto L</span>
+                      <select id="auto-libero-select-opp">
+                        <option value="">Nessuno</option>
+                        <option value="P">P</option>
+                        <option value="S">S</option>
+                        <option value="C">C</option>
+                        <option value="O">O</option>
+                      </select>
+                    </label>
+                    <button type="button" id="btn-swap-libero-opp" class="small secondary">Cambia L</button>
+                  </div>
+                  <div class="skill-flow-panel">
+                    <label>Forza prossima skill</label>
+                    <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons-opp">
+                      <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
+                      <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                      <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
+                      <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
+                      <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
+                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div id="opponent-players-container"></div>
             </div>
-            <div id="opponent-players-container"></div>
           </div>
-          <div class="court-net-divider"><span>Rete</span></div>
-          <div id="players-container"></div>
+          <div class="court-net-divider">
+            <span>Rete</span>
+            <button id="btn-attack-base" class="small secondary base-k-btn" type="button">Base (K)</button>
+          </div>
           <div class="team-panel team-panel--near team-panel--home" data-team-panel="home">
-            <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--home">
-              <div class="rotation-block court-rotation-block">
-              <div class="rotation-controls">
-                <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
-                <div class="rotation-display">
-                  <select id="rotation-select" class="rotation-select">
-                    <option value="1">P1</option>
-                    <option value="2">P2</option>
-                    <option value="3">P3</option>
-                    <option value="4">P4</option>
-                    <option value="5">P5</option>
-                    <option value="6">P6</option>
-                  </select>
-                </div>
-                <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
-              </div>
-              </div>
-              <div class="score-actions court-game-actions">
-                <button id="btn-score-team-point" class="small">Punto</button>
-                <button id="btn-score-team-error" class="small danger">Errore</button>
-                <button id="btn-freeball" class="secondary small">Freeball</button>
-              </div>
-              <div class="team-controls-panel">
-                <div class="libero-inline">
-                  <label>Libero</label>
-                  <div id="libero-tags-inline" class="libero-tags"></div>
-                  <label class="auto-libero-inline">
-                    <span>Auto L</span>
-                    <select id="auto-libero-select">
-                      <option value="">Nessuno</option>
-                      <option value="P">P</option>
-                      <option value="S">S</option>
-                      <option value="C">C</option>
-                      <option value="O">O</option>
+            <div class="team-field-box team-field-box--home">
+              <div id="players-container"></div>
+              <div class="court-actions-bar court-actions-inline team-panel__bar team-panel__bar--home">
+                <div class="rotation-block court-rotation-block">
+                <div class="rotation-controls">
+                  <button id="btn-rotate-cw" class="small rotate-cw">↺</button>
+                  <div class="rotation-display">
+                    <select id="rotation-select" class="rotation-select">
+                      <option value="1">P1</option>
+                      <option value="2">P2</option>
+                      <option value="3">P3</option>
+                      <option value="4">P4</option>
+                      <option value="5">P5</option>
+                      <option value="6">P6</option>
                     </select>
-                  </label>
-                  <button type="button" id="btn-swap-libero" class="small secondary">Cambia L</button>
+                  </div>
+                  <button id="btn-rotate-ccw" class="small rotate-ccw">↻</button>
                 </div>
-                <div class="skill-flow-panel">
-                  <label>Forza prossima skill</label>
-                  <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons">
-                    <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
-                    <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
-                    <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
-                    <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
-                    <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
-                    <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                </div>
+                <div class="score-actions court-game-actions">
+                  <button id="btn-score-team-point" class="small">Punto</button>
+                  <button id="btn-score-team-error" class="small danger">Errore</button>
+                  <button id="btn-freeball" class="secondary small">Freeball</button>
+                </div>
+                <div class="team-controls-panel">
+                  <div class="libero-inline">
+                    <label>Libero</label>
+                    <div id="libero-tags-inline" class="libero-tags"></div>
+                    <label class="auto-libero-inline">
+                      <span>Auto L</span>
+                      <select id="auto-libero-select">
+                        <option value="">Nessuno</option>
+                        <option value="P">P</option>
+                        <option value="S">S</option>
+                        <option value="C">C</option>
+                        <option value="O">O</option>
+                      </select>
+                    </label>
+                    <button type="button" id="btn-swap-libero" class="small secondary">Cambia L</button>
+                  </div>
+                  <div class="skill-flow-panel">
+                    <label>Forza prossima skill</label>
+                    <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons">
+                      <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
+                      <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                      <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
+                      <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
+                      <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
+                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1415,6 +1422,27 @@ Bianchi Laura 18"></textarea>
         <button id="agg-skill-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-agg-skill="true">✕</button>
       </div>
       <div id="agg-skill-modal-body" class="skill-modal__body"></div>
+    </div>
+  </div>
+  <div id="base-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-base></div>
+    <div class="skill-modal__content base-modal__content">
+      <div class="skill-modal__head">
+        <div class="skill-modal__title">Base centrale</div>
+        <button id="base-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-base="true">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <p class="section-note">Seleziona la base da assegnare all'ultimo attacco.</p>
+        <div id="base-modal-grid" class="base-modal__grid">
+          <button type="button" class="base-modal-btn" data-base="K1" data-key="1">K1</button>
+          <button type="button" class="base-modal-btn" data-base="K2" data-key="2">K2</button>
+          <button type="button" class="base-modal-btn" data-base="KC" data-key="C">KC</button>
+          <button type="button" class="base-modal-btn" data-base="KB" data-key="B">KB</button>
+          <button type="button" class="base-modal-btn" data-base="K7" data-key="7">K7</button>
+          <button type="button" class="base-modal-btn" data-base="KF" data-key="F">KF</button>
+        </div>
+        <div class="section-note base-modal__hint">Scorciatoie: 1, 2, C, B, 7, F.</div>
+      </div>
     </div>
   </div>
   <div id="bulk-edit-modal" class="skill-modal hidden" role="dialog" aria-modal="true">

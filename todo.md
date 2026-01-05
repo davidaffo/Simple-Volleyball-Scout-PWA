@@ -1,9 +1,11 @@
 # Minor features
-Inserimento basi
+
 Inserimento numero persone a muro
 Inserimento tipo di attacco
+tasti scorciatoia per modifiche rapide a video
 
 # Bugfix
+
 LA visuale da telefono non funziona piu
 Importazione match sembra avere problemi
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti

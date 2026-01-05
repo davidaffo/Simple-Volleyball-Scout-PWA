@@ -3154,6 +3154,15 @@ let bulkEditActive = false;
 let bulkEditSession = null;
 const videoUndoStack = [];
 const VIDEO_UNDO_LIMIT = 30;
+const BASE_KEY_MAP = {
+  "1": "K1",
+  "2": "K2",
+  C: "KC",
+  B: "KB",
+  "7": "K7",
+  F: "KF"
+};
+let baseModalTargetEvent = null;
 function openMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.remove("hidden");
@@ -3166,6 +3175,47 @@ function closeMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
+}
+function getLastAttackEventForScope(scope) {
+  const events = state.events || [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const ev = events[i];
+    if (!ev || ev.skillId !== "attack") continue;
+    if (scope && getTeamScopeFromEvent(ev) !== scope) continue;
+    return ev;
+  }
+  return null;
+}
+function applyBaseToTarget(baseValue) {
+  if (!baseModalTargetEvent) return;
+  baseModalTargetEvent.base = baseValue || null;
+  saveState({ persistLocal: true });
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog({ suppressScroll: true });
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab === "video") {
+    renderVideoAnalysis();
+  }
+  closeBaseModal();
+}
+function openBaseModal() {
+  if (!elBaseModal) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab !== "scout") return;
+  const ev = getLastAttackEventForScope();
+  if (!ev) {
+    alert("Nessun attacco recente per assegnare la base.");
+    return;
+  }
+  baseModalTargetEvent = ev;
+  elBaseModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeBaseModal() {
+  if (!elBaseModal) return;
+  elBaseModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  baseModalTargetEvent = null;
 }
 function buildPlayersDbUsage(teamsMap) {
   const usage = {};
@@ -3475,6 +3525,7 @@ const BULK_EDIT_CONFIG = {
 };
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
+const elBtnAttackBase = document.getElementById("btn-attack-base");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
 const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
@@ -3501,6 +3552,9 @@ const elTimeoutCount = document.getElementById("timeout-count");
 const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
 const elSubstitutionRemainingOpp = document.getElementById("substitution-remaining-opp");
+const elBaseModal = document.getElementById("base-modal");
+const elBaseModalClose = document.getElementById("base-modal-close");
+const elBaseModalGrid = document.getElementById("base-modal-grid");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -18347,6 +18401,35 @@ async function init() {
       }
     });
   }
+  if (elBtnAttackBase) {
+    elBtnAttackBase.addEventListener("click", openBaseModal);
+  }
+  if (elBaseModalClose) {
+    elBaseModalClose.addEventListener("click", closeBaseModal);
+  }
+  if (elBaseModal) {
+    elBaseModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose = target.dataset.closeBase || target === elBaseModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeBaseModal();
+      }
+    });
+  }
+  if (elBaseModalGrid) {
+    elBaseModalGrid.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".base-modal-btn");
+      if (!btn) return;
+      const baseValue = btn.dataset.base;
+      if (baseValue) {
+        applyBaseToTarget(baseValue);
+      }
+    });
+  }
   if (elSkillModalClose) {
     elSkillModalClose.addEventListener("click", closeSkillModal);
   }
@@ -18390,6 +18473,7 @@ async function init() {
       closeSettingsModal();
       closeAggSkillModal();
       closeNextSetModal();
+      closeBaseModal();
     }
   });
   document.addEventListener("mousedown", e => {
@@ -18400,6 +18484,19 @@ async function init() {
   document.addEventListener("keydown", e => {
     if (isEditingField(e.target)) return;
     closeCurrentEdit();
+    if (!elBaseModal?.classList.contains("hidden")) {
+      const mapped = BASE_KEY_MAP[String(e.key).toUpperCase()];
+      if (mapped) {
+        e.preventDefault();
+        applyBaseToTarget(mapped);
+      }
+      return;
+    }
+    if (e.key === "k" || e.key === "K") {
+      e.preventDefault();
+      openBaseModal();
+      return;
+    }
     const ctxKey = getActiveEventContextKey();
     if (!ctxKey) return;
     if (e.key === "ArrowDown") {
