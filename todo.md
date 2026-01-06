@@ -1,7 +1,4 @@
 # Minor features
-
-Inserimento numero persone a muro
-Inserimento tipo di attacco
 tasti scorciatoia per modifiche rapide a video
 
 # Bugfix

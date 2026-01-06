@@ -1910,9 +1910,9 @@ body[data-theme="light"] .next-set-inline__card {
   text-transform: uppercase;
   color: #94a3b8;
 }
-.base-k-btn {
-  padding: 0.1rem 0.45rem;
-  font-size: 0.7rem;
+.net-action-btn {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
   line-height: 1;
   white-space: nowrap;
 }

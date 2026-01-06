@@ -3163,6 +3163,20 @@ const BASE_KEY_MAP = {
   F: "KF"
 };
 let baseModalTargetEvent = null;
+const ATTACK_TYPE_KEY_MAP = {
+  R: "Regolare",
+  P: "Pallonetto",
+  Z: "Piazzata",
+  S: "Spinta"
+};
+let attackTypeModalTargetEvent = null;
+const BLOCK_NUMBER_KEY_MAP = {
+  "0": 0,
+  "1": 1,
+  "2": 2,
+  "3": 3
+};
+let blockNumberModalTargetEvent = null;
 function openMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.remove("hidden");
@@ -3216,6 +3230,62 @@ function closeBaseModal() {
   elBaseModal.classList.add("hidden");
   document.body.classList.remove("modal-open");
   baseModalTargetEvent = null;
+}
+function applyAttackTypeToTarget(value) {
+  if (!attackTypeModalTargetEvent) return;
+  attackTypeModalTargetEvent.attackType = value || null;
+  saveState({ persistLocal: true });
+  renderEventsLog({ suppressScroll: true });
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab === "video") renderVideoAnalysis();
+  closeAttackTypeModal();
+}
+function openAttackTypeModal() {
+  if (!elAttackTypeModal) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab !== "scout") return;
+  const ev = getLastAttackEventForScope();
+  if (!ev) {
+    alert("Nessun attacco recente per assegnare il tipo.");
+    return;
+  }
+  attackTypeModalTargetEvent = ev;
+  elAttackTypeModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeAttackTypeModal() {
+  if (!elAttackTypeModal) return;
+  elAttackTypeModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  attackTypeModalTargetEvent = null;
+}
+function applyBlockNumberToTarget(value) {
+  if (!blockNumberModalTargetEvent) return;
+  blockNumberModalTargetEvent.blockNumber = typeof value === "number" ? value : null;
+  saveState({ persistLocal: true });
+  renderEventsLog({ suppressScroll: true });
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab === "video") renderVideoAnalysis();
+  closeBlockNumberModal();
+}
+function openBlockNumberModal() {
+  if (!elBlockNumberModal) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab !== "scout") return;
+  const ev = getLastAttackEventForScope();
+  if (!ev) {
+    alert("Nessun attacco recente per assegnare il muro.");
+    return;
+  }
+  blockNumberModalTargetEvent = ev;
+  elBlockNumberModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeBlockNumberModal() {
+  if (!elBlockNumberModal) return;
+  elBlockNumberModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+  blockNumberModalTargetEvent = null;
 }
 function buildPlayersDbUsage(teamsMap) {
   const usage = {};
@@ -3526,6 +3596,8 @@ const BULK_EDIT_CONFIG = {
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elBtnAttackBase = document.getElementById("btn-attack-base");
+const elBtnAttackType = document.getElementById("btn-attack-type");
+const elBtnBlockNumber = document.getElementById("btn-block-number");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
 const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
@@ -3555,6 +3627,12 @@ const elSubstitutionRemainingOpp = document.getElementById("substitution-remaini
 const elBaseModal = document.getElementById("base-modal");
 const elBaseModalClose = document.getElementById("base-modal-close");
 const elBaseModalGrid = document.getElementById("base-modal-grid");
+const elAttackTypeModal = document.getElementById("attack-type-modal");
+const elAttackTypeModalClose = document.getElementById("attack-type-modal-close");
+const elAttackTypeModalGrid = document.getElementById("attack-type-modal-grid");
+const elBlockNumberModal = document.getElementById("block-number-modal");
+const elBlockNumberModalClose = document.getElementById("block-number-modal-close");
+const elBlockNumberModalGrid = document.getElementById("block-number-modal-grid");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -18404,6 +18482,12 @@ async function init() {
   if (elBtnAttackBase) {
     elBtnAttackBase.addEventListener("click", openBaseModal);
   }
+  if (elBtnAttackType) {
+    elBtnAttackType.addEventListener("click", openAttackTypeModal);
+  }
+  if (elBtnBlockNumber) {
+    elBtnBlockNumber.addEventListener("click", openBlockNumberModal);
+  }
   if (elBaseModalClose) {
     elBaseModalClose.addEventListener("click", closeBaseModal);
   }
@@ -18427,6 +18511,61 @@ async function init() {
       const baseValue = btn.dataset.base;
       if (baseValue) {
         applyBaseToTarget(baseValue);
+      }
+    });
+  }
+  if (elAttackTypeModalClose) {
+    elAttackTypeModalClose.addEventListener("click", closeAttackTypeModal);
+  }
+  if (elAttackTypeModal) {
+    elAttackTypeModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose = target.dataset.closeAttackType || target === elAttackTypeModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeAttackTypeModal();
+      }
+    });
+  }
+  if (elAttackTypeModalGrid) {
+    elAttackTypeModalGrid.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".base-modal-btn");
+      if (!btn) return;
+      const value = btn.dataset.attackType;
+      if (value) {
+        applyAttackTypeToTarget(value);
+      }
+    });
+  }
+  if (elBlockNumberModalClose) {
+    elBlockNumberModalClose.addEventListener("click", closeBlockNumberModal);
+  }
+  if (elBlockNumberModal) {
+    elBlockNumberModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose = target.dataset.closeBlockNumber || target === elBlockNumberModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeBlockNumberModal();
+      }
+    });
+  }
+  if (elBlockNumberModalGrid) {
+    elBlockNumberModalGrid.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".base-modal-btn");
+      if (!btn) return;
+      const raw = btn.dataset.blockNumber;
+      if (raw !== undefined) {
+        const num = parseInt(raw, 10);
+        if (!Number.isNaN(num)) {
+          applyBlockNumberToTarget(num);
+        }
       }
     });
   }
@@ -18474,6 +18613,8 @@ async function init() {
       closeAggSkillModal();
       closeNextSetModal();
       closeBaseModal();
+      closeAttackTypeModal();
+      closeBlockNumberModal();
     }
   });
   document.addEventListener("mousedown", e => {
@@ -18492,9 +18633,35 @@ async function init() {
       }
       return;
     }
+    if (!elAttackTypeModal?.classList.contains("hidden")) {
+      const mapped = ATTACK_TYPE_KEY_MAP[String(e.key).toUpperCase()];
+      if (mapped) {
+        e.preventDefault();
+        applyAttackTypeToTarget(mapped);
+      }
+      return;
+    }
+    if (!elBlockNumberModal?.classList.contains("hidden")) {
+      const mapped = BLOCK_NUMBER_KEY_MAP[String(e.key)];
+      if (mapped !== undefined) {
+        e.preventDefault();
+        applyBlockNumberToTarget(mapped);
+      }
+      return;
+    }
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
       openBaseModal();
+      return;
+    }
+    if (e.key === "t" || e.key === "T") {
+      e.preventDefault();
+      openAttackTypeModal();
+      return;
+    }
+    if (e.key === "m" || e.key === "M") {
+      e.preventDefault();
+      openBlockNumberModal();
       return;
     }
     const ctxKey = getActiveEventContextKey();

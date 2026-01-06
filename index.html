@@ -362,7 +362,9 @@
           </div>
           <div class="court-net-divider">
             <span>Rete</span>
-            <button id="btn-attack-base" class="small secondary base-k-btn" type="button">Base (K)</button>
+            <button id="btn-attack-base" class="small secondary net-action-btn" type="button">Base (K)</button>
+            <button id="btn-attack-type" class="small secondary net-action-btn" type="button">Tipo attacco (T)</button>
+            <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (M)</button>
           </div>
           <div class="team-panel team-panel--near team-panel--home" data-team-panel="home">
             <div class="team-field-box team-field-box--home">
@@ -1442,6 +1444,44 @@ Bianchi Laura 18"></textarea>
           <button type="button" class="base-modal-btn" data-base="KF" data-key="F">KF</button>
         </div>
         <div class="section-note base-modal__hint">Scorciatoie: 1, 2, C, B, 7, F.</div>
+      </div>
+    </div>
+  </div>
+  <div id="attack-type-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-attack-type></div>
+    <div class="skill-modal__content base-modal__content">
+      <div class="skill-modal__head">
+        <div class="skill-modal__title">Tipo attacco</div>
+        <button id="attack-type-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-attack-type="true">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <p class="section-note">Seleziona il tipo di attacco da assegnare all'ultimo attacco.</p>
+        <div id="attack-type-modal-grid" class="base-modal__grid">
+          <button type="button" class="base-modal-btn" data-attack-type="Regolare" data-key="R">Regolare (R)</button>
+          <button type="button" class="base-modal-btn" data-attack-type="Pallonetto" data-key="P">Pallonetto (P)</button>
+          <button type="button" class="base-modal-btn" data-attack-type="Piazzata" data-key="Z">Piazzata (Z)</button>
+          <button type="button" class="base-modal-btn" data-attack-type="Spinta" data-key="S">Spinta (S)</button>
+        </div>
+        <div class="section-note base-modal__hint">Scorciatoie: R, P, Z, S.</div>
+      </div>
+    </div>
+  </div>
+  <div id="block-number-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-block-number></div>
+    <div class="skill-modal__content base-modal__content">
+      <div class="skill-modal__head">
+        <div class="skill-modal__title">N° muro</div>
+        <button id="block-number-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-block-number="true">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <p class="section-note">Seleziona il numero di giocatrici a muro per l'ultimo attacco.</p>
+        <div id="block-number-modal-grid" class="base-modal__grid">
+          <button type="button" class="base-modal-btn" data-block-number="0" data-key="0">0</button>
+          <button type="button" class="base-modal-btn" data-block-number="1" data-key="1">1</button>
+          <button type="button" class="base-modal-btn" data-block-number="2" data-key="2">2</button>
+          <button type="button" class="base-modal-btn" data-block-number="3" data-key="3">3</button>
+        </div>
+        <div class="section-note base-modal__hint">Scorciatoie: 0, 1, 2, 3.</div>
       </div>
     </div>
   </div>
