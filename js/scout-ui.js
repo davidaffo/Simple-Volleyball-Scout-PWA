@@ -225,6 +225,11 @@ const elMultiscoutTeamSelect = document.getElementById("multiscout-team-select")
 const elMultiscoutReset = document.getElementById("multiscout-reset");
 const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
+const elVideoOverlay = document.getElementById("video-analysis-overlay");
+const elVideoOverlaySet = document.getElementById("video-overlay-set");
+const elVideoOverlayPlayer = document.getElementById("video-overlay-player");
+const elVideoOverlaySkill = document.getElementById("video-overlay-skill");
+const elVideoOverlayRotation = document.getElementById("video-overlay-rotation");
 const elPlayersDbModal = document.getElementById("players-db-modal");
 const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
@@ -7413,6 +7418,9 @@ function setSelectionForContext(contextKey, keysSet, anchorKey = null, opts = {}
   if (typeof ctx.onSelectionChange === "function") {
     ctx.onSelectionChange(getSelectedRows(contextKey), contextKey, opts);
   }
+  if (contextKey === "video") {
+    updateVideoAnalysisOverlay();
+  }
 }
 function toggleSelectionForContext(contextKey, key, opts = {}) {
   const next = new Set(selectedEventIds);
@@ -7577,12 +7585,90 @@ function buildSelectedSegments() {
           " " +
           (ev.skillId || "") +
           " " +
-          (ev.code || "")
+          (ev.code || ""),
+        overlayLines: buildVideoOverlayLinesForEvent(ev)
       };
     })
     .filter(seg => isFinite(seg.start) && isFinite(seg.end))
     .sort((a, b) => a.start - b.start);
   return segments;
+}
+function getVideoOverlayEvent() {
+  const ctx = eventTableContexts.video;
+  if (!ctx || !ctx.rows || !ctx.rows.length) return null;
+  let key = lastSelectedEventId && selectedEventIds.has(lastSelectedEventId) ? lastSelectedEventId : null;
+  if (!key) {
+    const match = ctx.rows.find(r => selectedEventIds.has(r.key));
+    key = match ? match.key : null;
+  }
+  if (!key) return null;
+  const row = ctx.rows.find(r => r.key === key);
+  return row ? row.ev : null;
+}
+function buildVideoOverlayLinesForEvent(ev) {
+  if (!ev) return [];
+  const setNum = ev.set || state.currentSet || 1;
+  const homeScore = ev.homeScore !== undefined && ev.homeScore !== null && ev.homeScore !== "" ? ev.homeScore : "-";
+  const visitorScore =
+    ev.visitorScore !== undefined && ev.visitorScore !== null && ev.visitorScore !== "" ? ev.visitorScore : "-";
+  const setLine = `Set ${setNum} · ${homeScore} - ${visitorScore}`;
+  const scope = getTeamScopeFromEvent(ev);
+  const numbers = getPlayerNumbersForScope(scope);
+  const rawName = ev.playerName || "";
+  const nameParts = splitNameParts(rawName);
+  const fullName =
+    nameParts.lastName || nameParts.firstName
+      ? [nameParts.lastName, nameParts.firstName].filter(Boolean).join(" ")
+      : rawName || "—";
+  const numValue = rawName && numbers ? numbers[rawName] : "";
+  const playerLine = numValue ? `${numValue} - ${fullName}` : fullName;
+  const skillLabel = (SKILLS.find(s => s.id === ev.skillId) || {}).label || ev.skillId || "";
+  const skillLine = [skillLabel, ev.code || ""].filter(Boolean).join(" ") || "—";
+  const rotationLine = ev.rotation ? `P${ev.rotation}` : "P-";
+  return [[setLine, playerLine, skillLine, rotationLine].filter(Boolean).join(" · ")];
+}
+function updateVideoAnalysisOverlay() {
+  if (!elVideoOverlay) return;
+  const isVideoTab = document && document.body ? document.body.dataset.activeTab === "video" : false;
+  if (!state.videoPlayByPlay || !isVideoTab) {
+    elVideoOverlay.classList.add("hidden");
+    return;
+  }
+  const ev = getVideoOverlayEvent();
+  if (!ev) {
+    elVideoOverlay.classList.add("hidden");
+    return;
+  }
+  const lines = buildVideoOverlayLinesForEvent(ev);
+  if (!lines.length) {
+    elVideoOverlay.classList.add("hidden");
+    return;
+  }
+  if (elVideoOverlaySet) elVideoOverlaySet.textContent = lines[0] || "";
+  if (elVideoOverlayPlayer) elVideoOverlayPlayer.textContent = "";
+  if (elVideoOverlaySkill) elVideoOverlaySkill.textContent = "";
+  if (elVideoOverlayRotation) elVideoOverlayRotation.textContent = "";
+  elVideoOverlay.classList.remove("hidden");
+}
+function escapeFfmpegText(text) {
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n");
+}
+function buildFfmpegOverlayFilter(lines) {
+  if (!lines || !lines.length) return "";
+  const x = 24;
+  const yStart = 24;
+  const step = 28;
+  return lines
+    .map((line, idx) => {
+      const safe = escapeFfmpegText(line || "");
+      const y = yStart + step * idx;
+      return `,drawtext=text='${safe}':x=${x}:y=${y}:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.55:boxborderw=8`;
+    })
+    .join("");
 }
 function getFileBasename(name) {
   if (!name) return "";
@@ -7607,7 +7693,8 @@ function buildFfmpegConcatCommand(segments, inputName, outputName) {
     .map((seg, idx) => {
       const start = seg.start.toFixed(2);
       const end = seg.end.toFixed(2);
-      return `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${idx}];` +
+      const overlay = buildFfmpegOverlayFilter(seg.overlayLines || []);
+      return `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS${overlay}[v${idx}];` +
         `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${idx}]`;
     })
     .join(";");
@@ -9305,7 +9392,8 @@ function renderEventTableRows(target, events, options = {}) {
       chk.checked = selectedEventIds.has(key);
       chk.addEventListener("click", e => {
         e.stopPropagation();
-        handleRowClick({ key, tr, idx: displayIdx }, e, true);
+        toggleSelectionForContext(contextKey, key, { userAction: true, preserveSelection: true });
+        scrollRowIntoView({ key, tr, idx: displayIdx });
       });
       selectTd.appendChild(chk);
       tr.appendChild(selectTd);
@@ -9572,7 +9660,16 @@ function renderEventTableRows(target, events, options = {}) {
       if (showSeek) seekVideoToTime(videoTime);
     });
     if (enableSelection) {
-      tr.addEventListener("click", e => handleRowClick({ key, tr, idx: displayIdx }, e));
+      tr.addEventListener("click", e => {
+        const target = e.target;
+        if (target instanceof HTMLElement) {
+          if (target.closest(".row-select")) return;
+          if (["input", "label", "button", "select", "option", "textarea"].includes(target.tagName.toLowerCase())) {
+            return;
+          }
+        }
+        handleRowClick({ key, tr, idx: displayIdx }, e);
+      });
     }
     const deleteTd = document.createElement("td");
     const deleteBtn = document.createElement("button");
@@ -9754,16 +9851,16 @@ function ensurePlayByPlayMonitor() {
     startPlayByPlayAtIndex(nextIndex);
   }, 150);
 }
-function startPlayByPlayFromSelection() {
+function startPlayByPlayFromSelection(options = {}) {
   const rows = getVideoPlayByPlayRows();
   if (!rows.length) {
     stopPlayByPlay();
     return;
   }
   const idx = getPlayByPlayStartIndex(rows);
-  startPlayByPlayAtIndex(idx);
+  startPlayByPlayAtIndex(idx, options);
 }
-function startPlayByPlayAtIndex(idx) {
+function startPlayByPlayAtIndex(idx, options = {}) {
   const rows = getVideoPlayByPlayRows();
   if (!rows.length || idx < 0 || idx >= rows.length) {
     stopPlayByPlay();
@@ -9782,34 +9879,16 @@ function startPlayByPlayAtIndex(idx) {
   const duration = getPlayByPlayDurationSeconds(row.ev || {});
   playByPlayState.endTime = start + duration;
   playByPlayState.endAtMs = Date.now() + duration * 1000;
-  setSelectionForContext("video", new Set([row.key]), row.key, { userAction: false });
-  scrollRowIntoView(row);
-  seekVideoToTime(start);
-  if (state.video && state.video.youtubeId) {
-    if (ytPlayer && typeof ytPlayer.playVideo === "function") {
-      ytPlayer.playVideo();
-    } else if (ytPlayerScout && typeof ytPlayerScout.playVideo === "function") {
-      ytPlayerScout.playVideo();
-    } else if (elYoutubeFrame && elYoutubeFrame.contentWindow) {
-      try {
-        elYoutubeFrame.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-          "*"
-        );
-      } catch (_) {
-        // ignore
-      }
-    } else if (elYoutubeFrameScout && elYoutubeFrameScout.contentWindow) {
-      try {
-        elYoutubeFrameScout.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func: "playVideo", args: [] }),
-          "*"
-        );
-      } catch (_) {
-        // ignore
-      }
-    }
+  if (options.preserveSelection) {
+    lastSelectedEventId = row.key;
+    lastEventContextKey = "video";
+    updateSelectionStyles();
+  } else {
+    setSelectionForContext("video", new Set([row.key]), row.key, { userAction: false });
   }
+  scrollRowIntoView(row);
+  const preservePlayback = options.preservePlayback !== false;
+  seekVideoToTime(start, { preservePlayback });
   ensurePlayByPlayMonitor();
 }
 function syncPlayByPlayAfterRender() {
@@ -9836,10 +9915,11 @@ function handleVideoSelectionChange(_rows, _ctx, opts) {
   const activeTab = document && document.body ? document.body.dataset.activeTab : "";
   if (state.videoPlayByPlay) {
     if (activeTab !== "video") return;
-    startPlayByPlayFromSelection();
+    startPlayByPlayFromSelection({ preserveSelection: !!opts.preserveSelection, preservePlayback: true });
     return;
   }
   handleSeekForSelection("video", { preservePlayback: true, userAction: true });
+  updateVideoAnalysisOverlay();
 }
 function renderVideoAnalysis() {
   if (!elVideoSkillsContainer) return;
@@ -9861,6 +9941,7 @@ function renderVideoAnalysis() {
       console.error("Video filters error", err);
     }
     elVideoSkillsContainer.innerHTML = "";
+    updateVideoAnalysisOverlay();
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 9;
@@ -9893,6 +9974,7 @@ function renderVideoAnalysis() {
   if (!filteredEvents.length) {
     if (state.videoPlayByPlay) stopPlayByPlay();
     elVideoSkillsContainer.innerHTML = "";
+    updateVideoAnalysisOverlay();
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 9;
@@ -9919,6 +10001,7 @@ function renderVideoAnalysis() {
       onSelectionChange: handleVideoSelectionChange
     }
   );
+  updateVideoAnalysisOverlay();
   syncPlayByPlayAfterRender();
   if (updatedZones) {
     saveState();
@@ -17919,7 +18002,7 @@ async function init() {
       if (state.videoPlayByPlay) {
         const active = document && document.body ? document.body.dataset.activeTab : "";
         if (active === "video") {
-          startPlayByPlayFromSelection();
+          startPlayByPlayFromSelection({ preservePlayback: true });
         }
       } else {
         stopPlayByPlay();
