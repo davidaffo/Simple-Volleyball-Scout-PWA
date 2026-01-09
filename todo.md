@@ -1,5 +1,5 @@
 # Major features
-Aggiungere condivisione dati via socket
+Aggiungere condivisione dati via socket (pagina html statica come esportazione ma con dati dell'app host come se fosse un backend?)
 Lettura Camp3 ocr
 
 # Minor features
@@ -7,9 +7,14 @@ tasti scorciatoia per modifiche rapide a video
 aggiungi squadra da gestione squadra e non tendina
 aggiungi giocatore deve aggiungere in alto e non in fondo
 incolla elenco deve leggere prima numero poi cognome poi nome
+overlay punteggio e dato nel play by play e nei tagli
+crea stampa tipo foglio gara
 
 
 # Bugfix
+La partita parte con 5 cambi
+appare muro e no muro solo su alcune giocatrici in modalita manuale
+avvio set non fa partire battuta ma fa partire in modalita manuale
 Importazione match sembra avere problemi
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
