@@ -16557,6 +16557,35 @@ function registerServiceWorker() {
   if (!supportsSw || !secureContext) {
     return;
   }
+  const banner = document.getElementById("update-banner");
+  const bannerRefresh = document.getElementById("update-banner-refresh");
+  const bannerDismiss = document.getElementById("update-banner-dismiss");
+  let waitingWorker = null;
+  const showBanner = () => {
+    if (!banner) return;
+    banner.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      const height = banner.getBoundingClientRect().height || 0;
+      document.documentElement.style.setProperty("--update-banner-offset", `${height}px`);
+    });
+  };
+  const hideBanner = () => {
+    if (!banner) return;
+    banner.classList.add("hidden");
+    document.documentElement.style.setProperty("--update-banner-offset", "0px");
+  };
+  if (bannerRefresh && !bannerRefresh._swBound) {
+    bannerRefresh.addEventListener("click", () => {
+      if (!waitingWorker) return;
+      sessionStorage.setItem("sw-refresh-requested", "1");
+      waitingWorker.postMessage({ type: "SKIP_WAITING" });
+    });
+    bannerRefresh._swBound = true;
+  }
+  if (bannerDismiss && !bannerDismiss._swBound) {
+    bannerDismiss.addEventListener("click", hideBanner);
+    bannerDismiss._swBound = true;
+  }
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("service-worker.js")
@@ -16565,12 +16594,25 @@ function registerServiceWorker() {
           reg.update();
         }
         if (navigator.serviceWorker.controller) {
-          sessionStorage.removeItem("sw-force-reload");
+          sessionStorage.removeItem("sw-refresh-requested");
         }
+        if (reg.waiting) {
+          waitingWorker = reg.waiting;
+          showBanner();
+        }
+        reg.addEventListener("updatefound", () => {
+          const installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", () => {
+            if (installing.state === "installed" && navigator.serviceWorker.controller) {
+              waitingWorker = reg.waiting;
+              showBanner();
+            }
+          });
+        });
         navigator.serviceWorker.addEventListener("controllerchange", () => {
-          const key = "sw-force-reload";
-          if (sessionStorage.getItem(key) === "1") return;
-          sessionStorage.setItem(key, "1");
+          if (sessionStorage.getItem("sw-refresh-requested") !== "1") return;
+          sessionStorage.removeItem("sw-refresh-requested");
           window.location.reload();
         });
       })

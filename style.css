@@ -1704,6 +1704,55 @@ body[data-theme="light"] .default-lineup-preferred-libero select {
   color: #bfdbfe;
   text-decoration: none;
 }
+
+:root {
+  --update-banner-offset: 0px;
+}
+
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #0f3a6d;
+  color: #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.update-banner.hidden {
+  display: none;
+}
+
+.update-banner-text {
+  font-weight: 600;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.update-banner .small {
+  border-color: transparent;
+  background: #ffffff;
+  color: #0f3a6d;
+}
+
+.update-banner .small.secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+body {
+  padding-top: var(--update-banner-offset);
+}
 .manual-nav a:hover {
   color: #e0f2fe;
   text-decoration: underline;
