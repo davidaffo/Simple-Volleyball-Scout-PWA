@@ -5,7 +5,6 @@ Lettura Camp3 ocr
 # Minor features
 tasti scorciatoia per modifiche rapide a video
 incolla elenco deve leggere prima numero poi cognome poi nome
-overlay punteggio e dato nel play by play e nei tagli
 crea stampa tipo foglio gara
 
 
