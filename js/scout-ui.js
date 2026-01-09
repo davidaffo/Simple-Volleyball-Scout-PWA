@@ -16730,7 +16730,7 @@ function initSwipeTabs() {
   let startedInSwipeZone = false;
   let lastX = null;
   let lastY = null;
-  const minDistance = 140;
+  const minDistance = 90;
   const maxOffset = 35;
   const maxTime = 600;
   const swipeZoneRatio = 0.25;
