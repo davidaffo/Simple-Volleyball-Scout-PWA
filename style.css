@@ -4084,6 +4084,23 @@ body[data-theme="light"] .rotation-table td {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.video-score-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.video-score-form label {
+  font-weight: 600;
+  color: var(--text, #e2e8f0);
+}
+
+.video-score-form input {
+  width: 100%;
+  max-width: 220px;
+}
 .video-player-wrap video {
   width: 100%;
   border-radius: 0.8rem;

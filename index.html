@@ -1202,6 +1202,7 @@
             <input id="video-file-input" type="file" accept="video/*" hidden />
             <button id="btn-sync-first-skill" class="secondary">Sincronizza prima skill</button>
             <button id="btn-copy-ffmpeg" class="secondary">Copia ffmpeg (selezione)</button>
+            <button id="btn-fix-video-score" class="secondary" type="button">Correggi punteggio</button>
             <button id="btn-offset-skills" class="secondary">Offset skill</button>
             <button id="btn-unify-times" class="secondary">Unifica tempi</button>
             <button id="btn-skill-duration" class="secondary">Durata skill</button>
@@ -1510,6 +1511,27 @@ Bianchi Laura 18"></textarea>
         <div class="settings-actions">
           <button id="bulk-edit-cancel" class="secondary" type="button">Annulla</button>
           <button id="bulk-edit-apply" class="primary" type="button">Salva</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="video-score-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-video-score></div>
+    <div class="skill-modal__content">
+      <div class="skill-modal__head">
+        <div class="skill-modal__title">Correggi punteggio</div>
+        <button id="video-score-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <div class="video-score-form">
+          <label for="video-score-home">Punteggio nostro</label>
+          <input id="video-score-home" type="number" min="0" step="1" />
+          <label for="video-score-away">Punteggio avversario</label>
+          <input id="video-score-away" type="number" min="0" step="1" />
+        </div>
+        <div class="settings-actions">
+          <button id="video-score-cancel" class="secondary" type="button">Annulla</button>
+          <button id="video-score-apply" class="primary" type="button">Applica</button>
         </div>
       </div>
     </div>

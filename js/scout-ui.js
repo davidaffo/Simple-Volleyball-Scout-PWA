@@ -225,6 +225,14 @@ const elMultiscoutTeamSelect = document.getElementById("multiscout-team-select")
 const elMultiscoutReset = document.getElementById("multiscout-reset");
 const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
+const elBtnFixVideoScore = document.getElementById("btn-fix-video-score");
+const elVideoScoreModal = document.getElementById("video-score-modal");
+const elVideoScoreClose = document.getElementById("video-score-close");
+const elVideoScoreCancel = document.getElementById("video-score-cancel");
+const elVideoScoreApply = document.getElementById("video-score-apply");
+const elVideoScoreHome = document.getElementById("video-score-home");
+const elVideoScoreAway = document.getElementById("video-score-away");
+const elVideoScoreBackdrop = document.querySelector("#video-score-modal .skill-modal__backdrop");
 const elVideoOverlay = document.getElementById("video-analysis-overlay");
 const elVideoOverlaySet = document.getElementById("video-overlay-set");
 const elVideoOverlayPlayer = document.getElementById("video-overlay-player");
@@ -7670,6 +7678,75 @@ function buildFfmpegOverlayFilter(lines) {
     })
     .join("");
 }
+function openVideoScoreModal() {
+  if (!elVideoScoreModal) return;
+  const ctx = eventTableContexts.video;
+  const rows = ctx && ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)) : [];
+  if (!rows.length) {
+    alert("Seleziona uno o più eventi per correggere il punteggio.");
+    return;
+  }
+  const seed = rows[0] && rows[0].ev ? rows[0].ev : null;
+  const seedHome =
+    seed && typeof seed.homeScore === "number" && isFinite(seed.homeScore) ? seed.homeScore : 0;
+  const seedAway =
+    seed && typeof seed.visitorScore === "number" && isFinite(seed.visitorScore) ? seed.visitorScore : 0;
+  if (elVideoScoreHome) elVideoScoreHome.value = String(seedHome);
+  if (elVideoScoreAway) elVideoScoreAway.value = String(seedAway);
+  elVideoScoreModal.classList.remove("hidden");
+  setModalOpenState(true);
+  if (elVideoScoreHome) elVideoScoreHome.focus();
+}
+function closeVideoScoreModal() {
+  if (!elVideoScoreModal) return;
+  elVideoScoreModal.classList.add("hidden");
+  setModalOpenState(false);
+}
+function correctVideoScoresFromSelection(startHome, startAway) {
+  const home = parseInt(startHome, 10);
+  const away = parseInt(startAway, 10);
+  if (!Number.isFinite(home) || !Number.isFinite(away)) {
+    alert("Inserisci un punteggio valido.");
+    return;
+  }
+  const ctx = eventTableContexts.video;
+  const rows = ctx && ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)) : [];
+  if (!rows.length) {
+    alert("Seleziona uno o più eventi per correggere il punteggio.");
+    return;
+  }
+  pushVideoUndoSnapshot(true);
+  let currentSet = null;
+  let homeScore = Math.max(0, home);
+  let awayScore = Math.max(0, away);
+  rows.forEach(row => {
+    const ev = row.ev;
+    if (!ev) return;
+    const setVal = parseInt(ev.set || currentSet || 1, 10);
+    if (currentSet === null) {
+      currentSet = setVal;
+    } else if (setVal !== currentSet) {
+      currentSet = setVal;
+      homeScore = Math.max(0, home);
+      awayScore = Math.max(0, away);
+    }
+    ev.homeScore = homeScore;
+    ev.visitorScore = awayScore;
+    const direction = getPointDirectionForScope(ev, "our");
+    if (direction === "for") {
+      homeScore += typeof ev.value === "number" ? ev.value : 1;
+    } else if (direction === "against") {
+      awayScore += typeof ev.value === "number" ? ev.value : 1;
+    }
+  });
+  refreshAfterVideoEdit(false);
+  renderEventsLog({ suppressScroll: true });
+  updateVideoAnalysisOverlay();
+  closeVideoScoreModal();
+}
+if (typeof window !== "undefined") {
+  window.correctVideoScoresFromSelection = correctVideoScoresFromSelection;
+}
 function getFileBasename(name) {
   if (!name) return "";
   const cleaned = String(name).split(/[\\/]/).pop();
@@ -9915,7 +9992,8 @@ function handleVideoSelectionChange(_rows, _ctx, opts) {
   const activeTab = document && document.body ? document.body.dataset.activeTab : "";
   if (state.videoPlayByPlay) {
     if (activeTab !== "video") return;
-    startPlayByPlayFromSelection({ preserveSelection: !!opts.preserveSelection, preservePlayback: true });
+    const preserveSelection = !!opts.preserveSelection || selectedEventIds.size > 1;
+    startPlayByPlayFromSelection({ preserveSelection, preservePlayback: true });
     return;
   }
   handleSeekForSelection("video", { preservePlayback: true, userAction: true });
@@ -18436,6 +18514,40 @@ async function init() {
   if (elBtnCopyFfmpeg) {
     elBtnCopyFfmpeg.addEventListener("click", copyFfmpegFromSelection);
   }
+  if (elBtnFixVideoScore) {
+    if (!elBtnFixVideoScore._fixScoreBound) {
+      const handler = () => openVideoScoreModal();
+      elBtnFixVideoScore.addEventListener("click", handler);
+      elBtnFixVideoScore.addEventListener("pointerup", handler);
+      elBtnFixVideoScore._fixScoreBound = true;
+    }
+  }
+  if (elVideoScoreClose) {
+    elVideoScoreClose.addEventListener("click", closeVideoScoreModal);
+  }
+  if (elVideoScoreCancel) {
+    elVideoScoreCancel.addEventListener("click", closeVideoScoreModal);
+  }
+  if (elVideoScoreBackdrop) {
+    elVideoScoreBackdrop.addEventListener("click", closeVideoScoreModal);
+  }
+  if (elVideoScoreApply) {
+    elVideoScoreApply.addEventListener("click", () => {
+      const homeVal = elVideoScoreHome ? elVideoScoreHome.value : "";
+      const awayVal = elVideoScoreAway ? elVideoScoreAway.value : "";
+      correctVideoScoresFromSelection(homeVal, awayVal);
+    });
+  }
+  [elVideoScoreHome, elVideoScoreAway].forEach(input => {
+    if (!input) return;
+    input.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const homeVal = elVideoScoreHome ? elVideoScoreHome.value : "";
+      const awayVal = elVideoScoreAway ? elVideoScoreAway.value : "";
+      correctVideoScoresFromSelection(homeVal, awayVal);
+    });
+  });
   if (elBtnLoadYoutube) {
     elBtnLoadYoutube.addEventListener("click", () => {
       const url = (elYoutubeUrlInput && elYoutubeUrlInput.value) || "";
