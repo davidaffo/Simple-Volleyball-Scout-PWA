@@ -295,7 +295,6 @@ const elVideoFileLabel = document.getElementById("video-file-label");
 const elVideoSyncLabel = document.getElementById("video-sync-label");
 const elBtnSyncFirstSkill = document.getElementById("btn-sync-first-skill");
 const elBtnCopyFfmpeg = document.getElementById("btn-copy-ffmpeg");
-const elBtnFixVideoScore = document.getElementById("btn-fix-video-score");
 const elVideoPlayByPlayToggle = document.getElementById("video-playbyplay-toggle");
 const elYoutubeUrlInput = document.getElementById("youtube-url-input");
 const elBtnLoadYoutube = document.getElementById("btn-load-youtube");
