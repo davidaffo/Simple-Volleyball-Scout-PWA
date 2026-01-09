@@ -49,7 +49,10 @@
       if (!clean) return;
       const existing = normalizePlayers(getPlayers());
       if (existing.includes(clean)) return;
-      updateRoster(existing.concat(clean));
+      const next = [clean, ...existing];
+      const numbers = Object.assign({}, state[numbersKey] || {});
+      numbers[clean] = "";
+      updateRoster(next, { playerNumbers: numbers });
     }
 
     function removePlayerAtIndex(idx) {

@@ -860,10 +860,16 @@ function buildNumbersForNames(names, provided = {}, previous = state.playerNumbe
     const clean = (value || "").trim();
     return clean && /^[0-9]{1,3}$/.test(clean) ? clean : "";
   };
+  const hasExplicitEmpty = (obj, key) =>
+    obj && Object.prototype.hasOwnProperty.call(obj, key) && String(obj[key]).trim() === "";
   const prev = previous || {};
   const used = new Set();
   const numbers = {};
   names.forEach(name => {
+    if (hasExplicitEmpty(provided, name)) {
+      numbers[name] = "";
+      return;
+    }
     const candidates = [valid(provided[name]), valid(prev[name])].filter(Boolean);
     let chosen = "";
     for (const candidate of candidates) {
@@ -1803,7 +1809,11 @@ function toggleOpponentLiberoAndRefresh(name, active) {
 }
 function renderPlayersManagerList() {
   if (!elPlayersList || !window.TeamUI) return;
-  const ordered = sortNamesByNumber(state.players || [], state.playerNumbers || {});
+  const numbersMap = state.playerNumbers || {};
+  const list = state.players || [];
+  const noNumber = list.filter(name => getPlayerNumberValue(name, numbersMap) === null);
+  const withNumber = list.filter(name => getPlayerNumberValue(name, numbersMap) !== null);
+  const ordered = noNumber.concat(sortNamesByNumber(withNumber, numbersMap));
   const idxMap = new Map((state.players || []).map((name, idx) => [name, idx]));
   window.TeamUI.renderTeamPills({
     container: elPlayersList,
@@ -1829,7 +1839,11 @@ function renderPlayersManagerList() {
 }
 function renderOpponentPlayersList() {
   if (!elOpponentPlayersList || !window.TeamUI) return;
-  const ordered = sortNamesByNumber(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
+  const numbersMap = state.opponentPlayerNumbers || {};
+  const list = state.opponentPlayers || [];
+  const noNumber = list.filter(name => getPlayerNumberValue(name, numbersMap) === null);
+  const withNumber = list.filter(name => getPlayerNumberValue(name, numbersMap) !== null);
+  const ordered = noNumber.concat(sortNamesByNumber(withNumber, numbersMap));
   const idxMap = new Map((state.opponentPlayers || []).map((name, idx) => [name, idx]));
   window.TeamUI.renderTeamPills({
     container: elOpponentPlayersList,
@@ -3599,21 +3613,27 @@ function renderTeamManagerTable() {
   if (elTeamManagerTemplate) {
     elTeamManagerTemplate.classList.toggle("hidden", !isEmpty);
   }
-  const players = (teamManagerState.players || []).slice();
+  const players = (teamManagerState.players || []).map((player, idx) => ({ player, idx }));
   players.sort((a, b) => {
-    const numA = a.number !== undefined && a.number !== null && a.number !== "" ? parseInt(a.number, 10) : null;
-    const numB = b.number !== undefined && b.number !== null && b.number !== "" ? parseInt(b.number, 10) : null;
+    const numA =
+      a.player.number !== undefined && a.player.number !== null && a.player.number !== ""
+        ? parseInt(a.player.number, 10)
+        : null;
+    const numB =
+      b.player.number !== undefined && b.player.number !== null && b.player.number !== ""
+        ? parseInt(b.player.number, 10)
+        : null;
     const cleanA = Number.isFinite(numA) ? numA : null;
     const cleanB = Number.isFinite(numB) ? numB : null;
     if (cleanA === null && cleanB === null) {
-      return (a.name || "").localeCompare(b.name || "", "it", { sensitivity: "base" });
+      return a.idx - b.idx;
     }
-    if (cleanA === null) return 1;
-    if (cleanB === null) return -1;
+    if (cleanA === null) return -1;
+    if (cleanB === null) return 1;
     if (cleanA !== cleanB) return cleanA - cleanB;
-    return (a.name || "").localeCompare(b.name || "", "it", { sensitivity: "base" });
+    return (a.player.name || "").localeCompare(b.player.name || "", "it", { sensitivity: "base" });
   });
-  players.forEach(p => {
+  players.forEach(({ player: p }) => {
     if (!isValidPlayerId(p.id)) {
       p.id = generatePlayerId();
     }
@@ -4650,8 +4670,11 @@ function addPlayerFromInput() {
     alert("Questa giocatrice è già presente nella lista.");
     return;
   }
-  updatePlayersList([...(state.players || []), normalizedName], {
-    askReset: true
+  const nextNumbers = Object.assign({}, state.playerNumbers || {});
+  nextNumbers[normalizedName] = "";
+  updatePlayersList([normalizedName, ...(state.players || [])], {
+    askReset: true,
+    playerNumbers: nextNumbers
   });
   elNewPlayerInput.value = "";
   elNewPlayerInput.focus();

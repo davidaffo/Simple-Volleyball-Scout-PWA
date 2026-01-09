@@ -17105,7 +17105,7 @@ async function init() {
         openTeamManagerModal(teamManagerScope || "our");
         return;
       }
-      teamManagerState.players.push({
+      teamManagerState.players.unshift({
         id: typeof generatePlayerId === "function" ? generatePlayerId() : Date.now() + "_" + Math.random(),
         name: "",
         firstName: "",
