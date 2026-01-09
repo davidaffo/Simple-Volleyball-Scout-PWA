@@ -226,6 +226,7 @@ const elMultiscoutReset = document.getElementById("multiscout-reset");
 const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
 const elBtnFixVideoScore = document.getElementById("btn-fix-video-score");
+const elBtnVideoAddEvent = document.getElementById("btn-video-add-event");
 const elVideoScoreModal = document.getElementById("video-score-modal");
 const elVideoScoreClose = document.getElementById("video-score-close");
 const elVideoScoreCancel = document.getElementById("video-score-cancel");
@@ -7746,6 +7747,60 @@ function correctVideoScoresFromSelection(startHome, startAway) {
 }
 if (typeof window !== "undefined") {
   window.correctVideoScoresFromSelection = correctVideoScoresFromSelection;
+}
+function getSelectedVideoRowForInsert() {
+  const ctx = eventTableContexts.video;
+  if (!ctx || !ctx.rows || !ctx.rows.length) return null;
+  let key = lastSelectedEventId && selectedEventIds.has(lastSelectedEventId) ? lastSelectedEventId : null;
+  if (!key) {
+    const first = ctx.rows.find(r => selectedEventIds.has(r.key));
+    key = first ? first.key : null;
+  }
+  if (!key) return null;
+  return ctx.rows.find(r => r.key === key) || null;
+}
+function addEmptyVideoEventAfterSelection() {
+  const insertRow = getSelectedVideoRowForInsert();
+  if (!insertRow || !insertRow.ev) {
+    alert("Seleziona un evento dopo cui inserire il nuovo.");
+    return;
+  }
+  const baseEv = insertRow.ev;
+  const scope = baseEv.team === "opponent" ? "opponent" : "our";
+  const baseMs = getVideoBaseTimeMs(getVideoSkillEvents());
+  const baseTime =
+    typeof baseEv.videoTime === "number" && isFinite(baseEv.videoTime)
+      ? baseEv.videoTime
+      : computeEventVideoTime(baseEv, baseMs);
+  const nextEvent = {
+    eventId: getNextEventId(),
+    t: new Date().toISOString(),
+    set: baseEv.set || state.currentSet || 1,
+    team: scope === "opponent" ? "opponent" : "our",
+    teamName: getTeamNameForScope(scope),
+    skillId: "manual",
+    code: "",
+    playerName: null,
+    playerIdx: null,
+    rotation: baseEv.rotation || 1,
+    homeScore: baseEv.homeScore || 0,
+    visitorScore: baseEv.visitorScore || 0,
+    durationMs: getDefaultSkillDurationMs(),
+    videoTime: baseTime
+  };
+  const idx =
+    typeof baseEv.eventId !== "undefined"
+      ? (state.events || []).findIndex(ev => ev.eventId === baseEv.eventId)
+      : (state.events || []).indexOf(baseEv);
+  if (!state.events) state.events = [];
+  const insertAt = idx >= 0 ? idx + 1 : state.events.length;
+  state.events.splice(insertAt, 0, nextEvent);
+  saveState({ persistLocal: true });
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog();
+  renderVideoAnalysis();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
 }
 function getFileBasename(name) {
   if (!name) return "";
@@ -18548,6 +18603,9 @@ async function init() {
       correctVideoScoresFromSelection(homeVal, awayVal);
     });
   });
+  if (elBtnVideoAddEvent) {
+    elBtnVideoAddEvent.addEventListener("click", addEmptyVideoEventAfterSelection);
+  }
   if (elBtnLoadYoutube) {
     elBtnLoadYoutube.addEventListener("click", () => {
       const url = (elYoutubeUrlInput && elYoutubeUrlInput.value) || "";
