@@ -4,7 +4,6 @@ Lettura Camp3 ocr
 
 # Minor features
 tasti scorciatoia per modifiche rapide a video
-aggiungi squadra da gestione squadra e non tendina
 aggiungi giocatore deve aggiungere in alto e non in fondo
 incolla elenco deve leggere prima numero poi cognome poi nome
 overlay punteggio e dato nel play by play e nei tagli
