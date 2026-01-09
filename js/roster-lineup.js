@@ -1995,6 +1995,21 @@ function generatePlayerId() {
     return value.toString(16);
   });
 }
+function buildTemplatePlayersDetailed() {
+  return (TEMPLATE_TEAM && Array.isArray(TEMPLATE_TEAM.players) ? TEMPLATE_TEAM.players : []).map((name, idx) => {
+    const parts = splitNameParts(name);
+    return {
+      id: typeof generatePlayerId === "function" ? generatePlayerId() : idx + "_" + name,
+      name,
+      firstName: parts.firstName || "",
+      lastName: parts.lastName || name,
+      number: String(idx + 1),
+      role: TEMPLATE_TEAM.liberos.includes(name) ? "L" : "",
+      isCaptain: idx === 0,
+      out: false
+    };
+  });
+}
 function isValidPlayerId(id) {
   if (!id || typeof id !== "string") return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
@@ -2313,22 +2328,30 @@ function renderTeamsSelect() {
   const names = Object.keys(state.savedTeams || {});
   const prev = elTeamsSelect.value || state.selectedTeam || "";
   elTeamsSelect.innerHTML = "";
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Nuova squadra (vuota)";
-  elTeamsSelect.appendChild(placeholder);
-  names.forEach(name => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    elTeamsSelect.appendChild(opt);
-  });
-  if (prev && names.includes(prev)) {
-    elTeamsSelect.value = prev;
-    state.selectedTeam = prev;
-  } else {
-    elTeamsSelect.value = "";
+  if (names.length === 0) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Nessuna squadra salvata";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    elTeamsSelect.appendChild(placeholder);
+    elTeamsSelect.disabled = true;
     state.selectedTeam = "";
+  } else {
+    elTeamsSelect.disabled = false;
+    names.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      elTeamsSelect.appendChild(opt);
+    });
+    const next = prev && names.includes(prev) ? prev : names[0];
+    elTeamsSelect.value = next;
+    state.selectedTeam = next;
+  }
+  const emptyHint = document.getElementById("teams-empty-hint");
+  if (emptyHint) {
+    emptyHint.classList.toggle("hidden", names.length > 0);
   }
   updateTeamButtonsState();
 }
@@ -2338,28 +2361,27 @@ function renderOpponentTeamsSelect() {
   const names = Object.keys(state.savedTeams || {});
   const prev = elOpponentTeamsSelect.value || state.selectedOpponentTeam || "";
   elOpponentTeamsSelect.innerHTML = "";
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Nuova squadra (vuota)";
-  elOpponentTeamsSelect.appendChild(placeholder);
-  names
-    .filter(name => name !== state.selectedTeam) // non mostrare la stessa squadra
-    .forEach(name => {
+  const available = names.filter(name => name !== state.selectedTeam);
+  if (available.length === 0) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Nessuna squadra disponibile";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    elOpponentTeamsSelect.appendChild(placeholder);
+    elOpponentTeamsSelect.disabled = true;
+    state.selectedOpponentTeam = "";
+  } else {
+    elOpponentTeamsSelect.disabled = false;
+    available.forEach(name => {
       const opt = document.createElement("option");
       opt.value = name;
       opt.textContent = name;
       elOpponentTeamsSelect.appendChild(opt);
     });
-  if (prev && names.includes(prev) && prev !== state.selectedTeam) {
-    elOpponentTeamsSelect.value = prev;
-    state.selectedOpponentTeam = prev;
-  } else {
-    elOpponentTeamsSelect.value = "";
-    state.selectedOpponentTeam = "";
-  }
-  // se non ci sono squadre disponibili, proponi roster di default
-  if (names.length === 0) {
-    applyTemplateRoster("opponent", { askReset: false });
+    const next = prev && available.includes(prev) ? prev : available[0];
+    elOpponentTeamsSelect.value = next;
+    state.selectedOpponentTeam = next;
   }
   updateOpponentTeamButtonsState();
 }
@@ -3043,6 +3065,10 @@ function importTeamFromFile(file) {
 function handleTeamSelectChange() {
   if (!elTeamsSelect) return;
   const selected = elTeamsSelect.value;
+  if (!selected) {
+    updateTeamButtonsState();
+    return;
+  }
   if (state.events && state.events.length > 0 && selected !== state.selectedTeam) {
     alert("Non puoi cambiare squadra con dati match già presenti.");
     renderTeamsSelect();
@@ -3050,19 +3076,6 @@ function handleTeamSelectChange() {
   }
   state.selectedTeam = selected;
   updateTeamButtonsState();
-  if (!selected) {
-    const ok = confirm(
-      "Caricare una nuova squadra precompilata (14 giocatrici e 2 liberi) azzererà roster e statistiche correnti. Procedere?"
-    );
-    if (!ok) {
-      renderTeamsSelect();
-      return;
-    }
-    applyTemplateRoster("our", { askReset: false });
-    renderTeamsSelect();
-    refreshTeamManagerFromSelection();
-    return;
-  }
   const team = loadTeamFromStorage(selected);
   if (!team) {
     alert("Squadra non trovata o corrotta.");
@@ -3110,16 +3123,7 @@ function handleOpponentTeamSelectChange() {
     saveState();
   }
   updateOpponentTeamButtonsState();
-  if (!selected) {
-    const ok = confirm(
-      "Caricare una nuova squadra generica precompilata (14 giocatrici e 2 liberi)?"
-    );
-    if (ok) {
-      applyTemplateRoster("opponent", { askReset: false });
-    }
-    renderOpponentTeamsSelect();
-    return;
-  }
+  if (!selected) return;
   const team = loadOpponentTeamFromStorage(selected);
   if (!team) {
     alert("Squadra avversaria non trovata o corrotta.");
@@ -3326,6 +3330,9 @@ function ensureOpponentSkillConfigDefaults() {
 function updateTeamButtonsState() {
   if (!elTeamsSelect) return;
   const selected = elTeamsSelect.value || "";
+  if (typeof updateMatchStatusUI === "function") {
+    updateMatchStatusUI();
+  }
   if (elBtnDeleteTeam) {
     elBtnDeleteTeam.disabled = !selected;
   }
@@ -4087,11 +4094,16 @@ function openTeamManagerModal(scope = "our") {
 }
 function openNewTeamManager() {
   teamManagerScope = "our";
+  const players = buildTemplatePlayersDetailed();
+  const defaultLineup =
+    typeof buildRoleBasedDefaultLineup === "function"
+      ? buildRoleBasedDefaultLineup(TEMPLATE_TEAM.players)
+      : TEMPLATE_TEAM.players.slice(0, 6);
   teamManagerState = {
     name: "",
     staff: Object.assign({}, DEFAULT_STAFF),
-    players: [],
-    defaultLineup: [],
+    players: players,
+    defaultLineup: defaultLineup,
     defaultRotation: 1,
     preferredLibero: ""
   };
@@ -4219,6 +4231,10 @@ function saveTeamManagerPayload(options = {}) {
       syncTeamsFromStorage();
       state.selectedTeam = nextName;
       renderTeamsSelect();
+      if (typeof renderTeamsManagerList === "function") {
+        teamsManagerSelectedName = nextName;
+        renderTeamsManagerList();
+      }
     }
   } else {
     if (isOpponent) {

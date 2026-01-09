@@ -10661,8 +10661,14 @@ function restoreVideoClock(snapshot) {
   state.videoClock.startMs = snapshot.startMs || Date.now();
   state.videoClock.currentSeconds = snapshot.currentSeconds || 0;
 }
+function isTeamReadyForScout() {
+  const teams = Object.keys(state.savedTeams || {});
+  const selected = (state.selectedTeam || "").trim();
+  return teams.length > 0 && !!selected && teams.includes(selected);
+}
 function updateMatchStatusUI() {
   const finished = !!state.matchFinished;
+  const teamReady = isTeamReadyForScout();
   const label = finished ? "Riprendi partita" : "Pausa/Termina";
   const mainBtns = [elBtnEndMatch, elBtnEndMatchModal].filter(Boolean);
   mainBtns.forEach(btn => {
@@ -10672,8 +10678,9 @@ function updateMatchStatusUI() {
     btn.classList.toggle("primary", finished);
   });
   if (!nextSetModalOpen) {
-    setScoutControlsDisabled(finished);
+    setScoutControlsDisabled(finished || !teamReady);
   }
+  document.body.dataset.teamReady = teamReady ? "true" : "false";
   document.body.dataset.matchFinished = finished ? "true" : "false";
 }
 function setScoutControlsDisabled(disabled) {
@@ -17168,19 +17175,22 @@ async function init() {
   }
   if (elTeamManagerTemplate) {
     elTeamManagerTemplate.addEventListener("click", () => {
-      const playersDetailed = TEMPLATE_TEAM.players.map((name, idx) => {
-        const parts = splitNameParts(name);
-        return {
-          id: typeof generatePlayerId === "function" ? generatePlayerId() : idx + "_" + name,
-          name,
-          firstName: parts.firstName || "",
-          lastName: parts.lastName || name,
-          number: String(idx + 1),
-          role: TEMPLATE_TEAM.liberos.includes(name) ? "L" : "",
-          isCaptain: idx === 0,
-          out: false
-        };
-      });
+      const playersDetailed =
+        typeof buildTemplatePlayersDetailed === "function"
+          ? buildTemplatePlayersDetailed()
+          : TEMPLATE_TEAM.players.map((name, idx) => {
+              const parts = splitNameParts(name);
+              return {
+                id: typeof generatePlayerId === "function" ? generatePlayerId() : idx + "_" + name,
+                name,
+                firstName: parts.firstName || "",
+                lastName: parts.lastName || name,
+                number: String(idx + 1),
+                role: TEMPLATE_TEAM.liberos.includes(name) ? "L" : "",
+                isCaptain: idx === 0,
+                out: false
+              };
+            });
       teamManagerState = {
         name: teamManagerScope === "opponent" ? state.selectedOpponentTeam || "Avversaria" : state.selectedTeam || "Squadra",
         staff: Object.assign({}, DEFAULT_STAFF),

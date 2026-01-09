@@ -12,9 +12,9 @@ crea stampa tipo foglio gara
 
 
 # Bugfix
-La partita parte con 5 cambi
-appare muro e no muro solo su alcune giocatrici in modalita manuale
-avvio set non fa partire battuta ma fa partire in modalita manuale
+La partita parte con 5 cambi (ma solo in alcuni casi)
+appare muro e no muro solo su alcune giocatrici in modalita manuale (solo in alcuni casi)
+avvio set non fa partire battuta ma fa partire in modalita manuale (solo in alcuni casi)
 Importazione match sembra avere problemi
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
