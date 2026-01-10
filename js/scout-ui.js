@@ -4795,8 +4795,9 @@ function attachModalCloseHandlers() {
     );
   }
 }
-function applyPlayersFromTextarea() {
-  if (!elPlayersInput) return;
+function applyPlayersFromTextarea(options = {}) {
+  if (!elPlayersInput) return false;
+  const { mode = "append" } = options;
   const raw = elPlayersInput.value;
   const parsed = parseDelimitedTeamText(raw);
   const currentPlayers = normalizePlayers(state.players || []);
@@ -4806,12 +4807,33 @@ function applyPlayersFromTextarea() {
         .split("\n")
         .map(l => l.trim())
         .filter(l => l.length > 0);
+  if (appendPlayers.length === 0) {
+    alert("Nessuna giocatrice valida trovata.");
+    return false;
+  }
+  const isReplace = mode === "replace";
+  if (isReplace) {
+    const ok = confirm(
+      "Sostituire tutta la squadra con l'elenco incollato?\nVerranno rimossi roster, liberi e numeri attuali."
+    );
+    if (!ok) return false;
+    updatePlayersList(appendPlayers, {
+      askReset: false,
+      preserveCourt: false,
+      liberos: (parsed && parsed.liberos) || [],
+      playerNumbers: (parsed && parsed.numbers) || {}
+    });
+    if (typeof refreshTeamManagerPlayersFromState === "function") {
+      refreshTeamManagerPlayersFromState();
+    }
+    return true;
+  }
   const mergedPlayers = currentPlayers.concat(
     appendPlayers.filter(name => !currentPlayers.some(p => p.toLowerCase() === name.toLowerCase()))
   );
   if (mergedPlayers.length === 0) {
     alert("Nessuna giocatrice valida trovata.");
-    return;
+    return false;
   }
   if (parsed && parsed.players && parsed.players.length > 0) {
     updatePlayersList(mergedPlayers, {
@@ -4823,12 +4845,13 @@ function applyPlayersFromTextarea() {
     if (typeof refreshTeamManagerPlayersFromState === "function") {
       refreshTeamManagerPlayersFromState();
     }
-    return;
+    return true;
   }
   updatePlayersList(mergedPlayers, { askReset: false, preserveCourt: true });
   if (typeof refreshTeamManagerPlayersFromState === "function") {
     refreshTeamManagerPlayersFromState();
   }
+  return true;
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
@@ -17214,10 +17237,22 @@ async function init() {
   };
   if (elBtnApplyPlayers) {
     elBtnApplyPlayers.addEventListener("click", () => {
-      applyPlayersFromTextarea();
-      closePastePlayersModal();
-      if (elPlayersInput) {
-        elPlayersInput.value = "";
+      if (applyPlayersFromTextarea({ mode: "append" })) {
+        closePastePlayersModal();
+        if (elPlayersInput) {
+          elPlayersInput.value = "";
+        }
+      }
+    });
+  }
+  const elBtnReplacePlayers = document.getElementById("btn-replace-players");
+  if (elBtnReplacePlayers) {
+    elBtnReplacePlayers.addEventListener("click", () => {
+      if (applyPlayersFromTextarea({ mode: "replace" })) {
+        closePastePlayersModal();
+        if (elPlayersInput) {
+          elPlayersInput.value = "";
+        }
       }
     });
   }

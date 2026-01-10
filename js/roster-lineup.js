@@ -3006,15 +3006,37 @@ function parseDelimitedTeamText(text) {
     let liberoFlag = "";
     const parts = rawLine.split(/[\t;,]+/).map(p => p.trim()).filter(Boolean);
     if (parts.length >= 2) {
-      name = parts[0];
-      number = parts[1];
-      liberoFlag = parts[2] || "";
+      const isNumberFirst = /^[0-9]{1,3}$/.test(parts[0]);
+      const isNumberSecond = /^[0-9]{1,3}$/.test(parts[1]);
+      if (isNumberFirst && !isNumberSecond) {
+        number = parts[0];
+        let tail = parts.slice(1);
+        const lastPart = tail[tail.length - 1] || "";
+        if (lastPart && lastPart.toLowerCase() === "l") {
+          liberoFlag = lastPart;
+          tail = tail.slice(0, -1);
+        }
+        name = tail.join(" ").trim();
+      } else if (isNumberSecond) {
+        name = parts[0];
+        number = parts[1];
+        liberoFlag = parts[2] || "";
+      } else {
+        name = parts.join(" ").trim();
+      }
     } else {
-      const match = rawLine.match(/^(.+?)\s+([0-9]{1,3})(?:\s+([Ll]))?$/);
+      let match = rawLine.match(/^([0-9]{1,3})\s+(.+?)(?:\s+([Ll]))?$/);
       if (match) {
-        name = match[1].trim();
-        number = match[2].trim();
+        number = match[1].trim();
+        name = match[2].trim();
         liberoFlag = (match[3] || "").trim();
+      } else {
+        match = rawLine.match(/^(.+?)\s+([0-9]{1,3})(?:\s+([Ll]))?$/);
+        if (match) {
+          name = match[1].trim();
+          number = match[2].trim();
+          liberoFlag = (match[3] || "").trim();
+        }
       }
     }
     const cleanName = normalizePlayers([name])[0];

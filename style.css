@@ -5860,3 +5860,9 @@ body.force-mobile .attack-trajectory-stage {
     min-height: 90px;
   }
 }
+#paste-players-modal {
+  z-index: 3100 !important;
+}
+#paste-players-modal .settings-modal__content {
+  z-index: 1;
+}

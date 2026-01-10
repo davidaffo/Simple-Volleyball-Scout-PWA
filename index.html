@@ -1410,13 +1410,14 @@
         <button class="pill-remove" aria-label="Chiudi" data-close-paste>✕</button>
       </div>
       <div class="settings-modal__body">
-        <label for="players-input">Formato: Cognome Nome;Numero;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
+        <label for="players-input">Formato: Numero;Cognome;Nome;L (L opzionale per il libero). Sono accettati anche tab o spazi.</label>
         <textarea id="players-input" placeholder="Esempi:
-Rossi Martina;12;L
-Verdi Sara;7
-Bianchi Laura 18"></textarea>
+12;Rossi;Martina;L
+7;Verdi;Sara
+18 Bianchi Laura"></textarea>
         <div class="controls-row">
           <button id="btn-apply-players">Aggiungi elenco</button>
+          <button id="btn-replace-players" class="danger">Sostituisci squadra</button>
           <button class="secondary" data-close-paste>Annulla</button>
         </div>
       </div>
