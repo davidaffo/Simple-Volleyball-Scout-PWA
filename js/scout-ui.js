@@ -8707,6 +8707,61 @@ function clearYoutubeSource() {
   }
   currentYoutubeIdScout = "";
 }
+function clearLoadedVideo() {
+  const hasVideo =
+    (state.video && (state.video.youtubeId || state.video.youtubeUrl || state.video.fileName)) ||
+    videoObjectUrl ||
+    (elAnalysisVideo && elAnalysisVideo.getAttribute("src")) ||
+    (elAnalysisVideoScout && elAnalysisVideoScout.getAttribute("src"));
+  if (!hasVideo) {
+    alert("Nessun video da rimuovere.");
+    return;
+  }
+  if (videoObjectUrl) {
+    try {
+      URL.revokeObjectURL(videoObjectUrl);
+    } catch (_) {
+      // ignore
+    }
+    videoObjectUrl = "";
+  }
+  clearCachedLocalVideo();
+  clearYoutubeSource();
+  if (elAnalysisVideo) {
+    elAnalysisVideo.pause();
+    elAnalysisVideo.removeAttribute("src");
+    elAnalysisVideo.load();
+  }
+  if (elAnalysisVideoScout) {
+    elAnalysisVideoScout.pause();
+    elAnalysisVideoScout.removeAttribute("src");
+    elAnalysisVideoScout.load();
+  }
+  state.video = state.video || {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
+  state.video.offsetSeconds = 0;
+  state.video.fileName = "";
+  state.video.youtubeId = "";
+  state.video.youtubeUrl = "";
+  state.video.lastPlaybackSeconds = 0;
+  state.videoClock = {
+    paused: true,
+    pausedAtMs: null,
+    pausedAccumMs: 0,
+    startMs: Date.now(),
+    currentSeconds: 0
+  };
+  if (elVideoFileInput) elVideoFileInput.value = "";
+  if (elVideoFileInputScout) elVideoFileInputScout.value = "";
+  syncYoutubeUrlInputs("");
+  saveState();
+  renderVideoAnalysis();
+}
 async function clearCachedLocalVideo() {
   try {
     if ("caches" in window) {
@@ -18646,6 +18701,9 @@ async function init() {
       const url = (elYoutubeUrlInput && elYoutubeUrlInput.value) || "";
       handleYoutubeUrlLoad(url);
     });
+  }
+  if (elBtnClearVideo) {
+    elBtnClearVideo.addEventListener("click", clearLoadedVideo);
   }
   if (elBtnLoadYoutubeScout) {
     elBtnLoadYoutubeScout.addEventListener("click", () => {
