@@ -5866,3 +5866,10 @@ body.force-mobile .attack-trajectory-stage {
 #paste-players-modal .settings-modal__content {
   z-index: 1;
 }
+#paste-players-modal .settings-modal__content {
+  width: min(680px, calc(100% - 1.5rem));
+  max-height: min(92vh, 820px);
+}
+#paste-players-modal #players-input {
+  min-height: 260px;
+}

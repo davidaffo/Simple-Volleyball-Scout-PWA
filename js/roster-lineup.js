@@ -585,6 +585,27 @@ function normalizePlayers(list) {
   });
   return names;
 }
+function normalizePlayerNameCase(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "";
+  const capitalize = chunk => {
+    if (!chunk) return "";
+    const lower = chunk.toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  };
+  return trimmed
+    .split(/\s+/)
+    .map(part =>
+      part
+        .split(/([-'’])/)
+        .map(token => {
+          if (token === "-" || token === "'" || token === "’") return token;
+          return capitalize(token);
+        })
+        .join("")
+    )
+    .join(" ");
+}
 function splitNameParts(fullName = "") {
   const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) {
@@ -3039,7 +3060,7 @@ function parseDelimitedTeamText(text) {
         }
       }
     }
-    const cleanName = normalizePlayers([name])[0];
+    const cleanName = normalizePlayers([normalizePlayerNameCase(name)])[0];
     if (!cleanName) return;
     players.push(cleanName);
     if (number && /^[0-9]{1,3}$/.test(number)) {
