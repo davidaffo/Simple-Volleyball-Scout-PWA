@@ -264,6 +264,7 @@ const elSetStartModalTitle = document.getElementById("set-start-modal-title");
 const elSetStartModalBody = document.getElementById("set-start-modal-body");
 const elSetStartModalClose = document.getElementById("set-start-modal-close");
 const elSetStartModalCancel = document.getElementById("set-start-modal-cancel");
+const elSetStartModalSave = document.getElementById("set-start-modal-save");
 let teamsManagerSelectedName = "";
 const courtModalElements = [];
 let courtOverlayEl = null;
@@ -387,6 +388,7 @@ let lineupModalContext = "match";
 let setStartEditSetNum = null;
 let setStartModalSetNum = null;
 let setStartModalScope = "our";
+let setStartDraft = null;
 let nextSetDraft = null;
 let nextSetModalOpen = false;
 let nextSetDragName = "";
@@ -2110,6 +2112,7 @@ function renderSetStartModal() {
   const setNum = setStartModalSetNum || state.currentSet || 1;
   const scope = setStartModalScope || "our";
   ensureSetStartSnapshot(setNum);
+  const draft = ensureSetStartDraft(setNum, scope);
   if (elSetStartModalTitle) {
     const label = "Formazione di partenza S" + String(setNum);
     elSetStartModalTitle.textContent = scope === "opponent" ? label + " avversaria" : label;
@@ -2146,9 +2149,10 @@ function renderSetStartModal() {
       select.appendChild(opt);
     }
     const key = makePlayerNameKey(name);
+    const draftEntry = draft && draft.selections ? draft.selections.get(key) : null;
     const pos = startInfo && startInfo.positions ? startInfo.positions.get(key) : null;
     const isSub = startInfo && startInfo.subsIn ? startInfo.subsIn.has(key) : false;
-    select.value = pos ? String(pos) : isSub ? "in" : "";
+    select.value = draftEntry ? draftEntry.value || "" : pos ? String(pos) : isSub ? "in" : "";
     select.addEventListener("change", () => {
       updateSetStartSelection(setNum, scope, name, select.value);
       renderSetStartModal();
@@ -2159,10 +2163,75 @@ function renderSetStartModal() {
   elSetStartModalBody.innerHTML = "";
   elSetStartModalBody.appendChild(list);
 }
+function buildSetStartDraft(setNum, scope) {
+  const startInfo = buildSetStartInfoList([setNum], scope)[0];
+  const entries =
+    scope === "opponent" ? getSortedPlayerEntriesForScope(scope) : getSortedPlayerEntries();
+  const selections = new Map();
+  entries.forEach(({ name }) => {
+    const key = makePlayerNameKey(name);
+    const pos = startInfo && startInfo.positions ? startInfo.positions.get(key) : null;
+    const isSub = startInfo && startInfo.subsIn ? startInfo.subsIn.has(key) : false;
+    selections.set(key, { name, value: pos ? String(pos) : isSub ? "in" : "" });
+  });
+  return { setNum, scope, selections };
+}
+function ensureSetStartDraft(setNum, scope) {
+  if (setStartDraft && setStartDraft.setNum === setNum && setStartDraft.scope === scope) {
+    return setStartDraft;
+  }
+  setStartDraft = buildSetStartDraft(setNum, scope);
+  return setStartDraft;
+}
+function updateSetStartSelection(setNum, scope, playerName, value) {
+  const draft = ensureSetStartDraft(setNum, scope);
+  const key = makePlayerNameKey(playerName);
+  const nextValue = value || "";
+  const entry = draft.selections.get(key) || { name: playerName, value: "" };
+  entry.value = nextValue;
+  draft.selections.set(key, entry);
+  if (nextValue && nextValue !== "in") {
+    draft.selections.forEach((other, otherKey) => {
+      if (otherKey === key) return;
+      if (other.value === nextValue) {
+        other.value = "";
+      }
+    });
+  }
+}
+function applySetStartDraft() {
+  if (!setStartDraft) return;
+  const setNum = setStartDraft.setNum;
+  const scope = setStartDraft.scope;
+  ensureSetStartSnapshot(setNum);
+  const entry = state.setStarts && state.setStarts[setNum];
+  if (!entry) return;
+  const scopeEntry = scope === "opponent" ? entry.opponent : entry.our;
+  if (!scopeEntry) return;
+  const nextCourt = Array.from({ length: 6 }, () => ({ main: "", replaced: "" }));
+  const subsIn = [];
+  setStartDraft.selections.forEach(item => {
+    const raw = item && item.value ? String(item.value) : "";
+    if (!raw) return;
+    if (raw === "in") {
+      subsIn.push(makePlayerNameKey(item.name));
+      return;
+    }
+    const pos = parseInt(raw, 10);
+    if (!pos || pos < 1 || pos > 6) return;
+    nextCourt[pos - 1] = { main: item.name, replaced: "" };
+  });
+  scopeEntry.court = nextCourt;
+  scopeEntry.subsIn = subsIn;
+  saveState({ persistLocal: true });
+  renderAggregatedTable();
+  closeSetStartModal();
+}
 function openSetStartEditor(setNum, scope = "our") {
   const targetSet = parseInt(setNum, 10) || state.currentSet || 1;
   setStartModalSetNum = targetSet;
   setStartModalScope = scope === "opponent" ? "opponent" : "our";
+  ensureSetStartDraft(targetSet, setStartModalScope);
   renderSetStartModal();
   if (elSetStartModal) {
     elSetStartModal.classList.remove("hidden");
@@ -2187,6 +2256,7 @@ function closeSetStartModal() {
   }
   setStartModalSetNum = null;
   setStartModalScope = "our";
+  setStartDraft = null;
   setModalOpenState(false, true);
 }
 function saveLineupModal({ countSubstitutions = false } = {}) {
@@ -3571,6 +3641,9 @@ function syncOpponentSettingsUI() {
   if (elUseOpponentTeamToggle) elUseOpponentTeamToggle.checked = enabled;
   if (elOpponentTeamSettings) {
     elOpponentTeamSettings.classList.toggle("hidden", !enabled);
+  }
+  if (elSingleTeamScoreActions) {
+    elSingleTeamScoreActions.classList.toggle("hidden", enabled);
   }
   const opponentPanel = document.querySelector('[data-team-panel="opponent"]');
   if (opponentPanel) {
@@ -6760,6 +6833,12 @@ function buildSetStartInfoList(setNumbers, scope) {
   });
   return (setNumbers || []).map(setNum => {
     const entry = getSetStartEntryForScope(setNum, scope);
+    const fullEntry = state.setStarts && state.setStarts[setNum];
+    const scopeEntry = fullEntry
+      ? scope === "opponent"
+        ? fullEntry.opponent
+        : fullEntry.our
+      : null;
     const positions = new Map();
     if (entry && Array.isArray(entry.court)) {
       entry.court.forEach((slot, idx) => {
@@ -6779,7 +6858,13 @@ function buildSetStartInfoList(setNumbers, scope) {
         }
       }
     }
-    const subsIn = substitutionsBySet.get(setNum) || new Set();
+    const subsIn = new Set(substitutionsBySet.get(setNum) || []);
+    if (scopeEntry && Array.isArray(scopeEntry.subsIn)) {
+      scopeEntry.subsIn.forEach(key => {
+        if (!key) return;
+        subsIn.add(String(key));
+      });
+    }
     return { setNum, positions, setterPos, subsIn };
   });
 }
@@ -10884,12 +10969,20 @@ function computePlayerPointsMap(events = state.events || [], scope = "our") {
 function computePlayerErrorsMap(events = state.events || []) {
   const map = {};
   (events || []).forEach(ev => {
-    if (typeof ev.playerIdx !== "number") return;
+    const rawIdx = ev && ev.playerIdx;
+    const idx =
+      typeof rawIdx === "number"
+        ? rawIdx
+        : typeof rawIdx === "string" && rawIdx.trim() !== ""
+          ? parseInt(rawIdx, 10)
+          : null;
+    if (idx === null || isNaN(idx)) return;
     const val = typeof ev.value === "number" ? ev.value : 1;
-    const isManualError = ev.skillId === "manual" && ev.code === "error";
-    const isBlockError = ev.skillId === "block" && ev.code === "/";
-    if (!isManualError && !isBlockError) return;
-    map[ev.playerIdx] = (map[ev.playerIdx] || 0) + Math.max(0, val);
+    const code = ev && ev.code;
+    const isErrorButton = code === "error" || code === "team-error";
+    const isBlockError = ev.skillId === "block" && code === "/";
+    if (!isErrorButton && !isBlockError) return;
+    map[idx] = (map[idx] || 0) + Math.max(0, val);
   });
   return map;
 }
@@ -11143,8 +11236,14 @@ function handleTeamPoint(scope = "our") {
 }
 function handleOpponentErrorPoint() {
   state.skillFlowOverride = null;
-  addManualPoint("for", 1, "opp-error", null, getTeamNameForScope("opponent"), null, "opponent");
-  updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
+  const scope = state.useOpponentTeam ? "opponent" : "our";
+  const label = state.useOpponentTeam ? getTeamNameForScope("opponent") : "Avversaria";
+  addManualPoint("for", 1, "opp-error", null, label, null, scope);
+  if (!state.useOpponentTeam && state.predictiveSkillFlow) {
+    forceNextSkill("serve", "our");
+  } else {
+    updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
+  }
 }
 function addPlayerError(playerIdx, playerName, errorType = null, scope = "our") {
   if (state.matchFinished) {
@@ -11166,8 +11265,14 @@ function handleTeamError(errorType = null, scope = "our") {
 }
 function handleOpponentPoint() {
   state.skillFlowOverride = null;
-  addManualPoint("against", 1, "opp-point", null, getTeamNameForScope("opponent"), null, "opponent");
-  updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
+  const scope = state.useOpponentTeam ? "opponent" : "our";
+  const label = state.useOpponentTeam ? getTeamNameForScope("opponent") : "Avversaria";
+  addManualPoint("against", 1, "opp-point", null, label, null, scope);
+  if (!state.useOpponentTeam && state.predictiveSkillFlow) {
+    forceNextSkill("pass", "our");
+  } else {
+    updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
+  }
 }
 function snapshotSkillClock() {
   ensureSkillClock();
@@ -18730,12 +18835,16 @@ async function init() {
     const onPointerDown = e => {
       const pos = getPos(e);
       if (!pos || !elAttackTrajectoryCanvas) return;
+      if (e.cancelable) e.preventDefault();
+      if (typeof e.stopPropagation === "function") e.stopPropagation();
+      if (typeof elAttackTrajectoryCanvas.setPointerCapture === "function" && e.pointerId != null) {
+        elAttackTrajectoryCanvas.setPointerCapture(e.pointerId);
+      }
       if (trajectoryMode === "serve-start") {
         trajectoryStart = pos;
         trajectoryEnd = null;
         trajectoryDragging = true;
         drawTrajectory();
-        e.preventDefault();
         return;
       }
       if (trajectoryMode === "serve-end") {
@@ -18743,7 +18852,6 @@ async function init() {
         trajectoryEnd = pos;
         trajectoryDragging = true;
         drawTrajectory();
-        e.preventDefault();
         return;
       }
       if (state.attackTrajectorySimplified) {
@@ -18757,7 +18865,6 @@ async function init() {
         trajectoryDragging = true;
         trajectoryEnd = pos;
         drawTrajectory(pos);
-        e.preventDefault();
         return;
       }
       if (!trajectoryStart || trajectoryEnd) {
@@ -18799,52 +18906,64 @@ async function init() {
       }
       trajectoryDragging = true;
       drawTrajectory();
-      e.preventDefault();
     };
     const onPointerMove = e => {
       if (!trajectoryDragging || (!trajectoryStart && !trajectoryEnd)) return;
       const pos = getPos(e);
       if (!pos) return;
+      if (e.cancelable) e.preventDefault();
+      if (typeof e.stopPropagation === "function") e.stopPropagation();
       if (trajectoryMode === "serve-start") {
         trajectoryStart = pos;
         drawTrajectory();
-        e.preventDefault();
         return;
       }
       if (trajectoryMode === "serve-end") {
         trajectoryEnd = pos;
         drawTrajectory();
-        e.preventDefault();
         return;
       }
       drawTrajectory(pos);
-      e.preventDefault();
     };
     const onPointerUp = e => {
       if (!trajectoryDragging || (!trajectoryStart && !trajectoryEnd)) return;
       const pos = getPos(e);
       trajectoryDragging = false;
+      if (e.cancelable) e.preventDefault();
+      if (typeof e.stopPropagation === "function") e.stopPropagation();
+      if (
+        elAttackTrajectoryCanvas &&
+        typeof elAttackTrajectoryCanvas.releasePointerCapture === "function" &&
+        e.pointerId != null
+      ) {
+        elAttackTrajectoryCanvas.releasePointerCapture(e.pointerId);
+      }
       if (!pos) return;
       if (trajectoryMode === "serve-start") {
         trajectoryStart = pos;
         drawTrajectory();
-        e.preventDefault();
         confirmCurrentTrajectory();
         return;
       }
       if (trajectoryMode === "serve-end") {
         trajectoryEnd = pos;
         drawTrajectory();
-        e.preventDefault();
         confirmCurrentTrajectory();
         return;
       }
       trajectoryEnd = pos;
       drawTrajectory();
-      e.preventDefault();
       confirmCurrentTrajectory();
     };
     if (elAttackTrajectoryCanvas) {
+      elAttackTrajectoryCanvas.addEventListener("click", e => {
+        if (e.cancelable) e.preventDefault();
+        if (typeof e.stopPropagation === "function") e.stopPropagation();
+      });
+      elAttackTrajectoryCanvas.addEventListener("contextmenu", e => {
+        if (e.cancelable) e.preventDefault();
+        if (typeof e.stopPropagation === "function") e.stopPropagation();
+      });
       elAttackTrajectoryCanvas.addEventListener("pointerdown", onPointerDown);
       elAttackTrajectoryCanvas.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
@@ -19114,6 +19233,12 @@ async function init() {
   if (elBtnScoreOppPoint) {
     elBtnScoreOppPoint.addEventListener("click", handleOpponentPoint);
   }
+  if (elBtnScoreOppErrorSingle) {
+    elBtnScoreOppErrorSingle.addEventListener("click", handleOpponentErrorPoint);
+  }
+  if (elBtnScoreOppPointSingle) {
+    elBtnScoreOppPointSingle.addEventListener("click", handleOpponentPoint);
+  }
   if (elBtnNextSet) {
     elBtnNextSet.addEventListener("click", () => openNextSetModal((state.currentSet || 1) + 1));
   }
@@ -19122,6 +19247,15 @@ async function init() {
   }
   if (elBtnScoreTeamErrorModal) {
     elBtnScoreTeamErrorModal.addEventListener("click", openErrorModal);
+  }
+  if (elSetStartModalClose) {
+    elSetStartModalClose.addEventListener("click", closeSetStartModal);
+  }
+  if (elSetStartModalCancel) {
+    elSetStartModalCancel.addEventListener("click", closeSetStartModal);
+  }
+  if (elSetStartModalSave) {
+    elSetStartModalSave.addEventListener("click", applySetStartDraft);
   }
   if (elBtnNextSetModal) {
     elBtnNextSetModal.addEventListener("click", () => openNextSetModal((state.currentSet || 1) + 1));
@@ -19405,7 +19539,7 @@ async function init() {
       openAttackTypeModal();
       return;
     }
-    if (e.key === "m" || e.key === "M") {
+    if (e.key === "n" || e.key === "N") {
       e.preventDefault();
       openBlockNumberModal();
       return;

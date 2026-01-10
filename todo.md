@@ -9,6 +9,7 @@ Selezionare la squadra anche da gestione match
 
 
 # Bugfix
+Anulla ultimo fa tornare il centrale in campo
 La partita parte con 5 cambi (ma solo in alcuni casi)
 appare muro e no muro solo su alcune giocatrici in modalita manuale (solo in alcuni casi)
 avvio set non fa partire battuta ma fa partire in modalita manuale (solo in alcuni casi)

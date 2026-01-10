@@ -370,7 +370,7 @@
             <span>Rete</span>
             <button id="btn-attack-base" class="small secondary net-action-btn" type="button">Base (K)</button>
             <button id="btn-attack-type" class="small secondary net-action-btn" type="button">Tipo attacco (T)</button>
-            <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (M)</button>
+            <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (N)</button>
           </div>
           <div class="team-panel team-panel--near team-panel--home" data-team-panel="home">
             <div class="team-field-box team-field-box--home">
@@ -395,6 +395,10 @@
                 <div class="score-actions court-game-actions">
                   <button id="btn-score-team-point" class="small">Punto</button>
                   <button id="btn-score-team-error" class="small danger">Errore</button>
+                  <div id="single-team-score-actions" class="score-actions-inline hidden">
+                    <button id="btn-score-opp-point-single" class="small success">Punto avv</button>
+                    <button id="btn-score-opp-error-single" class="small danger">Errore avv</button>
+                  </div>
                   <button id="btn-freeball" class="secondary small">Freeball</button>
                 </div>
                 <div class="team-controls-panel">
@@ -1550,6 +1554,7 @@
         <div id="set-start-modal-body" class="skill-modal__body"></div>
         <div class="skill-modal__foot">
           <button id="set-start-modal-cancel" class="secondary">Chiudi</button>
+          <button id="set-start-modal-save" class="primary" type="button">Salva</button>
         </div>
       </div>
     </div>
