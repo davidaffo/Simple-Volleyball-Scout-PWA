@@ -16751,6 +16751,69 @@ function resetMatch() {
     window.location.reload();
   }, 200);
 }
+function deleteIndexedDbByName(name) {
+  if (!name || !("indexedDB" in window)) return Promise.resolve(false);
+  return new Promise(resolve => {
+    try {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => resolve(false);
+      request.onblocked = () => resolve(false);
+    } catch (_) {
+      resolve(false);
+    }
+  });
+}
+async function resetAppData() {
+  const ok = confirm(
+    "Questa operazione elimina tutti i dati dell'app (squadre, match, impostazioni, video). Procedere?"
+  );
+  if (!ok) return;
+  if ("serviceWorker" in navigator) {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      regs.forEach(reg => reg.unregister());
+    } catch (_) {
+      // ignore
+    }
+  }
+  if (typeof clearCachedLocalVideo === "function") {
+    await clearCachedLocalVideo();
+  }
+  if ("caches" in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(key => caches.delete(key)));
+    } catch (_) {
+      // ignore
+    }
+  }
+  try {
+    const rootPrefix = typeof PERSISTENT_DB_NAME !== "undefined" ? PERSISTENT_DB_NAME + "/" : null;
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key === STORAGE_KEY) {
+        keys.push(key);
+        continue;
+      }
+      if (rootPrefix && key.startsWith(rootPrefix)) {
+        keys.push(key);
+      }
+    }
+    keys.forEach(key => localStorage.removeItem(key));
+  } catch (_) {
+    // ignore
+  }
+  if (typeof STATE_DB_NAME !== "undefined") {
+    await deleteIndexedDbByName(STATE_DB_NAME);
+  }
+  if (typeof LOCAL_VIDEO_DB !== "undefined") {
+    await deleteIndexedDbByName(LOCAL_VIDEO_DB);
+  }
+  window.location.reload();
+}
 function undoLastEvent() {
   if (!state.events || state.events.length === 0) {
     alert("Non ci sono eventi da annullare.");
@@ -18680,6 +18743,7 @@ async function init() {
     });
   }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
+  if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   // pulsanti lineup mobile rimossi
   const elMobileMenuBtn = document.getElementById("btn-open-menu-mobile");

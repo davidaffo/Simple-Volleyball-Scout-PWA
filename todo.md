@@ -5,6 +5,7 @@ Lettura Camp3 ocr
 # Minor features
 tasti scorciatoia per modifiche rapide a video
 crea stampa tipo foglio gara
+Selezionare la squadra anche da gestione match
 
 
 # Bugfix

@@ -117,6 +117,7 @@ const elOpponentLiberoTags = document.getElementById("opponent-libero-tags");
 const elBtnExportPdf = document.getElementById("btn-export-pdf");
 const elBtnExportHtml = document.getElementById("btn-export-html");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
+const elBtnResetApp = document.getElementById("btn-reset-app");
 const elBtnExportMatch = document.getElementById("btn-export-match");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
