@@ -143,6 +143,12 @@ const elDefaultLineupRotateCcw = document.getElementById("default-lineup-rotate-
 const elDefaultLineupPreferredLibero = document.getElementById("default-lineup-preferred-libero");
 let defaultLineupDragName = "";
 let defaultLineupDragAt = 0;
+let defaultLineupTouchName = "";
+let defaultLineupTouchFromIdx = null;
+let defaultLineupTouchOverIdx = -1;
+let defaultLineupTouchStart = { x: 0, y: 0 };
+let defaultLineupTouchListenersAttached = false;
+let defaultLineupTouchGhost = null;
 const elTeamManagerAdd = document.getElementById("team-manager-add");
 const elTeamManagerSave = document.getElementById("team-manager-save");
 const elTeamManagerCancel = document.getElementById("team-manager-cancel");
@@ -3915,6 +3921,113 @@ function clearDefaultLineupSlot(slotIdx) {
   teamManagerState.defaultLineup = current;
   renderDefaultLineupEditor();
 }
+function ensureDefaultLineupTouchListeners() {
+  if (defaultLineupTouchListenersAttached) return;
+  document.addEventListener("touchmove", handleDefaultLineupTouchMove, { passive: false });
+  document.addEventListener("touchend", handleDefaultLineupTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", handleDefaultLineupTouchCancel, { passive: false });
+  defaultLineupTouchListenersAttached = true;
+}
+function clearDefaultLineupTouch() {
+  const prev = document.querySelector(".default-lineup-slot.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (defaultLineupTouchGhost && defaultLineupTouchGhost.parentNode) {
+    defaultLineupTouchGhost.parentNode.removeChild(defaultLineupTouchGhost);
+  }
+  defaultLineupTouchGhost = null;
+  defaultLineupTouchName = "";
+  defaultLineupTouchFromIdx = null;
+  defaultLineupTouchOverIdx = -1;
+  document.body.style.overflow = "";
+}
+function updateDefaultLineupTouchOver(x, y) {
+  const elAt = document.elementFromPoint(x, y);
+  const slot = elAt && elAt.closest(".default-lineup-slot");
+  const prev = document.querySelector(".default-lineup-slot.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (!slot || !slot.dataset.slotIndex) {
+    defaultLineupTouchOverIdx = -1;
+    return;
+  }
+  const idx = parseInt(slot.dataset.slotIndex, 10);
+  if (isNaN(idx)) {
+    defaultLineupTouchOverIdx = -1;
+    return;
+  }
+  defaultLineupTouchOverIdx = idx;
+  slot.classList.add("drop-over");
+}
+function handleDefaultLineupTouchStart(e, name, fromIdx = null) {
+  const t = e.touches && e.touches[0];
+  if (!t || !name) return;
+  ensureDefaultLineupTouchListeners();
+  defaultLineupTouchName = name;
+  defaultLineupTouchFromIdx = typeof fromIdx === "number" ? fromIdx : null;
+  defaultLineupTouchStart = { x: t.clientX, y: t.clientY };
+  const label = formatDefaultLineupName(name, state.playerNumbers || {}, new Set(state.captains || []), {
+    compactCourt: true
+  }) || name;
+  if (defaultLineupTouchGhost && defaultLineupTouchGhost.parentNode) {
+    defaultLineupTouchGhost.parentNode.removeChild(defaultLineupTouchGhost);
+  }
+  const ghost = document.createElement("div");
+  ghost.className = "touch-drag-ghost";
+  ghost.textContent = label;
+  ghost.style.left = t.clientX + "px";
+  ghost.style.top = t.clientY + "px";
+  document.body.appendChild(ghost);
+  defaultLineupTouchGhost = ghost;
+  updateDefaultLineupTouchOver(t.clientX, t.clientY);
+  document.body.style.overflow = "hidden";
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleDefaultLineupTouchMove(e) {
+  if (!defaultLineupTouchName) return;
+  const t = e.touches && e.touches[0];
+  if (!t) return;
+  if (defaultLineupTouchGhost) {
+    defaultLineupTouchGhost.style.left = t.clientX + "px";
+    defaultLineupTouchGhost.style.top = t.clientY + "px";
+  }
+  updateDefaultLineupTouchOver(t.clientX, t.clientY);
+  e.stopPropagation();
+  e.preventDefault();
+}
+function finalizeDefaultLineupTouch(e, forcedIdx = null) {
+  if (!defaultLineupTouchName) return;
+  if (typeof forcedIdx === "number") {
+    defaultLineupTouchOverIdx = forcedIdx;
+  }
+  const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+  const endX = t ? t.clientX : defaultLineupTouchStart.x;
+  const endY = t ? t.clientY : defaultLineupTouchStart.y;
+  const dist = Math.hypot(endX - defaultLineupTouchStart.x, endY - defaultLineupTouchStart.y);
+  if (defaultLineupTouchOverIdx >= 0) {
+    setDefaultLineupSlot(defaultLineupTouchOverIdx, defaultLineupTouchName);
+  } else if (dist < 8) {
+    if (typeof defaultLineupTouchFromIdx === "number") {
+      clearDefaultLineupSlot(defaultLineupTouchFromIdx);
+    } else if (teamManagerState) {
+      const rosterNames = getDefaultLineupRoster().map(p => p.name);
+      const current = normalizeDefaultLineup(teamManagerState.defaultLineup || [], rosterNames);
+      const firstEmpty = current.findIndex(n => !n);
+      const targetIdx = firstEmpty !== -1 ? firstEmpty : 0;
+      setDefaultLineupSlot(targetIdx, defaultLineupTouchName);
+    }
+  }
+  clearDefaultLineupTouch();
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleDefaultLineupTouchEnd(e) {
+  if (!defaultLineupTouchName) return;
+  finalizeDefaultLineupTouch(e);
+}
+function handleDefaultLineupTouchCancel() {
+  if (!defaultLineupTouchName) return;
+  clearDefaultLineupTouch();
+}
 function renderDefaultLineupEditor() {
   if (!elDefaultLineupGrid || !elDefaultLineupBench || !teamManagerState) return;
   if (elDefaultLineupRotation) {
@@ -4019,12 +4132,14 @@ function renderDefaultLineupEditor() {
       }
     });
     slot.addEventListener("touchend", e => {
-      if (!defaultLineupDragName) return;
-      e.preventDefault();
-      setDefaultLineupSlot(idx, defaultLineupDragName);
-      defaultLineupDragName = "";
-      defaultLineupDragAt = 0;
+      if (!defaultLineupTouchName) return;
+      finalizeDefaultLineupTouch(e, idx);
     });
+    if (name) {
+      slot.addEventListener("touchstart", e => {
+        handleDefaultLineupTouchStart(e, name, idx);
+      });
+    }
     slot.addEventListener("dragover", e => {
       e.preventDefault();
       slot.classList.add("drop-over");
@@ -4078,10 +4193,7 @@ function renderDefaultLineupEditor() {
       defaultLineupDragName = "";
     });
     chip.addEventListener("touchstart", e => {
-      e.preventDefault();
-      defaultLineupDragName = p.name;
-      defaultLineupDragAt = Date.now();
-      renderDefaultLineupEditor();
+      handleDefaultLineupTouchStart(e, p.name, null);
     });
     chip.addEventListener("click", () => {
       const firstEmpty = current.findIndex(n => !n);

@@ -24,8 +24,7 @@
     function applyMatchInfoToUI() {
       ensureMatchDefaults();
       if (elOpponent) {
-        const opponentName =
-          state.useOpponentTeam && state.selectedOpponentTeam ? state.selectedOpponentTeam : state.match.opponent || "";
+        const opponentName = state.match.opponent || "";
         elOpponent.value = opponentName;
         elOpponent.disabled = !!state.useOpponentTeam;
       }
@@ -41,6 +40,7 @@
         state.match.opponent = state.selectedOpponentTeam;
       } else if (elOpponent) {
         state.match.opponent = elOpponent.value.trim();
+        state.match.opponentManual = state.match.opponent;
       }
       if (elCategory) state.match.category = elCategory.value.trim();
       if (elDate) {

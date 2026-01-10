@@ -46,11 +46,7 @@ function getServeDisplayCourt(scope = "our") {
 function getTeamNameForScope(scope) {
   if (scope === "opponent") {
     const matchName = (state.match && state.match.opponent) || "";
-    if (matchName) return matchName;
-    if (state.useOpponentTeam) {
-      return state.selectedOpponentTeam || "Avversaria";
-    }
-    return "Avversaria";
+    return matchName || "Avversaria";
   }
   return state.selectedTeam || "Squadra";
 }
@@ -374,6 +370,15 @@ let serveTypeKeyHandler = null;
 let lineupModalCourt = [];
 let lineupDragName = "";
 let lineupSelectedName = "";
+let lineupTouchActive = false;
+let lineupTouchName = "";
+let lineupTouchFromIdx = null;
+let lineupTouchOverIdx = null;
+let lineupTouchContext = "";
+let lineupTouchScope = "our";
+let lineupTouchStart = { x: 0, y: 0 };
+let lineupTouchListenersAttached = false;
+let lineupTouchGhost = null;
 let lineupNumberMode = false;
 let lineupModalScope = "our";
 let lineupDragFromIdx = null;
@@ -730,6 +735,8 @@ function renderNextSetLineup(scope, courtEl, benchEl) {
     card.className = "lineup-slot pos-" + (idx + 1) + (!slot.main ? " empty" : "");
     card.style.gridArea = "pos" + (idx + 1);
     card.dataset.pos = "P" + (idx + 1);
+    card.dataset.posIndex = String(idx);
+    card.dataset.lineupContext = "next-set";
     if (slot.main) {
       card.draggable = true;
       card.addEventListener("dragstart", e => {
@@ -774,20 +781,15 @@ function renderNextSetLineup(scope, courtEl, benchEl) {
         renderNextSetLineups();
       }
     });
-    card.addEventListener("touchend", e => {
-      if (!nextSetDragName) return;
-      if (nextSetDragScope && nextSetDragScope !== scope) return;
-      e.preventDefault();
-      if (typeof nextSetDragFromIdx === "number" && nextSetDragFromIdx !== idx) {
-        swapNextSetSlots(scope, nextSetDragFromIdx, idx);
-      } else {
-        setNextSetPlayer(scope, idx, nextSetDragName);
-      }
-      nextSetDragName = "";
-      nextSetDragFromIdx = null;
-      nextSetDragScope = null;
-      renderNextSetLineups();
-    });
+    if (slot.main) {
+      card.addEventListener(
+        "touchstart",
+        e => {
+          handleLineupTouchStart(e, slot.main, idx, "next-set", scope);
+        },
+        { passive: false }
+      );
+    }
     const body = document.createElement("div");
     body.className = "slot-body";
     const nameLabel = document.createElement("div");
@@ -815,6 +817,7 @@ function renderNextSetLineup(scope, courtEl, benchEl) {
       chip.className = "lineup-chip";
       chip.draggable = true;
       chip.dataset.playerName = name;
+      chip.dataset.lineupContext = "next-set";
       chip.addEventListener("dragstart", e => {
         nextSetDragName = name;
         nextSetDragFromIdx = null;
@@ -835,12 +838,14 @@ function renderNextSetLineup(scope, courtEl, benchEl) {
         setNextSetPlayer(scope, targetIdx, name);
         renderNextSetLineups();
       });
-      chip.addEventListener("touchstart", e => {
-        if (!isCoarse) return;
-        e.preventDefault();
-        nextSetDragName = name;
-        nextSetDragScope = scope;
-      });
+      chip.addEventListener(
+        "touchstart",
+        e => {
+          if (!isCoarse) return;
+          handleLineupTouchStart(e, name, null, "next-set", scope);
+        },
+        { passive: false }
+      );
       const span = document.createElement("span");
       span.textContent = formatLineupModalName(name, { compactCourt: true });
       chip.appendChild(span);
@@ -1727,6 +1732,175 @@ function clearLineupSlot(posIdx) {
     );
   }
 }
+function ensureLineupTouchListeners() {
+  if (lineupTouchListenersAttached) return;
+  document.addEventListener("touchmove", handleLineupTouchMove, { passive: false });
+  document.addEventListener("touchend", handleLineupTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", handleLineupTouchCancel, { passive: false });
+  lineupTouchListenersAttached = true;
+}
+function clearLineupTouch() {
+  const prev = document.querySelector(".lineup-slot.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (lineupTouchGhost && lineupTouchGhost.parentNode) {
+    lineupTouchGhost.parentNode.removeChild(lineupTouchGhost);
+  }
+  lineupTouchGhost = null;
+  lineupTouchActive = false;
+  lineupTouchName = "";
+  lineupTouchFromIdx = null;
+  lineupTouchOverIdx = null;
+  lineupTouchContext = "";
+  lineupTouchScope = "our";
+  document.body.style.overflow = "";
+}
+function updateLineupTouchOver(x, y) {
+  const elAt = document.elementFromPoint(x, y);
+  const card = elAt && elAt.closest(".lineup-slot");
+  const prev = document.querySelector(".lineup-slot.drop-over");
+  if (prev) prev.classList.remove("drop-over");
+  if (!card) {
+    lineupTouchOverIdx = null;
+    return;
+  }
+  if (lineupTouchContext === "modal") {
+    if (!card.closest("#lineup-modal")) {
+      lineupTouchOverIdx = null;
+      return;
+    }
+  } else if (lineupTouchContext === "next-set") {
+    if (!card.closest("#next-set-lineups")) {
+      lineupTouchOverIdx = null;
+      return;
+    }
+  } else {
+    lineupTouchOverIdx = null;
+    return;
+  }
+  const posIdx = parseInt(card.dataset.posIndex, 10);
+  if (isNaN(posIdx)) {
+    lineupTouchOverIdx = null;
+    return;
+  }
+  lineupTouchOverIdx = posIdx;
+  card.classList.add("drop-over");
+}
+function createLineupTouchGhost(text, x, y) {
+  if (lineupTouchGhost && lineupTouchGhost.parentNode) {
+    lineupTouchGhost.parentNode.removeChild(lineupTouchGhost);
+  }
+  const ghost = document.createElement("div");
+  ghost.className = "touch-drag-ghost";
+  ghost.textContent = text;
+  ghost.style.left = x + "px";
+  ghost.style.top = y + "px";
+  document.body.appendChild(ghost);
+  lineupTouchGhost = ghost;
+}
+function moveLineupTouchGhost(x, y) {
+  if (!lineupTouchGhost) return;
+  lineupTouchGhost.style.left = x + "px";
+  lineupTouchGhost.style.top = y + "px";
+}
+function handleLineupTouchStart(e, name, fromIdx, context, scope) {
+  const t = e.touches && e.touches[0];
+  if (!t || !name) return;
+  ensureLineupTouchListeners();
+  lineupTouchActive = true;
+  lineupTouchName = name;
+  lineupTouchFromIdx = typeof fromIdx === "number" ? fromIdx : null;
+  lineupTouchContext = context || "";
+  lineupTouchScope = scope || "our";
+  lineupTouchStart = { x: t.clientX, y: t.clientY };
+  const label = formatLineupModalName(name, { compactCourt: true });
+  createLineupTouchGhost(label, t.clientX, t.clientY);
+  updateLineupTouchOver(t.clientX, t.clientY);
+  document.body.style.overflow = "hidden";
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleLineupTouchMove(e) {
+  if (!lineupTouchActive) return;
+  const t = e.touches && e.touches[0];
+  if (!t) return;
+  moveLineupTouchGhost(t.clientX, t.clientY);
+  updateLineupTouchOver(t.clientX, t.clientY);
+  e.stopPropagation();
+  e.preventDefault();
+}
+function finalizeLineupTouch(e, forcedIdx = null) {
+  if (!lineupTouchActive) return;
+  if (typeof forcedIdx === "number") {
+    lineupTouchOverIdx = forcedIdx;
+  }
+  const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+  const endX = t ? t.clientX : lineupTouchStart.x;
+  const endY = t ? t.clientY : lineupTouchStart.y;
+  const dist = Math.hypot(endX - lineupTouchStart.x, endY - lineupTouchStart.y);
+  if (lineupTouchContext === "modal") {
+    if (lineupTouchFromIdx === null && lineupTouchName) {
+      const idx = getCourtShape(lineupModalCourt).findIndex(slot => slot.main === lineupTouchName);
+      if (idx >= 0) lineupTouchFromIdx = idx;
+    }
+    if (typeof lineupTouchOverIdx === "number" && lineupTouchOverIdx >= 0) {
+      if (typeof lineupTouchFromIdx === "number" && lineupTouchFromIdx !== lineupTouchOverIdx) {
+        swapLineupSlots(lineupTouchFromIdx, lineupTouchOverIdx);
+      } else {
+        assignPlayerToLineup(lineupTouchName, lineupTouchOverIdx);
+      }
+      lineupSelectedName = "";
+      renderLineupModal();
+    } else if (dist < 8) {
+      if (typeof lineupTouchFromIdx === "number") {
+        clearLineupSlot(lineupTouchFromIdx);
+        renderLineupModal();
+      } else {
+        lineupSelectedName = lineupTouchName;
+        renderLineupModal();
+      }
+    }
+  } else if (lineupTouchContext === "next-set") {
+    if (lineupTouchFromIdx === null && lineupTouchName) {
+      const entry = getNextSetEntry(lineupTouchScope);
+      const court = entry ? getCourtShape(entry.court || []) : [];
+      const idx = court.findIndex(slot => slot.main === lineupTouchName);
+      if (idx >= 0) lineupTouchFromIdx = idx;
+    }
+    if (typeof lineupTouchOverIdx === "number" && lineupTouchOverIdx >= 0) {
+      if (typeof lineupTouchFromIdx === "number" && lineupTouchFromIdx !== lineupTouchOverIdx) {
+        swapNextSetSlots(lineupTouchScope, lineupTouchFromIdx, lineupTouchOverIdx);
+      } else {
+        setNextSetPlayer(lineupTouchScope, lineupTouchOverIdx, lineupTouchName);
+      }
+      renderNextSetLineups();
+    } else if (dist < 8) {
+      if (typeof lineupTouchFromIdx === "number") {
+        clearNextSetSlot(lineupTouchScope, lineupTouchFromIdx);
+        renderNextSetLineups();
+      } else {
+        const entry = getNextSetEntry(lineupTouchScope);
+        const court = entry ? getCourtShape(entry.court || []) : [];
+        const nextEmpty = court.findIndex(slot => !slot.main);
+        const targetIdx = nextEmpty !== -1 ? nextEmpty : 0;
+        setNextSetPlayer(lineupTouchScope, targetIdx, lineupTouchName);
+        renderNextSetLineups();
+      }
+    }
+  }
+  clearLineupTouch();
+  e.stopPropagation();
+  e.preventDefault();
+}
+function handleLineupTouchEnd(e) {
+  if (!lineupTouchActive) return;
+  const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+  if (t) updateLineupTouchOver(t.clientX, t.clientY);
+  finalizeLineupTouch(e);
+}
+function handleLineupTouchCancel() {
+  if (!lineupTouchActive) return;
+  clearLineupTouch();
+}
 function renderLineupModal() {
   if (!elLineupModalCourt || !elLineupModalBench) return;
   elLineupModalCourt.innerHTML = "";
@@ -1740,6 +1914,8 @@ function renderLineupModal() {
     card.className = "lineup-slot " + areaClass + (!slot.main ? " empty" : "");
     card.style.gridArea = "pos" + (idx + 1);
     card.dataset.pos = "P" + (idx + 1);
+    card.dataset.posIndex = String(idx);
+    card.dataset.lineupContext = "modal";
     if (slot.main) {
       card.draggable = true;
       card.addEventListener("dragstart", e => {
@@ -1788,19 +1964,15 @@ function renderLineupModal() {
         renderLineupModal();
       }
     });
-    card.addEventListener("touchend", e => {
-      if (!lineupDragName) return;
-      e.preventDefault();
-      if (typeof lineupDragFromIdx === "number" && lineupDragFromIdx !== idx) {
-        swapLineupSlots(lineupDragFromIdx, idx);
-      } else {
-        assignPlayerToLineup(lineupDragName, idx);
-      }
-      lineupDragName = "";
-      lineupDragFromIdx = null;
-      lineupSelectedName = "";
-      renderLineupModal();
-    });
+    if (slot.main) {
+      card.addEventListener(
+        "touchstart",
+        e => {
+          handleLineupTouchStart(e, slot.main, idx, "modal", lineupModalScope);
+        },
+        { passive: false }
+      );
+    }
     const head = document.createElement("div");
     head.className = "slot-head";
     const label = document.createElement("span");
@@ -1873,6 +2045,7 @@ function renderLineupModal() {
       chip.className = "lineup-chip" + (lineupSelectedName === name ? " selected" : "");
       chip.draggable = true;
       chip.dataset.playerName = name;
+      chip.dataset.lineupContext = "modal";
       chip.addEventListener("dragstart", e => {
         lineupDragName = name;
         lineupDragFromIdx = null;
@@ -1892,13 +2065,14 @@ function renderLineupModal() {
         lineupSelectedName = "";
         renderLineupModal();
       });
-      chip.addEventListener("touchstart", e => {
-        if (!isCoarse) return;
-        e.preventDefault();
-        lineupDragName = name;
-        lineupSelectedName = name;
-        renderLineupModal();
-      });
+      chip.addEventListener(
+        "touchstart",
+        e => {
+          if (!isCoarse) return;
+          handleLineupTouchStart(e, name, null, "modal", lineupModalScope);
+        },
+        { passive: false }
+      );
       const span = document.createElement("span");
       span.textContent = formatLineupModalName(name, { compactCourt: true });
       chip.appendChild(span);
@@ -3406,11 +3580,19 @@ function syncOpponentSettingsUI() {
   if (opponentSettingsPanel) {
     opponentSettingsPanel.classList.toggle("hidden", !enabled);
   }
-  if (enabled && state.selectedOpponentTeam) {
-    state.match.opponent = state.selectedOpponentTeam;
+  if (enabled) {
+    if (state.match && typeof state.match.opponentManual === "undefined") {
+      state.match.opponentManual = state.match.opponent || "";
+    }
+    if (state.selectedOpponentTeam) {
+      state.match.opponent = state.selectedOpponentTeam;
+    }
     saveState();
   }
   if (!enabled) {
+    if (state.match && typeof state.match.opponentManual === "string") {
+      state.match.opponent = state.match.opponentManual;
+    }
     state.courtSideSwapped = false;
     state.courtViewMirrored = false;
     state.opponentCourtViewMirrored = false;
