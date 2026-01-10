@@ -44,12 +44,21 @@ function getServeDisplayCourt(scope = "our") {
   return shaped;
 }
 function getTeamNameForScope(scope) {
-  return scope === "opponent"
-    ? state.selectedOpponentTeam || "Avversaria"
-    : state.selectedTeam || "Squadra";
+  if (scope === "opponent") {
+    const matchName = (state.match && state.match.opponent) || "";
+    if (matchName) return matchName;
+    if (state.useOpponentTeam) {
+      return state.selectedOpponentTeam || "Avversaria";
+    }
+    return "Avversaria";
+  }
+  return state.selectedTeam || "Squadra";
 }
 function getSelectedTeamNameForScope(scope) {
-  return scope === "opponent" ? (state.selectedOpponentTeam || "").trim() : (state.selectedTeam || "").trim();
+  if (scope === "opponent") {
+    return state.useOpponentTeam ? (state.selectedOpponentTeam || "").trim() : "";
+  }
+  return (state.selectedTeam || "").trim();
 }
 function getPlayersForScope(scope) {
   return scope === "opponent" ? state.opponentPlayers || [] : state.players || [];
