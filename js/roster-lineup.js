@@ -469,15 +469,34 @@ function applyStateSnapshot(parsed, options = {}) {
     .filter(name => (state.opponentPlayers || []).includes(name))
     .slice(0, 1);
   state.metricsConfig = parsed.metricsConfig || {};
-  state.video =
-    parsed.video ||
-    state.video || {
-      offsetSeconds: 0,
-      fileName: "",
-      youtubeId: "",
-      youtubeUrl: "",
-      lastPlaybackSeconds: 0
-    };
+  const existingVideo = state.video || null;
+  const parsedVideo = parsed.video || null;
+  const hasExistingVideo =
+    !!existingVideo &&
+    (existingVideo.youtubeId || existingVideo.youtubeUrl || existingVideo.fileName);
+  const hasParsedVideo =
+    !!parsedVideo && (parsedVideo.youtubeId || parsedVideo.youtubeUrl || parsedVideo.fileName);
+  if (parsedVideo && !hasParsedVideo && hasExistingVideo) {
+    state.video = existingVideo;
+  } else {
+    state.video =
+      parsedVideo ||
+      existingVideo || {
+        offsetSeconds: 0,
+        fileName: "",
+        youtubeId: "",
+        youtubeUrl: "",
+        lastPlaybackSeconds: 0
+      };
+    if (
+      parsedVideo &&
+      existingVideo &&
+      !parsedVideo.lastPlaybackSeconds &&
+      existingVideo.lastPlaybackSeconds
+    ) {
+      state.video.lastPlaybackSeconds = existingVideo.lastPlaybackSeconds;
+    }
+  }
   if (typeof state.video.offsetSeconds !== "number") {
     state.video.offsetSeconds = 0;
   }
