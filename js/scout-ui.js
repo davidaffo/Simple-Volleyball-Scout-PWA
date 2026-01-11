@@ -11141,7 +11141,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     applyAutoRolePositioning();
   }
 }
-function recomputeServeFlagsFromHistory() {
+function recomputeServeFlagsFromHistory(options = {}) {
   let servingScope = state.isServing ? "our" : "opponent";
   if (!state || !state.autoRotate) {
     state.isServing = servingScope === "our";
@@ -11176,7 +11176,7 @@ function recomputeServeFlagsFromHistory() {
   } else {
     state.flowTeamScope = servingScope;
   }
-  if (typeof enforceAutoLiberoForState === "function") {
+  if (!options.skipAutoLibero && typeof enforceAutoLiberoForState === "function") {
     enforceAutoLiberoForState({ skipServerOnServe: true });
   }
 }
@@ -13936,6 +13936,19 @@ function renderVideoFilters(events) {
   const els = getVideoFilterElements();
   if (!els) return;
   const list = Array.isArray(events) ? events : [];
+  const getManualCodeLabel = val => {
+    const map = {
+      for: "Punto",
+      "opp-error": "Errore avv.",
+      "opp-point": "Punto avv.",
+      error: "Errore",
+      "team-error": "Errore squadra",
+      TO: "Timeout",
+      TOA: "Timeout avv.",
+      SUB: "Cambio"
+    };
+    return map[val] || val;
+  };
   const filteredByTeam = videoFilterState.teams.size
     ? list.filter(ev => matchesTeamFilter(ev, videoFilterState.teams))
     : list;
@@ -14030,11 +14043,24 @@ function renderVideoFilters(events) {
   const playerOpts = playerOptsRaw;
   const setterOpts = setterOptsRaw;
   const skillOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.skillId), {
-    labelFn: val => (SKILLS.find(s => s.id === val) || {}).label || val
-  }).filter(opt => opt.value !== "manual");
-  const codeOpts = filterNormalEvalOptions(
+    labelFn: val => {
+      if (val === "manual") return "Manuale";
+      return (SKILLS.find(s => s.id === val) || {}).label || val;
+    }
+  });
+  const evalCodeOpts = filterNormalEvalOptions(
     buildUniqueOptions(filteredByTeam.map(ev => ev.code), { labelFn: val => val })
   );
+  const manualCodeOpts = buildUniqueOptions(
+    filteredByTeam.filter(ev => ev && ev.skillId === "manual").map(ev => ev.code),
+    { labelFn: val => getManualCodeLabel(val) }
+  );
+  const codeOptMap = new Map();
+  [...evalCodeOpts, ...manualCodeOpts].forEach(opt => {
+    if (!opt || !opt.value || codeOptMap.has(opt.value)) return;
+    codeOptMap.set(opt.value, opt);
+  });
+  const codeOpts = Array.from(codeOptMap.values());
   const setOpts = buildUniqueOptions(filteredByTeam.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
     labelFn: val => "Set " + val
@@ -17217,7 +17243,7 @@ function undoLastEvent() {
   ) {
     state.stats[idx][skillId][ev.code]--;
   }
-  recomputeServeFlagsFromHistory();
+  recomputeServeFlagsFromHistory({ skipAutoLibero: true });
   saveState();
   recalcAllStatsAndUpdateUI();
   renderEventsLog();
@@ -17243,7 +17269,7 @@ function deleteEventByKey(eventKey) {
   if (!confirm(`Eliminare ${label}?`)) return;
   state.events.splice(evIndex, 1);
   clearEventSelection();
-  recomputeServeFlagsFromHistory();
+  recomputeServeFlagsFromHistory({ skipAutoLibero: true });
   saveState();
   recalcAllStatsAndUpdateUI();
   renderEventsLog();
