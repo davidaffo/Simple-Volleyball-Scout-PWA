@@ -32,6 +32,16 @@ body.modal-open {
   width: 100%;
   height: 100%;
 }
+#global-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: none;
+  background: transparent;
+}
+body.modal-open #global-modal-scrim {
+  display: block;
+}
 body[data-match-finished="true"] .tab-panel[data-tab="scout"] .score-layout,
 body[data-match-finished="true"] .tab-panel[data-tab="scout"] .score-top-row,
 body[data-match-finished="true"] .tab-panel[data-tab="scout"] .card-inline,
@@ -1130,7 +1140,7 @@ body[data-theme="light"] .floating-serve-error-btn {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 60;
+  z-index: 220;
 }
 .settings-modal.hidden {
   display: none;
@@ -2043,6 +2053,7 @@ body.desktop-court-modal-open #court-area {
 }
 body.desktop-court-modal.desktop-court-modal-open #court-overlay {
   pointer-events: auto;
+  z-index: 260;
 }
 .bench-inline-list {
   padding: 0.05rem 0;

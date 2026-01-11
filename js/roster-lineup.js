@@ -4283,7 +4283,7 @@ function openTeamManagerModal(scope = "our") {
   renderTeamManagerTable();
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
+    window.setGlobalModalState(true);
   }
   const title = document.querySelector("#team-manager-modal h3");
   if (title) {
@@ -4312,7 +4312,7 @@ function openNewTeamManager() {
   renderTeamManagerTable();
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
-    document.body.classList.add("modal-open");
+    window.setGlobalModalState(true);
   }
   const title = document.querySelector("#team-manager-modal h3");
   if (title) {
@@ -4323,7 +4323,7 @@ function closeTeamManagerModal() {
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.add("hidden");
   }
-  document.body.classList.remove("modal-open");
+  window.setGlobalModalState(false);
 }
 function collectTeamManagerPayload() {
   if (!teamManagerState) return null;
@@ -5722,13 +5722,13 @@ function openSettingsModal() {
   if (!elSettingsModal) return;
   elSettingsModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
-  document.body.classList.add("modal-open");
+  window.setGlobalModalState(true);
 }
 function closeSettingsModal() {
   if (!elSettingsModal) return;
   elSettingsModal.classList.add("hidden");
   document.body.style.overflow = "";
-  document.body.classList.remove("modal-open");
+  window.setGlobalModalState(false);
 }
 function resetDragState() {
   draggedPlayerName = "";

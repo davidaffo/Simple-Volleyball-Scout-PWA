@@ -405,6 +405,7 @@ let currentEditCell = null;
 let lockedCourtAreaHeight = null;
 let lastMobileScrollY = null;
 let mobileBodyLock = null;
+let globalModalScrim = null;
 let pendingMobileActiveScroll = false;
 function isDesktopCourtModalLayout() {
   if (state.forceMobileLayout) return false;
@@ -487,6 +488,13 @@ function restoreModalToPopup(modal) {
   modal.style.padding = "";
   modal.style.overflow = "";
 }
+function ensureGlobalModalScrim() {
+  if (globalModalScrim || typeof document === "undefined" || !document.body) return;
+  globalModalScrim = document.createElement("div");
+  globalModalScrim.id = "global-modal-scrim";
+  globalModalScrim.setAttribute("aria-hidden", "true");
+  document.body.appendChild(globalModalScrim);
+}
 function setCourtAreaLocked(isLocked) {
   const courtArea = document.querySelector("#court-area") || document.querySelector(".players-area");
   if (!courtArea) return;
@@ -528,12 +536,13 @@ function setCourtAreaLocked(isLocked) {
 function setModalOpenState(isOpen, forcePopup = false) {
   const useCourt = isDesktopCourtModalLayout() && !forcePopup;
   if (typeof document !== "undefined" && document.body) {
+    document.body.classList.toggle("modal-open", isOpen);
     document.body.classList.toggle("desktop-court-modal-open", isOpen && useCourt);
   }
   setCourtAreaLocked(isOpen && useCourt);
-  if (useCourt) return;
   const isMobileModal = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   if (isOpen) {
+    ensureGlobalModalScrim();
     if (isMobileModal) {
       lastMobileScrollY = window.scrollY || 0;
       if (!mobileBodyLock) {
@@ -554,12 +563,10 @@ function setModalOpenState(isOpen, forcePopup = false) {
     if (!isMobileModal) {
       document.body.style.overflow = "hidden";
     }
-    document.body.classList.add("modal-open");
   } else {
     if (!isMobileModal) {
       document.body.style.overflow = "";
     }
-    document.body.classList.remove("modal-open");
     if (isMobileModal) {
       if (mobileBodyLock) {
         document.body.style.position = mobileBodyLock.position;
@@ -573,12 +580,17 @@ function setModalOpenState(isOpen, forcePopup = false) {
         window.scrollTo({ top: lastMobileScrollY, behavior: "auto" });
       }
       pendingMobileActiveScroll = true;
-      setTimeout(() => {
-        maybeScrollToActiveCourtOnMobile();
-      }, 60);
+      maybeScrollToActiveCourtOnMobile();
       lastMobileScrollY = null;
     }
   }
+}
+function setGlobalModalState(isOpen, options = {}) {
+  const forcePopup = typeof options === "boolean" ? options : !!options.forcePopup;
+  setModalOpenState(isOpen, forcePopup);
+}
+if (typeof window !== "undefined") {
+  window.setGlobalModalState = setGlobalModalState;
 }
 function getActiveCourtContainerForScroll() {
   const activeScope = getMobileActiveScope() || "our";
@@ -3448,7 +3460,7 @@ let blockNumberModalTargetEvent = null;
 function openMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
   if (typeof renderMatchesSelect === "function") renderMatchesSelect();
   if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
   if (typeof renderMatchSummary === "function") renderMatchSummary();
@@ -3456,7 +3468,7 @@ function openMatchManagerModal() {
 function closeMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function getLastAttackEventForScope(scope) {
   const events = state.events || [];
@@ -3491,12 +3503,12 @@ function openBaseModal() {
   }
   baseModalTargetEvent = ev;
   elBaseModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeBaseModal() {
   if (!elBaseModal) return;
   elBaseModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
   baseModalTargetEvent = null;
 }
 function applyAttackTypeToTarget(value) {
@@ -3519,12 +3531,12 @@ function openAttackTypeModal() {
   }
   attackTypeModalTargetEvent = ev;
   elAttackTypeModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeAttackTypeModal() {
   if (!elAttackTypeModal) return;
   elAttackTypeModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
   attackTypeModalTargetEvent = null;
 }
 function applyBlockNumberToTarget(value) {
@@ -3547,12 +3559,12 @@ function openBlockNumberModal() {
   }
   blockNumberModalTargetEvent = ev;
   elBlockNumberModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeBlockNumberModal() {
   if (!elBlockNumberModal) return;
   elBlockNumberModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
   blockNumberModalTargetEvent = null;
 }
 function buildPlayersDbUsage(teamsMap) {
@@ -3629,12 +3641,12 @@ function openPlayersDbModal() {
   if (!elPlayersDbModal) return;
   renderPlayersDbList();
   elPlayersDbModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closePlayersDbModal() {
   if (!elPlayersDbModal) return;
   elPlayersDbModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function syncOpponentSettingsUI() {
   const enabled = !!state.useOpponentTeam;
@@ -3718,12 +3730,12 @@ function openTeamsManagerModal() {
   teamsManagerSelectedName = state.selectedTeam || "";
   renderTeamsManagerList();
   elTeamsManagerModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeTeamsManagerModal() {
   if (!elTeamsManagerModal) return;
   elTeamsManagerModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function importTeamToStorageOnly(file) {
   if (!file) return;
@@ -8453,12 +8465,12 @@ function openOffsetModal() {
     elOffsetSkillGrid.appendChild(row);
   });
   elOffsetModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeOffsetModal() {
   if (!elOffsetModal) return;
   elOffsetModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function getDefaultSkillDurationMs() {
   return 5000;
@@ -8492,12 +8504,12 @@ function openSkillDurationModal() {
   if (!elSkillDurationModal) return;
   renderSkillDurationGrid();
   elSkillDurationModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeSkillDurationModal() {
   if (!elSkillDurationModal) return;
   elSkillDurationModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function applySkillDurationDefaults() {
   if (!elSkillDurationGrid) return;
@@ -8603,12 +8615,12 @@ function openUnifyTimesModal() {
   if (!elUnifyTimesModal) return;
   renderUnifyTimesOptions();
   elUnifyTimesModal.classList.remove("hidden");
-  document.body.classList.add("modal-open");
+  setGlobalModalState(true);
 }
 function closeUnifyTimesModal() {
   if (!elUnifyTimesModal) return;
   elUnifyTimesModal.classList.add("hidden");
-  document.body.classList.remove("modal-open");
+  setGlobalModalState(false);
 }
 function getFilteredVideoEventsForAnalysis() {
   const skillEvents = getVideoSkillEvents();
@@ -17706,7 +17718,7 @@ async function init() {
     if (!elPastePlayersModal) return;
     elPastePlayersModal.classList.add("hidden");
     if (elTeamManagerModal && !elTeamManagerModal.classList.contains("hidden")) return;
-    document.body.classList.remove("modal-open");
+    setGlobalModalState(false);
   };
   if (elBtnApplyPlayers) {
     elBtnApplyPlayers.addEventListener("click", () => {
@@ -17905,7 +17917,7 @@ async function init() {
       }
       if (elPastePlayersModal) {
         elPastePlayersModal.classList.remove("hidden");
-        document.body.classList.add("modal-open");
+        setGlobalModalState(true);
       }
       if (elPlayersInput) {
         elPlayersInput.focus();
@@ -18068,7 +18080,7 @@ async function init() {
         if (typeof renderTeamManagerTable === "function") renderTeamManagerTable();
         if (elTeamManagerModal) {
           elTeamManagerModal.classList.remove("hidden");
-          document.body.classList.add("modal-open");
+          setGlobalModalState(true);
         }
         const title = document.querySelector("#team-manager-modal h3");
         if (title) title.textContent = "Gestione squadra";
