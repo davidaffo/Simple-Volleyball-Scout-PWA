@@ -1338,6 +1338,9 @@ body[data-theme="light"] .match-summary {
   padding: 0.75rem;
   background: rgba(15, 23, 42, 0.65);
 }
+.match-manager-panel--actions {
+  grid-column: 1 / -1;
+}
 body[data-theme="light"] .match-manager-panel {
   background: #f8fafc;
   border-color: #e2e8f0;
@@ -2676,6 +2679,13 @@ body[data-theme="light"] .event-btn.code-negative:hover {
 }
 .controls-row button {
   flex: 1 1 120px;
+}
+.match-actions-row {
+  flex-wrap: nowrap;
+}
+.match-actions-row button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .player-management {
   display: flex;
@@ -4068,6 +4078,12 @@ body[data-theme="light"] .rotation-table td {
   flex-direction: column;
   gap: 0.35rem;
   align-self: stretch;
+}
+.video-frame-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
 }
 .video-media {
   position: relative;

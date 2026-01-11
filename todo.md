@@ -3,10 +3,7 @@ Aggiungere condivisione dati via socket (pagina html statica come esportazione m
 Lettura Camp3 ocr
 
 # Minor features
-tasti scorciatoia per modifiche rapide a video
 crea stampa tipo foglio gara
-Selezionare la squadra anche da gestione match
-Fai in modo che la squadra sia legata al match e non piu modificabile separatamente per evitare bugs
 Annullare parzialmente l-inserimento di una parte di fondamentale
 
 

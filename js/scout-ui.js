@@ -11742,6 +11742,34 @@ function handleVideoShortcut(e) {
     return;
   }
 }
+function stepActiveVideoByFrame(direction) {
+  const delta = (direction || 0) * (1 / 30);
+  if (!delta) return;
+  const video = getActiveVideoElement();
+  const ytCtrl = getActiveYoutubeController();
+  if (!video && !ytCtrl) return;
+  if (ytCtrl && ytCtrl.player && typeof ytCtrl.player.getCurrentTime === "function") {
+    const wasPlaying = isYoutubePlayerPlaying(ytCtrl.player, ytCtrl.ready);
+    const current = ytCtrl.player.getCurrentTime();
+    if (!isFinite(current)) return;
+    ytCtrl.player.seekTo(Math.max(0, current + delta), true);
+    if (wasPlaying && typeof ytCtrl.player.playVideo === "function") {
+      ytCtrl.player.playVideo();
+    }
+    return;
+  }
+  if (!video) return;
+  const duration = Number.isFinite(video.duration) ? video.duration : null;
+  const clampTime = next => {
+    if (duration == null) return Math.max(0, next);
+    return Math.max(0, Math.min(duration, next));
+  };
+  const wasPaused = video.paused;
+  video.currentTime = clampTime(video.currentTime + delta);
+  if (!wasPaused) {
+    video.play().catch(() => {});
+  }
+}
 function syncMatchInfoInputs(match) {
   if (!match) return;
   const opponent = document.getElementById("match-opponent");
@@ -19134,6 +19162,14 @@ async function init() {
   }
   if (elBtnSyncFirstSkill) {
     elBtnSyncFirstSkill.addEventListener("click", syncFirstSkillToVideo);
+  }
+  const videoFramePrevBtn = document.getElementById("btn-video-frame-prev");
+  if (videoFramePrevBtn) {
+    videoFramePrevBtn.addEventListener("click", () => stepActiveVideoByFrame(-1));
+  }
+  const videoFrameNextBtn = document.getElementById("btn-video-frame-next");
+  if (videoFrameNextBtn) {
+    videoFrameNextBtn.addEventListener("click", () => stepActiveVideoByFrame(1));
   }
   if (elBtnCopyFfmpeg) {
     elBtnCopyFfmpeg.addEventListener("click", copyFfmpegFromSelection);

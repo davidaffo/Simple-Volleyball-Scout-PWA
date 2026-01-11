@@ -2449,6 +2449,31 @@ function renderOpponentTeamsSelect() {
   }
   updateOpponentTeamButtonsState();
 }
+function hasMatchDataForReset() {
+  return Array.isArray(state.events) && state.events.length > 0;
+}
+function restoreMatchInfoAfterReset(preserved) {
+  if (!preserved) return;
+  state.match = state.match || {};
+  state.match.category = preserved.category || "";
+  state.match.date = preserved.date || (typeof getTodayIso === "function" ? getTodayIso() : "");
+  state.match.matchType = preserved.matchType || "amichevole";
+  state.match.leg = preserved.leg || "";
+  state.match.teamName = preserved.teamName || state.selectedTeam || "";
+  if (state.useOpponentTeam && state.selectedOpponentTeam) {
+    state.match.opponent = state.selectedOpponentTeam;
+  } else {
+    state.match.opponent = preserved.opponent || "";
+  }
+  state.match.opponentManual =
+    preserved.opponentManual ||
+    (state.useOpponentTeam ? preserved.opponentManual || "" : state.match.opponent || "");
+  if (typeof applyMatchInfoToUI === "function") {
+    applyMatchInfoToUI();
+  }
+  renderMatchSummary();
+  saveState();
+}
 function renderMatchesSelect() {
   if (!elSavedMatchesSelect) return;
   syncMatchesFromStorage();
@@ -3155,12 +3180,19 @@ function handleTeamSelectChange() {
     updateTeamButtonsState();
     return;
   }
-  if (state.events && state.events.length > 0 && selected !== state.selectedTeam) {
-    alert("Non puoi cambiare squadra con dati match già presenti.");
-    renderTeamsSelect();
-    return;
+  const hasData = hasMatchDataForReset();
+  const isChanging = selected !== state.selectedTeam;
+  const preservedMatch = isChanging && hasData ? Object.assign({}, state.match) : null;
+  if (isChanging && hasData) {
+    const ok = confirm("Cambiare la squadra del match resetterà tutti i dati. Procedere?");
+    if (!ok) {
+      renderTeamsSelect();
+      return;
+    }
   }
   state.selectedTeam = selected;
+  state.match = state.match || {};
+  state.match.teamName = selected;
   updateTeamButtonsState();
   const team = loadTeamFromStorage(selected);
   if (!team) {
@@ -3176,6 +3208,10 @@ function handleTeamSelectChange() {
       : roster.playersDetailed && roster.playersDetailed.length > 0
         ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
         : roster.players || [];
+  if (isChanging && hasData) {
+    resetMatchState();
+    restoreMatchInfoAfterReset(Object.assign({}, preservedMatch, { teamName: selected }));
+  }
   updatePlayersList(roster.players || [], {
     askReset: true,
     liberos: roster.liberos || [],
@@ -3199,6 +3235,16 @@ function handleOpponentTeamSelectChange() {
     elOpponentTeamsSelect.value = "";
     state.selectedOpponentTeam = "";
     return;
+  }
+  const hasData = hasMatchDataForReset();
+  const isChanging = selected !== state.selectedOpponentTeam;
+  const preservedMatch = isChanging && hasData ? Object.assign({}, state.match) : null;
+  if (isChanging && hasData) {
+    const ok = confirm("Cambiare la squadra avversaria del match resetterà tutti i dati. Procedere?");
+    if (!ok) {
+      renderOpponentTeamsSelect();
+      return;
+    }
   }
   state.selectedOpponentTeam = selected;
   if (state.useOpponentTeam && selected) {
@@ -3230,6 +3276,10 @@ function handleOpponentTeamSelectChange() {
       : roster.playersDetailed && roster.playersDetailed.length > 0
         ? roster.playersDetailed.filter(p => !p.out).map(p => p.name)
         : roster.players || [];
+  if (isChanging && hasData) {
+    resetMatchState();
+    restoreMatchInfoAfterReset(preservedMatch);
+  }
   applyOpponentDefaultLineup(opponentDefaultLineup, roster.defaultRotation || 1);
   if (typeof renderOpponentPlayers === "function") {
     renderOpponentPlayers();
