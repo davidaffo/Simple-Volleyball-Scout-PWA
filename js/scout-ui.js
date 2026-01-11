@@ -249,6 +249,10 @@ const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
 const elPlayersDbClose = document.getElementById("players-db-close");
 const elPlayersDbClean = document.getElementById("btn-clean-players-db");
+const elDebugModal = document.getElementById("debug-modal");
+const elDebugModalClose = document.getElementById("debug-modal-close");
+const elBtnOpenDebugModal = document.getElementById("btn-open-debug-modal");
+const elBtnForceSyncLog = document.getElementById("btn-force-sync-log");
 const elTeamsManagerModal = document.getElementById("teams-manager-modal");
 const elTeamsManagerList = document.getElementById("teams-manager-list");
 const elTeamsManagerClose = document.getElementById("teams-manager-close");
@@ -3646,6 +3650,16 @@ function openPlayersDbModal() {
 function closePlayersDbModal() {
   if (!elPlayersDbModal) return;
   elPlayersDbModal.classList.add("hidden");
+  setGlobalModalState(false);
+}
+function openDebugModal() {
+  if (!elDebugModal) return;
+  elDebugModal.classList.remove("hidden");
+  setGlobalModalState(true);
+}
+function closeDebugModal() {
+  if (!elDebugModal) return;
+  elDebugModal.classList.add("hidden");
   setGlobalModalState(false);
 }
 function syncOpponentSettingsUI() {
@@ -8737,6 +8751,7 @@ function applyOffsetsToSelectedSkills() {
   closeOffsetModal();
 }
 function getVideoSkillEvents() {
+  syncEventPlayerLinks(state.events || []);
   return (state.events || [])
     .map((ev, idx) => ({ ev, idx }))
     .filter(item => item.ev && item.ev.skillId);
@@ -9302,14 +9317,61 @@ function resolvePlayerIdx(ev) {
   }
   return players.findIndex(name => name === ev.playerName);
 }
+function syncEventPlayerLink(ev) {
+  if (!ev) return;
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope);
+  if (!Array.isArray(players) || players.length === 0) return;
+  const rawName = ev.playerName != null ? String(ev.playerName).trim() : "";
+  if (rawName) {
+    let idx = players.indexOf(rawName);
+    if (idx === -1) {
+      const lower = rawName.toLowerCase();
+      idx = players.findIndex(p => String(p || "").trim().toLowerCase() === lower);
+    }
+    if (idx !== -1) {
+      ev.playerIdx = idx;
+      if (players[idx] && players[idx] !== ev.playerName) {
+        ev.playerName = players[idx];
+      }
+      return;
+    }
+  }
+  if (typeof ev.playerIdx === "number" && players[ev.playerIdx]) {
+    ev.playerName = players[ev.playerIdx];
+  }
+}
+function syncEventPlayerLinks(events) {
+  (events || []).forEach(syncEventPlayerLink);
+}
 function refreshAfterVideoEdit(shouldRecalcStats) {
   if (bulkEditActive) return;
   saveState({ persistLocal: shouldTrackVideoUndo() });
   if (shouldRecalcStats) {
+    syncEventPlayerLinks(state.events || []);
+    invalidateAnalysisCaches();
     recalcAllStatsAndUpdateUI();
     renderEventsLog();
+    renderAggregatedTable();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+    renderSecondTable();
+    renderPlayerAnalysis();
   }
   renderVideoAnalysis();
+}
+function forceSyncDataFromLog() {
+  syncEventPlayerLinks(state.events || []);
+  invalidateAnalysisCaches();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog({ suppressScroll: true });
+  renderAggregatedTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+  renderSecondTable();
+  renderPlayerAnalysis();
+  renderVideoAnalysis();
+  saveState();
 }
 function createPlayerSelect(ev, onDone, options = {}) {
   const select = document.createElement("select");
@@ -12123,6 +12185,7 @@ function getAnalysisScopesForExtras() {
   return Array.from(analysisTeamFilterState.teams);
 }
 function getAnalysisEvents() {
+  syncEventPlayerLinks(state.events || []);
   const baseEvents = Array.isArray(state.events) ? state.events : [];
   const extraState = getAnalysisExtraMatchState();
   const extraEvents = [];
@@ -18110,6 +18173,12 @@ async function init() {
   if (elPlayersDbClean) {
     elPlayersDbClean.addEventListener("click", removeOrphanPlayersFromDb);
   }
+  if (elBtnOpenDebugModal) {
+    elBtnOpenDebugModal.addEventListener("click", openDebugModal);
+  }
+  if (elDebugModalClose) {
+    elDebugModalClose.addEventListener("click", closeDebugModal);
+  }
   if (elTeamsManagerClose) {
     elTeamsManagerClose.addEventListener("click", closeTeamsManagerModal);
   }
@@ -18162,6 +18231,15 @@ async function init() {
       if (!(target instanceof HTMLElement)) return;
       if (target.dataset.closePlayersDb !== undefined) {
         closePlayersDbModal();
+      }
+    });
+  }
+  if (elDebugModal) {
+    elDebugModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeDebugModal !== undefined || target.classList.contains("settings-modal__backdrop")) {
+        closeDebugModal();
       }
     });
   }
@@ -19119,6 +19197,12 @@ async function init() {
     });
   }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
+  if (elBtnForceSyncLog) {
+    elBtnForceSyncLog.addEventListener("click", () => {
+      forceSyncDataFromLog();
+      alert("Dati riallineati dal log.");
+    });
+  }
   if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   // pulsanti lineup mobile rimossi

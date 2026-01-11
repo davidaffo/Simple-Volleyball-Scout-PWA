@@ -45,6 +45,10 @@
           <button id="btn-open-match-manager" class="secondary" type="button" onclick="window.openMatchManagerModal && window.openMatchManagerModal()">Gestione match</button>
         </div>
         <div class="col col-auto">
+          <label class="spacer-label">&nbsp;</label>
+          <button id="btn-open-debug-modal" class="secondary" type="button">Debug</button>
+        </div>
+        <div class="col col-auto">
           <label>Tema</label>
           <div class="theme-toggle">
             <button type="button" id="theme-dark" class="secondary" aria-pressed="false" title="Tema scuro">🌙</button>
@@ -1723,6 +1727,21 @@
             </div>
             <p class="section-note">Backup di tutte le impostazioni, squadre e match attuale in un unico file.</p>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="debug-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="debug-modal-title">
+    <div class="settings-modal__backdrop" data-close-debug-modal></div>
+    <div class="settings-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="debug-modal-title">Debug dati match</h3>
+        <button id="debug-modal-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body">
+        <p class="section-note">Forza il riallineamento dei dati di analisi usando il log come fonte.</p>
+        <div class="controls-row">
+          <button id="btn-force-sync-log" class="danger">Riallinea dati dal log</button>
         </div>
       </div>
     </div>
