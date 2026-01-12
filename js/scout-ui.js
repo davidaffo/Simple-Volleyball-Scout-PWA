@@ -393,6 +393,7 @@ let setStartEditSetNum = null;
 let setStartModalSetNum = null;
 let setStartModalScope = "our";
 let setStartDraft = null;
+let suppressClickUntil = 0;
 let nextSetDraft = null;
 let nextSetModalOpen = false;
 let nextSetDragName = "";
@@ -2192,6 +2193,19 @@ function buildSetStartDraft(setNum, scope) {
   });
   return { setNum, scope, selections };
 }
+function suppressTransientClicks(ms = 350) {
+  suppressClickUntil = Date.now() + ms;
+}
+function shouldSuppressClick(e) {
+  if (Date.now() < suppressClickUntil) {
+    if (e) {
+      if (e.cancelable) e.preventDefault();
+      if (typeof e.stopPropagation === "function") e.stopPropagation();
+    }
+    return true;
+  }
+  return false;
+}
 function ensureSetStartDraft(setNum, scope) {
   if (setStartDraft && setStartDraft.setNum === setNum && setStartDraft.scope === scope) {
     return setStartDraft;
@@ -3281,6 +3295,9 @@ function closeAttackTrajectoryModal(result = null) {
   setAttackTrajectoryCourtSizing(false);
   elAttackTrajectoryModal.classList.remove("force-popup");
   attackTrajectoryForcePopup = false;
+  if (result) {
+    suppressTransientClicks();
+  }
   trajectoryMirror = false;
   trajectoryForceFar = false;
   trajectoryBaseZone = null;
@@ -19406,6 +19423,13 @@ async function init() {
   if (elBtnScoreTeamErrorModal) {
     elBtnScoreTeamErrorModal.addEventListener("click", openErrorModal);
   }
+  document.addEventListener(
+    "click",
+    e => {
+      shouldSuppressClick(e);
+    },
+    true
+  );
   if (elSetStartModalClose) {
     elSetStartModalClose.addEventListener("click", closeSetStartModal);
   }
