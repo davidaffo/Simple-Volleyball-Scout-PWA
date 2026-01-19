@@ -2772,8 +2772,9 @@ function loadSelectedMatch() {
       renderMatchesSelect();
       return;
     }
-    state.selectedMatch = generateMatchName();
+    state.selectedMatch = "";
     resetMatchState();
+    state.selectedMatch = generateMatchName();
     persistCurrentMatch();
     if (typeof syncMatchInfoInputs === "function") {
       syncMatchInfoInputs(state.match);
