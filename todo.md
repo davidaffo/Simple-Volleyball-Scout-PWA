@@ -7,7 +7,6 @@ Modalità allenamento
 crea stampa tipo foglio gara
 
 # Bug funzionalità
-Unisci dati partita non funziona correttamente
 Da touch si cliccano i tasti sottostanti dagli overlay
 Timeout e cambi non vengono resettate correttamente al cambio di partita
 Anulla ultimo fa tornare il centrale in campo

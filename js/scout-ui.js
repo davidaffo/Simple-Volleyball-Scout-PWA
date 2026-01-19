@@ -68,6 +68,68 @@ function getLiberosForScope(scope) {
 function getCaptainsForScope(scope) {
   return scope === "opponent" ? state.opponentCaptains || [] : state.captains || [];
 }
+const rosterIdMapsCache = {
+  our: { teamName: null, playersKey: null, map: null },
+  opponent: { teamName: null, playersKey: null, map: null }
+};
+function normalizePlayerKey(name) {
+  return String(name || "").trim().toLowerCase();
+}
+function getRosterIdMapsForScope(scope) {
+  const teamName = getSelectedTeamNameForScope(scope);
+  if (!teamName) return null;
+  const players = getPlayersForScope(scope) || [];
+  const playersKey = players.join("|");
+  const cache = rosterIdMapsCache[scope] || {};
+  if (cache.teamName === teamName && cache.playersKey === playersKey && cache.map) {
+    return cache.map;
+  }
+  if (typeof extractRosterFromTeam !== "function") return null;
+  const loadTeam = scope === "opponent" ? loadOpponentTeamFromStorage : loadTeamFromStorage;
+  if (typeof loadTeam !== "function") return null;
+  const team = loadTeam(teamName);
+  if (!team) return null;
+  const roster = extractRosterFromTeam(team);
+  const detailed = Array.isArray(roster.playersDetailed) ? roster.playersDetailed : [];
+  const nameToId = new Map();
+  const idToName = new Map();
+  detailed.forEach(player => {
+    const id = player && (player.id || player.playerId);
+    const name = player && player.name;
+    if (!id || !name) return;
+    nameToId.set(normalizePlayerKey(name), id);
+    idToName.set(id, name);
+  });
+  const idToIndex = new Map();
+  players.forEach((name, idx) => {
+    const id = nameToId.get(normalizePlayerKey(name));
+    if (id) idToIndex.set(id, idx);
+  });
+  const map = { nameToId, idToName, idToIndex };
+  rosterIdMapsCache[scope] = { teamName, playersKey, map };
+  return map;
+}
+function getPlayerIdForScope(scope, playerIdx, playerName) {
+  const maps = getRosterIdMapsForScope(scope);
+  const players = getPlayersForScope(scope);
+  const name = playerName || (typeof playerIdx === "number" ? players[playerIdx] : "");
+  if (maps && name) {
+    const id = maps.nameToId.get(normalizePlayerKey(name));
+    if (id) return id;
+  }
+  if (typeof findPlayersDbMatchByFullName === "function" && name) {
+    const entry = findPlayersDbMatchByFullName(name);
+    if (entry && entry.id) return entry.id;
+  }
+  return null;
+}
+function getPlayerIndexForId(scope, playerId) {
+  if (!playerId) return null;
+  const maps = getRosterIdMapsForScope(scope);
+  if (!maps || !maps.idToIndex) return null;
+  const idx = maps.idToIndex.get(playerId);
+  return typeof idx === "number" ? idx : null;
+}
 function getEnabledSkillsForScope(scope) {
   if (scope === "opponent" && state.useOpponentTeam) {
     const cfg = state.opponentSkillConfig || {};
@@ -4438,6 +4500,7 @@ function buildBaseEventPayload(base) {
     rotation,
     courtSideSwapped: !!state.courtSideSwapped,
     playerIdx: base.playerIdx,
+    playerId: base.playerId || null,
     playerName:
       base.playerName ||
       (typeof base.playerIdx === "number"
@@ -6513,6 +6576,7 @@ async function handleEventClick(
     });
   }
   if (playerIdx === -1 || !players[playerIdx]) return false;
+  const playerId = getPlayerIdForScope(scope, playerIdx, players[playerIdx]);
   if (skillId === "attack" && !attackMeta) {
     attackMeta = getAttackMetaForPlayer(scope, playerIdx);
   }
@@ -6583,8 +6647,10 @@ async function handleEventClick(
           : null;
     if (serverName) {
       const serveCode = getServeCodeFromPassCode(code);
+      const serverId = getPlayerIdForScope(servingScope, serverIdx, serverName);
       const serveEvent = buildBaseEventPayload({
         playerIdx: serverIdx,
+        playerId: serverId,
         playerName: serverName,
         skillId: "serve",
         code: serveCode,
@@ -6605,6 +6671,7 @@ async function handleEventClick(
   }
   const event = buildBaseEventPayload({
     playerIdx,
+    playerId,
     playerName: players[playerIdx],
     skillId,
     code,
@@ -9427,6 +9494,10 @@ function undoLastVideoEdit() {
 function resolvePlayerIdx(ev) {
   const scope = getTeamScopeFromEvent(ev);
   const players = getPlayersForScope(scope);
+  const idxById = getPlayerIndexForId(scope, ev.playerId);
+  if (typeof idxById === "number" && players[idxById]) {
+    return idxById;
+  }
   if (typeof ev.playerIdx === "number" && players[ev.playerIdx]) {
     return ev.playerIdx;
   }
@@ -9437,6 +9508,12 @@ function syncEventPlayerLink(ev) {
   const scope = getTeamScopeFromEvent(ev);
   const players = getPlayersForScope(scope);
   if (!Array.isArray(players) || players.length === 0) return;
+  const idxById = getPlayerIndexForId(scope, ev.playerId);
+  if (typeof idxById === "number" && players[idxById]) {
+    ev.playerIdx = idxById;
+    ev.playerName = players[idxById];
+    return;
+  }
   const rawName = ev.playerName != null ? String(ev.playerName).trim() : "";
   if (rawName) {
     let idx = players.indexOf(rawName);
@@ -9449,11 +9526,23 @@ function syncEventPlayerLink(ev) {
       if (players[idx] && players[idx] !== ev.playerName) {
         ev.playerName = players[idx];
       }
+      if (!ev.playerId) {
+        const maps = getRosterIdMapsForScope(scope);
+        if (maps && maps.nameToId) {
+          ev.playerId = maps.nameToId.get(normalizePlayerKey(ev.playerName)) || null;
+        }
+      }
       return;
     }
   }
   if (typeof ev.playerIdx === "number" && players[ev.playerIdx]) {
     ev.playerName = players[ev.playerIdx];
+    if (!ev.playerId) {
+      const maps = getRosterIdMapsForScope(scope);
+      if (maps && maps.nameToId) {
+        ev.playerId = maps.nameToId.get(normalizePlayerKey(ev.playerName)) || null;
+      }
+    }
   }
 }
 function syncEventPlayerLinks(events) {
@@ -9524,6 +9613,7 @@ function createPlayerSelect(ev, onDone, options = {}) {
       } else {
         ev.playerIdx = null;
         ev.playerName = null;
+        ev.playerId = null;
       }
       refreshAfterVideoEdit(true);
       return;
@@ -9535,6 +9625,7 @@ function createPlayerSelect(ev, onDone, options = {}) {
       } else {
         ev.playerIdx = val;
         ev.playerName = players[val];
+        ev.playerId = getPlayerIdForScope(scope, val, players[val]);
       }
       refreshAfterVideoEdit(true);
     }
@@ -11374,8 +11465,10 @@ function addManualPoint(
     return;
   }
   state.freeballPending = false;
+  const playerId = getPlayerIdForScope(scope, playerIdx, playerName);
   const event = buildBaseEventPayload({
     playerIdx,
+    playerId,
     playerName: playerName,
     skillId: "manual",
     code: codeLabel || direction,
@@ -12313,7 +12406,64 @@ function getAnalysisEvents() {
     matchNames.forEach(name => {
       const payload = state.savedMatches && state.savedMatches[name];
       const events = payload && payload.state && Array.isArray(payload.state.events) ? payload.state.events : [];
-      extraEvents.push(...events);
+      const rosterOur = payload && payload.state && Array.isArray(payload.state.players) ? payload.state.players : [];
+      const rosterOpp =
+        payload && payload.state && Array.isArray(payload.state.opponentPlayers)
+          ? payload.state.opponentPlayers
+          : [];
+      const resolvePayloadRosterMap = scopeName => {
+        if (!payload || !payload.state || typeof extractRosterFromTeam !== "function") return null;
+        const teamName =
+          scopeName === "opponent"
+            ? (payload.state.selectedOpponentTeam || "").trim()
+            : (payload.state.selectedTeam || "").trim();
+        if (!teamName) return null;
+        const mapSource =
+          scopeName === "opponent"
+            ? payload.state.savedOpponentTeams || payload.state.savedTeams
+            : payload.state.savedTeams;
+        let team = mapSource && mapSource[teamName] ? mapSource[teamName] : null;
+        if (!team && typeof loadTeamFromStorage === "function") {
+          team = loadTeamFromStorage(teamName);
+        }
+        if (!team && scopeName === "opponent" && typeof loadOpponentTeamFromStorage === "function") {
+          team = loadOpponentTeamFromStorage(teamName);
+        }
+        if (!team) return null;
+        const roster = extractRosterFromTeam(team);
+        const detailed = Array.isArray(roster.playersDetailed) ? roster.playersDetailed : [];
+        const nameToId = new Map();
+        detailed.forEach(player => {
+          const id = player && (player.id || player.playerId);
+          const pname = player && player.name;
+          if (!id || !pname) return;
+          nameToId.set(normalizePlayerKey(pname), id);
+        });
+        return { nameToId };
+      };
+      const payloadRosterMaps = {
+        our: resolvePayloadRosterMap("our"),
+        opponent: resolvePayloadRosterMap("opponent")
+      };
+      events.forEach(ev => {
+        if (!ev) return;
+        const cloned = Object.assign({}, ev);
+        const evScope = getTeamScopeFromEvent(cloned);
+        if (!cloned.playerName && typeof cloned.playerIdx === "number") {
+          const roster = evScope === "opponent" ? rosterOpp : rosterOur;
+          if (roster && roster[cloned.playerIdx]) {
+            cloned.playerName = roster[cloned.playerIdx];
+          }
+        }
+        if (!cloned.playerId && cloned.playerName) {
+          const map = payloadRosterMaps[evScope];
+          if (map && map.nameToId) {
+            cloned.playerId = map.nameToId.get(normalizePlayerKey(cloned.playerName)) || null;
+          }
+        }
+        syncEventPlayerLink(cloned);
+        extraEvents.push(cloned);
+      });
     });
   });
   return baseEvents.concat(extraEvents);
