@@ -4338,13 +4338,13 @@ function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
       : scope === "opponent"
         ? opponentBase
         : ensureCourtShapeFor(state.court);
-  const servingCourt = isServingForScope(scope) ? getServeDisplayCourt(scope) : null;
-  const effectiveBase = servingCourt ? ensureCourtShapeFor(servingCourt) : baseCourt;
+  const effectiveBase = baseCourt;
   if (!useAuto) {
     return effectiveBase.map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "serve") {
-    return ensureCourtShapeFor(effectiveBase).map((slot, idx) => ({ slot, idx }));
+    const servingCourt = getServeDisplayCourt(scope);
+    return ensureCourtShapeFor(servingCourt || effectiveBase).map((slot, idx) => ({ slot, idx }));
   }
   if (forSkillId === "pass") {
     const rotation = scope === "opponent" ? state.opponentRotation : state.rotation;
@@ -6412,6 +6412,8 @@ function syncRosterFromSelectedTeamIfNeeded() {
   const roster = extractRosterFromTeam(team);
   const rosterPlayers = normalizePlayers(roster.players || []);
   let currentPlayers = normalizePlayers(state.players || []);
+  const rosterNumbers =
+    typeof normalizeNumbersMap === "function" ? normalizeNumbersMap(roster.numbers || {}) : roster.numbers || {};
   const rosterLookup = new Map(rosterPlayers.map(name => [name.toLowerCase(), name]));
   const hasRoster = rosterPlayers.length > 0;
   const isEditDistanceAtMostOne = (a, b) => {
@@ -6459,6 +6461,12 @@ function syncRosterFromSelectedTeamIfNeeded() {
     });
     return match;
   };
+  const mapRosterNameToCurrent = rosterName => {
+    const match = findRosterTypoMatch(rosterName);
+    if (!match) return rosterName;
+    const currentMatch = currentPlayers.find(current => current.toLowerCase() === match.toLowerCase());
+    return currentMatch || rosterName;
+  };
   if (hasRoster && Array.isArray(state.players)) {
     const replacements = [];
     state.players.forEach((name, idx) => {
@@ -6472,9 +6480,13 @@ function syncRosterFromSelectedTeamIfNeeded() {
       replacements.forEach(({ idx, oldName, newName }) => {
         state.players[idx] = newName;
         const numbers = state.playerNumbers || {};
+        const rosterNum = rosterNumbers[newName];
         if (Object.prototype.hasOwnProperty.call(numbers, oldName)) {
-          if (!numbers[newName]) {
-            numbers[newName] = numbers[oldName];
+          const oldNum = numbers[oldName];
+          if (rosterNum) {
+            numbers[newName] = rosterNum;
+          } else if (!numbers[newName]) {
+            numbers[newName] = oldNum;
           }
           delete numbers[oldName];
           state.playerNumbers = numbers;
@@ -6488,14 +6500,22 @@ function syncRosterFromSelectedTeamIfNeeded() {
       saveState();
     }
   }
-  const missing = rosterPlayers.filter(name =>
-    !currentPlayers.some(current => current.toLowerCase() === name.toLowerCase())
-  );
+  const missing = rosterPlayers.filter(name => {
+    const mapped = mapRosterNameToCurrent(name);
+    return !currentPlayers.some(current => current.toLowerCase() === mapped.toLowerCase());
+  });
   if (!missing.length) return false;
   rosterSyncInProgress = true;
   const mergedPlayers = currentPlayers.concat(missing);
-  const mergedNumbers = Object.assign({}, roster.numbers || {}, state.playerNumbers || {});
-  const mergedLiberos = Array.from(new Set([...(state.liberos || []), ...(roster.liberos || [])]));
+  const mergedNumbers = Object.assign({}, rosterNumbers || {}, state.playerNumbers || {});
+  const mergedLiberos = Array.from(
+    new Set(
+      [
+        ...(state.liberos || []),
+        ...normalizePlayers(roster.liberos || []).map(name => mapRosterNameToCurrent(name))
+      ].filter(name => mergedPlayers.some(player => player.toLowerCase() === name.toLowerCase()))
+    )
+  );
   const mergedCaptains = (state.captains && state.captains.length ? state.captains : roster.captains) || [];
   const preferred = state.preferredLibero || roster.preferredLibero || "";
   updatePlayersList(mergedPlayers, {
