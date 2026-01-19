@@ -1513,6 +1513,16 @@ function clearAttackSelection(playerIdx = null, scope = "our") {
     attackInlinePlayer = null;
   }
 }
+function resetSkillSelectionForPlayer(playerIdx, scope = "our") {
+  const key = makePlayerKey(scope, playerIdx);
+  delete serveMetaByPlayer[key];
+  delete blockConfirmByPlayer[key];
+  if (serveTypeInlinePlayer === key || serveTypeFocusPlayer === key) {
+    clearServeTypeInlineListener();
+  }
+  clearAttackSelection(playerIdx, scope);
+  setSelectedSkillForScope(scope, playerIdx, null);
+}
 function shouldPromptAttackSetType(scope = "our") {
   const enabled =
     scope === "opponent" ? state.opponentSetTypePromptEnabled : state.setTypePromptEnabled;
@@ -4485,12 +4495,17 @@ function buildBaseEventPayload(base) {
     videoTime: videoSeconds
   };
 }
+function setSkillModalCancelVisibility(visible) {
+  if (!elSkillModalCancel) return;
+  elSkillModalCancel.classList.toggle("hidden", !visible);
+}
 function renderSkillChoice(playerIdx, playerName, scope = "our") {
   if (state.matchFinished) {
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
   if (!elSkillModalBody) return;
+  setSkillModalCancelVisibility(false);
   activeSkillModalContext = { playerIdx, playerName: playerName || null, skillId: null, scope };
   updateSetTypeVisibility(getPredictedSkillIdForScope(scope) || getPredictedSkillId());
   modalMode = "skill";
@@ -4527,6 +4542,7 @@ function renderSkillChoice(playerIdx, playerName, scope = "our") {
 }
 function renderSkillCodes(playerIdx, playerName, skillId, scope = "our") {
   if (!elSkillModalBody) return;
+  setSkillModalCancelVisibility(true);
   activeSkillModalContext = { playerIdx, playerName: playerName || null, skillId, scope };
   const predicted = getPredictedSkillIdForScope(scope) || getPredictedSkillId();
   updateSetTypeVisibility(skillId === "attack" ? "attack" : predicted);
@@ -4750,6 +4766,7 @@ function openSubModal(posIdx) {
   modalMode = "sub";
   modalSubPosIdx = posIdx;
   elSkillModalBody.innerHTML = "";
+  setSkillModalCancelVisibility(false);
   if (elSkillModalTitle) {
     elSkillModalTitle.textContent = "Sostituisci posizione " + (posIdx + 1);
   }
@@ -4784,11 +4801,18 @@ function openSubModal(posIdx) {
   elSkillModal.classList.remove("hidden");
   setModalOpenState(true);
 }
+function cancelSkillModalFlow() {
+  if (!activeSkillModalContext) return;
+  const { playerIdx, playerName, scope } = activeSkillModalContext;
+  resetSkillSelectionForPlayer(playerIdx, scope);
+  renderSkillChoice(playerIdx, playerName, scope);
+}
 function closeSkillModal() {
   if (!elSkillModal) return;
   elSkillModal.classList.add("hidden");
   setModalOpenState(false);
   activeSkillModalContext = null;
+  setSkillModalCancelVisibility(false);
 }
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
@@ -5223,6 +5247,33 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
   const { closeAfterAction = false, nextSkillId = null, scope = "our" } = options;
   const playerKey = makePlayerKey(scope, playerIdx);
+  const selectedSkill = getSelectedSkillForScope(scope, playerIdx);
+  const hasActiveSelection =
+    !!selectedSkill ||
+    !!serveMetaByPlayer[playerKey] ||
+    !!getAttackMetaForPlayer(scope, playerIdx) ||
+    attackInlinePlayer === playerKey ||
+    serveTypeInlinePlayer === playerKey ||
+    !!blockConfirmByPlayer[playerKey];
+  let cancelBtn = targetEl.querySelector(".player-skill-cancel");
+  if (hasActiveSelection) {
+    if (!cancelBtn) {
+      cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "player-skill-cancel";
+      cancelBtn.title = "Annulla fondamentale";
+      cancelBtn.textContent = "✕";
+      cancelBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        resetSkillSelectionForPlayer(playerIdx, scope);
+        if (closeAfterAction) closeSkillModal();
+        renderPlayers();
+      });
+      targetEl.appendChild(cancelBtn);
+    }
+  } else if (cancelBtn) {
+    cancelBtn.remove();
+  }
   const attackLockedForPlayer = attackInlinePlayer === playerKey;
   let forcedSkillId = null;
   const getSkillColors = skillId => {
@@ -19651,6 +19702,13 @@ async function init() {
           applyBlockNumberToTarget(num);
         }
       }
+    });
+  }
+  if (elSkillModalCancel) {
+    elSkillModalCancel.addEventListener("click", e => {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelSkillModalFlow();
     });
   }
   if (elSkillModalClose) {

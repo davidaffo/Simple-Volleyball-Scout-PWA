@@ -266,6 +266,7 @@ const elSkillModal = document.getElementById("skill-modal");
 const elSkillModalBackdrop = document.querySelector("#skill-modal .skill-modal__backdrop");
 const elSkillModalBody = document.getElementById("skill-modal-body");
 const elSkillModalTitle = document.getElementById("skill-modal-title");
+const elSkillModalCancel = document.getElementById("skill-modal-cancel");
 const elSkillModalClose = document.getElementById("skill-modal-close");
 const elAggSkillModal = document.getElementById("agg-skill-modal");
 const elAggSkillModalBackdrop = document.querySelector("#agg-skill-modal .skill-modal__backdrop");

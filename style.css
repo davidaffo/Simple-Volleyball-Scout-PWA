@@ -2168,6 +2168,25 @@ body[data-theme="light"] .player-card {
   position: relative;
   background: #181818;
 }
+.player-skill-cancel {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #dc2626;
+  color: #fff;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.player-skill-cancel:active {
+  transform: scale(0.98);
+}
 .court-card[data-team-scope="our"] .court-name {
   color: #60a5fa;
 }
@@ -4552,6 +4571,26 @@ body[data-theme="light"] .agg-skill-codes th {
   font-weight: 800;
   cursor: pointer;
   pointer-events: auto;
+}
+.skill-modal__cancel-abs {
+  position: absolute;
+  top: 0.15rem;
+  right: 2.45rem;
+  z-index: 3;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.skill-modal__cancel-abs:active {
+  transform: scale(0.98);
 }
 .skill-modal__close-abs:active {
   transform: scale(0.98);
