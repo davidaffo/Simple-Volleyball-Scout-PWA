@@ -965,7 +965,8 @@ function ensureOpponentLiberosFromTeam() {
 }
 function applyDefaultLineup(names = [], rotation = 1) {
   ensureCourtShape();
-  const lineup = Array.isArray(names) ? names.filter(Boolean) : [];
+  const valid = new Set(state.players || []);
+  const lineup = Array.isArray(names) ? names.filter(name => name && valid.has(name)) : [];
   state.court = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
   const rot = Number.isFinite(rotation) ? rotation : parseInt(rotation, 10) || 1;
   state.rotation = Math.min(6, Math.max(1, rot));
@@ -974,7 +975,8 @@ function applyDefaultLineup(names = [], rotation = 1) {
   resetAutoRoleCache();
 }
 function applyOpponentDefaultLineup(names = [], rotation = 1) {
-  const lineup = Array.isArray(names) ? names.filter(Boolean) : [];
+  const valid = new Set(state.opponentPlayers || []);
+  const lineup = Array.isArray(names) ? names.filter(name => name && valid.has(name)) : [];
   state.opponentCourt = Array.from({ length: 6 }, (_, idx) => ({ main: lineup[idx] || "" }));
   const rot = Number.isFinite(rotation) ? rotation : parseInt(rotation, 10) || 1;
   state.opponentRotation = Math.min(6, Math.max(1, rot));

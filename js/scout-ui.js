@@ -6081,9 +6081,49 @@ function updateFloatingServeErrorButton(isCompactMobile) {
   elFloatingServeErrorBtn.dataset.playerName = server.name;
   elFloatingServeErrorBtn.classList.remove("hidden");
 }
+function syncRosterFromSelectedTeamIfNeeded() {
+  if (rosterSyncInProgress) return false;
+  if (typeof loadTeamFromStorage !== "function" || typeof extractRosterFromTeam !== "function") return false;
+  const teamName = (state.selectedTeam || (state.match && state.match.teamName) || "").trim();
+  if (!teamName) return false;
+  const team = loadTeamFromStorage(teamName);
+  if (!team) return false;
+  const roster = extractRosterFromTeam(team);
+  const rosterPlayers = normalizePlayers(roster.players || []);
+  const currentPlayers = normalizePlayers(state.players || []);
+  const missing = rosterPlayers.filter(name =>
+    !currentPlayers.some(current => current.toLowerCase() === name.toLowerCase())
+  );
+  if (!missing.length) return false;
+  rosterSyncInProgress = true;
+  const mergedPlayers = currentPlayers.concat(missing);
+  const mergedNumbers = Object.assign({}, roster.numbers || {}, state.playerNumbers || {});
+  const mergedLiberos = Array.from(new Set([...(state.liberos || []), ...(roster.liberos || [])]));
+  const mergedCaptains = (state.captains && state.captains.length ? state.captains : roster.captains) || [];
+  const preferred = state.preferredLibero || roster.preferredLibero || "";
+  updatePlayersList(mergedPlayers, {
+    askReset: false,
+    preserveCourt: true,
+    playerNumbers: mergedNumbers,
+    liberos: mergedLiberos,
+    captains: mergedCaptains,
+    setDefaultLineup: false,
+    preferredLibero: preferred
+  });
+  rosterSyncInProgress = false;
+  return true;
+}
 function renderPlayers() {
   if (!elPlayersContainer) return;
   syncCourtSideLayout();
+  if (syncRosterFromSelectedTeamIfNeeded()) return;
+  if (typeof cleanCourtPlayers === "function" && state.court) {
+    const valid = new Set(state.players || []);
+    const hasInvalid = state.court.some(slot => slot && slot.main && !valid.has(slot.main));
+    if (hasInvalid) {
+      cleanCourtPlayers();
+    }
+  }
   elPlayersContainer.innerHTML = "";
   elPlayersContainer.classList.add("court-layout");
   elPlayersContainer.classList.toggle("court-layout--mirror", !!state.courtViewMirrored);
@@ -12824,6 +12864,7 @@ const TRAJECTORY_LINE_WIDTH = 3;
 const trajectoryBgCache = {};
 let serveTrajectoryImgs = null;
 let multiscoutTeamScope = "our";
+let rosterSyncInProgress = false;
 function getAnalysisCourtSide(value) {
   return value === "far" ? "far" : "near";
 }
