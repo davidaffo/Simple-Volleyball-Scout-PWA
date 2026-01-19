@@ -354,6 +354,15 @@ const elNextSetStart = document.getElementById("next-set-start");
 const elNextSetCancel = document.getElementById("next-set-cancel");
 const elUseOpponentTeamToggle = document.getElementById("use-opponent-team-toggle");
 const elOpponentTeamSettings = document.getElementById("opponent-team-settings");
+const elScoutMatchControls = document.getElementById("scout-match-controls");
+const elScoutTrainingControls = document.getElementById("scout-training-controls");
+const elTrainingSkillSelect = document.getElementById("training-skill-select");
+const elBtnTrainingFillDefault = document.getElementById("btn-training-fill-default");
+const elBtnTrainingClear = document.getElementById("btn-training-clear");
+const elTrainingBoard = document.getElementById("training-board");
+const elTrainingPlayersPool = document.getElementById("training-players-pool");
+const elTrainingPlayersContainer = document.getElementById("training-players-container");
+const elCourtArea = document.getElementById("court-area");
 const elOpponentSkillServe = document.getElementById("opponent-skill-serve");
 const elOpponentSkillPass = document.getElementById("opponent-skill-pass");
 const elOpponentSkillAttack = document.getElementById("opponent-skill-attack");
@@ -4290,7 +4299,7 @@ const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
-const TAB_ORDER = ["match", "info", "scout", "aggregated", "video"];
+const TAB_ORDER = ["match", "info", "scout", "training", "aggregated", "video"];
 function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -5566,6 +5575,10 @@ function applyPlayersFromTextarea(options = {}) {
 }
 function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   if (!targetEl) return;
+  if (state.sessionType === "training") {
+    renderTrainingSkillRows(targetEl, playerIdx, activeName, options);
+    return;
+  }
   const { closeAfterAction = false, nextSkillId = null, scope = "our" } = options;
   const playerKey = makePlayerKey(scope, playerIdx);
   const selectedSkill = getSelectedSkillForScope(scope, playerIdx);
@@ -6235,6 +6248,58 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   }
   targetEl.appendChild(grid);
 }
+function renderTrainingSkillRows(targetEl, playerIdx, activeName, options = {}) {
+  if (!targetEl) return;
+  const { scope = "our" } = options;
+  const skillId = state.trainingSkillId || "";
+  if (!skillId) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Seleziona un fondamentale da valutare.";
+    targetEl.appendChild(empty);
+    return;
+  }
+  if (!isSkillEnabledForScope(skillId, scope)) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Il fondamentale selezionato non è abilitato.";
+    targetEl.appendChild(empty);
+    return;
+  }
+  const skillMeta = SKILLS.find(s => s.id === skillId);
+  const codes = (state.metricsConfig?.[skillId]?.activeCodes || RESULT_CODES).slice();
+  if (!codes.includes("/")) codes.push("/");
+  if (!codes.includes("=")) codes.push("=");
+  const ordered = codes.filter(c => c !== "/" && c !== "=").concat("/", "=");
+  const grid = document.createElement("div");
+  grid.className = "code-grid";
+  const title = document.createElement("div");
+  title.className = "skill-header";
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "skill-title skill-" + skillId;
+  const colors = SKILL_COLORS[skillId] || { bg: "#2f2f2f", text: "#e5e7eb" };
+  titleSpan.style.backgroundColor = colors.bg;
+  titleSpan.style.color = colors.text;
+  titleSpan.textContent = skillMeta ? skillMeta.label : skillId;
+  title.appendChild(titleSpan);
+  grid.appendChild(title);
+  ordered.forEach(code => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const tone = typeof getCodeTone === "function" ? getCodeTone(skillId, code) : "neutral";
+    btn.className = "event-btn code-" + tone;
+    btn.textContent = code;
+    btn.dataset.playerIdx = String(playerIdx);
+    btn.dataset.playerName = activeName;
+    btn.dataset.skillId = skillId;
+    btn.dataset.code = code;
+    btn.addEventListener("click", async e => {
+      await handleTrainingEventClick(playerIdx, skillId, code, activeName, e.currentTarget, { scope });
+    });
+    grid.appendChild(btn);
+  });
+  targetEl.appendChild(grid);
+}
 function renderTeamCourtCards(options = {}) {
   const {
     container,
@@ -6530,6 +6595,42 @@ function syncRosterFromSelectedTeamIfNeeded() {
   rosterSyncInProgress = false;
   return true;
 }
+function renderTrainingPlayers() {
+  if (!elTrainingPlayersContainer) return;
+  if (syncRosterFromSelectedTeamIfNeeded()) return;
+  const valid = new Set(state.players || []);
+  state.trainingBoardPlayers = (state.trainingBoardPlayers || []).filter(name => valid.has(name));
+  state.trainingBoardPositions = state.trainingBoardPositions || {};
+  elTrainingPlayersContainer.innerHTML = "";
+  elTrainingPlayersContainer.classList.add("training-board-inner");
+  state.trainingBoardPlayers.forEach(name => {
+    const card = document.createElement("div");
+    card.className = "training-board-card";
+    card.dataset.playerName = name;
+    const pos = state.trainingBoardPositions[name] || { x: 20, y: 20 };
+    card.style.left = `${pos.x}px`;
+    card.style.top = `${pos.y}px`;
+    const label = document.createElement("div");
+    label.className = "training-board-name";
+    label.textContent = formatNameWithNumber(name, { compactCourt: true });
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "training-board-remove";
+    removeBtn.textContent = "✕";
+    removeBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      removeTrainingBoardPlayer(name);
+    });
+    card.appendChild(removeBtn);
+    card.appendChild(label);
+    enableTrainingBoardDrag(card);
+    renderTrainingSkillRows(card, state.players.indexOf(name), name, { scope: "our" });
+    elTrainingPlayersContainer.appendChild(card);
+  });
+  if (elTrainingPlayersPool) {
+    renderTrainingPlayersPool();
+  }
+}
 function renderPlayers() {
   if (!elPlayersContainer) return;
   syncCourtSideLayout();
@@ -6603,6 +6704,135 @@ function renderPlayers() {
   renderLogServeTrajectories();
   updateFloatingServeErrorButton(isCompactMobile);
   maybeScrollToActiveCourtOnMobile();
+}
+function addTrainingBoardPlayer(name) {
+  if (!name) return;
+  state.trainingBoardPlayers = state.trainingBoardPlayers || [];
+  if (state.trainingBoardPlayers.includes(name)) return;
+  state.trainingBoardPlayers.push(name);
+  state.trainingBoardPositions = state.trainingBoardPositions || {};
+  if (!state.trainingBoardPositions[name]) {
+    state.trainingBoardPositions[name] = { x: 20, y: 20 };
+  }
+  saveState();
+  renderTrainingPlayers();
+}
+function removeTrainingBoardPlayer(name) {
+  state.trainingBoardPlayers = (state.trainingBoardPlayers || []).filter(player => player !== name);
+  if (state.trainingBoardPositions) {
+    delete state.trainingBoardPositions[name];
+  }
+  saveState();
+  renderTrainingPlayers();
+}
+function renderTrainingPlayersPool() {
+  if (!elTrainingPlayersPool) return;
+  elTrainingPlayersPool.innerHTML = "";
+  const players = state.players || [];
+  if (!players.length) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessuna giocatrice disponibile.";
+    elTrainingPlayersPool.appendChild(empty);
+    return;
+  }
+  players.forEach(name => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "training-pool-item";
+    btn.textContent = formatNameWithNumber(name, { compactCourt: true });
+    btn.addEventListener("click", () => addTrainingBoardPlayer(name));
+    elTrainingPlayersPool.appendChild(btn);
+  });
+}
+function setTrainingCourtFromDefaultLineup() {
+  const defaults = typeof getSelectedTeamDefaultSettings === "function" ? getSelectedTeamDefaultSettings() : null;
+  const basePlayers = defaults && defaults.defaultLineup ? defaults.defaultLineup : [];
+  basePlayers.forEach(name => {
+    if (name) addTrainingBoardPlayer(name);
+  });
+}
+function clearTrainingCourt() {
+  state.trainingBoardPlayers = [];
+  state.trainingBoardPositions = {};
+  saveState();
+  renderTrainingPlayers();
+}
+function enableTrainingBoardDrag(card) {
+  if (!elTrainingPlayersContainer || !card) return;
+  let startX = 0;
+  let startY = 0;
+  let originX = 0;
+  let originY = 0;
+  let dragging = false;
+  const onPointerMove = e => {
+    if (!dragging) return;
+    const rect = elTrainingPlayersContainer.getBoundingClientRect();
+    const nextX = Math.min(Math.max(originX + (e.clientX - startX), 0), rect.width - card.offsetWidth);
+    const nextY = Math.min(Math.max(originY + (e.clientY - startY), 0), rect.height - card.offsetHeight);
+    card.style.left = `${nextX}px`;
+    card.style.top = `${nextY}px`;
+    const name = card.dataset.playerName || "";
+    if (name) {
+      state.trainingBoardPositions[name] = { x: nextX, y: nextY };
+    }
+  };
+  const onPointerUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    saveState();
+  };
+  card.addEventListener("pointerdown", e => {
+    if (!(e.target instanceof HTMLElement)) return;
+    if (e.target.classList.contains("training-board-remove")) return;
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    originX = parseFloat(card.style.left) || 0;
+    originY = parseFloat(card.style.top) || 0;
+    card.setPointerCapture(e.pointerId);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  });
+}
+function syncTrainingSkillSelect() {
+  if (!elTrainingSkillSelect) return;
+  const enabledSkills = getEnabledSkillsForScope("our");
+  elTrainingSkillSelect.innerHTML = "";
+  enabledSkills.forEach(skill => {
+    const opt = document.createElement("option");
+    opt.value = skill.id;
+    opt.textContent = skill.label;
+    elTrainingSkillSelect.appendChild(opt);
+  });
+  let desired = state.trainingSkillId || "";
+  if (!enabledSkills.some(skill => skill.id === desired)) {
+    desired = enabledSkills.length ? enabledSkills[0].id : "";
+  }
+  state.trainingSkillId = desired;
+  elTrainingSkillSelect.value = desired;
+}
+function applySessionTypeUI() {
+  const type = state.sessionType === "training" ? "training" : "match";
+  document.body.dataset.sessionType = type;
+  if (type === "training") {
+    state.useOpponentTeam = false;
+    state.predictiveSkillFlow = false;
+    state.matchFinished = false;
+  }
+  const active = document && document.body ? document.body.dataset.activeTab : "";
+  if (active === "training") {
+    if (typeof applyTrainingInfoToUI === "function") {
+      applyTrainingInfoToUI();
+    }
+    syncTrainingSkillSelect();
+    renderTrainingPlayersPool();
+    renderTrainingPlayers();
+  } else {
+    renderPlayers();
+  }
 }
 function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
   if (!state.useOpponentTeam) return;
@@ -6885,6 +7115,49 @@ function incrementSkillStats(scope, playerIdx, skillId, code) {
   }
   state.opponentStats[playerIdx][skillId][code] =
     (state.opponentStats[playerIdx][skillId][code] || 0) + 1;
+}
+async function handleTrainingEventClick(
+  playerIdxStr,
+  skillId,
+  code,
+  playerName,
+  sourceEl,
+  { scope = "our" } = {}
+) {
+  if (!skillId) return false;
+  const players = getPlayersForScope(scope);
+  let playerIdx = parseInt(playerIdxStr, 10);
+  if (isNaN(playerIdx) || !players[playerIdx]) {
+    playerIdx = players.findIndex(p => p === playerName);
+  }
+  if ((playerIdx === -1 || !players[playerIdx]) && playerName) {
+    const raw = playerName.trim().toLowerCase();
+    playerIdx = players.findIndex(p => (p || "").trim().toLowerCase() === raw);
+  }
+  if (playerIdx === -1 || !players[playerIdx]) return false;
+  const playerId = getPlayerIdForScope(scope, playerIdx, players[playerIdx]);
+  const event = buildBaseEventPayload({
+    playerIdx,
+    playerId,
+    playerName: players[playerIdx],
+    skillId,
+    code,
+    teamScope: scope
+  });
+  event.sessionType = "training";
+  event.trainingName = state.selectedTraining || (state.training && state.training.title) || "";
+  state.events.push(event);
+  incrementSkillStats(scope, playerIdx, skillId, code);
+  animateEventToLog(sourceEl, skillId, code);
+  schedulePostEventUpdates({
+    includeAggregates: true,
+    append: true,
+    playerIdx,
+    skillId,
+    persistLocal: true,
+    scope
+  });
+  return true;
 }
 async function handleEventClick(
   playerIdxStr,
@@ -12661,6 +12934,14 @@ function normalizeMatchKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 function getCurrentMatchKey() {
+  if (state.sessionType === "training") {
+    const selectedTraining = (state.selectedTraining || "").trim();
+    if (selectedTraining) return selectedTraining;
+    if (typeof buildTrainingDisplayName === "function") {
+      return buildTrainingDisplayName(state.training || {}) || "";
+    }
+    return "";
+  }
   const selected = (state.selectedMatch || "").trim();
   if (selected) return selected;
   if (typeof buildMatchDisplayName === "function") {
@@ -12669,6 +12950,12 @@ function getCurrentMatchKey() {
   return "";
 }
 function getCurrentMatchLabel() {
+  if (state.sessionType === "training") {
+    if (typeof buildTrainingDisplayName === "function") {
+      return buildTrainingDisplayName(state.training || {}) || "";
+    }
+    return (state.selectedTraining || "").trim();
+  }
   if (typeof buildMatchDisplayName === "function") {
     return buildMatchDisplayName(state.match || {}) || "";
   }
@@ -16767,7 +17054,13 @@ function buildMatchExportPayload() {
     version: 1,
     exportedAt: new Date().toISOString(),
     state: {
+      sessionType: state.sessionType || "match",
       match: state.match,
+      training: state.training,
+      trainingCourt: state.trainingCourt,
+      trainingSkillId: state.trainingSkillId,
+      trainingBoardPlayers: state.trainingBoardPlayers,
+      trainingBoardPositions: state.trainingBoardPositions,
       theme: state.theme,
       currentSet: state.currentSet,
       rotation: state.rotation,
@@ -16807,8 +17100,10 @@ function buildMatchExportPayload() {
       matchFinished: state.matchFinished,
       savedTeams: state.savedTeams,
       savedOpponentTeams: state.savedOpponentTeams || state.savedTeams,
+      savedTrainings: state.savedTrainings,
       selectedTeam: state.selectedTeam,
       selectedOpponentTeam: state.selectedOpponentTeam,
+      selectedTraining: state.selectedTraining,
       video: state.video,
       pointRules: state.pointRules,
       autoRotate: state.autoRotate,
@@ -16831,7 +17126,9 @@ function buildDatabaseBackupPayload() {
   payload.kind = "database-backup";
   payload.savedAt = payload.exportedAt;
   payload.state.savedMatches = loadMatchesMapFromStorage();
+  payload.state.savedTrainings = loadTrainingsMapFromStorage();
   payload.state.selectedMatch = state.selectedMatch || "";
+  payload.state.selectedTraining = state.selectedTraining || "";
   return payload;
 }
 async function exportMatchToFile() {
@@ -16923,6 +17220,21 @@ function applyImportedMatch(nextState, options = {}) {
   merged.courtViewMirrored = !!nextState.courtViewMirrored;
   merged.courtSideSwapped = !!nextState.courtSideSwapped;
   merged.useOpponentTeam = !!nextState.useOpponentTeam;
+  merged.sessionType = nextState.sessionType === "training" ? "training" : "match";
+  merged.training = nextState.training || state.training || { title: "", date: "", notes: "" };
+  merged.trainingCourt = Array.isArray(nextState.trainingCourt)
+    ? ensureCourtShapeFor(nextState.trainingCourt)
+    : state.trainingCourt || Array.from({ length: 6 }, () => ({ main: "" }));
+  merged.trainingSkillId = nextState.trainingSkillId || state.trainingSkillId || "pass";
+  merged.trainingBoardPlayers = Array.isArray(nextState.trainingBoardPlayers)
+    ? nextState.trainingBoardPlayers
+    : state.trainingBoardPlayers || [];
+  merged.trainingBoardPositions =
+    typeof nextState.trainingBoardPositions === "object" && nextState.trainingBoardPositions
+      ? nextState.trainingBoardPositions
+      : state.trainingBoardPositions || {};
+  merged.savedTrainings = nextState.savedTrainings || state.savedTrainings || {};
+  merged.selectedTraining = nextState.selectedTraining || state.selectedTraining || "";
   merged.opponentSkillConfig = nextState.opponentSkillConfig || state.opponentSkillConfig || {};
   merged.freeballPending = !!nextState.freeballPending;
   merged.freeballPendingScope = nextState.freeballPendingScope || state.freeballPendingScope || "our";
@@ -16966,6 +17278,9 @@ function applyImportedMatch(nextState, options = {}) {
   renderEventsLog();
   renderTeamsSelect();
   renderOpponentTeamsSelect();
+  if (typeof applySessionTypeUI === "function") {
+    applySessionTypeUI();
+  }
   if (!silent) {
     alert("Match importato correttamente.");
   }
@@ -16983,6 +17298,14 @@ function applyImportedDatabase(nextState) {
     syncMatchesFromStorage();
     state.selectedMatch = nextState.state.selectedMatch || "";
     renderMatchesSelect();
+  }
+  if (nextState.state.savedTrainings && typeof nextState.state.savedTrainings === "object") {
+    Object.entries(nextState.state.savedTrainings).forEach(([name, data]) => {
+      saveTrainingToStorage(name, data);
+    });
+    syncTrainingsFromStorage();
+    state.selectedTraining = nextState.state.selectedTraining || "";
+    renderTrainingsSelect();
   }
   if (nextState.state.savedOpponentTeams && typeof nextState.state.savedOpponentTeams === "object") {
     Object.entries(nextState.state.savedOpponentTeams).forEach(([name, data]) => {
@@ -18239,6 +18562,13 @@ function setActiveTab(target) {
   if (target === "scout" && shouldOpenNextSetModal()) {
     openNextSetModal(state.currentSet || 1);
   }
+  if (target === "training") {
+    state.sessionType = "training";
+    applySessionTypeUI();
+  } else if (target === "scout") {
+    state.sessionType = "match";
+    applySessionTypeUI();
+  }
 }
 function initTabs() {
   if (!tabButtons || !tabPanels) return;
@@ -18425,6 +18755,9 @@ async function init() {
   restoreYoutubeFromState();
   applyTheme(state.theme || "dark");
   applyMatchInfoToUI();
+  if (typeof applyTrainingInfoToUI === "function") {
+    applyTrainingInfoToUI();
+  }
   updateRotationDisplay();
   applyPlayersFromStateToTextarea();
   applyOpponentPlayersFromStateToTextarea();
@@ -18439,8 +18772,10 @@ async function init() {
   renderTeamsSelect();
   renderOpponentTeamsSelect();
   renderMatchesSelect();
+  renderTrainingsSelect();
   renderLiveScore();
   renderPlayers();
+  applySessionTypeUI();
   initLogServeTrajectoryControls();
   if (elFloatingServeErrorBtn && !elFloatingServeErrorBtn._serveErrorBound) {
     elFloatingServeErrorBtn._serveErrorBound = true;
@@ -18505,6 +18840,18 @@ async function init() {
     const handler = () => {
       saveMatchInfoFromUI();
       if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+      if (typeof renderMatchSummary === "function") renderMatchSummary();
+    };
+    input.addEventListener("change", handler);
+    input.addEventListener("blur", handler);
+  });
+  [elTrainingTitle, elTrainingDate, elTrainingNotes].forEach(input => {
+    if (!input) return;
+    const handler = () => {
+      if (typeof saveTrainingInfoFromUI === "function") {
+        saveTrainingInfoFromUI();
+      }
+      if (typeof renderTrainingsSelect === "function") renderTrainingsSelect();
       if (typeof renderMatchSummary === "function") renderMatchSummary();
     };
     input.addEventListener("change", handler);
@@ -18830,6 +19177,9 @@ async function init() {
   if (elBtnDeleteMatch) {
     elBtnDeleteMatch.addEventListener("click", deleteSelectedMatch);
   }
+  if (elBtnDeleteTraining) {
+    elBtnDeleteTraining.addEventListener("click", deleteSelectedTraining);
+  }
   if (elBtnExportDb) {
     elBtnExportDb.addEventListener("click", exportDatabaseToFile);
   }
@@ -19066,6 +19416,23 @@ async function init() {
       updateMatchButtonsState();
     });
   }
+  if (elSavedTrainingsList) {
+    elSavedTrainingsList.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const btn = target.closest(".training-list-open");
+      if (!btn) return;
+      const name = btn.dataset.trainingName || "";
+      if (elSavedTrainingsSelect) {
+        elSavedTrainingsSelect.value = name;
+      }
+      state.selectedTraining = name;
+      if (typeof renderTrainingsList === "function") {
+        renderTrainingsList(Object.keys(state.savedTrainings || {}), name);
+      }
+      updateTrainingButtonsState();
+    });
+  }
   if (elBtnSaveMatchInfo) {
     elBtnSaveMatchInfo.addEventListener("click", () => {
       const selectedName = (elSavedMatchesSelect && elSavedMatchesSelect.value) || state.selectedMatch || "";
@@ -19096,6 +19463,43 @@ async function init() {
       alert("Info match salvate.");
     });
   }
+  if (elBtnSaveTrainingInfo) {
+    elBtnSaveTrainingInfo.addEventListener("click", () => {
+      const selectedName = (elSavedTrainingsSelect && elSavedTrainingsSelect.value) || state.selectedTraining || "";
+      if (selectedName) {
+        state.selectedTraining = selectedName;
+      }
+      if (typeof saveTrainingInfoFromUI === "function") {
+        saveTrainingInfoFromUI();
+      }
+      if (typeof saveTrainingToStorage === "function" && typeof buildMatchExportPayload === "function") {
+        const trainingInfo =
+          typeof getTrainingInfoFromInputs === "function" ? getTrainingInfoFromInputs() : state.training || {};
+        const desiredName =
+          state.selectedTraining ||
+          (typeof generateTrainingName === "function" ? generateTrainingName("") : "") ||
+          "Allenamento";
+        const payload = getCurrentTrainingPayload(desiredName);
+        payload.name = desiredName;
+        payload.state.training = Object.assign({}, payload.state.training || {}, trainingInfo);
+        state.training = Object.assign({}, payload.state.training);
+        state.sessionType = "training";
+        state.selectedTraining = desiredName;
+        state.savedTrainings = state.savedTrainings || {};
+        state.savedTrainings[desiredName] = payload;
+        saveTrainingToStorage(desiredName, payload);
+        if (typeof applyTrainingInfoToUI === "function") {
+          applyTrainingInfoToUI();
+        }
+      } else if (typeof persistCurrentTraining === "function") {
+        persistCurrentTraining();
+      }
+      if (typeof renderTrainingsSelect === "function") renderTrainingsSelect();
+      if (typeof renderMatchSummary === "function") renderMatchSummary();
+      applySessionTypeUI();
+      alert("Info allenamento salvate.");
+    });
+  }
   if (elBtnNewMatch) {
     elBtnNewMatch.addEventListener("click", () => {
       if (!elSavedMatchesSelect) return;
@@ -19103,9 +19507,21 @@ async function init() {
       loadSelectedMatch();
     });
   }
+  if (elBtnNewTraining) {
+    elBtnNewTraining.addEventListener("click", () => {
+      if (!elSavedTrainingsSelect) return;
+      elSavedTrainingsSelect.value = "";
+      loadSelectedTraining();
+    });
+  }
   if (elBtnLoadMatch) {
     elBtnLoadMatch.addEventListener("click", () => {
       loadSelectedMatch();
+    });
+  }
+  if (elBtnLoadTraining) {
+    elBtnLoadTraining.addEventListener("click", () => {
+      loadSelectedTraining();
     });
   }
   if (elTeamsSelect) {
@@ -19124,6 +19540,28 @@ async function init() {
         renderMatchesList(Object.keys(state.savedMatches || {}), state.selectedMatch);
       }
     });
+  }
+  if (elSavedTrainingsSelect) {
+    elSavedTrainingsSelect.addEventListener("change", () => {
+      updateTrainingButtonsState();
+      state.selectedTraining = elSavedTrainingsSelect.value || "";
+      if (typeof renderTrainingsList === "function") {
+        renderTrainingsList(Object.keys(state.savedTrainings || {}), state.selectedTraining);
+      }
+    });
+  }
+  if (elTrainingSkillSelect) {
+    elTrainingSkillSelect.addEventListener("change", () => {
+      state.trainingSkillId = elTrainingSkillSelect.value || "";
+      saveState();
+      renderTrainingPlayers();
+    });
+  }
+  if (elBtnTrainingFillDefault) {
+    elBtnTrainingFillDefault.addEventListener("click", setTrainingCourtFromDefaultLineup);
+  }
+  if (elBtnTrainingClear) {
+    elBtnTrainingClear.addEventListener("click", clearTrainingCourt);
   }
   window.addEventListener("resize", () => {
     updateCourtModalPlacement();

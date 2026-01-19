@@ -46,6 +46,8 @@ const PLAYER_STORE_NAME = "Players";
 const PLAYER_PREFIX = PERSISTENT_DB_NAME + "/" + PLAYER_STORE_NAME;
 const MATCH_STORE_NAME = "Matches";
 const MATCH_PREFIX = PERSISTENT_DB_NAME + "/" + MATCH_STORE_NAME + "/";
+const TRAINING_STORE_NAME = "Trainings";
+const TRAINING_PREFIX = PERSISTENT_DB_NAME + "/" + TRAINING_STORE_NAME + "/";
 const TEMPLATE_TEAM = {
   players: [
     "Palleggiatore 1",
@@ -74,6 +76,7 @@ const POSITIONS_META = [
   { id: 6, label: "Posizione 6 · C1", gridArea: "pos6" }
 ];
 let state = {
+  sessionType: "match",
   match: {
     opponent: "",
     category: "",
@@ -82,6 +85,15 @@ let state = {
     leg: "",
     matchType: ""
   },
+  training: {
+    title: "",
+    date: "",
+    notes: ""
+  },
+  trainingCourt: [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }],
+  trainingSkillId: "pass",
+  trainingBoardPlayers: [],
+  trainingBoardPositions: {},
   theme: "dark",
   currentSet: 1,
   players: [],
@@ -101,9 +113,11 @@ let state = {
   savedTeams: {},
   savedOpponentTeams: {},
   savedMatches: {},
+  savedTrainings: {},
   selectedTeam: "",
   selectedOpponentTeam: "",
   selectedMatch: "",
+  selectedTraining: "",
   opponentPlayers: [],
   opponentPlayerNumbers: {},
   opponentLiberos: [],

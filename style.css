@@ -1345,12 +1345,62 @@ body[data-theme="light"] .match-summary {
   grid-template-columns: repeat(3, minmax(260px, 1fr));
   gap: 1rem;
 }
+.tab-panel[data-tab="training"] .match-manager__content {
+  width: 100%;
+  max-height: none;
+  height: calc(100vh - 210px);
+  overflow: visible;
+}
+.tab-panel[data-tab="training"] .match-manager__body {
+  max-height: none;
+  height: 100%;
+  overflow: visible;
+}
+.training-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "info mode"
+    "board board";
+  height: 100%;
+}
+.training-info-panel {
+  grid-area: info;
+}
+.training-mode-panel {
+  grid-area: mode;
+}
+.training-board-panel {
+  grid-area: board;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.training-board-panel .section-note {
+  margin-top: 0.6rem;
+}
+.training-board {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 60vh;
+}
+.training-board-inner {
+  min-height: 100%;
+}
 .tab-panel[data-tab="match"] .match-list {
   max-height: 360px;
 }
 @media (max-width: 980px) {
   .tab-panel[data-tab="match"] .match-manager-grid {
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .training-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "info"
+      "mode"
+      "board";
   }
 }
 .match-manager-panel {
@@ -2121,6 +2171,14 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   max-width: 100%;
 }
+#training-players-container {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  min-height: 220px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  max-width: 100%;
+}
 #players-container {
   background: transparent;
   border: none;
@@ -2136,6 +2194,97 @@ body[data-theme="light"] #players-container {
 }
 body[data-theme="light"] #opponent-players-container {
   background: transparent;
+}
+.training-players-pool {
+  margin: 0.6rem 0;
+}
+.training-pool-head {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 0.4rem;
+}
+body[data-theme="light"] .training-pool-head {
+  color: #64748b;
+}
+.training-pool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.training-pool-item {
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.78rem;
+}
+body[data-theme="light"] .training-pool-item {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5f5;
+}
+.training-board {
+  position: relative;
+  min-height: 420px;
+  border-radius: 18px;
+  padding: 0.6rem;
+  background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), transparent 60%),
+    radial-gradient(circle at 80% 10%, rgba(250, 204, 21, 0.18), transparent 55%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.95));
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  overflow: hidden;
+}
+body[data-theme="light"] .training-board {
+  background: radial-gradient(circle at 20% 20%, rgba(14, 116, 144, 0.18), transparent 60%),
+    radial-gradient(circle at 80% 10%, rgba(245, 158, 11, 0.18), transparent 55%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(226, 232, 240, 0.9));
+  border-color: rgba(100, 116, 139, 0.35);
+}
+.training-board-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+}
+.training-board-card {
+  position: absolute;
+  min-width: 150px;
+  max-width: 220px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 16px;
+  padding: 0.6rem 0.6rem 0.75rem;
+  color: #e2e8f0;
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.4);
+  touch-action: none;
+}
+body[data-theme="light"] .training-board-card {
+  background: rgba(248, 250, 252, 0.92);
+  color: #0f172a;
+  border-color: rgba(100, 116, 139, 0.35);
+}
+.training-board-name {
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+.training-board-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: none;
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-radius: 999px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+}
+body[data-theme="light"] .training-board-remove {
+  color: #b91c1c;
+  background: rgba(248, 113, 113, 0.2);
 }
 .court-layout {
   grid-template-columns: repeat(3, minmax(160px, 1fr));
