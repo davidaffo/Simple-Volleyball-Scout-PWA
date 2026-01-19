@@ -337,6 +337,8 @@ const elNextSetRotateCwOpp = document.getElementById("next-set-rotate-cw-opp");
 const elNextSetRotateCcwOpp = document.getElementById("next-set-rotate-ccw-opp");
 const elNextSetRotationSelectOur = document.getElementById("next-set-rotation-select-our");
 const elNextSetRotationSelectOpp = document.getElementById("next-set-rotation-select-opp");
+const elNextSetPreferredLiberoOur = document.getElementById("next-set-preferred-libero-our");
+const elNextSetPreferredLiberoOpp = document.getElementById("next-set-preferred-libero-opp");
 const elNextSetSwapRow = document.getElementById("next-set-swap-row");
 const elNextSetSides = document.getElementById("next-set-sides");
 const elNextSetSideOur = document.getElementById("next-set-side-our");
@@ -391,6 +393,9 @@ const elPlayersDbBody = document.getElementById("players-db-body");
 const elPlayersDbCount = document.getElementById("players-db-count");
 const elPlayersDbClose = document.getElementById("players-db-close");
 const elPlayersDbClean = document.getElementById("btn-clean-players-db");
+const elPlayersDbMergePrimary = document.getElementById("players-db-merge-primary");
+const elPlayersDbMergeSecondary = document.getElementById("players-db-merge-secondary");
+const elBtnMergePlayers = document.getElementById("btn-merge-players");
 const elDebugModal = document.getElementById("debug-modal");
 const elDebugModalClose = document.getElementById("debug-modal-close");
 const elBtnOpenDebugModal = document.getElementById("btn-open-debug-modal");
@@ -1021,6 +1026,58 @@ function renderNextSetLineups() {
   renderNextSetLineup("opponent", elNextSetCourtOpp, elNextSetBenchOpp);
   renderNextSetLineup("our", elNextSetCourtOur, elNextSetBenchOur);
   updateNextSetDefaultButtons();
+  syncNextSetPreferredLiberoSelects();
+}
+function syncNextSetPreferredLiberoSelects() {
+  const syncForScope = scope => {
+    const select = scope === "opponent" ? elNextSetPreferredLiberoOpp : elNextSetPreferredLiberoOur;
+    if (!select) return;
+    const liberos = getLiberosForScope(scope);
+    const numbers = getPlayerNumbersForScope(scope);
+    const ordered = typeof sortNamesByNumber === "function" ? sortNamesByNumber(liberos, numbers) : liberos.slice();
+    select.innerHTML = "";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "-";
+    select.appendChild(emptyOpt);
+    ordered.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent =
+        scope === "opponent" ? formatNameWithNumberFor(name, numbers) : formatNameWithNumber(name);
+      select.appendChild(opt);
+    });
+    const preferred =
+      typeof getTeamPreferredLibero === "function"
+        ? getTeamPreferredLibero(scope)
+        : scope === "opponent"
+          ? state.opponentPreferredLibero || ""
+          : state.preferredLibero || "";
+    select.value = preferred && ordered.includes(preferred) ? preferred : "";
+    select.disabled = ordered.length === 0;
+    if (!select._preferredBound) {
+      select.addEventListener("change", () => {
+        const next = select.value || "";
+        if (typeof setTeamPreferredLibero === "function") {
+          setTeamPreferredLibero(scope, next);
+        } else if (scope === "opponent") {
+          state.opponentPreferredLibero = next;
+        } else {
+          state.preferredLibero = next;
+        }
+        saveState();
+        if (typeof renderLiberoChipsInline === "function") {
+          renderLiberoChipsInline();
+        }
+        if (typeof renderOpponentLiberoChipsInline === "function") {
+          renderOpponentLiberoChipsInline();
+        }
+      });
+      select._preferredBound = true;
+    }
+  };
+  syncForScope("our");
+  syncForScope("opponent");
 }
 function updateNextSetDefaultButtons() {
   if (elNextSetDefaultOur) {
@@ -1131,21 +1188,28 @@ function updateSetScoreDisplays() {
 }
 function buildNextSetDraft(setNum) {
   const nextSet = Math.min(5, Math.max(1, setNum || 1));
+  const useDefaults = nextSet === 1;
+  const defaultsOur = useDefaults ? getDefaultSetStartForScope("our") : null;
+  const defaultsOpp = useDefaults ? getDefaultSetStartForScope("opponent") : null;
   const baseOurCourt =
-    typeof removeLiberosAndRestoreForScope === "function"
-      ? removeLiberosAndRestoreForScope(state.court || [], "our")
-      : cloneCourt(state.court || []);
+    defaultsOur && defaultsOur.court
+      ? cloneCourt(defaultsOur.court)
+      : typeof removeLiberosAndRestoreForScope === "function"
+        ? removeLiberosAndRestoreForScope(state.court || [], "our")
+        : cloneCourt(state.court || []);
   const baseOppCourt =
-    typeof removeLiberosAndRestoreForScope === "function"
-      ? removeLiberosAndRestoreForScope(state.opponentCourt || [], "opponent")
-      : cloneCourt(state.opponentCourt || []);
+    defaultsOpp && defaultsOpp.court
+      ? cloneCourt(defaultsOpp.court)
+      : typeof removeLiberosAndRestoreForScope === "function"
+        ? removeLiberosAndRestoreForScope(state.opponentCourt || [], "opponent")
+        : cloneCourt(state.opponentCourt || []);
   const our = {
     court: cloneCourt(baseOurCourt),
-    rotation: state.rotation || 1
+    rotation: defaultsOur && defaultsOur.rotation ? defaultsOur.rotation : state.rotation || 1
   };
   const opponent = {
     court: cloneCourt(baseOppCourt),
-    rotation: state.opponentRotation || 1
+    rotation: defaultsOpp && defaultsOpp.rotation ? defaultsOpp.rotation : state.opponentRotation || 1
   };
   const serveDefault = !!state.isServing;
   return {
@@ -1227,6 +1291,7 @@ function openNextSetModal(setNum) {
     courtArea.classList.add("court-area--next-set");
   }
   renderNextSetLineups();
+  syncNextSetPreferredLiberoSelects();
 }
 function closeNextSetModal({ force = false } = {}) {
   if (!elNextSetInline) return;
@@ -1302,6 +1367,12 @@ function applyNextSetDraft() {
     setIsServing(!!nextSetDraft.isServing);
   } else {
     state.isServing = !!nextSetDraft.isServing;
+  }
+  if (typeof enforceAutoLiberoForState === "function") {
+    enforceAutoLiberoForState({ skipServerOnServe: true });
+    if (state.useOpponentTeam && typeof enforceAutoLiberoForScope === "function") {
+      enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+    }
   }
   if (nextSet !== prevSet) {
     applySetChange(nextSet, {
@@ -3759,6 +3830,42 @@ function buildPlayersDbUsage(teamsMap) {
   });
   return usage;
 }
+function buildPlayersDbOptions(entries) {
+  return (entries || []).map(entry => {
+    const name =
+      entry.name ||
+      (typeof buildFullName === "function" ? buildFullName(entry.lastName, entry.firstName) : "") ||
+      [entry.lastName, entry.firstName].filter(Boolean).join(" ");
+    const label = (name || "Giocatrice") + " · " + entry.id;
+    return { id: entry.id, label };
+  });
+}
+function renderPlayersDbMergeControls(entries) {
+  if (!elPlayersDbMergePrimary || !elPlayersDbMergeSecondary || !elBtnMergePlayers) return;
+  const options = buildPlayersDbOptions(entries);
+  const fillSelect = select => {
+    select.innerHTML = "";
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "-";
+    select.appendChild(emptyOpt);
+    options.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.id;
+      option.textContent = opt.label;
+      select.appendChild(option);
+    });
+    if (!select.value && options.length > 0) {
+      select.value = options[0].id;
+    }
+  };
+  fillSelect(elPlayersDbMergePrimary);
+  fillSelect(elPlayersDbMergeSecondary);
+  if (options.length > 1 && elPlayersDbMergeSecondary.value === elPlayersDbMergePrimary.value) {
+    elPlayersDbMergeSecondary.value = options[1].id;
+  }
+  elBtnMergePlayers.disabled = options.length < 2;
+}
 function renderPlayersDbList() {
   if (!elPlayersDbBody || !elPlayersDbCount) return;
   const db = state.playersDb || {};
@@ -3789,6 +3896,7 @@ function renderPlayersDbList() {
     tr.appendChild(td);
     elPlayersDbBody.appendChild(tr);
     elPlayersDbCount.textContent = "0 giocatrici";
+    renderPlayersDbMergeControls([]);
     return;
   }
   const orphanCount = entries.filter(entry => !usage[entry.id] || usage[entry.id].length === 0).length;
@@ -3810,6 +3918,7 @@ function renderPlayersDbList() {
   });
   elPlayersDbCount.textContent =
     entries.length + " giocatrici" + (orphanCount > 0 ? " · " + orphanCount + " senza squadra" : "");
+  renderPlayersDbMergeControls(entries);
 }
 function openPlayersDbModal() {
   if (!elPlayersDbModal) return;
@@ -3970,6 +4079,74 @@ function removeOrphanPlayersFromDb() {
     savePlayersDbToStorage(db);
   }
   renderPlayersDbList();
+}
+function mergePlayersDbEntries(primaryId, secondaryId) {
+  if (!primaryId || !secondaryId || primaryId === secondaryId) return false;
+  const db = Object.assign({}, state.playersDb || {});
+  const primary = db[primaryId];
+  const secondary = db[secondaryId];
+  if (!primary || !secondary) return false;
+  const merged = {
+    id: primaryId,
+    firstName: primary.firstName || secondary.firstName || "",
+    lastName: primary.lastName || secondary.lastName || "",
+    name:
+      primary.name ||
+      secondary.name ||
+      (typeof buildFullName === "function" ? buildFullName(primary.lastName, primary.firstName) : "") ||
+      ""
+  };
+  db[primaryId] = merged;
+  delete db[secondaryId];
+  state.playersDb = db;
+  if (typeof savePlayersDbToStorage === "function") {
+    savePlayersDbToStorage(db);
+  }
+  const teamsMap = typeof loadTeamsMapFromStorage === "function" ? loadTeamsMapFromStorage() : {};
+  Object.entries(teamsMap || {}).forEach(([teamName, team]) => {
+    const normalized = typeof normalizeTeamPayload === "function" ? normalizeTeamPayload(team, teamName) : team;
+    if (!normalized || !Array.isArray(normalized.playersDetailed)) return;
+    let changed = false;
+    const playersDetailed = normalized.playersDetailed.map(player => {
+      const id = player && (player.id || player.playerId);
+      if (id !== secondaryId) return player;
+      changed = true;
+      return Object.assign({}, player, { id: primaryId });
+    });
+    if (changed) {
+      normalized.playersDetailed = playersDetailed;
+      if (typeof saveTeamToStorage === "function") {
+        saveTeamToStorage(teamName, normalized);
+      }
+    }
+  });
+  if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+  const savedMatches = state.savedMatches || {};
+  Object.entries(savedMatches).forEach(([name, payload]) => {
+    if (!payload || !payload.state || !Array.isArray(payload.state.events)) return;
+    let touched = false;
+    payload.state.events.forEach(ev => {
+      if (ev && ev.playerId === secondaryId) {
+        ev.playerId = primaryId;
+        touched = true;
+      }
+    });
+    if (touched && typeof saveMatchToStorage === "function") {
+      saveMatchToStorage(name, payload);
+      savedMatches[name] = payload;
+    }
+  });
+  state.savedMatches = savedMatches;
+  if (Array.isArray(state.events)) {
+    state.events.forEach(ev => {
+      if (ev && ev.playerId === secondaryId) {
+        ev.playerId = primaryId;
+      }
+    });
+  }
+  syncEventPlayerLinks(state.events || []);
+  saveState();
+  return true;
 }
 const BULK_EDIT_CONFIG = {
   videoTime: {
@@ -6234,7 +6411,83 @@ function syncRosterFromSelectedTeamIfNeeded() {
   if (!team) return false;
   const roster = extractRosterFromTeam(team);
   const rosterPlayers = normalizePlayers(roster.players || []);
-  const currentPlayers = normalizePlayers(state.players || []);
+  let currentPlayers = normalizePlayers(state.players || []);
+  const rosterLookup = new Map(rosterPlayers.map(name => [name.toLowerCase(), name]));
+  const hasRoster = rosterPlayers.length > 0;
+  const isEditDistanceAtMostOne = (a, b) => {
+    if (a === b) return true;
+    const lenA = a.length;
+    const lenB = b.length;
+    if (Math.abs(lenA - lenB) > 1) return false;
+    let i = 0;
+    let j = 0;
+    let edits = 0;
+    while (i < lenA && j < lenB) {
+      if (a[i] === b[j]) {
+        i += 1;
+        j += 1;
+        continue;
+      }
+      edits += 1;
+      if (edits > 1) return false;
+      if (lenA > lenB) {
+        i += 1;
+      } else if (lenB > lenA) {
+        j += 1;
+      } else {
+        i += 1;
+        j += 1;
+      }
+    }
+    return true;
+  };
+  const findRosterTypoMatch = name => {
+    const parts = typeof splitNameParts === "function" ? splitNameParts(name) : { lastName: "", firstName: "" };
+    const last = (parts.lastName || "").toLowerCase();
+    const first = (parts.firstName || "").toLowerCase();
+    if (!last || !first) return null;
+    let match = null;
+    rosterPlayers.forEach(rosterName => {
+      if (match) return;
+      const rosterParts = splitNameParts(rosterName);
+      const rosterLast = (rosterParts.lastName || "").toLowerCase();
+      const rosterFirst = (rosterParts.firstName || "").toLowerCase();
+      if (rosterFirst !== first) return;
+      if (isEditDistanceAtMostOne(last, rosterLast)) {
+        match = rosterName;
+      }
+    });
+    return match;
+  };
+  if (hasRoster && Array.isArray(state.players)) {
+    const replacements = [];
+    state.players.forEach((name, idx) => {
+      const lower = String(name || "").toLowerCase();
+      if (rosterLookup.has(lower)) return;
+      const match = findRosterTypoMatch(name);
+      if (!match) return;
+      replacements.push({ idx, oldName: name, newName: match });
+    });
+    if (replacements.length > 0) {
+      replacements.forEach(({ idx, oldName, newName }) => {
+        state.players[idx] = newName;
+        const numbers = state.playerNumbers || {};
+        if (Object.prototype.hasOwnProperty.call(numbers, oldName)) {
+          if (!numbers[newName]) {
+            numbers[newName] = numbers[oldName];
+          }
+          delete numbers[oldName];
+          state.playerNumbers = numbers;
+        }
+        if (typeof replacePlayerNameEverywhere === "function") {
+          replacePlayerNameEverywhere(oldName, newName, idx);
+        }
+      });
+      currentPlayers = normalizePlayers(state.players || []);
+      cleanLiberos();
+      saveState();
+    }
+  }
   const missing = rosterPlayers.filter(name =>
     !currentPlayers.some(current => current.toLowerCase() === name.toLowerCase())
   );
@@ -9629,6 +9882,26 @@ function syncEventPlayerLink(ev) {
 function syncEventPlayerLinks(events) {
   (events || []).forEach(syncEventPlayerLink);
 }
+function cleanCourtLiberoReplacementsForScope(scope = "our") {
+  const court = scope === "opponent" ? state.opponentCourt : state.court;
+  if (!Array.isArray(court)) return;
+  let changed = false;
+  const nextCourt = court.map(slot => {
+    const main = slot && slot.main ? slot.main : "";
+    const replaced = slot && slot.replaced ? slot.replaced : "";
+    if (replaced && (!main || !isLiberoForScope(main, scope))) {
+      changed = true;
+      return { main, replaced: "" };
+    }
+    return slot && typeof slot === "object" ? Object.assign({}, slot) : { main: "", replaced: "" };
+  });
+  if (!changed) return;
+  if (scope === "opponent") {
+    state.opponentCourt = nextCourt;
+  } else {
+    state.court = nextCourt;
+  }
+}
 function refreshAfterVideoEdit(shouldRecalcStats) {
   if (bulkEditActive) return;
   saveState({ persistLocal: shouldTrackVideoUndo() });
@@ -11699,7 +11972,13 @@ function updateMatchStatusUI() {
   document.body.dataset.matchFinished = finished ? "true" : "false";
 }
 function setScoutControlsDisabled(disabled) {
-  const allowIds = new Set(["btn-end-match", "btn-end-match-modal"]);
+  const allowIds = new Set([
+    "btn-end-match",
+    "btn-end-match-modal",
+    "btn-swap-libero",
+    "btn-swap-libero-opp",
+    "btn-libero-to-bench"
+  ]);
   const scope = document.querySelector('[data-tab="scout"]');
   if (!scope) return;
   scope.querySelectorAll("button").forEach(btn => {
@@ -16570,12 +16849,19 @@ function applyImportedMatch(nextState, options = {}) {
   }
   resetSetTypeState();
   const merged = Object.assign({}, state, nextState);
+  const normalizedPlayers = normalizePlayers(nextState.players || []);
   merged.match = nextState.match || state.match || {};
-  merged.playerNumbers = nextState.playerNumbers || {};
+  merged.players = normalizedPlayers;
+  const normalizedNumbers =
+    typeof normalizeNumbersMap === "function" ? normalizeNumbersMap(nextState.playerNumbers || {}) : nextState.playerNumbers || {};
+  merged.playerNumbers =
+    typeof buildNumbersForNames === "function"
+      ? buildNumbersForNames(normalizedPlayers, normalizedNumbers, state.playerNumbers || {})
+      : normalizedNumbers;
   merged.captains = normalizePlayers(Array.isArray(nextState.captains) ? nextState.captains : [])
-    .filter(name => (nextState.players || []).includes(name))
+    .filter(name => normalizedPlayers.includes(name))
     .slice(0, 1);
-  merged.liberos = nextState.liberos || [];
+  merged.liberos = normalizePlayers(nextState.liberos || []).filter(name => normalizedPlayers.includes(name));
   merged.opponentStats = nextState.opponentStats || state.opponentStats || {};
   merged.liberoAutoMap = nextState.liberoAutoMap || {};
   merged.autoLiberoBackline = nextState.autoLiberoBackline !== false;
@@ -16622,11 +16908,16 @@ function applyImportedMatch(nextState, options = {}) {
   merged.freeballPendingScope = nextState.freeballPendingScope || state.freeballPendingScope || "our";
   merged.flowTeamScope = nextState.flowTeamScope || state.flowTeamScope || "our";
   state = merged;
+  if (typeof cleanCourtPlayers === "function") {
+    cleanCourtPlayers(state.court);
+  }
   syncOpponentPlayerNumbers(state.opponentPlayers || [], state.opponentPlayerNumbers || {});
   cleanOpponentLiberos();
   if (typeof cleanLiberoAutoMap === "function") {
     cleanLiberoAutoMap();
   }
+  cleanCourtLiberoReplacementsForScope("our");
+  cleanCourtLiberoReplacementsForScope("opponent");
   migrateTeamsToPersistent();
   migrateOpponentTeamsToPersistent();
   syncTeamsFromStorage();
@@ -17461,11 +17752,17 @@ function resetMatch() {
     });
   }
   resetSetTypeState();
-  const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
+  const stripReplaced = court =>
+    (court || []).map(slot => ({
+      main: typeof slot === "string" ? slot : (slot && slot.main) || "",
+      replaced: ""
+    }));
+  const preservedCourt = state.court ? stripReplaced(state.court) : Array.from({ length: 6 }, () => ({ main: "" }));
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
-  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
-  const preservedLiberoMap = Object.assign({}, state.liberoAutoMap || {});
+  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt)
+    ? stripReplaced(state.autoRoleBaseCourt)
+    : [];
   const preservedPreferredLibero = state.preferredLibero || "";
   state.events = [];
   state.court = preservedCourt;
@@ -17488,7 +17785,7 @@ function resetMatch() {
   state.matchEndSetRecorded = null;
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
   state.isServing = preservedServing;
-  state.liberoAutoMap = preservedLiberoMap;
+  state.liberoAutoMap = {};
   state.preferredLibero = preservedPreferredLibero;
   if (typeof enforceAutoLiberoForState === "function") {
     enforceAutoLiberoForState({ skipServerOnServe: true });
@@ -18176,6 +18473,7 @@ async function init() {
   ensureSkillClock();
   ensureVideoClock();
   updateMatchStatusUI();
+  updateTeamCounters();
   setScoutControlsDisabled(!!state.matchFinished);
 
   [elCurrentSet].forEach(select => {
@@ -18545,6 +18843,26 @@ async function init() {
   }
   if (elPlayersDbClean) {
     elPlayersDbClean.addEventListener("click", removeOrphanPlayersFromDb);
+  }
+  if (elBtnMergePlayers) {
+    elBtnMergePlayers.addEventListener("click", () => {
+      if (!elPlayersDbMergePrimary || !elPlayersDbMergeSecondary) return;
+      const primaryId = elPlayersDbMergePrimary.value || "";
+      const secondaryId = elPlayersDbMergeSecondary.value || "";
+      if (!primaryId || !secondaryId || primaryId === secondaryId) {
+        alert("Seleziona due giocatrici diverse da unire.");
+        return;
+      }
+      const ok = confirm("Unire le due giocatrici selezionate mantenendo l'ID della prima?");
+      if (!ok) return;
+      const merged = mergePlayersDbEntries(primaryId, secondaryId);
+      if (!merged) {
+        alert("Unione non riuscita. Verifica che entrambe esistano nell'archivio.");
+        return;
+      }
+      renderPlayersDbList();
+      alert("Giocatrici unite. ID aggiornati nei match.");
+    });
   }
   if (elBtnOpenDebugModal) {
     elBtnOpenDebugModal.addEventListener("click", openDebugModal);

@@ -8,7 +8,6 @@ crea stampa tipo foglio gara
 
 # Bug funzionalità
 Da touch si cliccano i tasti sottostanti dagli overlay
-Timeout e cambi non vengono resettate correttamente al cambio di partita
 Anulla ultimo fa tornare il centrale in campo
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice

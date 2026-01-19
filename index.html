@@ -549,11 +549,15 @@
                       <button id="next-set-default-opp" class="secondary small" type="button">Imposta default</button>
                     </div>
                     <div id="next-set-court-opp" class="lineup-court-grid next-set-court-grid"></div>
-                    <div class="next-set-bench">
-                      <div id="next-set-bench-opp" class="lineup-bench-chips"></div>
-                    </div>
+                  <div class="next-set-bench">
+                    <div id="next-set-bench-opp" class="lineup-bench-chips"></div>
                   </div>
-                  <div class="next-set-lineup-block" id="next-set-block-our">
+                  <div class="next-set-libero">
+                    <label for="next-set-preferred-libero-opp">Libero principale</label>
+                    <select id="next-set-preferred-libero-opp" class="rotation-select"></select>
+                  </div>
+                </div>
+                <div class="next-set-lineup-block" id="next-set-block-our">
                     <div class="next-set-lineup-head">
                       <h4 id="next-set-team-our">Squadra nostra</h4>
                       <div class="rotation-controls next-set-rotation-controls">
@@ -573,10 +577,14 @@
                       <button id="next-set-default-our" class="secondary small" type="button">Imposta default</button>
                     </div>
                     <div id="next-set-court-our" class="lineup-court-grid next-set-court-grid"></div>
-                    <div class="next-set-bench">
-                      <div id="next-set-bench-our" class="lineup-bench-chips"></div>
-                    </div>
+                  <div class="next-set-bench">
+                    <div id="next-set-bench-our" class="lineup-bench-chips"></div>
                   </div>
+                  <div class="next-set-libero">
+                    <label for="next-set-preferred-libero-our">Libero principale</label>
+                    <select id="next-set-preferred-libero-our" class="rotation-select"></select>
+                  </div>
+                </div>
                 </div>
                 <label class="auto-rotate-toggle" id="next-set-swap-row">
                   <input type="checkbox" id="next-set-swap-court" />
@@ -1797,6 +1805,13 @@
         <div class="players-db__summary">
           <span id="players-db-count"></span>
           <button id="btn-clean-players-db" class="secondary small">Rimuovi senza squadra</button>
+        </div>
+        <div class="players-db__merge controls-row">
+          <label for="players-db-merge-primary">Mantieni</label>
+          <select id="players-db-merge-primary"></select>
+          <label for="players-db-merge-secondary">Unisci</label>
+          <select id="players-db-merge-secondary"></select>
+          <button id="btn-merge-players" class="secondary small">Unisci ID</button>
         </div>
         <div class="table-wrapper players-db__tablewrap">
           <table class="players-db-table">

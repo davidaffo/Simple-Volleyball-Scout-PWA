@@ -397,7 +397,12 @@ function applyStateSnapshot(parsed, options = {}) {
   const { skipStorageSync = false } = options;
   state = Object.assign(state, parsed);
   state.theme = parsed.theme || "dark";
-  state.playerNumbers = parsed.playerNumbers || state.playerNumbers || {};
+  state.players = normalizePlayers(parsed.players || state.players || []);
+  const normalizedNumbers = normalizeNumbersMap(parsed.playerNumbers || state.playerNumbers || {});
+  state.playerNumbers =
+    typeof buildNumbersForNames === "function"
+      ? buildNumbersForNames(state.players, normalizedNumbers, state.playerNumbers || {})
+      : normalizedNumbers;
   state.captains = normalizePlayers(Array.isArray(parsed.captains) ? parsed.captains : []).slice(0, 1);
   ensureCourtShape();
   cleanCourtPlayers();
@@ -419,7 +424,9 @@ function applyStateSnapshot(parsed, options = {}) {
   state.videoPlayByPlay = !!parsed.videoPlayByPlay;
   state.nextSetType = parsed.nextSetType || "";
   state.forceMobileLayout = !!parsed.forceMobileLayout;
-  state.liberos = Array.isArray(parsed.liberos) ? parsed.liberos : [];
+  state.liberos = Array.isArray(parsed.liberos)
+    ? normalizePlayers(parsed.liberos).filter(name => (state.players || []).includes(name))
+    : [];
   state.liberoAutoMap = parsed.liberoAutoMap || {};
   state.savedTeams = parsed.savedTeams || {};
   state.savedOpponentTeams = parsed.savedOpponentTeams || state.savedTeams || {};
@@ -605,7 +612,7 @@ function normalizePlayers(list) {
   const seen = new Set();
   const names = [];
   list.forEach(name => {
-    const clean = (name || "").trim();
+    const clean = (name || "").trim().replace(/\s+/g, " ");
     const key = clean.toLowerCase();
     if (clean && !seen.has(key)) {
       seen.add(key);
@@ -613,6 +620,15 @@ function normalizePlayers(list) {
     }
   });
   return names;
+}
+function normalizeNumbersMap(map = {}) {
+  const normalized = {};
+  Object.entries(map || {}).forEach(([key, value]) => {
+    const cleanKey = (key || "").trim().replace(/\s+/g, " ");
+    if (!cleanKey) return;
+    normalized[cleanKey] = value;
+  });
+  return normalized;
 }
 function normalizePlayerNameCase(name) {
   const trimmed = (name || "").trim();
@@ -1237,6 +1253,8 @@ function removeLiberosAndRestoreForScope(baseCourt, scope = "our") {
       } else {
         shaped[idx] = { main: "", replaced: "" };
       }
+    } else if (slot.replaced) {
+      shaped[idx] = { main: slot.main || "", replaced: "" };
     }
   });
   return shaped;
@@ -1434,7 +1452,7 @@ function getLockedMapForScope(scope = "our") {
   const map = {};
   const court = ensureCourtShapeFor(getTeamCourt(scope));
   court.forEach((slot, idx) => {
-    if (slot.replaced) {
+    if (slot.replaced && isLiberoForScope(slot.main, scope)) {
       map[slot.replaced] = idx;
     }
   });
@@ -2814,14 +2832,20 @@ function renameSelectedMatch() {
   // intentionally no-op: naming is automatic from match info
 }
 function resetMatchState() {
-  const preservedCourt = state.court ? JSON.parse(JSON.stringify(state.court)) : Array.from({ length: 6 }, () => ({ main: "" }));
+  const stripReplaced = court =>
+    (court || []).map(slot => ({
+      main: typeof slot === "string" ? slot : (slot && slot.main) || "",
+      replaced: ""
+    }));
+  const preservedCourt = state.court ? stripReplaced(state.court) : Array.from({ length: 6 }, () => ({ main: "" }));
   const preservedRotation = state.rotation || 1;
   const preservedServing = !!state.isServing;
-  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt) ? [...state.autoRoleBaseCourt] : [];
-  const preservedLiberoMap = Object.assign({}, state.liberoAutoMap || {});
+  const preservedAutoRoleCourt = Array.isArray(state.autoRoleBaseCourt)
+    ? stripReplaced(state.autoRoleBaseCourt)
+    : [];
   const preservedPreferredLibero = state.preferredLibero || "";
   const preservedOpponentCourt = Array.isArray(state.opponentCourt)
-    ? JSON.parse(JSON.stringify(state.opponentCourt))
+    ? stripReplaced(state.opponentCourt)
     : Array.from({ length: 6 }, () => ({ main: "" }));
   const preservedOpponentRotation = state.opponentRotation || 1;
   if (typeof resetSetTypeState === "function") {
@@ -2867,7 +2891,7 @@ function resetMatchState() {
   state.flowTeamScope = "our";
   state.matchEndSetSnapshot = null;
   state.matchEndSetRecorded = null;
-  state.liberoAutoMap = preservedLiberoMap;
+  state.liberoAutoMap = {};
   state.preferredLibero = preservedPreferredLibero;
   state.courtViewMirrored = false;
   state.skillClock = { paused: true, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: 0 };
@@ -5356,7 +5380,7 @@ function toggleLibero(name) {
 function getLockedMap() {
   const map = {};
   state.court.forEach((slot, idx) => {
-    if (slot.replaced) {
+    if (slot.replaced && (state.liberos || []).includes(slot.main)) {
       map[slot.replaced] = idx;
     }
   });
