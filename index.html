@@ -20,29 +20,27 @@
   <div class="tabs-nav centered">
     <h1 class="app-title">Simple Volleyball Scout PWA</h1>
     <a class="manual-link-btn hidden" href="manual.html">Manuale</a>
-    <button class="tab-btn active" data-tab-target="info">Impostazioni partita</button>
+    <button class="tab-btn" data-tab-target="match">Gestione match</button>
+    <button class="tab-btn active" data-tab-target="info">Impostazioni</button>
     <button class="tab-btn" data-tab-target="scout">Scout live</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
     <button class="tab-btn" data-tab-target="video">Video</button>
   </div>
   <div class="tabs-dots" aria-label="Navigazione pagine">
-    <button class="tab-btn tab-dot" data-tab-target="info" aria-label="Impostazioni partita"></button>
+    <button class="tab-btn tab-dot" data-tab-target="match" aria-label="Gestione match"></button>
+    <button class="tab-btn tab-dot" data-tab-target="info" aria-label="Impostazioni"></button>
     <button class="tab-btn tab-dot" data-tab-target="scout" aria-label="Scout live"></button>
     <button class="tab-btn tab-dot" data-tab-target="aggregated" aria-label="Analisi"></button>
     <button class="tab-btn tab-dot" data-tab-target="video" aria-label="Video"></button>
     <span class="tab-swipe-hint" aria-hidden="true">swipe ↔</span>
   </div>
-  <div class="tab-panel active" data-tab="info">
+  <div class="tab-panel" data-tab="match">
     <div class="section">
-      <h2>Impostazioni partita</h2>
+      <h2>Gestione match</h2>
       <div class="top-bar match-info-bar">
         <div class="col">
           <label>Match corrente</label>
           <div id="match-summary" class="match-summary">—</div>
-        </div>
-        <div class="col col-auto">
-          <label class="spacer-label">&nbsp;</label>
-          <button id="btn-open-match-manager" class="secondary" type="button" onclick="window.openMatchManagerModal && window.openMatchManagerModal()">Gestione match</button>
         </div>
         <div class="col col-auto">
           <label class="spacer-label">&nbsp;</label>
@@ -56,6 +54,146 @@
           </div>
         </div>
       </div>
+    </div>
+    <div class="section">
+      <div class="match-manager__content">
+        <div class="match-manager__body">
+          <div class="match-manager-grid">
+            <div class="match-manager-panel">
+              <h4>Informazioni match</h4>
+              <div class="top-bar match-form-grid">
+                <div class="col">
+                  <label for="match-opponent">Avversario</label>
+                  <input id="match-opponent" type="text" />
+                </div>
+                <div class="col">
+                  <label for="match-category">Categoria</label>
+                  <input id="match-category" type="text" />
+                </div>
+                <div class="col">
+                  <label for="match-date">Data</label>
+                  <input id="match-date" type="date" />
+                </div>
+                <div class="col">
+                  <label for="match-type">Tipo partita</label>
+                  <select id="match-type">
+                    <option value="amichevole">Amichevole</option>
+                    <option value="campionato">Campionato</option>
+                    <option value="torneo">Torneo</option>
+                    <option value="playoff">Playoff</option>
+                    <option value="playout">Playout</option>
+                    <option value="coppa">Coppa</option>
+                    <option value="">Altro</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label for="match-leg">Turno</label>
+                  <select id="match-leg">
+                    <option value="">-</option>
+                    <option value="andata">Andata</option>
+                    <option value="ritorno">Ritorno</option>
+                    <option value="gara-1">Gara 1</option>
+                    <option value="gara-2">Gara 2</option>
+                    <option value="gara-3">Gara 3</option>
+                  </select>
+                </div>
+              </div>
+              <div class="controls-row">
+                <button id="btn-save-match-info">Salva info match</button>
+              </div>
+            </div>
+            <div class="match-manager-panel">
+              <h4>Squadre match</h4>
+              <p class="section-note">Seleziona le squadre collegate al match. Gestione, importazione ed esportazione passano da “Gestione squadre”.</p>
+              <div class="team-manage">
+                <label class="auto-rotate-toggle">
+                  <input type="checkbox" id="use-opponent-team-toggle" />
+                  Usa squadra avversaria
+                </label>
+                <div class="team-manage-grid">
+                  <div class="team-manage-col">
+                    <h4>Squadra nostra</h4>
+                    <select id="saved-teams"></select>
+                    <p id="teams-empty-hint" class="section-note hidden">
+                      Nessuna squadra salvata. Crea una nuova squadra da “Gestione squadre”.
+                    </p>
+                    <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
+                  </div>
+                  <div class="team-manage-col opponent-settings hidden" id="opponent-team-settings">
+                    <h4>Squadra avversaria</h4>
+                    <select id="saved-opponent-teams"></select>
+                    <div class="opponent-skill-toggles">
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-serve" />
+                        Battuta
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-pass" />
+                        Ricezione
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-attack" />
+                        Attacco
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-defense" />
+                        Difesa
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-block" />
+                        Muro
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-second" />
+                        Alzata
+                      </label>
+                    </div>
+                    <button id="btn-open-opponent-team-manager" class="secondary">Gestione squadra</button>
+                  </div>
+                </div>
+                <div class="team-manage-actions">
+                  <button id="btn-open-teams-manager" class="secondary">Gestione squadre</button>
+                </div>
+              </div>
+            </div>
+            <div class="match-manager-panel">
+              <h4>Match salvati</h4>
+              <div id="saved-matches-list" class="match-list" role="listbox" aria-label="Match salvati"></div>
+              <select id="saved-matches" class="hidden-select" tabindex="-1" aria-hidden="true">
+                <option value="">Nuovo match (vuoto)</option>
+              </select>
+              <div class="controls-row">
+                <button id="btn-load-match">Carica match</button>
+                <button id="btn-new-match" class="secondary">Nuovo match</button>
+                <button id="btn-delete-match" class="danger">Elimina selezionati</button>
+              </div>
+            </div>
+            <div class="match-manager-panel match-manager-panel--actions">
+              <h4>Azioni match</h4>
+              <div class="controls-row match-actions-row">
+                <button id="btn-reset-match" class="danger">Reset match</button>
+                <button id="btn-export-match" class="secondary">Esporta match</button>
+                <button id="btn-import-match" class="secondary">Importa match</button>
+                <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
+              </div>
+              <div class="controls-row match-actions-row">
+                <button id="btn-export-db" class="secondary">Esporta database completo</button>
+                <button id="btn-import-db" class="secondary">Importa database</button>
+                <input id="db-file-input" type="file" accept="application/json,text/plain" hidden />
+              </div>
+              <div class="controls-row match-actions-row">
+                <button id="btn-reset-app" class="danger">Cancella dati app</button>
+              </div>
+              <p class="section-note">Backup di tutte le impostazioni, squadre e match attuale in un unico file.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tab-panel active" data-tab="info">
+    <div class="section">
+      <h2>Impostazioni</h2>
     </div>
     <div class="section">
       <details class="import-panel metrics-panel" open>
@@ -1589,146 +1727,6 @@
             </div>
             <button id="attack-trajectory-close-btn" class="pill-remove" type="button" aria-label="Chiudi">✕</button>
           </div>
-    </div>
-  </div>
-  <div id="match-manager-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="match-manager-title">
-    <div class="settings-modal__backdrop" data-close-match-manager></div>
-    <div class="settings-modal__content match-manager__content">
-      <div class="settings-modal__head">
-        <h3 id="match-manager-title">Gestione match</h3>
-        <button id="match-manager-close" class="pill-remove" aria-label="Chiudi">✕</button>
-      </div>
-      <div class="settings-modal__body match-manager__body">
-        <div class="match-manager-grid">
-          <div class="match-manager-panel">
-            <h4>Informazioni match</h4>
-            <div class="top-bar match-form-grid">
-              <div class="col">
-                <label for="match-opponent">Avversario</label>
-                <input id="match-opponent" type="text" />
-              </div>
-              <div class="col">
-                <label for="match-category">Categoria</label>
-                <input id="match-category" type="text" />
-              </div>
-              <div class="col">
-                <label for="match-date">Data</label>
-                <input id="match-date" type="date" />
-              </div>
-              <div class="col">
-                <label for="match-type">Tipo partita</label>
-                <select id="match-type">
-                  <option value="amichevole">Amichevole</option>
-                  <option value="campionato">Campionato</option>
-                  <option value="torneo">Torneo</option>
-                  <option value="playoff">Playoff</option>
-                  <option value="playout">Playout</option>
-                  <option value="coppa">Coppa</option>
-                  <option value="">Altro</option>
-                </select>
-              </div>
-              <div class="col">
-                <label for="match-leg">Turno</label>
-                <select id="match-leg">
-                  <option value="">-</option>
-                  <option value="andata">Andata</option>
-                  <option value="ritorno">Ritorno</option>
-                  <option value="gara-1">Gara 1</option>
-                  <option value="gara-2">Gara 2</option>
-                  <option value="gara-3">Gara 3</option>
-                </select>
-              </div>
-            </div>
-            <div class="controls-row">
-              <button id="btn-save-match-info">Salva info match</button>
-            </div>
-          </div>
-          <div class="match-manager-panel">
-            <h4>Squadre match</h4>
-            <p class="section-note">Seleziona le squadre collegate al match. Gestione, importazione ed esportazione passano da “Gestione squadre”.</p>
-            <div class="team-manage">
-              <label class="auto-rotate-toggle">
-                <input type="checkbox" id="use-opponent-team-toggle" />
-                Usa squadra avversaria
-              </label>
-              <div class="team-manage-grid">
-                <div class="team-manage-col">
-                  <h4>Squadra nostra</h4>
-                  <select id="saved-teams"></select>
-                  <p id="teams-empty-hint" class="section-note hidden">
-                    Nessuna squadra salvata. Crea una nuova squadra da “Gestione squadre”.
-                  </p>
-                  <button id="btn-open-team-manager" class="secondary">Gestione squadra</button>
-                </div>
-                <div class="team-manage-col opponent-settings hidden" id="opponent-team-settings">
-                  <h4>Squadra avversaria</h4>
-                  <select id="saved-opponent-teams"></select>
-                  <div class="opponent-skill-toggles">
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-serve" />
-                      Battuta
-                    </label>
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-pass" />
-                      Ricezione
-                    </label>
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-attack" />
-                      Attacco
-                    </label>
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-defense" />
-                      Difesa
-                    </label>
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-block" />
-                      Muro
-                    </label>
-                    <label class="auto-rotate-toggle">
-                      <input type="checkbox" id="opponent-skill-second" />
-                      Alzata
-                    </label>
-                  </div>
-                  <button id="btn-open-opponent-team-manager" class="secondary">Gestione squadra</button>
-                </div>
-              </div>
-              <div class="team-manage-actions">
-                <button id="btn-open-teams-manager" class="secondary">Gestione squadre</button>
-              </div>
-            </div>
-          </div>
-          <div class="match-manager-panel">
-            <h4>Match salvati</h4>
-            <div id="saved-matches-list" class="match-list" role="listbox" aria-label="Match salvati"></div>
-            <select id="saved-matches" class="hidden-select" tabindex="-1" aria-hidden="true">
-              <option value="">Nuovo match (vuoto)</option>
-            </select>
-            <div class="controls-row">
-              <button id="btn-load-match">Carica match</button>
-              <button id="btn-new-match" class="secondary">Nuovo match</button>
-              <button id="btn-delete-match" class="danger">Elimina selezionati</button>
-            </div>
-          </div>
-          <div class="match-manager-panel match-manager-panel--actions">
-            <h4>Azioni match</h4>
-            <div class="controls-row match-actions-row">
-              <button id="btn-reset-match" class="danger">Reset match</button>
-              <button id="btn-export-match" class="secondary">Esporta match</button>
-              <button id="btn-import-match" class="secondary">Importa match</button>
-              <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
-            </div>
-            <div class="controls-row match-actions-row">
-              <button id="btn-export-db" class="secondary">Esporta database completo</button>
-              <button id="btn-import-db" class="secondary">Importa database</button>
-              <input id="db-file-input" type="file" accept="application/json,text/plain" hidden />
-            </div>
-            <div class="controls-row match-actions-row">
-              <button id="btn-reset-app" class="danger">Cancella dati app</button>
-            </div>
-            <p class="section-note">Backup di tutte le impostazioni, squadre e match attuale in un unico file.</p>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   <div id="debug-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="debug-modal-title">

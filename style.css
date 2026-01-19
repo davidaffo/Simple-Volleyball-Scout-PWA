@@ -1332,6 +1332,27 @@ body[data-theme="light"] .match-summary {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.8rem;
 }
+.tab-panel[data-tab="match"] .match-manager__content {
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+.tab-panel[data-tab="match"] .match-manager__body {
+  max-height: none;
+  overflow: visible;
+}
+.tab-panel[data-tab="match"] .match-manager-grid {
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.tab-panel[data-tab="match"] .match-list {
+  max-height: 360px;
+}
+@media (max-width: 980px) {
+  .tab-panel[data-tab="match"] .match-manager-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
 .match-manager-panel {
   border: 1px solid #1f2937;
   border-radius: 0.75rem;

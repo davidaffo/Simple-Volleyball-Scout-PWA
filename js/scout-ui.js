@@ -3960,7 +3960,7 @@ const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
-const TAB_ORDER = ["info", "scout", "aggregated", "video"];
+const TAB_ORDER = ["match", "info", "scout", "aggregated", "video"];
 function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
