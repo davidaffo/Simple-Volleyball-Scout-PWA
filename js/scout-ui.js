@@ -130,6 +130,86 @@ function getPlayerIndexForId(scope, playerId) {
   const idx = maps.idToIndex.get(playerId);
   return typeof idx === "number" ? idx : null;
 }
+function buildPayloadRosterNameToIdMap(payload, scope) {
+  if (!payload || !payload.state || typeof extractRosterFromTeam !== "function") return null;
+  const teamName =
+    scope === "opponent"
+      ? (payload.state.selectedOpponentTeam || "").trim()
+      : (payload.state.selectedTeam || "").trim();
+  if (!teamName) return null;
+  const mapSource =
+    scope === "opponent"
+      ? payload.state.savedOpponentTeams || payload.state.savedTeams
+      : payload.state.savedTeams;
+  const team = mapSource && mapSource[teamName] ? mapSource[teamName] : null;
+  if (!team) return null;
+  const roster = extractRosterFromTeam(team);
+  const detailed = Array.isArray(roster.playersDetailed) ? roster.playersDetailed : [];
+  const nameToId = new Map();
+  detailed.forEach(player => {
+    const id = player && (player.id || player.playerId);
+    const name = player && player.name;
+    if (!id || !name) return;
+    nameToId.set(normalizePlayerKey(name), id);
+  });
+  return nameToId;
+}
+function backfillPlayerIdsInPayload(payload) {
+  if (!payload || !payload.state || !Array.isArray(payload.state.events)) return 0;
+  const rosterOur = Array.isArray(payload.state.players) ? payload.state.players : [];
+  const rosterOpp = Array.isArray(payload.state.opponentPlayers) ? payload.state.opponentPlayers : [];
+  const mapOur = buildPayloadRosterNameToIdMap(payload, "our");
+  const mapOpp = buildPayloadRosterNameToIdMap(payload, "opponent");
+  let updated = 0;
+  payload.state.events.forEach(ev => {
+    if (!ev || ev.playerId) return;
+    const scope = getTeamScopeFromEvent(ev);
+    const roster = scope === "opponent" ? rosterOpp : rosterOur;
+    let name = ev.playerName;
+    if (!name && typeof ev.playerIdx === "number" && roster[ev.playerIdx]) {
+      name = roster[ev.playerIdx];
+      ev.playerName = name;
+    }
+    if (!name) return;
+    const map = scope === "opponent" ? mapOpp : mapOur;
+    if (!map) return;
+    const id = map.get(normalizePlayerKey(name));
+    if (id) {
+      ev.playerId = id;
+      updated += 1;
+    }
+  });
+  return updated;
+}
+function backfillPlayerIdsInSavedMatches() {
+  const saved = state.savedMatches || {};
+  let updatedMatches = 0;
+  let updatedEvents = 0;
+  Object.entries(saved).forEach(([name, payload]) => {
+    const count = backfillPlayerIdsInPayload(payload);
+    if (count > 0) {
+      updatedMatches += 1;
+      updatedEvents += count;
+      if (typeof saveMatchToStorage === "function") {
+        saveMatchToStorage(name, payload);
+      }
+      saved[name] = payload;
+      if (name === state.selectedMatch) {
+        state.events = payload.state.events || state.events || [];
+        syncEventPlayerLinks(state.events || []);
+      }
+    }
+  });
+  state.savedMatches = saved;
+  if (updatedMatches > 0) {
+    saveState();
+  }
+  alert(
+    updatedMatches > 0
+      ? `Aggiornati ${updatedEvents} eventi in ${updatedMatches} match.`
+      : "Nessun match da aggiornare."
+  );
+}
 function getEnabledSkillsForScope(scope) {
   if (scope === "opponent" && state.useOpponentTeam) {
     const cfg = state.opponentSkillConfig || {};
@@ -315,6 +395,7 @@ const elDebugModal = document.getElementById("debug-modal");
 const elDebugModalClose = document.getElementById("debug-modal-close");
 const elBtnOpenDebugModal = document.getElementById("btn-open-debug-modal");
 const elBtnForceSyncLog = document.getElementById("btn-force-sync-log");
+const elBtnBackfillPlayerIds = document.getElementById("btn-backfill-player-ids");
 const elTeamsManagerModal = document.getElementById("teams-manager-modal");
 const elTeamsManagerList = document.getElementById("teams-manager-list");
 const elTeamsManagerClose = document.getElementById("teams-manager-close");
@@ -16381,6 +16462,7 @@ async function openAnalysisPrintLayout() {
   }
 }
 function buildMatchExportPayload() {
+  syncEventPlayerLinks(state.events || []);
   return {
     app: "simple-volley-scout",
     version: 1,
@@ -19492,6 +19574,13 @@ async function init() {
     elBtnForceSyncLog.addEventListener("click", () => {
       forceSyncDataFromLog();
       alert("Dati riallineati dal log.");
+    });
+  }
+  if (elBtnBackfillPlayerIds) {
+    elBtnBackfillPlayerIds.addEventListener("click", () => {
+      const ok = confirm("Scrivere gli ID giocatrici in tutti i match salvati?");
+      if (!ok) return;
+      backfillPlayerIdsInSavedMatches();
     });
   }
   if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
