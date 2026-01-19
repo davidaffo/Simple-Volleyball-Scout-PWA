@@ -6,7 +6,6 @@ Modalità allenamento
 # Minor features
 crea stampa tipo foglio gara
 Annullare parzialmente l-inserimento di una parte di fondamentale
-Manca il filtro freeball su video, e sarebbe opportuno aggiungere anche il menu a tendina di fondamentale precedente
 
 # Bug funzionalità
 Unisci dati partita non funziona correttamente

@@ -12656,6 +12656,7 @@ function matchesVideoFilters(ev, filters) {
   if (filters.serveTypes && filters.serveTypes.size) {
     if (!ev.serveType || !filters.serveTypes.has(ev.serveType)) return false;
   }
+  if (filters.prevSkill && !matchesPreviousSkill(ev, filters.prevSkill)) return false;
   return true;
 }
 const trajectoryFilterState = {
@@ -12737,6 +12738,7 @@ const videoFilterState = {
   setters: new Set(),
   skills: new Set(),
   codes: new Set(),
+  prevSkill: "any",
   sets: new Set(),
   rotations: new Set(),
   zones: new Set(),
@@ -12823,6 +12825,7 @@ function syncVideoFilterState() {
   videoFilterState.setters = new Set(getCheckedValues(els.setters));
   videoFilterState.skills = new Set(getCheckedValues(els.skills));
   videoFilterState.codes = new Set(getCheckedValues(els.codes));
+  videoFilterState.prevSkill = (els.prev && els.prev.value) || "any";
   videoFilterState.sets = new Set(getCheckedValues(els.sets, { asNumber: true }));
   videoFilterState.rotations = new Set(getCheckedValues(els.rotations, { asNumber: true }));
   videoFilterState.zones = new Set(getCheckedValues(els.zones, { asNumber: true }));
@@ -12880,6 +12883,7 @@ function resetVideoFilters() {
   videoFilterState.setters.clear();
   videoFilterState.skills.clear();
   videoFilterState.codes.clear();
+  videoFilterState.prevSkill = "any";
   videoFilterState.sets.clear();
   videoFilterState.rotations.clear();
   videoFilterState.zones.clear();
@@ -12889,6 +12893,10 @@ function resetVideoFilters() {
   videoFilterState.receiveEvaluations.clear();
   videoFilterState.receiveZones.clear();
   videoFilterState.serveTypes.clear();
+  const els = getVideoFilterElements();
+  if (els && els.prev) {
+    els.prev.value = "any";
+  }
   renderVideoAnalysis();
 }
 function getVideoFilterElements() {
@@ -12902,6 +12910,7 @@ function getVideoFilterElements() {
     setters: document.getElementById("video-filter-setters"),
     skills: document.getElementById("video-filter-skills"),
     codes: document.getElementById("video-filter-codes"),
+    prev: document.getElementById("video-filter-prev"),
     sets: document.getElementById("video-filter-sets"),
     rotations: document.getElementById("video-filter-rotations"),
     zones: document.getElementById("video-filter-zones"),
@@ -14227,6 +14236,9 @@ function renderVideoFilters(events) {
   videoFilterState.teams = new Set(
     [...videoFilterState.teams].filter(val => getTeamFilterOptions().some(o => o.value === val))
   );
+  if (!PREVIOUS_SKILL_OPTIONS.some(opt => opt.value === videoFilterState.prevSkill)) {
+    videoFilterState.prevSkill = "any";
+  }
 
   renderDynamicFilter(els.teams, getTeamFilterOptions(), videoFilterState.teams, {
     onChange: handleVideoTeamFilterChange
@@ -14310,11 +14322,21 @@ function renderVideoFilters(events) {
     onChange: handleVideoFilterChange
   });
 
+  toggleFilterVisibility(els.prev, true);
+  if (els.prev) {
+    els.prev.value = videoFilterState.prevSkill || "any";
+    if (!els.prev._videoPrevBound) {
+      els.prev.addEventListener("change", handleVideoFilterChange);
+      els.prev._videoPrevBound = true;
+    }
+  }
+
   const visibleFilters = [
     playerOpts.length,
     setterOpts.length,
     skillOpts.length,
     codeOpts.length,
+    PREVIOUS_SKILL_OPTIONS.length,
     setOpts.length,
     rotOpts.length,
     zoneOpts.length,
