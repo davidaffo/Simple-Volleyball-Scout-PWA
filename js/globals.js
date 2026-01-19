@@ -298,6 +298,7 @@ const elBtnSyncFirstSkill = document.getElementById("btn-sync-first-skill");
 const elBtnCopyFfmpeg = document.getElementById("btn-copy-ffmpeg");
 const elBtnVideoFramePrev = document.getElementById("btn-video-frame-prev");
 const elBtnVideoFrameNext = document.getElementById("btn-video-frame-next");
+const elVideoSelectionCount = document.getElementById("video-selection-count");
 const elVideoPlayByPlayToggle = document.getElementById("video-playbyplay-toggle");
 const elBtnClearVideo = document.getElementById("btn-clear-video");
 const elYoutubeUrlInput = document.getElementById("youtube-url-input");

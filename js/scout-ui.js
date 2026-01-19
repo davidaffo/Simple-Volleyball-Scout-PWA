@@ -7873,6 +7873,13 @@ function updateSelectionStyles() {
       }
     });
   });
+  updateVideoSelectionCount();
+}
+function updateVideoSelectionCount() {
+  if (!elVideoSelectionCount) return;
+  const ctx = eventTableContexts.video;
+  const count = ctx && ctx.rows ? ctx.rows.filter(r => selectedEventIds.has(r.key)).length : 0;
+  elVideoSelectionCount.textContent = "Selezionati: " + count;
 }
 function registerEventTableContext(key, ctx) {
   if (!key) return;
@@ -10681,6 +10688,7 @@ function renderVideoAnalysis() {
     tbody.appendChild(tr);
     tbl.appendChild(tbody);
     elVideoSkillsContainer.appendChild(tbl);
+    updateVideoSelectionCount();
     return;
   }
   try {
@@ -10714,6 +10722,7 @@ function renderVideoAnalysis() {
     tbody.appendChild(tr);
     tbl.appendChild(tbody);
     elVideoSkillsContainer.appendChild(tbl);
+    updateVideoSelectionCount();
     return;
   }
   renderEventTableRows(
@@ -10729,6 +10738,7 @@ function renderVideoAnalysis() {
       onSelectionChange: handleVideoSelectionChange
     }
   );
+  updateVideoSelectionCount();
   updateVideoAnalysisOverlay();
   syncPlayByPlayAfterRender();
   if (updatedZones) {
