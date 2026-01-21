@@ -94,6 +94,7 @@ let state = {
   trainingSkillId: "pass",
   trainingBoardPlayers: [],
   trainingBoardPositions: {},
+  uiTrainingTab: "info",
   theme: "dark",
   currentSet: 1,
   players: [],

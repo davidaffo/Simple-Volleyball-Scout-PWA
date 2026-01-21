@@ -23,17 +23,17 @@
     <button class="tab-btn" data-tab-target="match">Gestione match</button>
     <button class="tab-btn active" data-tab-target="info">Impostazioni</button>
     <button class="tab-btn" data-tab-target="scout">Scout live</button>
-    <button class="tab-btn" data-tab-target="training">Allenamento</button>
     <button class="tab-btn" data-tab-target="aggregated">Analisi</button>
     <button class="tab-btn" data-tab-target="video">Video</button>
+    <button class="tab-btn" data-tab-target="training">Allenamento</button>
   </div>
   <div class="tabs-dots" aria-label="Navigazione pagine">
     <button class="tab-btn tab-dot" data-tab-target="match" aria-label="Gestione match"></button>
     <button class="tab-btn tab-dot" data-tab-target="info" aria-label="Impostazioni"></button>
     <button class="tab-btn tab-dot" data-tab-target="scout" aria-label="Scout live"></button>
-    <button class="tab-btn tab-dot" data-tab-target="training" aria-label="Allenamento"></button>
     <button class="tab-btn tab-dot" data-tab-target="aggregated" aria-label="Analisi"></button>
     <button class="tab-btn tab-dot" data-tab-target="video" aria-label="Video"></button>
+    <button class="tab-btn tab-dot" data-tab-target="training" aria-label="Allenamento"></button>
     <span class="tab-swipe-hint" aria-hidden="true">swipe ↔</span>
   </div>
   <div class="tab-panel" data-tab="match">
@@ -168,18 +168,6 @@
                 <button id="btn-load-match">Carica match</button>
                 <button id="btn-new-match" class="secondary">Nuovo match</button>
                 <button id="btn-delete-match" class="danger">Elimina selezionati</button>
-              </div>
-            </div>
-            <div class="match-manager-panel">
-              <h4>Allenamenti salvati</h4>
-              <div id="saved-trainings-list" class="match-list" role="listbox" aria-label="Allenamenti salvati"></div>
-              <select id="saved-trainings" class="hidden-select" tabindex="-1" aria-hidden="true">
-                <option value="">Nuovo allenamento (vuoto)</option>
-              </select>
-              <div class="controls-row">
-                <button id="btn-load-training">Carica allenamento</button>
-                <button id="btn-new-training" class="secondary">Nuovo allenamento</button>
-                <button id="btn-delete-training" class="danger">Elimina selezionati</button>
               </div>
             </div>
             <div class="match-manager-panel match-manager-panel--actions">
@@ -683,52 +671,78 @@
       <h2>Allenamento</h2>
     </div>
     <div class="section">
-      <div class="match-manager__content">
-        <div class="match-manager__body">
-          <div class="match-manager-grid training-grid">
-            <div class="match-manager-panel training-info-panel">
-              <h4>Informazioni allenamento</h4>
-              <div class="top-bar match-form-grid">
-                <div class="col">
-                  <label for="training-title">Titolo</label>
-                  <input id="training-title" type="text" placeholder="Es. Tecnica individuale" />
+      <div class="agg-subnav training-subnav">
+        <button class="agg-subtab-btn active" data-training-tab-target="info">Gestione allenamenti</button>
+        <button class="agg-subtab-btn" data-training-tab-target="mode">Raccolta dati</button>
+      </div>
+      <div class="agg-subpanel training-subpanel active" data-training-tab="info">
+        <div class="match-manager__content">
+          <div class="match-manager__body">
+            <div class="match-manager-grid training-info-grid">
+              <div class="match-manager-panel training-info-panel">
+                <h4>Informazioni allenamento</h4>
+                <div class="top-bar match-form-grid">
+                  <div class="col">
+                    <label for="training-title">Titolo</label>
+                    <input id="training-title" type="text" placeholder="Es. Tecnica individuale" />
+                  </div>
+                  <div class="col">
+                    <label for="training-date">Data</label>
+                    <input id="training-date" type="date" />
+                  </div>
+                  <div class="col">
+                    <label for="training-notes">Note</label>
+                    <input id="training-notes" type="text" />
+                  </div>
                 </div>
-                <div class="col">
-                  <label for="training-date">Data</label>
-                  <input id="training-date" type="date" />
-                </div>
-                <div class="col">
-                  <label for="training-notes">Note</label>
-                  <input id="training-notes" type="text" />
+                <div class="controls-row">
+                  <button id="btn-save-training-info">Salva info allenamento</button>
                 </div>
               </div>
-              <div class="controls-row">
-                <button id="btn-save-training-info">Salva info allenamento</button>
+              <div class="match-manager-panel training-saved-panel">
+                <h4>Allenamenti salvati</h4>
+                <div id="saved-trainings-list" class="match-list" role="listbox" aria-label="Allenamenti salvati"></div>
+                <select id="saved-trainings" class="hidden-select" tabindex="-1" aria-hidden="true">
+                  <option value="">Nuovo allenamento (vuoto)</option>
+                </select>
+                <div class="controls-row">
+                  <button id="btn-load-training">Carica allenamento</button>
+                  <button id="btn-new-training" class="secondary">Nuovo allenamento</button>
+                  <button id="btn-delete-training" class="danger">Elimina selezionati</button>
+                </div>
               </div>
             </div>
-            <div class="match-manager-panel training-mode-panel">
-              <h4>Modalità allenamento</h4>
-              <div class="rotation-toggles">
-                <label for="training-skill-select">Skill da valutare</label>
-                <select id="training-skill-select"></select>
-              </div>
-              <div class="training-players-pool">
-                <div class="training-pool-head">
-                  <span>Giocatrici disponibili</span>
+          </div>
+        </div>
+      </div>
+      <div class="agg-subpanel training-subpanel" data-training-tab="mode">
+        <div class="match-manager__content">
+          <div class="match-manager__body">
+            <div class="match-manager-grid training-mode-grid">
+              <div class="match-manager-panel training-mode-panel">
+                <h4>Modalità allenamento</h4>
+                <div class="rotation-toggles">
+                  <label for="training-skill-select">Skill da valutare</label>
+                  <select id="training-skill-select"></select>
                 </div>
-                <div id="training-players-pool" class="training-pool-list"></div>
+                <div class="training-players-pool">
+                  <div class="training-pool-head">
+                    <span>Giocatrici disponibili</span>
+                  </div>
+                  <div id="training-players-pool" class="training-pool-list"></div>
+                </div>
+                <div class="controls-row">
+                  <button id="btn-training-fill-default" class="secondary">Aggiungi formazione base</button>
+                  <button id="btn-training-clear" class="danger">Svuota campo</button>
+                </div>
               </div>
-              <div class="controls-row">
-                <button id="btn-training-fill-default" class="secondary">Aggiungi formazione base</button>
-                <button id="btn-training-clear" class="danger">Svuota campo</button>
+              <div class="match-manager-panel training-board-panel">
+                <h4>Area allenamento</h4>
+                <div class="training-board" id="training-board">
+                  <div id="training-players-container" class="training-board-inner"></div>
+                </div>
+                <p class="section-note">Seleziona le giocatrici e trascinale nell'area di lavoro.</p>
               </div>
-            </div>
-            <div class="match-manager-panel training-board-panel">
-              <h4>Area allenamento</h4>
-              <div class="training-board" id="training-board">
-                <div id="training-players-container" class="training-board-inner"></div>
-              </div>
-              <p class="section-note">Per gestire o creare un allenamento usa “Gestione match” → “Allenamenti salvati”.</p>
             </div>
           </div>
         </div>

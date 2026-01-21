@@ -473,6 +473,7 @@ function applyStateSnapshot(parsed, options = {}) {
     typeof parsed.trainingBoardPositions === "object" && parsed.trainingBoardPositions
       ? parsed.trainingBoardPositions
       : state.trainingBoardPositions || {};
+  state.uiTrainingTab = parsed.uiTrainingTab || state.uiTrainingTab || "info";
   state.playersDb = loadPlayersDbFromStorage();
   if (!state.playersDb || Object.keys(state.playersDb).length === 0) {
     const rebuilt = rebuildPlayersDbFromTeams(state.savedTeams || {});

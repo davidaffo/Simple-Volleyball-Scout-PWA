@@ -372,6 +372,8 @@ const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
+const elTrainingTabButtons = document.querySelectorAll("[data-training-tab-target]");
+const elTrainingSubPanels = document.querySelectorAll("[data-training-tab]");
 const elAnalysisScoreSummary = document.getElementById("analysis-score-summary");
 const elBtnOpenMultiscout = document.getElementById("btn-open-multiscout");
 const elMultiscoutModal = document.getElementById("multiscout-modal");
@@ -4299,7 +4301,7 @@ const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
-const TAB_ORDER = ["match", "info", "scout", "training", "aggregated", "video"];
+const TAB_ORDER = ["match", "info", "scout", "aggregated", "video", "training"];
 function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -18525,6 +18527,28 @@ function setActiveAggTab(target) {
     setTimeout(refreshPlayer, 0);
   }
 }
+function setActiveTrainingTab(target) {
+  const desired = target || "info";
+  state.uiTrainingTab = desired;
+  if (!isLoadingMatch) saveState();
+  if (document && document.body) {
+    document.body.dataset.trainingTab = desired;
+  }
+  if (elTrainingTabButtons && typeof elTrainingTabButtons.forEach === "function") {
+    elTrainingTabButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.trainingTabTarget === desired);
+    });
+  }
+  if (elTrainingSubPanels && typeof elTrainingSubPanels.forEach === "function") {
+    elTrainingSubPanels.forEach(panel => {
+      panel.classList.toggle("active", panel.dataset.trainingTab === desired);
+    });
+  }
+  if (desired === "mode") {
+    renderTrainingPlayersPool();
+    renderTrainingPlayers();
+  }
+}
 function setActiveTab(target) {
   if (!target) return;
   const prevTab = activeTab;
@@ -18564,6 +18588,7 @@ function setActiveTab(target) {
   }
   if (target === "training") {
     state.sessionType = "training";
+    setActiveTrainingTab(state.uiTrainingTab || "info");
     applySessionTypeUI();
   } else if (target === "scout") {
     state.sessionType = "match";
@@ -18776,6 +18801,7 @@ async function init() {
   renderLiveScore();
   renderPlayers();
   applySessionTypeUI();
+  setActiveTrainingTab(state.uiTrainingTab || "info");
   initLogServeTrajectoryControls();
   if (elFloatingServeErrorBtn && !elFloatingServeErrorBtn._serveErrorBound) {
     elFloatingServeErrorBtn._serveErrorBound = true;
@@ -20391,6 +20417,15 @@ async function init() {
       btn.addEventListener("click", () => {
         if (btn.dataset.aggTabTarget) {
           setActiveAggTab(btn.dataset.aggTabTarget);
+        }
+      });
+    });
+  }
+  if (elTrainingTabButtons && typeof elTrainingTabButtons.forEach === "function") {
+    elTrainingTabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.trainingTabTarget) {
+          setActiveTrainingTab(btn.dataset.trainingTabTarget);
         }
       });
     });
