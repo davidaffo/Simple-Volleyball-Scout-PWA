@@ -674,6 +674,7 @@
       <div class="agg-subnav training-subnav">
         <button class="agg-subtab-btn active" data-training-tab-target="info">Info &amp; salvati</button>
         <button class="agg-subtab-btn" data-training-tab-target="mode">Modalità &amp; area</button>
+        <button class="agg-subtab-btn" data-training-tab-target="analysis">Analisi</button>
       </div>
       <div class="agg-subpanel training-subpanel active" data-training-tab="info">
         <div class="match-manager__content">
@@ -756,9 +757,13 @@
           </div>
         </div>
       </div>
+      <div class="agg-subpanel training-subpanel" data-training-tab="analysis">
+        <div id="training-analysis-host"></div>
+      </div>
     </div>
   </div>
 
+  <div id="aggregated-panel-anchor"></div>
   <div class="tab-panel" data-tab="aggregated" id="aggregated-panel">
     <div id="print-match-title" class="print-match-title"></div>
     <div class="section">

@@ -249,6 +249,7 @@ let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
 let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
+let analysisSource = "match";
 let serveTrajectoryScope = null;
 function getAttackMetaForPlayer(scope, playerIdx) {
   const scopedKey = scope + ":" + playerIdx;
@@ -4301,6 +4302,9 @@ const elAttackTypeModalGrid = document.getElementById("attack-type-modal-grid");
 const elBlockNumberModal = document.getElementById("block-number-modal");
 const elBlockNumberModalClose = document.getElementById("block-number-modal-close");
 const elBlockNumberModalGrid = document.getElementById("block-number-modal-grid");
+const elAggregatedPanel = document.getElementById("aggregated-panel");
+const elAggregatedPanelAnchor = document.getElementById("aggregated-panel-anchor");
+const elTrainingAnalysisHost = document.getElementById("training-analysis-host");
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -13120,8 +13124,18 @@ function getAnalysisScopesForExtras() {
   return Array.from(analysisTeamFilterState.teams);
 }
 function getAnalysisEvents() {
-  syncEventPlayerLinks(state.events || []);
-  const baseEvents = Array.isArray(state.events) ? state.events : [];
+  const useTraining = analysisSource === "training";
+  const baseEvents = useTraining
+    ? Array.isArray(state.trainingEvents)
+      ? state.trainingEvents
+      : []
+    : Array.isArray(state.events)
+      ? state.events
+      : [];
+  syncEventPlayerLinks(baseEvents);
+  if (useTraining) {
+    return baseEvents;
+  }
   const extraState = getAnalysisExtraMatchState();
   const extraEvents = [];
   const scopes = getAnalysisScopesForExtras();
@@ -13232,12 +13246,16 @@ function getTeamFilterOptions() {
   const options = [
     { value: "our", label: getTeamNameForScope("our") }
   ];
-  if (state.useOpponentTeam) {
+  if (analysisSource !== "training" && state.useOpponentTeam) {
     options.push({ value: "opponent", label: getTeamNameForScope("opponent") });
   }
   return options;
 }
 function ensureAnalysisTeamFilterDefault() {
+  if (analysisSource === "training") {
+    analysisTeamFilterState.teams = new Set(["our"]);
+    return;
+  }
   if (!state.useOpponentTeam && analysisTeamFilterState.teams.size === 0) {
     analysisTeamFilterState.teams.add("our");
   }
@@ -13245,6 +13263,30 @@ function ensureAnalysisTeamFilterDefault() {
 function invalidateAnalysisCaches() {
   analysisStatsCache = null;
   analysisStatsScope = null;
+}
+function setAnalysisSource(nextSource) {
+  const normalized = nextSource === "training" ? "training" : "match";
+  if (analysisSource === normalized) {
+    if (document && document.body) {
+      document.body.dataset.analysisSource = analysisSource;
+    }
+    return;
+  }
+  analysisTeamFilterStateBySource[analysisSource] = new Set(analysisTeamFilterState.teams);
+  analysisSummaryFilterStateBySource[analysisSource] = new Set(analysisSummaryFilterState.sets);
+  analysisSource = normalized;
+  analysisTeamFilterState.teams = new Set(analysisTeamFilterStateBySource[analysisSource] || []);
+  analysisSummaryFilterState.sets = new Set(analysisSummaryFilterStateBySource[analysisSource] || []);
+  if (document && document.body) {
+    document.body.dataset.analysisSource = analysisSource;
+  }
+  invalidateAnalysisCaches();
+  renderAnalysisTeamFilter();
+  renderAggregatedTable();
+  renderTrajectoryAnalysis();
+  renderServeTrajectoryAnalysis();
+  renderSecondTable();
+  renderPlayerAnalysis();
 }
 function handleAnalysisMatchFilterChange() {
   if (!elAnalysisFilterMatches) return;
@@ -13293,6 +13335,10 @@ function renderAnalysisTeamFilter() {
   renderAnalysisMatchFilter();
 }
 function renderAnalysisMatchFilter() {
+  if (analysisSource === "training") {
+    if (elBtnOpenMultiscout) elBtnOpenMultiscout.classList.add("hidden");
+    return;
+  }
   if (!elAnalysisFilterMatches) {
     updateMultiscoutButton();
     return;
@@ -13312,6 +13358,11 @@ function renderAnalysisMatchFilter() {
 }
 function updateMultiscoutButton() {
   if (!elBtnOpenMultiscout) return;
+  if (analysisSource === "training") {
+    elBtnOpenMultiscout.classList.add("hidden");
+    return;
+  }
+  elBtnOpenMultiscout.classList.remove("hidden");
   const scope = state.useOpponentTeam
     ? multiscoutTeamScope === "opponent"
       ? "opponent"
@@ -13652,6 +13703,14 @@ const analysisTeamFilterState = {
 };
 const analysisSummaryFilterState = {
   sets: new Set()
+};
+const analysisTeamFilterStateBySource = {
+  match: new Set(),
+  training: new Set()
+};
+const analysisSummaryFilterStateBySource = {
+  match: new Set(),
+  training: new Set()
 };
 const serveTrajectoryFilterState = {
   players: new Set(),
@@ -17006,6 +17065,14 @@ async function ensureTrajectoryAssetsLoaded(activeSubtab) {
 function setPrintMatchTitle() {
   const el = document.getElementById("print-match-title");
   if (!el) return;
+  if (analysisSource === "training") {
+    const trainingLabel =
+      (typeof buildTrainingDisplayName === "function" && buildTrainingDisplayName(state.training)) ||
+      (state.training && state.training.title) ||
+      "";
+    el.textContent = trainingLabel || "Allenamento";
+    return;
+  }
   const label =
     (typeof buildMatchDisplayName === "function" && buildMatchDisplayName(state.match)) ||
     (state.match && state.match.opponent) ||
@@ -17021,7 +17088,11 @@ async function captureAnalysisAsPdf() {
   const prevTab = activeTab;
   const prevAggTab = activeAggTab;
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
+  const useTraining = analysisSource === "training";
   setActiveTab("aggregated");
+  if (useTraining) {
+    setAnalysisSource("training");
+  }
   setActiveAggTab(prevAggTab || activeAggTab || "summary");
   applyTheme("light");
   document.body.classList.add("pdf-capture");
@@ -17084,7 +17155,11 @@ async function openAnalysisPrintLayout() {
   const prevTab = activeTab;
   const prevAggTab = activeAggTab;
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
+  const useTraining = analysisSource === "training";
   setActiveTab("aggregated");
+  if (useTraining) {
+    setAnalysisSource("training");
+  }
   setActiveAggTab(prevAggTab || activeAggTab || "summary");
   applyTheme("light");
   document.body.classList.add("pdf-capture");
@@ -17999,7 +18074,11 @@ async function exportAnalysisHtml() {
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
   showExportSplash();
   try {
+    const useTraining = analysisSource === "training";
     setActiveTab("aggregated");
+    if (useTraining) {
+      setAnalysisSource("training");
+    }
     setActiveAggTab("summary");
     setPrintMatchTitle();
     const exportState = JSON.parse(JSON.stringify(state));
@@ -18602,6 +18681,20 @@ function setActiveTrainingTab(target) {
       panel.classList.toggle("active", panel.dataset.trainingTab === desired);
     });
   }
+  if (desired === "analysis") {
+    setAnalysisSource("training");
+    if (elAggregatedPanel && elTrainingAnalysisHost && elAggregatedPanel.parentElement !== elTrainingAnalysisHost) {
+      elTrainingAnalysisHost.appendChild(elAggregatedPanel);
+    }
+    if (elAggregatedPanel) {
+      elAggregatedPanel.classList.add("active");
+    }
+  } else if (elAggregatedPanelAnchor && elAggregatedPanel && elAggregatedPanel.parentElement !== elAggregatedPanelAnchor) {
+    elAggregatedPanelAnchor.after(elAggregatedPanel);
+    if (activeTab !== "aggregated") {
+      elAggregatedPanel.classList.remove("active");
+    }
+  }
   if (desired === "mode") {
     renderTrainingPlayersPool();
     renderTrainingPlayers();
@@ -18620,10 +18713,18 @@ function setActiveTab(target) {
   tabPanels.forEach(panel => {
     panel.classList.toggle("active", panel.dataset.tab === target);
   });
-  if (
-    target === "aggregated" &&
-    (activeAggTab === "trajectory" || activeAggTab === "serve" || activeAggTab === "player")
-  ) {
+  if (target !== "training" && elAggregatedPanelAnchor && elAggregatedPanel) {
+    if (elAggregatedPanel.parentElement !== elAggregatedPanelAnchor) {
+      elAggregatedPanelAnchor.after(elAggregatedPanel);
+    }
+    if (target !== "aggregated") {
+      elAggregatedPanel.classList.remove("active");
+    }
+  }
+  if (target === "aggregated") {
+    setAnalysisSource("match");
+  }
+  if (target === "aggregated" && (activeAggTab === "trajectory" || activeAggTab === "serve" || activeAggTab === "player")) {
     const refresh = () => {
       if (typeof renderTrajectoryAnalysis === "function" && activeAggTab === "trajectory") {
         renderTrajectoryAnalysis();
