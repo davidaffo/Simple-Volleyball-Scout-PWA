@@ -672,8 +672,8 @@
     </div>
     <div class="section">
       <div class="agg-subnav training-subnav">
-        <button class="agg-subtab-btn active" data-training-tab-target="info">Gestione allenamenti</button>
-        <button class="agg-subtab-btn" data-training-tab-target="mode">Raccolta dati</button>
+        <button class="agg-subtab-btn active" data-training-tab-target="info">Info &amp; salvati</button>
+        <button class="agg-subtab-btn" data-training-tab-target="mode">Modalità &amp; area</button>
       </div>
       <div class="agg-subpanel training-subpanel active" data-training-tab="info">
         <div class="match-manager__content">
@@ -732,7 +732,6 @@
                   <div id="training-players-pool" class="training-pool-list"></div>
                 </div>
                 <div class="controls-row">
-                  <button id="btn-training-fill-default" class="secondary">Aggiungi formazione base</button>
                   <button id="btn-training-clear" class="danger">Svuota campo</button>
                 </div>
               </div>
@@ -742,6 +741,16 @@
                   <div id="training-players-container" class="training-board-inner"></div>
                 </div>
                 <p class="section-note">Seleziona le giocatrici e trascinale nell'area di lavoro.</p>
+                <div class="training-log-wrap">
+                  <div id="training-events-log-summary" class="events-log-summary" aria-live="polite"></div>
+                  <div id="training-events-log" class="training-events-log"></div>
+                  <div class="card-inline log-undo">
+                    <div class="undo-last-summary" aria-live="polite">
+                      <span>Ultimo codice:</span>
+                      <strong id="training-undo-last-summary">—</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

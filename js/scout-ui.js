@@ -244,6 +244,7 @@ const eventTableContexts = {};
 let lastEventContextKey = null;
 let lastReceiveContext = { our: null, opponent: null };
 let lastLogRenderedKey = null;
+let lastTrainingLogRenderedKey = null;
 let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
 let aggTableHeadCache = null;
 let analysisStatsCache = null;
@@ -374,6 +375,9 @@ const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
 const elTrainingTabButtons = document.querySelectorAll("[data-training-tab-target]");
 const elTrainingSubPanels = document.querySelectorAll("[data-training-tab]");
+const elTrainingEventsLog = document.getElementById("training-events-log");
+const elTrainingEventsLogSummary = document.getElementById("training-events-log-summary");
+const elTrainingUndoLastSummary = document.getElementById("training-undo-last-summary");
 const elAnalysisScoreSummary = document.getElementById("analysis-score-summary");
 const elBtnOpenMultiscout = document.getElementById("btn-open-multiscout");
 const elMultiscoutModal = document.getElementById("multiscout-modal");
@@ -4629,6 +4633,7 @@ function schedulePostEventUpdates({
     renderPlayers();
     scrollToActiveCourtOnMobileAlways();
     renderEventsLog({ suppressScroll, append });
+    renderTrainingEventsLog({ suppressScroll, append });
     if (includeAggregates) {
       renderLiveScore();
       renderScoreAndRotations(computePointsSummary());
@@ -4637,6 +4642,16 @@ function schedulePostEventUpdates({
       renderTrajectoryAnalysis();
       renderServeTrajectoryAnalysis();
     }
+  });
+}
+function scheduleTrainingPostEventUpdates({
+  suppressScroll = false,
+  append = true,
+  persistLocal = false
+} = {}) {
+  scheduleVideoSafeRender(() => {
+    saveState({ persistLocal });
+    renderTrainingEventsLog({ suppressScroll, append });
   });
 }
 function applySavedPlaybackToVideo(videoEl) {
@@ -6789,6 +6804,7 @@ function enableTrainingBoardDrag(card) {
   card.addEventListener("pointerdown", e => {
     if (!(e.target instanceof HTMLElement)) return;
     if (e.target.classList.contains("training-board-remove")) return;
+    if (e.target.closest(".event-btn")) return;
     dragging = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -7148,16 +7164,12 @@ async function handleTrainingEventClick(
   });
   event.sessionType = "training";
   event.trainingName = state.selectedTraining || (state.training && state.training.title) || "";
-  state.events.push(event);
-  incrementSkillStats(scope, playerIdx, skillId, code);
+  state.trainingEvents = state.trainingEvents || [];
+  state.trainingEvents.push(event);
   animateEventToLog(sourceEl, skillId, code);
-  schedulePostEventUpdates({
-    includeAggregates: true,
+  scheduleTrainingPostEventUpdates({
     append: true,
-    playerIdx,
-    skillId,
-    persistLocal: true,
-    scope
+    persistLocal: true
   });
   return true;
 }
@@ -9060,20 +9072,28 @@ async function copyFfmpegFromSelection() {
   }
   alert("Comando ffmpeg copiato negli appunti.");
 }
-function renderEventsLog(options = {}) {
-  const append = !!options.append;
+function renderEventsLogBase({
+  events = [],
+  logEl,
+  summaryEl,
+  undoEl,
+  contextKey = "log",
+  lastKey = null,
+  append = false,
+  suppressScroll = false,
+  updateCounters = false,
+  updateServeTraj = false
+} = {}) {
   let summaryText = "Nessun evento";
   let compactSummary = "";
-  const suppressScroll = !!options.suppressScroll;
-  if (!state.events || state.events.length === 0) {
-    if (elEventsLog) elEventsLog.innerHTML = "";
-    if (elEventsLog) elEventsLog.textContent = "Nessun evento ancora registrato.";
-    if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
-    if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
-    lastLogRenderedKey = null;
-    return;
+  if (!events || events.length === 0) {
+    if (logEl) logEl.innerHTML = "";
+    if (logEl) logEl.textContent = "Nessun evento ancora registrato.";
+    if (summaryEl) summaryEl.textContent = summaryText;
+    if (undoEl) undoEl.textContent = "—";
+    return null;
   }
-  const recent = state.events.slice(-40).sort((a, b) => {
+  const recent = events.slice(-40).sort((a, b) => {
     const at = new Date(a.t || 0).getTime();
     const bt = new Date(b.t || 0).getTime();
     if (isFinite(at) && isFinite(bt) && at !== bt) return at - bt; // oldest first
@@ -9139,23 +9159,23 @@ function renderEventsLog(options = {}) {
   const skillEvents = getVideoSkillEvents();
   const baseMs = getVideoBaseTimeMs(skillEvents);
   let didAppend = false;
-  if (append && elEventsLog && lastLogRenderedKey) {
-    const lastIdx = recent.findIndex(ev => getEventKey(ev) === lastLogRenderedKey);
+  if (append && logEl && lastKey) {
+    const lastIdx = recent.findIndex(ev => getEventKey(ev) === lastKey);
     if (lastIdx !== -1) {
       const toAppend = recent.slice(lastIdx + 1);
       if (toAppend.length > 0) {
-        renderEventTableRows(elEventsLog, toAppend, {
+        renderEventTableRows(logEl, toAppend, {
           showSeek: false,
           showVideoTime: true,
           baseMs,
           enableSelection: true,
-          contextKey: "log",
-          onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts),
+          contextKey,
+          onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection(contextKey, opts),
           append: true
         });
-        const table = elEventsLog.querySelector("table");
+        const table = logEl.querySelector("table");
         const tbody = table ? table.querySelector("tbody") : null;
-        const ctxRef = eventTableContexts.log;
+        const ctxRef = eventTableContexts[contextKey];
         if (tbody && ctxRef && ctxRef.rows) {
           const overflow = tbody.rows.length - recent.length;
           if (overflow > 0) {
@@ -9172,30 +9192,65 @@ function renderEventsLog(options = {}) {
     }
   }
   if (!didAppend) {
-    if (elEventsLog) elEventsLog.innerHTML = "";
-    renderEventTableRows(elEventsLog, recent, {
+    if (logEl) logEl.innerHTML = "";
+    renderEventTableRows(logEl, recent, {
       showSeek: false,
       showVideoTime: true,
       baseMs,
       enableSelection: true,
-      contextKey: "log",
-      onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection("log", opts)
+      contextKey,
+      onSelectionChange: (_rows, _ctx, opts) => handleSeekForSelection(contextKey, opts)
     });
   }
-  lastLogRenderedKey = latestKey;
-  if (elEventsLog && !suppressScroll) {
+  if (logEl && !suppressScroll) {
     requestAnimationFrame(() => {
-      elEventsLog.scrollTop = elEventsLog.scrollHeight;
+      logEl.scrollTop = logEl.scrollHeight;
     });
   }
-  if (elEventsLogSummary) {
-    elEventsLogSummary.textContent = summaryText;
+  if (summaryEl) {
+    summaryEl.textContent = summaryText;
   }
-  if (elUndoLastSummary) {
-    elUndoLastSummary.textContent = compactSummary || "—";
+  if (undoEl) {
+    undoEl.textContent = compactSummary || "—";
   }
-  updateTeamCounters();
-  renderLogServeTrajectories();
+  if (updateCounters) {
+    updateTeamCounters();
+  }
+  if (updateServeTraj) {
+    renderLogServeTrajectories();
+  }
+  return latestKey;
+}
+function renderEventsLog(options = {}) {
+  const append = !!options.append;
+  const suppressScroll = !!options.suppressScroll;
+  lastLogRenderedKey = renderEventsLogBase({
+    events: state.events || [],
+    logEl: elEventsLog,
+    summaryEl: elEventsLogSummary,
+    undoEl: elUndoLastSummary,
+    contextKey: "log",
+    lastKey: lastLogRenderedKey,
+    append,
+    suppressScroll,
+    updateCounters: true,
+    updateServeTraj: true
+  });
+}
+function renderTrainingEventsLog(options = {}) {
+  const append = !!options.append;
+  const suppressScroll = !!options.suppressScroll;
+  const trainingEvents = state.trainingEvents || [];
+  lastTrainingLogRenderedKey = renderEventsLogBase({
+    events: trainingEvents,
+    logEl: elTrainingEventsLog,
+    summaryEl: elTrainingEventsLogSummary,
+    undoEl: elTrainingUndoLastSummary,
+    contextKey: "training-log",
+    lastKey: lastTrainingLogRenderedKey,
+    append,
+    suppressScroll
+  });
 }
 function getTimeoutCountForSet(setNum) {
   const set = Number(setNum) || 1;
@@ -17063,6 +17118,7 @@ function buildMatchExportPayload() {
       trainingSkillId: state.trainingSkillId,
       trainingBoardPlayers: state.trainingBoardPlayers,
       trainingBoardPositions: state.trainingBoardPositions,
+      trainingEvents: state.trainingEvents,
       theme: state.theme,
       currentSet: state.currentSet,
       rotation: state.rotation,
@@ -17235,6 +17291,7 @@ function applyImportedMatch(nextState, options = {}) {
     typeof nextState.trainingBoardPositions === "object" && nextState.trainingBoardPositions
       ? nextState.trainingBoardPositions
       : state.trainingBoardPositions || {};
+  merged.trainingEvents = Array.isArray(nextState.trainingEvents) ? nextState.trainingEvents : state.trainingEvents || [];
   merged.savedTrainings = nextState.savedTrainings || state.savedTrainings || {};
   merged.selectedTraining = nextState.selectedTraining || state.selectedTraining || "";
   merged.opponentSkillConfig = nextState.opponentSkillConfig || state.opponentSkillConfig || {};
@@ -18528,7 +18585,8 @@ function setActiveAggTab(target) {
   }
 }
 function setActiveTrainingTab(target) {
-  const desired = target || "info";
+  let desired = target || "info";
+  if (desired === "log") desired = "mode";
   state.uiTrainingTab = desired;
   if (!isLoadingMatch) saveState();
   if (document && document.body) {
@@ -18800,6 +18858,7 @@ async function init() {
   renderTrainingsSelect();
   renderLiveScore();
   renderPlayers();
+  renderTrainingEventsLog();
   applySessionTypeUI();
   setActiveTrainingTab(state.uiTrainingTab || "info");
   initLogServeTrajectoryControls();
@@ -19582,9 +19641,6 @@ async function init() {
       saveState();
       renderTrainingPlayers();
     });
-  }
-  if (elBtnTrainingFillDefault) {
-    elBtnTrainingFillDefault.addEventListener("click", setTrainingCourtFromDefaultLineup);
   }
   if (elBtnTrainingClear) {
     elBtnTrainingClear.addEventListener("click", clearTrainingCourt);

@@ -1393,6 +1393,7 @@ body[data-theme="light"] .match-summary {
   grid-template-columns: 1fr;
   grid-template-rows: auto 1fr;
   height: 100%;
+  min-width: 0;
 }
 .training-subpanel[data-training-tab="mode"] .match-manager__content {
   height: calc(100vh - 260px);
@@ -1407,14 +1408,40 @@ body[data-theme="light"] .match-summary {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
 }
 .training-board-panel .section-note {
   margin-top: 0.6rem;
+}
+.training-log-wrap {
+  margin-top: 0.8rem;
+  min-width: 0;
+}
+.training-events-log {
+  max-height: 32vh;
+  overflow-y: auto;
+  overflow-x: auto;
+  max-width: 100%;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.45);
+  padding: 0.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+ .training-events-log table {
+  width: max-content;
+  min-width: 100%;
+}
+body[data-theme="light"] .training-events-log {
+  background: rgba(248, 250, 252, 0.7);
+  border-color: rgba(100, 116, 139, 0.25);
 }
 .training-board {
   flex: 1 1 auto;
   height: 100%;
   min-height: 60vh;
+  max-width: 100%;
+  overflow: hidden;
 }
 .training-board-inner {
   min-height: 100%;
@@ -2290,6 +2317,7 @@ body[data-theme="light"] .training-board {
   color: #e2e8f0;
   box-shadow: 0 14px 24px rgba(15, 23, 42, 0.4);
   touch-action: none;
+  overflow: hidden;
 }
 body[data-theme="light"] .training-board-card {
   background: rgba(248, 250, 252, 0.92);
@@ -2335,6 +2363,7 @@ body[data-theme="light"] .training-board-remove {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
 }
 body[data-theme="light"] .player-card {
   background: #ffffff;
@@ -2346,6 +2375,7 @@ body[data-theme="light"] .player-card {
   min-height: 0;
   position: relative;
   background: #181818;
+  overflow: hidden;
 }
 .player-skill-cancel {
   position: absolute;
@@ -2620,7 +2650,7 @@ body[data-theme="light"] .skill-row {
 .skill-grid,
 .code-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
   width: 100%;
 }
@@ -2717,7 +2747,7 @@ body[data-theme="light"] .skill-row {
 }
 .skill-buttons {
   display: grid;
-  grid-template-columns: repeat(2, minmax(60px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
 }
 .skill-buttons button {
@@ -2744,6 +2774,14 @@ body[data-theme="light"] .skill-row {
   border: 1px solid #1d4ed8;
   color: #fff;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.player-card .event-btn,
+.court-card .event-btn,
+.training-board-card .event-btn {
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+  word-break: break-word;
 }
 .event-btn.code-positive,
 .event-btn.code-neutral,

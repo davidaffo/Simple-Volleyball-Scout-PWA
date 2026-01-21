@@ -95,6 +95,7 @@ let state = {
   trainingBoardPlayers: [],
   trainingBoardPositions: {},
   uiTrainingTab: "info",
+  trainingEvents: [],
   theme: "dark",
   currentSet: 1,
   players: [],

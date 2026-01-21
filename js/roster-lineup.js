@@ -474,6 +474,7 @@ function applyStateSnapshot(parsed, options = {}) {
       ? parsed.trainingBoardPositions
       : state.trainingBoardPositions || {};
   state.uiTrainingTab = parsed.uiTrainingTab || state.uiTrainingTab || "info";
+  state.trainingEvents = Array.isArray(parsed.trainingEvents) ? parsed.trainingEvents : state.trainingEvents || [];
   state.playersDb = loadPlayersDbFromStorage();
   if (!state.playersDb || Object.keys(state.playersDb).length === 0) {
     const rebuilt = rebuildPlayersDbFromTeams(state.savedTeams || {});
@@ -2946,6 +2947,7 @@ function getCurrentMatchPayload(name = "") {
   const payload = buildMatchExportPayload();
   payload.name = safeName;
   payload.state.sessionType = "match";
+  delete payload.state.trainingEvents;
   return payload;
 }
 function getCurrentTrainingPayload(name = "") {
@@ -2958,6 +2960,7 @@ function getCurrentTrainingPayload(name = "") {
   payload.state.trainingSkillId = state.trainingSkillId || "pass";
   payload.state.trainingBoardPlayers = state.trainingBoardPlayers || [];
   payload.state.trainingBoardPositions = state.trainingBoardPositions || {};
+  payload.state.trainingEvents = state.trainingEvents || [];
   payload.state.matchFinished = false;
   return payload;
 }
@@ -3207,6 +3210,7 @@ function resetTrainingState() {
   state.trainingCourt = Array.from({ length: 6 }, () => ({ main: "" }));
   state.trainingBoardPlayers = [];
   state.trainingBoardPositions = {};
+  state.trainingEvents = [];
   state.useOpponentTeam = false;
   state.predictiveSkillFlow = false;
   state.matchFinished = false;
