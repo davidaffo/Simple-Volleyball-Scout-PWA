@@ -18265,7 +18265,7 @@ function initSwipeTabs() {
   const maxOffset = 35;
   const maxTime = 600;
   const swipeZoneRatio = 0.25;
-  const tabsOrder = ["info", "scout", "aggregated", "video"];
+  const tabsOrder = ["match", "info", "scout", "aggregated", "video", "training"];
   const onStart = e => {
     if (!e.touches || e.touches.length === 0) {
       startedInSwipeZone = false;
