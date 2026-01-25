@@ -36,6 +36,9 @@
     }
 
     function saveMatchInfoFromUI() {
+      if (state.selectedTeam) {
+        state.match.teamName = state.selectedTeam;
+      }
       if (state.useOpponentTeam && state.selectedOpponentTeam) {
         state.match.opponent = state.selectedOpponentTeam;
       } else if (elOpponent) {

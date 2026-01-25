@@ -48,13 +48,13 @@ function getTeamNameForScope(scope) {
     const matchName = (state.match && state.match.opponent) || "";
     return matchName || "Avversaria";
   }
-  return state.selectedTeam || "Squadra";
+  return (state.match && state.match.teamName) || state.selectedTeam || "Squadra";
 }
 function getSelectedTeamNameForScope(scope) {
   if (scope === "opponent") {
     return state.useOpponentTeam ? (state.selectedOpponentTeam || "").trim() : "";
   }
-  return (state.selectedTeam || "").trim();
+  return ((state.match && state.match.teamName) || state.selectedTeam || "").trim();
 }
 function getPlayersForScope(scope) {
   return scope === "opponent" ? state.opponentPlayers || [] : state.players || [];
@@ -16896,6 +16896,9 @@ function applyImportedMatch(nextState, options = {}) {
   merged.savedOpponentTeams = nextState.savedOpponentTeams || nextState.savedTeams || state.savedTeams || {};
   merged.selectedTeam = nextState.selectedTeam || state.selectedTeam || "";
   merged.selectedOpponentTeam = nextState.selectedOpponentTeam || state.selectedOpponentTeam || "";
+  if (merged.match && !merged.match.teamName && merged.selectedTeam) {
+    merged.match.teamName = merged.selectedTeam;
+  }
   merged.opponentPlayers = normalizePlayers(nextState.opponentPlayers || []);
   merged.opponentPlayerNumbers = nextState.opponentPlayerNumbers || {};
   merged.opponentLiberos = normalizePlayers(nextState.opponentLiberos || []);

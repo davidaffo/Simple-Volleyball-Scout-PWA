@@ -343,7 +343,7 @@ function buildMatchDisplayName(matchObj) {
   const m = matchObj || state.match || {};
   const dateIso = m.date || getTodayIso();
   const datePart = formatUsDate(dateIso);
-  const teamName = (state.match && state.match.teamName) || (state.selectedTeam || "").trim();
+  const teamName = (m.teamName || "").trim();
   const typeLabels = {
     amichevole: "Amichevole",
     campionato: "Campionato",
@@ -2410,7 +2410,7 @@ function renderTeamsSelect() {
   if (!elTeamsSelect) return;
   syncTeamsFromStorage();
   const names = Object.keys(state.savedTeams || {});
-  const prev = elTeamsSelect.value || state.selectedTeam || "";
+  const prev = (state.match && state.match.teamName) || elTeamsSelect.value || state.selectedTeam || "";
   elTeamsSelect.innerHTML = "";
   if (names.length === 0) {
     const placeholder = document.createElement("option");
@@ -2421,6 +2421,7 @@ function renderTeamsSelect() {
     elTeamsSelect.appendChild(placeholder);
     elTeamsSelect.disabled = true;
     state.selectedTeam = "";
+    if (state.match) state.match.teamName = "";
   } else {
     elTeamsSelect.disabled = false;
     names.forEach(name => {
@@ -2432,6 +2433,7 @@ function renderTeamsSelect() {
     const next = prev && names.includes(prev) ? prev : names[0];
     elTeamsSelect.value = next;
     state.selectedTeam = next;
+    if (state.match) state.match.teamName = next;
   }
   const emptyHint = document.getElementById("teams-empty-hint");
   if (emptyHint) {
@@ -3211,11 +3213,9 @@ function handleTeamSelectChange() {
   const isChanging = selected !== state.selectedTeam;
   const preservedMatch = isChanging && hasData ? Object.assign({}, state.match) : null;
   if (isChanging && hasData) {
-    const ok = confirm("Cambiare la squadra del match resetterà tutti i dati. Procedere?");
-    if (!ok) {
-      renderTeamsSelect();
-      return;
-    }
+    alert("Non puoi cambiare squadra dopo l'inizio dello scout. Esegui prima il reset del match.");
+    renderTeamsSelect();
+    return;
   }
   state.selectedTeam = selected;
   state.match = state.match || {};
@@ -3267,11 +3267,9 @@ function handleOpponentTeamSelectChange() {
   const isChanging = selected !== state.selectedOpponentTeam;
   const preservedMatch = isChanging && hasData ? Object.assign({}, state.match) : null;
   if (isChanging && hasData) {
-    const ok = confirm("Cambiare la squadra avversaria del match resetterà tutti i dati. Procedere?");
-    if (!ok) {
-      renderOpponentTeamsSelect();
-      return;
-    }
+    alert("Non puoi cambiare la squadra avversaria dopo l'inizio dello scout. Esegui prima il reset del match.");
+    renderOpponentTeamsSelect();
+    return;
   }
   state.selectedOpponentTeam = selected;
   if (state.useOpponentTeam && selected) {

@@ -7,6 +7,8 @@ Modalità allenamento
 crea stampa tipo foglio gara
 
 # Bug funzionalità
+I filtri non funzionano nella view giocatore
+Annulla ultimo punto non torna indietro nel flusso skill (basterebbe guardare la skill precedente presente nel log)
 Da touch si cliccano i tasti sottostanti dagli overlay
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
