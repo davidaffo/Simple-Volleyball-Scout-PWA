@@ -18017,6 +18017,24 @@ function undoLastEvent() {
   ) {
     state.stats[idx][skillId][ev.code]--;
   }
+  if (state.predictiveSkillFlow) {
+    if (typeof resetSetTypeState === "function") {
+      resetSetTypeState();
+    } else {
+      Object.keys(selectedSkillPerPlayer || {}).forEach(key => delete selectedSkillPerPlayer[key]);
+    }
+    const lastFlow = getLastFlowEvent(state.events || []);
+    if (state.useOpponentTeam) {
+      if (lastFlow) {
+        const next = computeTwoTeamFlowFromEvent(lastFlow);
+        state.flowTeamScope = next.teamScope || state.flowTeamScope || (state.isServing ? "our" : "opponent");
+      } else {
+        state.flowTeamScope = state.isServing ? "our" : "opponent";
+      }
+    } else {
+      state.flowTeamScope = "our";
+    }
+  }
   recomputeServeFlagsFromHistory({ skipAutoLibero: true });
   saveState();
   recalcAllStatsAndUpdateUI();
