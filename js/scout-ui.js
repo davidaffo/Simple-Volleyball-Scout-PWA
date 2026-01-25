@@ -7921,8 +7921,8 @@ function renderPlayerAnalysisTable() {
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
-  const filteredEvents = filterEventsByAnalysisTeam();
-  const statsByPlayer = ensureAnalysisStatsCache();
+  const filteredEvents = filterEventsByAnalysisTeam().filter(ev => matchesSummarySetFilter(ev));
+  const statsByPlayer = computeStatsByPlayerForEvents(filteredEvents, players);
   if (idx === null || !players || !players[idx]) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -12533,6 +12533,19 @@ function normalizeReceiveZone(val) {
   return num;
 }
 function normalizeSetNumber(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    const direct = Number(trimmed);
+    if (Number.isFinite(direct)) return direct;
+    const match = trimmed.match(/\d+/);
+    if (match) {
+      const parsed = Number(match[0]);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  }
   const num = Number(val);
   if (!Number.isFinite(num)) return null;
   return num;
@@ -12928,6 +12941,7 @@ function handleAnalysisSummarySetFilterChange() {
   if (!elAnalysisFilterSets) return;
   analysisSummaryFilterState.sets = new Set(getCheckedValues(elAnalysisFilterSets, { asNumber: true }));
   renderAggregatedTable();
+  renderPlayerAnalysis();
 }
 function handleVideoTeamFilterChange(e) {
   if (!elVideoFilterTeams) return;
@@ -13148,7 +13162,7 @@ function formatPercentValueSafe(num, den) {
 function getSummarySetNumbers() {
   const setNums = new Set();
   getAnalysisEvents().forEach(ev => {
-    const num = parseInt(ev && ev.set, 10);
+    const num = normalizeSetNumber(ev && ev.set);
     if (num) setNums.add(num);
   });
   const played = Array.from(setNums).sort((a, b) => a - b);
@@ -14085,8 +14099,9 @@ function getFilteredPlayerTrajectoryEvents() {
   return events.filter(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory;
     const startZone = ev.attackStartZone || (traj && traj.startZone) || ev.zone || ev.playerPosition || null;
+    const setNum = normalizeSetNumber(ev.set);
     if (!matchesAdvancedFilters(ev, playerTrajectoryFilterState)) return false;
-    if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(ev.set)) return false;
+    if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(setNum)) return false;
     if (playerTrajectoryFilterState.codes.size && !playerTrajectoryFilterState.codes.has(ev.code)) return false;
     if (playerTrajectoryFilterState.zones.size && !playerTrajectoryFilterState.zones.has(startZone)) return false;
     return true;
@@ -14310,8 +14325,9 @@ function getFilteredPlayerServeTrajectoryEvents() {
   });
   return events.filter(ev => {
     const startZone = getServeStartZone(ev);
+    const setNum = normalizeSetNumber(ev.set);
     if (!matchesAdvancedFilters(ev, playerServeTrajectoryFilterState)) return false;
-    if (playerServeTrajectoryFilterState.sets.size && !playerServeTrajectoryFilterState.sets.has(ev.set)) return false;
+    if (playerServeTrajectoryFilterState.sets.size && !playerServeTrajectoryFilterState.sets.has(setNum)) return false;
     if (playerServeTrajectoryFilterState.codes.size && !playerServeTrajectoryFilterState.codes.has(ev.code)) return false;
     if (playerServeTrajectoryFilterState.zones.size && !playerServeTrajectoryFilterState.zones.has(startZone)) return false;
     return true;
@@ -14493,7 +14509,9 @@ function getFilteredPlayerSecondEvents() {
   return events.filter(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory || {};
     const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    const setNum = normalizeSetNumber(ev.set);
     if (!matchesAdvancedFilters(ev, playerSecondFilterState)) return false;
+    if (playerSecondFilterState.sets.size && !playerSecondFilterState.sets.has(setNum)) return false;
     return true;
   });
 }
