@@ -2022,6 +2022,40 @@ body[data-theme="light"] .court-net-divider::after {
 .base-modal__content {
   max-width: 360px;
 }
+.analysis-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+.analysis-todo__content {
+  width: min(560px, 94vw);
+  max-width: 560px;
+}
+.analysis-todo__text {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 0.65rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid #2f2f2f;
+  background: #0b111a;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.analysis-todo__controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+body[data-theme="light"] .analysis-todo__text {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5f5;
+}
 .base-modal__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

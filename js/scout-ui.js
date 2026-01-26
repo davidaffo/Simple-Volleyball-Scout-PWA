@@ -417,6 +417,11 @@ const elSetStartModalBody = document.getElementById("set-start-modal-body");
 const elSetStartModalClose = document.getElementById("set-start-modal-close");
 const elSetStartModalCancel = document.getElementById("set-start-modal-cancel");
 const elSetStartModalSave = document.getElementById("set-start-modal-save");
+const elBtnAnalysisTodo = document.getElementById("btn-analysis-todo");
+const elAnalysisTodoModal = document.getElementById("analysis-todo-modal");
+const elAnalysisTodoClose = document.getElementById("analysis-todo-close");
+const elAnalysisTodoText = document.getElementById("analysis-todo-text");
+const elAnalysisTodoClear = document.getElementById("analysis-todo-clear");
 let teamsManagerSelectedName = "";
 const courtModalElements = [];
 let courtOverlayEl = null;
@@ -3894,6 +3899,28 @@ function closeBlockNumberModal() {
   elBlockNumberModal.classList.add("hidden");
   setGlobalModalState(false);
   blockNumberModalTargetEvent = null;
+}
+function loadAnalysisTodoText() {
+  return state && typeof state.analysisTodoText === "string" ? state.analysisTodoText : "";
+}
+function saveAnalysisTodoText(value) {
+  if (!state) return;
+  state.analysisTodoText = String(value || "");
+  saveState({ persistLocal: true });
+}
+function openAnalysisTodoModal() {
+  if (!elAnalysisTodoModal) return;
+  if (elAnalysisTodoText) {
+    elAnalysisTodoText.value = loadAnalysisTodoText();
+  }
+  elAnalysisTodoModal.classList.remove("hidden");
+  setGlobalModalState(true);
+  if (elAnalysisTodoText) elAnalysisTodoText.focus();
+}
+function closeAnalysisTodoModal() {
+  if (!elAnalysisTodoModal) return;
+  elAnalysisTodoModal.classList.add("hidden");
+  setGlobalModalState(false);
 }
 function buildPlayersDbUsage(teamsMap) {
   const usage = {};
@@ -20452,6 +20479,36 @@ async function init() {
   if (elAttackSetterModalClose) {
     elAttackSetterModalClose.addEventListener("click", closeAttackSetterModal);
   }
+  if (elBtnAnalysisTodo) {
+    elBtnAnalysisTodo.addEventListener("click", openAnalysisTodoModal);
+  }
+  if (elAnalysisTodoClose) {
+    elAnalysisTodoClose.addEventListener("click", closeAnalysisTodoModal);
+  }
+  if (elAnalysisTodoModal) {
+    elAnalysisTodoModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose = target.dataset.closeAnalysisTodo || target === elAnalysisTodoModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeAnalysisTodoModal();
+      }
+    });
+  }
+  if (elAnalysisTodoText) {
+    elAnalysisTodoText.addEventListener("input", () => {
+      saveAnalysisTodoText(elAnalysisTodoText.value || "");
+    });
+  }
+  if (elAnalysisTodoClear) {
+    elAnalysisTodoClear.addEventListener("click", () => {
+      if (!elAnalysisTodoText) return;
+      const cleared = elAnalysisTodoText.value.replace(/\[\s*x\s*\]/gi, "[ ]");
+      elAnalysisTodoText.value = cleared;
+      saveAnalysisTodoText(cleared);
+    });
+  }
   if (elAttackSetterModal) {
     elAttackSetterModal.addEventListener("click", e => {
       const target = e.target;
@@ -20546,6 +20603,7 @@ async function init() {
       closeAttackTypeModal();
       closeAttackSetterModal();
       closeBlockNumberModal();
+      closeAnalysisTodoModal();
     }
   });
   document.addEventListener("mousedown", e => {
