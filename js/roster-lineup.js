@@ -2883,6 +2883,9 @@ function resetMatchState() {
   state.setResults = {};
   state.setStarts = {};
   state.matchFinished = false;
+  if (typeof syncCurrentSetUI === "function") {
+    syncCurrentSetUI(1);
+  }
   state.scoreOverrides = {};
   state.autoRotatePending = false;
   state.opponentAutoRotatePending = false;
