@@ -9,7 +9,6 @@ crea stampa tipo foglio gara
 il programma conta i muri + come punti
 
 # Bug funzionalità
-Anziche cambiare campo nel cambio set mette sempre nel campo lontano
 Nuovo match non resetta i set, quindi non sta chiamando reset match correttamente
 Da touch si cliccano i tasti sottostanti dagli overlay
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti

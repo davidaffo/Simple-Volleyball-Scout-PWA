@@ -1216,7 +1216,7 @@ function buildNextSetDraft(setNum) {
     setNum: nextSet,
     our,
     opponent,
-    swapCourt: nextSet > 1,
+    swapCourt: nextSet > 1 ? !state.courtSideSwapped : false,
     isServing: serveDefault
   };
 }
