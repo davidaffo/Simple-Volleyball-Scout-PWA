@@ -4,7 +4,6 @@ Lettura Camp3 ocr
 Modalità allenamento
 
 # Minor features
-aggiungere tasto rapido a rete per cambiare alzatore dell'ultimo attacco
 crea stampa tipo foglio gara
 
 # Bug funzionalità

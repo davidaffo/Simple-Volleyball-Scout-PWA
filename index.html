@@ -456,6 +456,7 @@
           <div class="court-net-divider">
             <span>Rete</span>
             <button id="btn-attack-base" class="small secondary net-action-btn" type="button">Base (K)</button>
+            <button id="btn-attack-setter" class="small secondary net-action-btn" type="button">Alzatore (A)</button>
             <button id="btn-attack-type" class="small secondary net-action-btn" type="button">Tipo attacco (T)</button>
             <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (N)</button>
             <button id="btn-undo" class="small danger net-action-btn">↩ Annulla ultimo</button>
@@ -1595,6 +1596,20 @@
           <button type="button" class="base-modal-btn" data-attack-type="Spinta" data-key="S">Spinta (S)</button>
         </div>
         <div class="section-note base-modal__hint">Scorciatoie: R, P, Z, S.</div>
+      </div>
+    </div>
+  </div>
+  <div id="attack-setter-modal" class="skill-modal hidden" role="dialog" aria-modal="true">
+    <div class="skill-modal__backdrop" data-close-attack-setter></div>
+    <div class="skill-modal__content base-modal__content">
+      <div class="skill-modal__head">
+        <div class="skill-modal__title">Alzatore attacco</div>
+        <button id="attack-setter-modal-close" class="pill-remove skill-modal__close-abs" aria-label="Chiudi" type="button" data-close-attack-setter="true">✕</button>
+      </div>
+      <div class="skill-modal__body">
+        <p class="section-note">Seleziona l'alzatrice dell'ultimo attacco.</p>
+        <div id="attack-setter-modal-grid" class="base-modal__grid"></div>
+        <div class="section-note base-modal__hint">Scorciatoia: A.</div>
       </div>
     </div>
   </div>

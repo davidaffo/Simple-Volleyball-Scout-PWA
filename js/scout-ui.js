@@ -3688,6 +3688,7 @@ const BASE_KEY_MAP = {
   F: "KF"
 };
 let baseModalTargetEvent = null;
+let setterModalTargetEvent = null;
 const ATTACK_TYPE_KEY_MAP = {
   R: "Regolare",
   P: "Pallonetto",
@@ -3755,6 +3756,88 @@ function closeBaseModal() {
   elBaseModal.classList.add("hidden");
   setGlobalModalState(false);
   baseModalTargetEvent = null;
+}
+function renderSetterModalOptions(scope, setterIdx) {
+  if (!elAttackSetterModalGrid) return;
+  const players = getPlayersForScope(scope) || [];
+  const baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
+  const shaped =
+    typeof ensureCourtShapeFor === "function"
+      ? ensureCourtShapeFor(baseCourt || [])
+      : (typeof getCourtShape === "function" ? getCourtShape(baseCourt || []) : baseCourt || []);
+  const inCourtNames = new Set();
+  (shaped || []).forEach(slot => {
+    if (!slot) return;
+    const main = typeof slot === "string" ? slot : slot.main;
+    const replaced = typeof slot === "object" ? slot.replaced : "";
+    if (main) inCourtNames.add(main);
+    if (replaced) inCourtNames.add(replaced);
+  });
+  const numbers = getPlayerNumbersForScope(scope);
+  elAttackSetterModalGrid.innerHTML = "";
+  const emptyBtn = document.createElement("button");
+  emptyBtn.type = "button";
+  emptyBtn.className = "base-modal-btn";
+  emptyBtn.dataset.setterIndex = "";
+  emptyBtn.textContent = "—";
+  elAttackSetterModalGrid.appendChild(emptyBtn);
+  players.forEach((name, idx) => {
+    if (!inCourtNames.has(name)) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "base-modal-btn";
+    btn.dataset.setterIndex = String(idx);
+    const label =
+      scope === "opponent" ? formatNameWithNumberFor(name, numbers) : formatNameWithNumber(name);
+    btn.textContent = label || name || "Giocatrice " + (idx + 1);
+    if (idx === setterIdx) {
+      btn.classList.add("active");
+    }
+    btn.addEventListener("click", () => applySetterToTarget(idx));
+    elAttackSetterModalGrid.appendChild(btn);
+  });
+  emptyBtn.addEventListener("click", () => applySetterToTarget(null));
+}
+function applySetterToTarget(setterIdx) {
+  if (!setterModalTargetEvent) return;
+  const scope = getTeamScopeFromEvent(setterModalTargetEvent);
+  const players = getPlayersForScope(scope) || [];
+  if (setterIdx === null || typeof setterIdx !== "number" || !players[setterIdx]) {
+    setterModalTargetEvent.setterIdx = null;
+    setterModalTargetEvent.setterName = null;
+  } else {
+    setterModalTargetEvent.setterIdx = setterIdx;
+    setterModalTargetEvent.setterName = players[setterIdx];
+  }
+  saveState({ persistLocal: true });
+  invalidateAnalysisCaches();
+  recalcAllStatsAndUpdateUI();
+  renderEventsLog({ suppressScroll: true });
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab === "video") renderVideoAnalysis();
+  closeAttackSetterModal();
+}
+function openAttackSetterModal() {
+  if (!elAttackSetterModal) return;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab !== "scout") return;
+  const ev = getLastAttackEventForScope();
+  if (!ev) {
+    alert("Nessun attacco recente per assegnare l'alzatrice.");
+    return;
+  }
+  setterModalTargetEvent = ev;
+  const scope = getTeamScopeFromEvent(ev);
+  const setterIdx = typeof ev.setterIdx === "number" ? ev.setterIdx : null;
+  renderSetterModalOptions(scope, setterIdx);
+  elAttackSetterModal.classList.remove("hidden");
+  setGlobalModalState(true);
+}
+function closeAttackSetterModal() {
+  if (!elAttackSetterModal) return;
+  elAttackSetterModal.classList.add("hidden");
+  setGlobalModalState(false);
+  setterModalTargetEvent = null;
 }
 function applyAttackTypeToTarget(value) {
   if (!attackTypeModalTargetEvent) return;
@@ -4249,6 +4332,7 @@ const BULK_EDIT_CONFIG = {
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
 const elBtnAttackBase = document.getElementById("btn-attack-base");
+const elBtnAttackSetter = document.getElementById("btn-attack-setter");
 const elBtnAttackType = document.getElementById("btn-attack-type");
 const elBtnBlockNumber = document.getElementById("btn-block-number");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
@@ -4283,9 +4367,13 @@ const elBaseModalGrid = document.getElementById("base-modal-grid");
 const elAttackTypeModal = document.getElementById("attack-type-modal");
 const elAttackTypeModalClose = document.getElementById("attack-type-modal-close");
 const elAttackTypeModalGrid = document.getElementById("attack-type-modal-grid");
+const elAttackSetterModal = document.getElementById("attack-setter-modal");
+const elAttackSetterModalClose = document.getElementById("attack-setter-modal-close");
+const elAttackSetterModalGrid = document.getElementById("attack-setter-modal-grid");
 const elBlockNumberModal = document.getElementById("block-number-modal");
 const elBlockNumberModalClose = document.getElementById("block-number-modal-close");
 const elBlockNumberModalGrid = document.getElementById("block-number-modal-grid");
+courtModalElements.push(elBaseModal, elAttackTypeModal, elAttackSetterModal, elBlockNumberModal);
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -12231,7 +12319,7 @@ const SET_TYPE_SHORTCUTS = {
   quick: "Q",
   veloce: "V",
   fast: "F",
-  alta: "A",
+  alta: "H",
   damp: "D"
 };
 const DEFAULT_BASE_OPTIONS = [
@@ -12481,8 +12569,8 @@ function handleSetTypeHotkeys(e) {
     F: "fast",
     d: "Damp",
     D: "Damp",
-    a: "alta",
-    A: "alta"
+    h: "alta",
+    H: "alta"
   };
   const choice = keyMap[e.key];
   if (!choice) return;
@@ -20300,6 +20388,9 @@ async function init() {
   if (elBtnAttackBase) {
     elBtnAttackBase.addEventListener("click", openBaseModal);
   }
+  if (elBtnAttackSetter) {
+    elBtnAttackSetter.addEventListener("click", openAttackSetterModal);
+  }
   if (elBtnAttackType) {
     elBtnAttackType.addEventListener("click", openAttackTypeModal);
   }
@@ -20355,6 +20446,20 @@ async function init() {
       const value = btn.dataset.attackType;
       if (value) {
         applyAttackTypeToTarget(value);
+      }
+    });
+  }
+  if (elAttackSetterModalClose) {
+    elAttackSetterModalClose.addEventListener("click", closeAttackSetterModal);
+  }
+  if (elAttackSetterModal) {
+    elAttackSetterModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const wantsClose = target.dataset.closeAttackSetter || target === elAttackSetterModal;
+      if (wantsClose) {
+        e.preventDefault();
+        closeAttackSetterModal();
       }
     });
   }
@@ -20439,6 +20544,7 @@ async function init() {
       closeNextSetModal();
       closeBaseModal();
       closeAttackTypeModal();
+      closeAttackSetterModal();
       closeBlockNumberModal();
     }
   });
@@ -20477,6 +20583,11 @@ async function init() {
     if (e.key === "k" || e.key === "K") {
       e.preventDefault();
       openBaseModal();
+      return;
+    }
+    if (e.key === "a" || e.key === "A") {
+      e.preventDefault();
+      openAttackSetterModal();
       return;
     }
     if (e.key === "t" || e.key === "T") {
