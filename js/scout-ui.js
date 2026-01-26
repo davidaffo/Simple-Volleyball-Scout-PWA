@@ -7239,6 +7239,12 @@ function computeMetrics(counts, skillId) {
   const prf = ((counts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
 }
+function countPointsForSkill(counts, skillId) {
+  ensurePointRulesDefaults();
+  const cfg = normalizePointRule(skillId, state.pointRules && state.pointRules[skillId]);
+  const pointCodes = (cfg && cfg.for) || [];
+  return pointCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
+}
 function getSkillLabel(skillId) {
   const skill = SKILLS.find(s => s.id === skillId);
   return (skill && skill.label) || skillId || "Fondamentale";
@@ -7949,6 +7955,9 @@ function renderPlayerAnalysisTable() {
   const points = playerPoints[idx] || { for: 0, against: 0 };
   const personalErrors = playerErrors[idx] || 0;
   const attackTotal = totalFromCounts(attackCounts);
+  const servePointCount = countPointsForSkill(serveCounts, "serve");
+  const attackPointCount = countPointsForSkill(attackCounts, "attack");
+  const blockPointCount = countPointsForSkill(blockCounts, "block");
 
   const row = document.createElement("tr");
   const cells = [
@@ -7965,7 +7974,7 @@ function renderPlayerAnalysisTable() {
 
     { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
     { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
-    { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
+    { text: servePointCount || 0, className: "skill-col skill-serve" },
     { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
     { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
 
@@ -7978,12 +7987,12 @@ function renderPlayerAnalysisTable() {
     { text: attackTotal, className: "skill-col skill-attack" },
     { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
     { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
-    { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
-    { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
+    { text: attackPointCount || 0, className: "skill-col skill-attack" },
+    { text: formatPercentValue(attackPointCount || 0, attackTotal), className: "skill-col skill-attack" },
     { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
 
     { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
-    { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
+    { text: blockPointCount || 0, className: "skill-col skill-block" },
 
     { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
     { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
@@ -11472,7 +11481,7 @@ function getScoreOverrideTotals(targetSet = null) {
 function getPointDirection(ev) {
   if (ev && ev.pendingBlockEval) return null;
   if (ev && (ev.derivedFromPassServe || ev.derivedFromBlock)) return null;
-  if (ev.pointDirection === "for" || ev.pointDirection === "against") {
+  if (ev && ev.skillId === "manual" && (ev.pointDirection === "for" || ev.pointDirection === "against")) {
     return ev.pointDirection;
   }
   if (ev && ev.skillId === "serve" && ev.code === "=") {
@@ -15833,6 +15842,9 @@ function renderAggregatedTable() {
       const personalErrors = playerErrors[idx] || 0;
       totalErrors += personalErrors;
       const attackTotal = totalFromCounts(attackCounts);
+      const servePointCount = countPointsForSkill(serveCounts, "serve");
+      const attackPointCount = countPointsForSkill(attackCounts, "attack");
+      const blockPointCount = countPointsForSkill(blockCounts, "block");
       const row = document.createElement("tr");
       const startCells = startInfoList.map(info => {
         const key = makePlayerNameKey(name);
@@ -15863,7 +15875,7 @@ function renderAggregatedTable() {
 
         { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
         { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
-        { text: serveCounts["#"] || 0, className: "skill-col skill-serve" },
+        { text: servePointCount || 0, className: "skill-col skill-serve" },
         { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
         { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
 
@@ -15876,12 +15888,12 @@ function renderAggregatedTable() {
         { text: attackTotal, className: "skill-col skill-attack" },
         { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
         { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
-        { text: attackCounts["#"] || 0, className: "skill-col skill-attack" },
-        { text: formatPercentValue(attackCounts["#"] || 0, attackTotal), className: "skill-col skill-attack" },
+        { text: attackPointCount || 0, className: "skill-col skill-attack" },
+        { text: formatPercentValue(attackPointCount || 0, attackTotal), className: "skill-col skill-attack" },
         { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
 
         { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
-        { text: (blockCounts["#"] || 0) + (blockCounts["+"] || 0), className: "skill-col skill-block" },
+        { text: blockPointCount || 0, className: "skill-col skill-block" },
 
         { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
         { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
@@ -15918,6 +15930,9 @@ function renderAggregatedTable() {
     const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
     const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
     const teamAttackTotal = totalFromCounts(totalsBySkill.attack);
+    const teamServePointCount = countPointsForSkill(totalsBySkill.serve, "serve");
+    const teamAttackPointCount = countPointsForSkill(totalsBySkill.attack, "attack");
+    const teamBlockPointCount = countPointsForSkill(totalsBySkill.block, "block");
     const totalsRow = document.createElement("tr");
     totalsRow.className = "rotation-row total";
     const startTotalsCells = playedSets.map(() => ({ text: "-" }));
@@ -15931,7 +15946,7 @@ function renderAggregatedTable() {
 
       { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
       { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
-      { text: totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
+      { text: teamServePointCount || 0, className: "skill-col skill-serve" },
       { text: serveTotalsMetrics.eff === null ? "-" : formatPercent(serveTotalsMetrics.eff), className: "skill-col skill-serve" },
       { text: serveTotalsMetrics.pos === null ? "-" : formatPercent(serveTotalsMetrics.pos), className: "skill-col skill-serve" },
 
@@ -15944,12 +15959,12 @@ function renderAggregatedTable() {
       { text: teamAttackTotal, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
-      { text: totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
-      { text: formatPercentValue(totalsBySkill.attack["#"] || 0, teamAttackTotal), className: "skill-col skill-attack" },
+      { text: teamAttackPointCount || 0, className: "skill-col skill-attack" },
+      { text: formatPercentValue(teamAttackPointCount || 0, teamAttackTotal), className: "skill-col skill-attack" },
       { text: attackTotalsMetrics.eff === null ? "-" : formatPercent(attackTotalsMetrics.eff), className: "skill-col skill-attack" },
 
       { text: totalFromCounts(totalsBySkill.block), className: "skill-col skill-block" },
-      { text: (totalsBySkill.block["#"] || 0) + (totalsBySkill.block["+"] || 0), className: "skill-col skill-block" },
+      { text: teamBlockPointCount || 0, className: "skill-col skill-block" },
 
       { text: totalFromCounts(totalsBySkill.defense), className: "skill-col skill-defense" },
       { text: defenseTotalsMetrics.negativeCount || 0, className: "skill-col skill-defense" },
@@ -15970,6 +15985,9 @@ function renderAggregatedTable() {
       const setAttackMetrics = computeMetrics(setTotals.totalsBySkill.attack, "attack");
       const setDefenseMetrics = computeMetrics(setTotals.totalsBySkill.defense, "defense");
       const setAttackTotal = totalFromCounts(setTotals.totalsBySkill.attack);
+      const setServePointCount = countPointsForSkill(setTotals.totalsBySkill.serve, "serve");
+      const setAttackPointCount = countPointsForSkill(setTotals.totalsBySkill.attack, "attack");
+      const setBlockPointCount = countPointsForSkill(setTotals.totalsBySkill.block, "block");
       const setRow = document.createElement("tr");
       setRow.className = "rotation-row";
       const setStartCells = playedSets.map(() => ({ text: "-" }));
@@ -15983,7 +16001,7 @@ function renderAggregatedTable() {
 
         { text: totalFromCounts(setTotals.totalsBySkill.serve), className: "skill-col skill-serve" },
         { text: setTotals.totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
-        { text: setTotals.totalsBySkill.serve["#"] || 0, className: "skill-col skill-serve" },
+        { text: setServePointCount || 0, className: "skill-col skill-serve" },
         { text: setServeMetrics.eff === null ? "-" : formatPercent(setServeMetrics.eff), className: "skill-col skill-serve" },
         { text: setServeMetrics.pos === null ? "-" : formatPercent(setServeMetrics.pos), className: "skill-col skill-serve" },
 
@@ -15996,16 +16014,12 @@ function renderAggregatedTable() {
         { text: setAttackTotal, className: "skill-col skill-attack" },
         { text: setTotals.totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
         { text: setTotals.totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
-        { text: setTotals.totalsBySkill.attack["#"] || 0, className: "skill-col skill-attack" },
-        { text: formatPercentValue(setTotals.totalsBySkill.attack["#"] || 0, setAttackTotal), className: "skill-col skill-attack" },
+        { text: setAttackPointCount || 0, className: "skill-col skill-attack" },
+        { text: formatPercentValue(setAttackPointCount || 0, setAttackTotal), className: "skill-col skill-attack" },
         { text: setAttackMetrics.eff === null ? "-" : formatPercent(setAttackMetrics.eff), className: "skill-col skill-attack" },
 
         { text: totalFromCounts(setTotals.totalsBySkill.block), className: "skill-col skill-block" },
-        {
-          text:
-            (setTotals.totalsBySkill.block["#"] || 0) + (setTotals.totalsBySkill.block["+"] || 0),
-          className: "skill-col skill-block"
-        },
+        { text: setBlockPointCount || 0, className: "skill-col skill-block" },
 
         { text: totalFromCounts(setTotals.totalsBySkill.defense), className: "skill-col skill-defense" },
         { text: setDefenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
@@ -16885,6 +16899,7 @@ function applyImportedMatch(nextState, options = {}) {
     fallback();
     return;
   }
+  const preservedPointRules = state.pointRules;
   resetSetTypeState();
   const merged = Object.assign({}, state, nextState);
   const normalizedPlayers = normalizePlayers(nextState.players || []);
@@ -16910,6 +16925,7 @@ function applyImportedMatch(nextState, options = {}) {
     nextState.court ||
     [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }];
   merged.metricsConfig = nextState.metricsConfig || state.metricsConfig || {};
+  merged.pointRules = preservedPointRules || merged.pointRules || {};
   merged.savedTeams = nextState.savedTeams || state.savedTeams || {};
   merged.savedOpponentTeams = nextState.savedOpponentTeams || nextState.savedTeams || state.savedTeams || {};
   merged.selectedTeam = nextState.selectedTeam || state.selectedTeam || "";
