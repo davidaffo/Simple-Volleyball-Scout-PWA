@@ -15694,8 +15694,13 @@ function renderAggregatedTable() {
       block: emptyCounts(),
       defense: emptyCounts()
     };
+    let teamErrors = 0;
     (events || []).forEach(ev => {
       if (!ev || ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+        if (ev && ev.skillId === "manual" && ev.code === "team-error") {
+          const val = typeof ev.value === "number" ? ev.value : 1;
+          teamErrors += Math.max(0, val);
+        }
         return;
       }
       const bucket = totalsBySkill[ev.skillId];
@@ -15714,6 +15719,7 @@ function renderAggregatedTable() {
     Object.values(playerErrors || {}).forEach(val => {
       totalErrors += val || 0;
     });
+    totalErrors += teamErrors;
     return { totalsBySkill, totalFor, totalAgainst, totalErrors };
   };
   const renderSummaryExtraTable = (scopes) => {
@@ -16084,7 +16090,7 @@ function renderAggregatedTable() {
       { text: teamTotals.totalFor || 0 },
       { text: teamTotals.totalAgainst || 0 },
       { text: formatDelta((teamTotals.totalFor || 0) - (teamTotals.totalAgainst || 0)) },
-      { text: totalErrors || 0 },
+      { text: teamTotals.totalErrors || 0 },
 
       { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
       { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
