@@ -7577,7 +7577,7 @@ function renderAggSummaryHeader(thead, setNumbers) {
   }
   addCell(rowTop, "Punti", { colspan: 4 });
   addCell(rowTop, "Battuta", { colspan: 5, className: "skill-col skill-serve" });
-  addCell(rowTop, "Ricezione", { colspan: 5, className: "skill-col skill-pass" });
+  addCell(rowTop, "Ricezione", { colspan: 6, className: "skill-col skill-pass" });
   addCell(rowTop, "Attacco", { colspan: 6, className: "skill-col skill-attack" });
   addCell(rowTop, "Muro", { colspan: 2, className: "skill-col skill-block" });
   addCell(rowTop, "Difesa", { colspan: 3, className: "skill-col skill-defense" });
@@ -7595,6 +7595,7 @@ function renderAggSummaryHeader(thead, setNumbers) {
 
   addCell(rowBottom, "Tot", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Err", { className: "skill-col skill-pass" });
+  addCell(rowBottom, "Ace", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Pos", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Prf", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Eff", { className: "skill-col skill-pass" });
@@ -8067,8 +8068,10 @@ function renderPlayerAnalysisTable() {
 
   const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
   const playerErrors = computePlayerErrorsMap(filteredEvents);
+  const playerPassAces = computePlayerPassAceMap(filteredEvents, analysisScope);
   const points = playerPoints[idx] || { for: 0, against: 0 };
   const personalErrors = playerErrors[idx] || 0;
+  const passAces = playerPassAces[idx] || 0;
   const attackTotal = totalFromCounts(attackCounts);
   const servePointCount = countPointsForSkill(serveCounts, "serve");
   const attackPointCount = countPointsForSkill(attackCounts, "attack");
@@ -8095,6 +8098,7 @@ function renderPlayerAnalysisTable() {
 
     { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
     { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+    { text: passAces || 0, className: "skill-col skill-pass" },
     { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
     { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
     { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
@@ -11764,6 +11768,24 @@ function computePlayerErrorsMap(events = state.events || []) {
     const isBlockError = ev.skillId === "block" && code === "/";
     if (!isErrorButton && !isBlockError) return;
     map[idx] = (map[idx] || 0) + Math.max(0, val);
+  });
+  return map;
+}
+function computePlayerPassAceMap(events = state.events || [], scope = "our") {
+  const map = {};
+  (events || []).forEach(ev => {
+    if (!ev || ev.skillId !== "pass") return;
+    const rawIdx = ev.playerIdx;
+    const idx =
+      typeof rawIdx === "number"
+        ? rawIdx
+        : typeof rawIdx === "string" && rawIdx.trim() !== ""
+          ? parseInt(rawIdx, 10)
+          : null;
+    if (idx === null || isNaN(idx)) return;
+    const direction = getPointDirectionFor(scope, ev);
+    if (direction !== "against") return;
+    map[idx] = (map[idx] || 0) + (typeof ev.value === "number" ? ev.value : 1);
   });
   return map;
 }
@@ -15638,7 +15660,7 @@ function renderAggregatedTable() {
   const analysisScope = getAnalysisTeamScope();
   const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
-  const summaryColCount = 26 + playedSets.length;
+  const summaryColCount = 27 + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
     analysisTeamFilterState.teams.size === 0 &&
@@ -15924,6 +15946,7 @@ function renderAggregatedTable() {
     }
     const playerPoints = computePlayerPointsMap(summaryEvents, scope);
     const playerErrors = computePlayerErrorsMap(summaryEvents);
+    const playerPassAces = computePlayerPassAceMap(summaryEvents, scope);
     const totalsBySkill = {
       serve: emptyCounts(),
       pass: emptyCounts(),
@@ -15932,6 +15955,7 @@ function renderAggregatedTable() {
       defense: emptyCounts()
     };
     let totalErrors = 0;
+    let totalPassAces = 0;
     const sortedEntries =
       scope === "opponent" ? getSortedPlayerEntriesForScope(scope) : getSortedPlayerEntries();
     const startInfoList = buildSetStartInfoList(playedSets, scope);
@@ -15955,7 +15979,9 @@ function renderAggregatedTable() {
 
       const points = playerPoints[idx] || { for: 0, against: 0 };
       const personalErrors = playerErrors[idx] || 0;
+      const passAces = playerPassAces[idx] || 0;
       totalErrors += personalErrors;
+      totalPassAces += passAces;
       const attackTotal = totalFromCounts(attackCounts);
       const servePointCount = countPointsForSkill(serveCounts, "serve");
       const attackPointCount = countPointsForSkill(attackCounts, "attack");
@@ -15996,6 +16022,7 @@ function renderAggregatedTable() {
 
         { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
         { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+        { text: passAces || 0, className: "skill-col skill-pass" },
         { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
         { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
         { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
@@ -16067,6 +16094,7 @@ function renderAggregatedTable() {
 
       { text: totalFromCounts(totalsBySkill.pass), className: "skill-col skill-pass" },
       { text: passTotalsMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+      { text: totalPassAces || 0, className: "skill-col skill-pass" },
       { text: passTotalsMetrics.pos === null ? "-" : formatPercent(passTotalsMetrics.pos), className: "skill-col skill-pass" },
       { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
       { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
@@ -16104,6 +16132,11 @@ function renderAggregatedTable() {
       const setAttackPointCount = countPointsForSkill(setTotals.totalsBySkill.attack, "attack");
       const setBlockPointCount = countPointsForSkill(setTotals.totalsBySkill.block, "block");
       const setRow = document.createElement("tr");
+      const setPassAcesMap = computePlayerPassAceMap(setEvents, scope);
+      let setPassAces = 0;
+      Object.values(setPassAcesMap || {}).forEach(val => {
+        setPassAces += val || 0;
+      });
       setRow.className = "rotation-row";
       const setStartCells = playedSets.map(() => ({ text: "-" }));
       const setCells = [
@@ -16122,6 +16155,7 @@ function renderAggregatedTable() {
 
         { text: totalFromCounts(setTotals.totalsBySkill.pass), className: "skill-col skill-pass" },
         { text: setPassMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+        { text: setPassAces || 0, className: "skill-col skill-pass" },
         { text: setPassMetrics.pos === null ? "-" : formatPercent(setPassMetrics.pos), className: "skill-col skill-pass" },
         { text: setPassMetrics.prf === null ? "-" : formatPercent(setPassMetrics.prf), className: "skill-col skill-pass" },
         { text: setPassMetrics.eff === null ? "-" : formatPercent(setPassMetrics.eff), className: "skill-col skill-pass" },
