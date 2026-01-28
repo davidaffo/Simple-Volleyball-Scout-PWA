@@ -3461,7 +3461,7 @@ function ensurePointRulesDefaults() {
   SKILLS.forEach(skill => {
     state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
     if (
-      (skill.id === "pass" || skill.id === "defense" || skill.id === "second") &&
+      (skill.id === "defense" || skill.id === "second") &&
       Array.isArray(state.pointRules[skill.id].against) &&
       state.pointRules[skill.id].against.length === 1 &&
       state.pointRules[skill.id].against[0] === "="

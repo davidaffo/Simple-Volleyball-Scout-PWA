@@ -22,7 +22,7 @@ const THEME_TEXT = {
 const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
 const POINT_RULE_DEFAULTS = {
   serve: { for: ["#"], against: ["="] },
-  pass: { for: [], against: ["=", "/"] },
+  pass: { for: [], against: ["="] },
   defense: { for: [], against: ["=", "/"] },
   attack: { for: ["#"], against: ["=", "/"] },
   block: { for: ["#"], against: ["/", "="] },
