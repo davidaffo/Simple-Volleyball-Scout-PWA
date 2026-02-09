@@ -4,6 +4,7 @@ import { resolve, dirname } from "node:path";
 
 const root = process.cwd();
 const packagePath = resolve(root, "package.json");
+const versionConfigPath = resolve(root, "version.config.json");
 const versionJsonPath = resolve(root, "version.json");
 const appVersionJsPath = resolve(root, "js/app-version.js");
 
@@ -25,7 +26,16 @@ function writeIfChanged(filePath, content) {
 }
 
 const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
-const baseVersion = pkg.version || "0.0.0";
+const versionConfig = existsSync(versionConfigPath)
+  ? JSON.parse(readFileSync(versionConfigPath, "utf8"))
+  : {};
+const baseVersion =
+  (versionConfig && typeof versionConfig.baseVersion === "string" && versionConfig.baseVersion.trim()) ||
+  pkg.version ||
+  "0.0.0";
+const appName =
+  (versionConfig && typeof versionConfig.appName === "string" && versionConfig.appName.trim()) ||
+  "Simple Volleyball Scout PWA";
 const commitCount = Number(runGit("git rev-list --count HEAD", "0")) || 0;
 const commitHash = runGit("git rev-parse --short HEAD", "dev");
 const version = `${baseVersion}+${commitCount}.${commitHash}`;
@@ -33,7 +43,7 @@ const cacheVersion = `v${commitCount}-${commitHash}`;
 const buildDate = new Date().toISOString();
 
 const meta = {
-  appName: "Simple Volleyball Scout PWA",
+  appName,
   baseVersion,
   version,
   commitCount,
