@@ -577,9 +577,24 @@ function loadState() {
   }
   return false;
 }
+function getSnapshotTimestamp(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return 0;
+  const ts = Number(snapshot.lastSavedAt || 0);
+  return Number.isFinite(ts) ? ts : 0;
+}
 async function loadStateFromIndexedDb() {
   try {
-    const parsed = await readStateFromIndexedDb();
+    const indexed = await readStateFromIndexedDb();
+    let local = null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      local = raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      local = null;
+    }
+    const indexedTs = getSnapshotTimestamp(indexed);
+    const localTs = getSnapshotTimestamp(local);
+    const parsed = localTs > indexedTs ? local : indexed;
     if (!parsed) return false;
     return applyStateSnapshot(parsed, { skipStorageSync: true });
   } catch (e) {
@@ -590,6 +605,7 @@ async function loadStateFromIndexedDb() {
 function saveState(options = {}) {
   const { persistLocal = false, skipMatchPersist = false } = options || {};
   try {
+    state.lastSavedAt = Date.now();
     if (persistLocal) {
       syncTeamsFromStorage();
       syncOpponentTeamsFromStorage();

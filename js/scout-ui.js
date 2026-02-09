@@ -245,6 +245,7 @@ let lastEventContextKey = null;
 let lastReceiveContext = { our: null, opponent: null };
 let lastLogRenderedKey = null;
 let aggTableView = { mode: "summary", skillId: null, playerIdx: null };
+let lastUseOpponentTeamState = null;
 let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
@@ -3131,10 +3132,36 @@ function getPredictedSkillId() {
   }
   return getPredictedSkillIdForScope("our");
 }
+function isForcedBlockScope(scope = "our") {
+  if (!state.forceSkillActive || state.forceSkillScope !== scope) return false;
+  const override = scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
+  return override === "block";
+}
+function shouldShowNetBlockPromptForScope(scope = "our") {
+  if (!state.predictiveSkillFlow) return false;
+  if (scope === "opponent" && !state.useOpponentTeam) return false;
+  if (isForcedBlockScope(scope)) return false;
+  const predicted =
+    scope === "opponent"
+      ? getPredictedSkillIdForScope("opponent")
+      : state.useOpponentTeam
+        ? getPredictedSkillIdForScope("our")
+        : getPredictedSkillIdSingle();
+  const canPromptFromFlow = predicted === "block" || predicted === "defense";
+  if (!canPromptFromFlow) return false;
+  if (!isSkillEnabledForScope("block", scope)) return false;
+  return true;
+}
 function getNetBlockPromptScope() {
-  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return null;
-  if (isBlockEligibleForScope("our")) return "our";
-  if (isBlockEligibleForScope("opponent")) return "opponent";
+  const our = shouldShowNetBlockPromptForScope("our");
+  if (!state.useOpponentTeam) return our ? "our" : null;
+  const opponent = shouldShowNetBlockPromptForScope("opponent");
+  if (our && opponent) {
+    const flowState = getAutoFlowState();
+    return flowState && flowState.teamScope === "opponent" ? "opponent" : "our";
+  }
+  if (our) return "our";
+  if (opponent) return "opponent";
   return null;
 }
 function updateNetBlockPrompt() {
@@ -4073,6 +4100,7 @@ function closeDebugModal() {
 }
 function syncOpponentSettingsUI() {
   const enabled = !!state.useOpponentTeam;
+  const wasEnabled = lastUseOpponentTeamState;
   if (elUseOpponentTeamToggle) elUseOpponentTeamToggle.checked = enabled;
   if (elOpponentTeamSettings) {
     elOpponentTeamSettings.classList.toggle("hidden", !enabled);
@@ -4104,11 +4132,14 @@ function syncOpponentSettingsUI() {
     if (state.match && typeof state.match.opponentManual === "string") {
       state.match.opponent = state.match.opponentManual;
     }
-    state.courtSideSwapped = false;
-    state.courtViewMirrored = false;
-    state.opponentCourtViewMirrored = false;
+    if (wasEnabled === true) {
+      state.courtSideSwapped = false;
+      state.courtViewMirrored = false;
+      state.opponentCourtViewMirrored = false;
+    }
     saveState();
   }
+  lastUseOpponentTeamState = enabled;
   if (typeof syncCourtSideLayout === "function") {
     syncCourtSideLayout();
   }
@@ -5748,6 +5779,11 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return SKILL_COLORS[skillId] || fallback;
   };
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
+  const rawNextSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
+  const blockPromptActiveForScope =
+    rawNextSkillId === "block" &&
+    getNetBlockPromptScope() === scope &&
+    !isForcedBlockScope(scope);
   const enabledSkills = getEnabledSkillsForScope(scope);
   if (enabledSkills.length === 0) {
     const empty = document.createElement("div");
@@ -5934,25 +5970,28 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     }
   }
   if (isCompactMobile) {
-    const pickedSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
+    let pickedSkillId = rawNextSkillId;
+    if (blockPromptActiveForScope) {
+      pickedSkillId = resolveFlowSkillForScope(scope, "defense") || "defense";
+    }
     if (pickedSkillId === "serve") {
       const serveZone = getServeBaseZoneForPlayer(playerIdx, scope);
       if (serveZone !== 1) {
         return;
       }
     }
-    if (pickedSkillId === "block" && !isBlockEligibleForScope(scope)) {
+    if (rawNextSkillId === "block" && !isBlockEligibleForScope(scope)) {
       return;
     }
     if (
-      pickedSkillId === "block" &&
+      rawNextSkillId === "block" &&
       blockInlinePlayer !== null &&
       blockInlinePlayer !== playerKey &&
       isPlayerKeyInScope(blockInlinePlayer, scope)
     ) {
       return;
     }
-    if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
+    if (rawNextSkillId === "block" && !blockPromptActiveForScope && blockConfirmByPlayer[playerKey] !== true) {
       if (shouldSkipBlockConfirm(scope)) {
         blockConfirmByPlayer[playerKey] = true;
       } else {
@@ -6015,6 +6054,9 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     forcedSkillId ??
     (attackLockedForPlayer ? "attack" : nextSkillId) ??
     getSelectedSkillForScope(scope, playerIdx);
+  if (blockPromptActiveForScope && pickedSkillId === "block") {
+    pickedSkillId = resolveFlowSkillForScope(scope, "defense") || "defense";
+  }
   if (pickedSkillId && !enabledSkillIds.has(pickedSkillId)) {
     if (!nextSkillId) setSelectedSkillForScope(scope, playerIdx, null);
     pickedSkillId = null;
@@ -6234,14 +6276,14 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
     return;
   }
   if (
-    pickedSkillId === "block" &&
+    rawNextSkillId === "block" &&
     blockInlinePlayer !== null &&
     blockInlinePlayer !== playerKey &&
     isPlayerKeyInScope(blockInlinePlayer, scope)
   ) {
     return;
   }
-  if (pickedSkillId === "block" && blockConfirmByPlayer[playerKey] !== true) {
+  if (rawNextSkillId === "block" && !blockPromptActiveForScope && blockConfirmByPlayer[playerKey] !== true) {
     if (shouldSkipBlockConfirm(scope)) {
       blockConfirmByPlayer[playerKey] = true;
     } else {
@@ -19995,7 +20037,7 @@ async function init() {
       state.courtSideSwapped = !state.courtSideSwapped;
       state.courtViewMirrored = !!state.courtSideSwapped;
       state.opponentCourtViewMirrored = !state.courtSideSwapped;
-      saveState();
+      saveState({ persistLocal: true });
       syncCourtSideLayout();
       renderPlayers();
     });
