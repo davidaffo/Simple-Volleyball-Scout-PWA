@@ -9364,6 +9364,18 @@ function openOffsetModal() {
     row.appendChild(input);
     elOffsetSkillGrid.appendChild(row);
   });
+  const manualErrorRow = document.createElement("div");
+  manualErrorRow.className = "offset-skill-row";
+  const manualErrorLabel = document.createElement("label");
+  manualErrorLabel.textContent = "Errori (manuale)";
+  const manualErrorInput = document.createElement("input");
+  manualErrorInput.type = "number";
+  manualErrorInput.step = "1";
+  manualErrorInput.value = "0";
+  manualErrorInput.dataset.skillId = "__manual_error__";
+  manualErrorRow.appendChild(manualErrorLabel);
+  manualErrorRow.appendChild(manualErrorInput);
+  elOffsetSkillGrid.appendChild(manualErrorRow);
   elOffsetModal.classList.remove("hidden");
   setGlobalModalState(true);
 }
@@ -9606,12 +9618,18 @@ function applyOffsetsToSelectedSkills() {
   }
   if (!elOffsetSkillGrid) return;
   const offsets = {};
+  let manualErrorOffset = 0;
   elOffsetSkillGrid.querySelectorAll("input[data-skill-id]").forEach(input => {
     const id = input.dataset.skillId;
     const value = parseFloat(input.value || "0");
-    if (id && !isNaN(value) && value !== 0) offsets[id] = value;
+    if (!id || isNaN(value) || value === 0) return;
+    if (id === "__manual_error__") {
+      manualErrorOffset = value;
+      return;
+    }
+    offsets[id] = value;
   });
-  if (!Object.keys(offsets).length) {
+  if (!Object.keys(offsets).length && manualErrorOffset === 0) {
     alert("Inserisci almeno un offset diverso da 0.");
     return;
   }
@@ -9619,8 +9637,17 @@ function applyOffsetsToSelectedSkills() {
   const baseMs = getVideoBaseTimeMs(getVideoSkillEvents());
   rows.forEach(r => {
     const ev = r.ev;
-    if (!ev || !ev.skillId) return;
-    const delta = offsets[ev.skillId];
+    if (!ev) return;
+    const code = String(ev.code || "").trim().toLowerCase();
+    const isManualErrorCode = code === "error" || code === "team-error" || code === "opp-error";
+    let delta = ev.skillId ? offsets[ev.skillId] : undefined;
+    if (
+      !delta &&
+      manualErrorOffset !== 0 &&
+      isManualErrorCode
+    ) {
+      delta = manualErrorOffset;
+    }
     if (!delta) return;
     const current =
       typeof ev.videoTime === "number"
