@@ -18544,6 +18544,9 @@ function setActiveTab(target) {
   state.uiActiveTab = target;
   if (!isLoadingMatch) saveState();
   document.body.dataset.activeTab = target;
+  if (document && document.documentElement) {
+    document.documentElement.dataset.activeTab = target;
+  }
   tabButtons.forEach(btn => {
     btn.classList.toggle("active", btn.dataset.tabTarget === target);
   });

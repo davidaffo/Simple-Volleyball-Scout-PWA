@@ -151,8 +151,8 @@ body[data-theme="light"] .tab-btn.active {
   color: #fff;
 }
 .tabs-nav.floating {
-  position: sticky;
-  top: 0;
+  position: static;
+  top: auto;
   left: 0;
   transform: none;
   z-index: 15;
@@ -164,6 +164,11 @@ body[data-theme="light"] .tab-btn.active {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   transition: box-shadow 180ms ease, background 180ms ease;
   margin-bottom: 0.15rem;
+}
+.tabs-nav,
+.tabs-nav.floating,
+.app-footer {
+  position: static;
 }
 .tabs-nav .app-title {
   margin: 0;
@@ -2000,10 +2005,10 @@ body[data-theme="light"] .scout-mobile-bar button {
 }
 .scout-grid .section {
   margin-top: 0;
-  height: 100%;
+  height: auto;
 }
 .scout-col-center .players-area {
-  height: 100%;
+  height: auto;
 }
 .scout-col-right {
   display: flex;
@@ -2019,6 +2024,25 @@ body[data-theme="light"] .scout-mobile-bar button {
   flex-direction: column;
   gap: 0.35rem;
   position: relative;
+}
+@media (min-width: 901px) {
+  body[data-active-tab="scout"] .tab-panel[data-tab="scout"] {
+    height: auto;
+    overflow: visible;
+  }
+  body[data-active-tab="scout"] .scout-grid {
+    height: auto;
+    min-height: 0;
+  }
+  body[data-active-tab="scout"] .scout-grid > .section { min-height: 0; }
+  body[data-active-tab="scout"] .scout-col-left,
+  body[data-active-tab="scout"] .scout-col-center,
+  body[data-active-tab="scout"] .scout-col-right {
+    overflow: visible;
+  }
+  body[data-active-tab="scout"] .scout-col-right #events-log {
+    overflow-y: auto;
+  }
 }
 .players-area.court-area--next-set > :not(.next-set-inline) {
   pointer-events: none;
