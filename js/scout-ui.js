@@ -11936,6 +11936,16 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     const wasReceiving = !opponentServing || !!state.opponentAutoRotatePending;
     const ourWasReceiving = !state.isServing || !!state.autoRotatePending;
     eventObj.autoRotatePrev = wasReceiving;
+    if (eventObj.skillId === "serve") {
+      const direction = getPointDirection(eventObj);
+      const opponentKeepsServe = direction !== "against";
+      state.isServing = !opponentKeepsServe;
+      state.opponentAutoRotatePending = !opponentKeepsServe;
+      state.autoRotatePending = opponentKeepsServe;
+      eventObj.autoRotateNext = !opponentKeepsServe;
+      saveState();
+      return;
+    }
     if (eventObj.skillId === "pass") {
       state.opponentAutoRotatePending = true;
       state.isServing = true;
@@ -11976,6 +11986,16 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
   const wasReceiving = !state.isServing || !!state.autoRotatePending;
   const opponentWasReceiving = !!state.isServing || !!state.opponentAutoRotatePending;
   eventObj.autoRotatePrev = wasReceiving;
+  if (eventObj.skillId === "serve") {
+    const direction = getPointDirection(eventObj);
+    const keepServe = direction !== "against";
+    state.isServing = keepServe;
+    state.autoRotatePending = !keepServe;
+    state.opponentAutoRotatePending = keepServe;
+    eventObj.autoRotateNext = !keepServe;
+    saveState();
+    return;
+  }
   if (eventObj.skillId === "pass") {
     state.autoRotatePending = true;
     state.isServing = false;
