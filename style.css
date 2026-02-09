@@ -556,6 +556,9 @@ button.small {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.45rem;
+  min-height: 0;
+  overflow: hidden;
+  max-width: 100%;
   border-radius: 0.85rem;
   border: 1px solid #1f2937;
   background: #0f172a;
@@ -577,6 +580,9 @@ body[data-theme="light"] .team-field-box--opponent {
   padding: 0;
   border: none;
   background: transparent;
+  width: 100%;
+  max-width: 100%;
+  flex: 0 0 auto;
 }
 .team-field-box--home > #players-container {
   order: 1;
@@ -660,14 +666,16 @@ body[data-theme="light"] .court-actions-bar {
 .court-actions-inline {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0.35rem;
   margin-top: 0.6rem;
-  overflow-x: auto;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 .court-actions-inline > * {
   flex: 1 1 260px;
-  min-width: 220px;
+  min-width: 0;
 }
 .court-actions-inline > .panel-title {
   flex: 1 0 100%;
@@ -724,9 +732,9 @@ body[data-theme="light"] .court-actions-bar {
   align-items: stretch;
 }
 .court-actions-inline .court-game-actions {
-  min-width: 280px;
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 0.25rem;
 }
 .court-game-actions button {
@@ -741,11 +749,44 @@ body[data-theme="light"] .court-actions-bar {
   border-radius: 0.4rem;
 }
 .court-actions-inline .team-controls-panel {
-  min-width: 220px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
+  overflow: hidden;
+}
+.court-actions-inline .libero-inline {
+  min-width: 0;
+  flex: 1 1 160px;
+}
+.court-actions-inline .skill-flow-panel {
+  min-width: 0;
+}
+.court-actions-inline .skill-flow-grid.skill-flow-inline {
+  flex-wrap: wrap;
+}
+.court-actions-inline .skill-flow-grid.skill-flow-inline .skill-flow-btn {
+  min-width: 46px;
+}
+@media (min-width: 901px) {
+  .court-actions-inline > * {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+  .court-rotation-block {
+    flex: 0 1 190px;
+    min-width: 0;
+  }
+  .court-actions-inline .court-game-actions {
+    flex: 1 1 420px;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+  .court-actions-inline .team-controls-panel {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
 }
 .court-actions-inline .team-controls-panel .skill-flow-panel {
   margin-top: 0;
@@ -1000,11 +1041,22 @@ body[data-theme="light"] .resume-btn {
   gap: 0.35rem;
   width: 100%;
 }
+.freeball-actions-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+}
 .score-actions button {
   flex: 1 1 120px;
   min-width: 0;
   padding: 0.18rem 0.3rem;
   font-size: 0.76rem;
+}
+.freeball-actions-inline button {
+  width: 100%;
+  min-width: 0;
 }
 .score-actions button#btn-score-team-point,
 .score-actions button#btn-score-team-point-modal {
@@ -2104,6 +2156,26 @@ body[data-theme="light"] .next-set-inline__card {
   line-height: 1;
   white-space: nowrap;
 }
+.net-actions-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.net-action-btn--block-prompt {
+  min-width: 160px;
+  padding: 0.38rem 0.9rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: var(--skill-block-bg, #4a148c);
+  border-color: var(--skill-block-bg, #4a148c);
+  color: var(--skill-block-text, #ede9fe);
+}
+body[data-theme="light"] .net-action-btn--block-prompt {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
 .court-net-divider::before,
 .court-net-divider::after {
   content: "";
@@ -2250,9 +2322,11 @@ body.desktop-court-modal.desktop-court-modal-open #court-overlay {
   display: grid;
   gap: 0.4rem;
   padding: 0.4rem;
-  min-height: 200px;
+  min-height: 0;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   max-width: 100%;
+  flex: 1 1 auto;
+  align-content: start;
 }
 #players-container {
   background: transparent;

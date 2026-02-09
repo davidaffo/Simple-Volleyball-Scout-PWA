@@ -2710,13 +2710,13 @@ function getPredictedSkillIdSingle() {
   const flowNext = skillId => {
     switch (skillId) {
       case "serve":
-        return "block";
+        return "defense";
       case "pass":
         return "second";
       case "second":
         return "attack";
       case "attack":
-        return "block";
+        return "defense";
       case "block":
         return "defense";
       case "defense":
@@ -2749,16 +2749,16 @@ function getPredictedSkillIdSingle() {
   const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
   if (last.skillId === "pass" && (last.code === "/" || last.receiveEvaluation === "/")) {
-    return resolveEnabledSkill("block") || fallback;
+    return resolveEnabledSkill("defense") || fallback;
   }
   if (last.skillId === "attack" && last.code === "!") {
     return resolveEnabledSkill("second") || fallback;
   }
   if (last.skillId === "defense" && (last.code === "-" || last.code === "/")) {
-    return resolveEnabledSkill("block") || fallback;
+    return resolveEnabledSkill("defense") || fallback;
   }
   if (last.skillId === "block" && last.code === "-") {
-    return resolveEnabledSkill("block") || fallback;
+    return resolveEnabledSkill("defense") || fallback;
   }
   const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
   if (dir === "for") return resolveEnabledSkill("serve") || fallback;
@@ -2798,7 +2798,7 @@ function computeTwoTeamFlowFromEvent(ev) {
       return { teamScope: scope, skillId: "attack" };
     case "attack": {
       if (ev.code === "/") {
-        return { teamScope: other, skillId: "block" };
+        return { teamScope: other, skillId: "defense" };
       }
       if (ev.code === "!") {
         return { teamScope: scope, skillId: "second" };
@@ -2886,7 +2886,7 @@ function resolveFlowSkillForScope(scope, skillId) {
       case "second":
         return "attack";
       case "attack":
-        return "block";
+        return "defense";
       case "block":
         return "defense";
       case "defense":
@@ -3009,7 +3009,8 @@ function updateSkillStatsForEvent(scope, playerIdx, skillId, prevCode, nextCode)
   }
 }
 function shouldSkipBlockConfirm(scope = "our") {
-  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return false;
+  if (state.predictiveSkillFlow) return true;
+  if (!state.useOpponentTeam) return false;
   const last = getLastFlowEvent(state.events || []);
   if (!last || last.skillId !== "attack" || last.code !== "/") return false;
   const expectedScope = getOppositeScope(getTeamScopeFromEvent(last));
@@ -3084,7 +3085,7 @@ function getPredictedSkillIdForScope(scope) {
       case "second":
         return "attack";
       case "attack":
-        return "block";
+        return "defense";
       case "block":
         return "defense";
       case "defense":
@@ -3129,6 +3130,25 @@ function getPredictedSkillId() {
     return getPredictedSkillIdSingle();
   }
   return getPredictedSkillIdForScope("our");
+}
+function getNetBlockPromptScope() {
+  if (!state.useOpponentTeam || !state.predictiveSkillFlow) return null;
+  if (isBlockEligibleForScope("our")) return "our";
+  if (isBlockEligibleForScope("opponent")) return "opponent";
+  return null;
+}
+function updateNetBlockPrompt() {
+  if (!elBtnNetBlockPrompt || !elNetActionsDefault) return;
+  const scope = getNetBlockPromptScope();
+  const show = !!scope;
+  elBtnNetBlockPrompt.classList.toggle("hidden", !show);
+  elNetActionsDefault.classList.toggle("hidden", show);
+  elBtnNetBlockPrompt.dataset.scope = scope || "";
+}
+function triggerNetBlockPrompt() {
+  const scope = (elBtnNetBlockPrompt && elBtnNetBlockPrompt.dataset.scope) || getNetBlockPromptScope();
+  if (!scope) return;
+  forceNextSkill("block", scope);
 }
 function updateNextSkillIndicator(skillId) {
   if (!elNextSkillIndicator) return;
@@ -4060,6 +4080,9 @@ function syncOpponentSettingsUI() {
   if (elSingleTeamScoreActions) {
     elSingleTeamScoreActions.classList.toggle("hidden", enabled);
   }
+  if (elBtnFreeballOppSingle) {
+    elBtnFreeballOppSingle.classList.toggle("hidden", enabled);
+  }
   const opponentPanel = document.querySelector('[data-team-panel="opponent"]');
   if (opponentPanel) {
     opponentPanel.classList.toggle("hidden", !enabled);
@@ -4095,6 +4118,11 @@ function syncOpponentSettingsUI() {
   }
   if (typeof applyMatchInfoToUI === "function") {
     applyMatchInfoToUI();
+  }
+  // Fallback hard sync to avoid stale UI when toggling teams.
+  const singleFreeballBtn = document.getElementById("btn-freeball-opp-single");
+  if (singleFreeballBtn) {
+    singleFreeballBtn.classList.toggle("hidden", enabled);
   }
 }
 function renderTeamsManagerList() {
@@ -4358,10 +4386,13 @@ const BULK_EDIT_CONFIG = {
 };
 const elBtnFreeball = document.getElementById("btn-freeball");
 const elBtnFreeballOpp = document.getElementById("btn-freeball-opp");
+const elBtnFreeballOppSingle = document.getElementById("btn-freeball-opp-single");
 const elBtnAttackBase = document.getElementById("btn-attack-base");
 const elBtnAttackSetter = document.getElementById("btn-attack-setter");
 const elBtnAttackType = document.getElementById("btn-attack-type");
 const elBtnBlockNumber = document.getElementById("btn-block-number");
+const elNetActionsDefault = document.getElementById("net-actions-default");
+const elBtnNetBlockPrompt = document.getElementById("btn-net-block-prompt");
 const elBtnToggleCourtView = document.getElementById("btn-toggle-court-view");
 const elNextSkillIndicator = document.getElementById("next-skill-indicator");
 const elSetTypeShortcuts = document.getElementById("set-type-shortcuts");
@@ -6715,6 +6746,7 @@ function renderPlayers() {
   recalcAllStatsAndUpdateUI();
   renderLineupChips();
   renderOpponentPlayers({ nextSkillId: predictedOpponentSkillId });
+  updateNetBlockPrompt();
   renderLogServeTrajectories();
   updateFloatingServeErrorButton(isCompactMobile);
   maybeScrollToActiveCourtOnMobile();
@@ -12077,6 +12109,16 @@ function handleOpponentPoint() {
     forceNextSkill("pass", "our");
   } else {
     updateNextSkillIndicator(getPredictedSkillIdForScope("opponent"));
+  }
+}
+function handleOpponentFreeballSingle() {
+  if (state.useOpponentTeam) return;
+  state.skillFlowOverride = null;
+  if (state.predictiveSkillFlow) {
+    forceNextSkill("defense", "our");
+  } else {
+    renderPlayers();
+    updateNextSkillIndicator(getPredictedSkillId());
   }
 }
 function snapshotSkillClock() {
@@ -19945,6 +19987,9 @@ async function init() {
       triggerFreeballFlow({ scope: "opponent" });
     });
   }
+  if (elBtnFreeballOppSingle) {
+    elBtnFreeballOppSingle.addEventListener("click", handleOpponentFreeballSingle);
+  }
   if (elBtnToggleCourtView) {
     elBtnToggleCourtView.addEventListener("click", () => {
       state.courtSideSwapped = !state.courtSideSwapped;
@@ -20618,6 +20663,9 @@ async function init() {
   if (elBtnBlockNumber) {
     elBtnBlockNumber.addEventListener("click", openBlockNumberModal);
   }
+  if (elBtnNetBlockPrompt) {
+    elBtnNetBlockPrompt.addEventListener("click", triggerNetBlockPrompt);
+  }
   if (elBaseModalClose) {
     elBaseModalClose.addEventListener("click", closeBaseModal);
   }
@@ -20849,7 +20897,11 @@ async function init() {
     }
     if (e.key === "n" || e.key === "N") {
       e.preventDefault();
-      openBlockNumberModal();
+      if (elBtnNetBlockPrompt && !elBtnNetBlockPrompt.classList.contains("hidden")) {
+        triggerNetBlockPrompt();
+      } else {
+        openBlockNumberModal();
+      }
       return;
     }
     const ctxKey = getActiveEventContextKey();

@@ -465,10 +465,13 @@
           </div>
           <div class="court-net-divider">
             <span>Rete</span>
-            <button id="btn-attack-base" class="small secondary net-action-btn" type="button">Base (K)</button>
-            <button id="btn-attack-setter" class="small secondary net-action-btn" type="button">Alzatore (A)</button>
-            <button id="btn-attack-type" class="small secondary net-action-btn" type="button">Tipo attacco (T)</button>
-            <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (N)</button>
+            <div id="net-actions-default" class="net-actions-default">
+              <button id="btn-attack-base" class="small secondary net-action-btn" type="button">Base (K)</button>
+              <button id="btn-attack-setter" class="small secondary net-action-btn" type="button">Alzatore (A)</button>
+              <button id="btn-attack-type" class="small secondary net-action-btn" type="button">Tipo attacco (T)</button>
+              <button id="btn-block-number" class="small secondary net-action-btn" type="button">N° muro (N)</button>
+            </div>
+            <button id="btn-net-block-prompt" class="small net-action-btn net-action-btn--block-prompt hidden" type="button">MURO</button>
             <button id="btn-undo" class="small danger net-action-btn">↩ Annulla ultimo</button>
           </div>
           <div class="team-panel team-panel--near team-panel--home" data-team-panel="home">
@@ -498,7 +501,10 @@
                     <button id="btn-score-opp-point-single" class="small success">Punto avv</button>
                     <button id="btn-score-opp-error-single" class="small danger">Errore avv</button>
                   </div>
-                  <button id="btn-freeball" class="secondary small">Freeball</button>
+                  <div class="freeball-actions-inline">
+                    <button id="btn-freeball" class="secondary small">Freeball</button>
+                    <button id="btn-freeball-opp-single" class="small danger hidden">Freeball avv</button>
+                  </div>
                 </div>
                 <div class="team-controls-panel">
                   <div class="libero-inline">
