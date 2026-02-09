@@ -18120,6 +18120,51 @@ function deleteIndexedDbByName(name) {
     }
   });
 }
+async function deleteAllIndexedDbDatabases() {
+  if (!("indexedDB" in window)) return;
+  const targets = new Set();
+  if (typeof STATE_DB_NAME !== "undefined" && STATE_DB_NAME) {
+    targets.add(STATE_DB_NAME);
+  }
+  if (typeof LOCAL_VIDEO_DB !== "undefined" && LOCAL_VIDEO_DB) {
+    targets.add(LOCAL_VIDEO_DB);
+  }
+  if (typeof indexedDB.databases === "function") {
+    try {
+      const dbs = await indexedDB.databases();
+      (dbs || []).forEach(entry => {
+        if (entry && entry.name) targets.add(entry.name);
+      });
+    } catch (_) {
+      // ignore
+    }
+  }
+  await Promise.all(Array.from(targets).map(name => deleteIndexedDbByName(name)));
+}
+async function clearStateSnapshotFromIndexedDb() {
+  if (typeof getStateDb !== "function") return;
+  try {
+    const db = await getStateDb();
+    if (!db) return;
+    await new Promise(resolve => {
+      try {
+        const tx = db.transaction(STATE_DB_STORE, "readwrite");
+        tx.objectStore(STATE_DB_STORE).delete(STORAGE_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      } catch (_) {
+        resolve();
+      }
+    });
+    db.close();
+    if (typeof stateDbPromise !== "undefined") {
+      stateDbPromise = null;
+    }
+  } catch (_) {
+    // ignore
+  }
+}
 async function resetAppData() {
   const ok = confirm(
     "Questa operazione elimina tutti i dati dell'app (squadre, match, impostazioni, video). Procedere?"
@@ -18145,29 +18190,17 @@ async function resetAppData() {
     }
   }
   try {
-    const rootPrefix = typeof PERSISTENT_DB_NAME !== "undefined" ? PERSISTENT_DB_NAME + "/" : null;
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      if (key === STORAGE_KEY) {
-        keys.push(key);
-        continue;
-      }
-      if (rootPrefix && key.startsWith(rootPrefix)) {
-        keys.push(key);
-      }
-    }
-    keys.forEach(key => localStorage.removeItem(key));
+    localStorage.clear();
   } catch (_) {
     // ignore
   }
-  if (typeof STATE_DB_NAME !== "undefined") {
-    await deleteIndexedDbByName(STATE_DB_NAME);
+  try {
+    sessionStorage.clear();
+  } catch (_) {
+    // ignore
   }
-  if (typeof LOCAL_VIDEO_DB !== "undefined") {
-    await deleteIndexedDbByName(LOCAL_VIDEO_DB);
-  }
+  await clearStateSnapshotFromIndexedDb();
+  await deleteAllIndexedDbDatabases();
   window.location.reload();
 }
 function undoLastEvent() {
@@ -18668,9 +18701,15 @@ async function init() {
   document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
-  loadState();
+  let loadedFromIndexedDb = false;
   if (typeof loadStateFromIndexedDb === "function") {
-    await loadStateFromIndexedDb();
+    loadedFromIndexedDb = await loadStateFromIndexedDb();
+  }
+  if (!loadedFromIndexedDb) {
+    loadState();
+  }
+  if (typeof syncMatchesFromStorage === "function") {
+    syncMatchesFromStorage();
   }
   state.setResults = state.setResults || {};
   state.setStarts = state.setStarts || {};

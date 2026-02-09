@@ -588,11 +588,12 @@ async function loadStateFromIndexedDb() {
   return false;
 }
 function saveState(options = {}) {
-  const { persistLocal = false } = options || {};
+  const { persistLocal = false, skipMatchPersist = false } = options || {};
   try {
     if (persistLocal) {
       syncTeamsFromStorage();
       syncOpponentTeamsFromStorage();
+      syncMatchesFromStorage();
     }
     writeStateToIndexedDb(state);
     const shouldPersistLocal = persistLocal || typeof indexedDB === "undefined";
@@ -603,7 +604,7 @@ function saveState(options = {}) {
       typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
         ? !!window.isLoadingMatch
         : isLoadingMatch;
-    if (!loading && shouldPersistLocal) {
+    if (!loading && shouldPersistLocal && !skipMatchPersist) {
       persistCurrentMatch();
     }
   } catch (e) {
@@ -2828,9 +2829,21 @@ function deleteSelectedMatch() {
   if (!name) return;
   const ok = confirm('Eliminare il match "' + name + '"?');
   if (!ok) return;
+  const wasCurrent = (state.selectedMatch || "") === name;
   deleteMatchFromStorage(name);
+  if (state.savedMatches && Object.prototype.hasOwnProperty.call(state.savedMatches, name)) {
+    delete state.savedMatches[name];
+  }
   syncMatchesFromStorage();
   state.selectedMatch = "";
+  if (elSavedMatchesSelect) {
+    elSavedMatchesSelect.value = "";
+  }
+  if (wasCurrent) {
+    resetMatchState();
+    return;
+  }
+  saveState({ persistLocal: true, skipMatchPersist: true });
   renderMatchesSelect();
 }
 function renameSelectedMatch() {

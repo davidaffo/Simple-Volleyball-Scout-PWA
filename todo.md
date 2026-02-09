@@ -7,6 +7,7 @@ Modalità allenamento
 crea stampa tipo foglio gara
 
 # Bug funzionalità
+Un match continua a ricomparire anche dopo eliminazione dei dati
 Da touch si cliccano i tasti sottostanti dagli overlay
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
