@@ -1,11 +1,11 @@
 (function attachAppVersion(root) {
   root.__APP_VERSION__ = {
   "appName": "Simple Volleyball Scout PWA",
-  "baseVersion": "0.3.6",
-  "version": "0.3.6+275.f7c2478",
-  "commitCount": 275,
-  "commitHash": "f7c2478",
-  "cacheVersion": "v275-f7c2478",
-  "buildDate": "2026-02-09T16:37:19.816Z"
+  "baseVersion": "0.3.8",
+  "version": "0.3.8+276.7102c2c",
+  "commitCount": 276,
+  "commitHash": "7102c2c",
+  "cacheVersion": "v276-7102c2c",
+  "buildDate": "2026-02-09T16:42:08.761Z"
 };
 })(typeof self !== "undefined" ? self : window);
