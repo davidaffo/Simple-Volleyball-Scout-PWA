@@ -173,7 +173,8 @@ let state = {
     showAttack: true,
     showServe: true,
     showSecond: false
-  }
+  },
+  uiTopBarHidden: false
 };
 function canUseShare() {
   return typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -306,6 +307,7 @@ const elBtnLoadYoutube = document.getElementById("btn-load-youtube");
 const elYoutubeFrame = document.getElementById("youtube-frame");
 const elVideoScoutToggle = document.getElementById("video-scout-toggle");
 const elVideoScoutContainer = document.getElementById("video-scout-container");
+const elVideoScoutControls = document.getElementById("video-scout-controls");
 const elVideoAnalysisSection = document.getElementById("video-analysis-section");
 const elVideoAnalysisHost = document.getElementById("video-analysis-host");
 const elVideoFileInputScout = document.getElementById("video-file-input-scout");

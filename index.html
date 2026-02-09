@@ -34,6 +34,7 @@
     <button class="tab-btn tab-dot" data-tab-target="video" aria-label="Video"></button>
     <span class="tab-swipe-hint" aria-hidden="true">swipe ↔</span>
   </div>
+  <button id="btn-toggle-topbar" class="topbar-toggle-btn" type="button" aria-label="Nascondi barra" title="Nascondi barra">▴</button>
   <div class="tab-panel" data-tab="match">
     <div class="section">
       <h2>Gestione match</h2>
@@ -297,6 +298,16 @@
                 Scout da video
               </label>
             </div>
+            <div id="video-scout-controls" class="video-scout-controls hidden">
+              <div class="video-scout-actions">
+                <label class="file-btn" for="video-file-input-scout">Carica video</label>
+                <input id="video-file-input-scout" type="file" accept="video/*" hidden />
+                <div class="youtube-input">
+                  <input id="youtube-url-input-scout" type="url" placeholder="https://youtu.be/..." />
+                  <button id="btn-load-youtube-scout" class="secondary">Usa YouTube</button>
+                </div>
+              </div>
+            </div>
             <div class="set-bottom-actions">
               <button id="btn-toggle-court-view" class="small secondary" type="button">Cambia campo</button>
             </div>
@@ -383,14 +394,6 @@
         </div>
         <div id="video-scout-container" class="video-scout-container hidden">
           <div class="video-scout-panel">
-            <div class="video-scout-actions">
-              <label class="file-btn" for="video-file-input-scout">Carica video</label>
-              <input id="video-file-input-scout" type="file" accept="video/*" hidden />
-              <div class="youtube-input">
-                <input id="youtube-url-input-scout" type="url" placeholder="https://youtu.be/..." />
-                <button id="btn-load-youtube-scout" class="secondary">Usa YouTube</button>
-              </div>
-            </div>
             <div class="video-player-wrap video-player-wrap--scout">
               <div class="video-media">
                 <video id="analysis-video-scout" controls preload="metadata"></video>

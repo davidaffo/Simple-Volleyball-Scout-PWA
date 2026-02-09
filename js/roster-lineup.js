@@ -426,6 +426,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.videoScoutMode = !!parsed.videoScoutMode;
   state.videoPlayByPlay = !!parsed.videoPlayByPlay;
   state.nextSetType = parsed.nextSetType || "";
+  state.uiTopBarHidden = !!parsed.uiTopBarHidden;
   state.forceMobileLayout = !!parsed.forceMobileLayout;
   state.liberos = Array.isArray(parsed.liberos)
     ? normalizePlayers(parsed.liberos).filter(name => (state.players || []).includes(name))

@@ -203,6 +203,38 @@ body[data-theme="light"] .tab-btn.active {
   z-index: 35;
   backdrop-filter: blur(6px);
 }
+body.top-bar-hidden .tabs-nav {
+  display: none;
+}
+body.top-bar-hidden .tabs-dots {
+  display: none !important;
+}
+.topbar-toggle-btn {
+  position: fixed;
+  top: 3.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: 30px;
+  height: 22px;
+  padding: 0;
+  border-radius: 0 0 12px 12px;
+  border: 1px solid #334155;
+  border-top: 0;
+  background: rgba(10, 18, 30, 0.92);
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+body.top-bar-hidden .topbar-toggle-btn {
+  top: 0.05rem;
+}
+body[data-theme="light"] .topbar-toggle-btn {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
 .tab-swipe-hint {
   font-size: 0.62rem;
   letter-spacing: 0.08em;
@@ -4238,6 +4270,10 @@ body[data-theme="light"] .rotation-table td {
 .video-scout-container {
   width: 100%;
   margin-bottom: 0.8rem;
+}
+.video-scout-controls {
+  width: 100%;
+  margin: 0.35rem 0 0.6rem;
 }
 .video-scout-panel {
   display: flex;

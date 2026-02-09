@@ -250,6 +250,16 @@ let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
 let serveTrajectoryScope = null;
+function applyTopBarVisibility() {
+  const hidden = !!state.uiTopBarHidden;
+  document.body.classList.toggle("top-bar-hidden", hidden);
+  if (elBtnToggleTopbar) {
+    elBtnToggleTopbar.textContent = hidden ? "▾" : "▴";
+    elBtnToggleTopbar.title = hidden ? "Mostra barra" : "Nascondi barra";
+    elBtnToggleTopbar.setAttribute("aria-label", hidden ? "Mostra barra" : "Nascondi barra");
+    elBtnToggleTopbar.setAttribute("aria-pressed", hidden ? "true" : "false");
+  }
+}
 function getAttackMetaForPlayer(scope, playerIdx) {
   const scopedKey = scope + ":" + playerIdx;
   if (attackMetaByPlayer[scopedKey]) return attackMetaByPlayer[scopedKey];
@@ -402,6 +412,7 @@ const elDebugModalClose = document.getElementById("debug-modal-close");
 const elBtnOpenDebugModal = document.getElementById("btn-open-debug-modal");
 const elBtnForceSyncLog = document.getElementById("btn-force-sync-log");
 const elBtnBackfillPlayerIds = document.getElementById("btn-backfill-player-ids");
+const elBtnToggleTopbar = document.getElementById("btn-toggle-topbar");
 const elTeamsManagerModal = document.getElementById("teams-manager-modal");
 const elTeamsManagerList = document.getElementById("teams-manager-list");
 const elTeamsManagerClose = document.getElementById("teams-manager-close");
@@ -3695,6 +3706,9 @@ function updateVideoScoutModeLayout() {
   if (!elVideoScoutContainer) return;
   const useScout = !!state.videoScoutMode;
   elVideoScoutContainer.classList.toggle("hidden", !useScout);
+  if (typeof elVideoScoutControls !== "undefined" && elVideoScoutControls) {
+    elVideoScoutControls.classList.toggle("hidden", !useScout);
+  }
   relocateVideoScoutContainer();
   renderEventsLog({ suppressScroll: true });
   if (!useScout) {
@@ -18862,6 +18876,7 @@ async function init() {
   restoreCachedLocalVideo();
   restoreYoutubeFromState();
   applyTheme(state.theme || "dark");
+  applyTopBarVisibility();
   applyMatchInfoToUI();
   updateRotationDisplay();
   applyPlayersFromStateToTextarea();
@@ -20370,6 +20385,13 @@ async function init() {
       const ok = confirm("Scrivere gli ID giocatrici in tutti i match salvati?");
       if (!ok) return;
       backfillPlayerIdsInSavedMatches();
+    });
+  }
+  if (elBtnToggleTopbar) {
+    elBtnToggleTopbar.addEventListener("click", () => {
+      state.uiTopBarHidden = !state.uiTopBarHidden;
+      applyTopBarVisibility();
+      saveState({ persistLocal: true });
     });
   }
   if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
