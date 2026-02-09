@@ -17293,6 +17293,55 @@ function handleImportDatabaseFile(file) {
   };
   reader.readAsText(file);
 }
+async function fetchJsonFromUrl(url) {
+  const cleanUrl = (url || "").trim();
+  if (!cleanUrl) throw new Error("URL mancante");
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(cleanUrl);
+  } catch (err) {
+    throw new Error("URL non valido");
+  }
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("Protocollo URL non supportato");
+  }
+  const response = await fetch(parsedUrl.toString(), { method: "GET", mode: "cors" });
+  if (!response.ok) {
+    throw new Error("Download fallito (" + response.status + ")");
+  }
+  return response.json();
+}
+async function importMatchFromUrl(url) {
+  try {
+    const parsed = await fetchJsonFromUrl(url);
+    const nextState = parsed && parsed.state ? parsed.state : parsed;
+    applyImportedMatch(nextState);
+    if (elImportJsonUrl) elImportJsonUrl.value = "";
+    alert("Match importato da URL.");
+  } catch (err) {
+    console.error("Import match URL error", err);
+    alert(
+      "Errore import URL match. Verifica link diretto JSON e CORS del provider (es. Dropbox raw link)."
+    );
+  }
+}
+async function importDatabaseFromUrl(url) {
+  try {
+    const parsed = await fetchJsonFromUrl(url);
+    if (parsed && parsed.app === "simple-volley-scout" && parsed.state) {
+      applyImportedDatabase(parsed);
+    } else {
+      applyImportedDatabase({ state: parsed });
+    }
+    if (elImportJsonUrl) elImportJsonUrl.value = "";
+    alert("Database importato da URL.");
+  } catch (err) {
+    console.error("Import database URL error", err);
+    alert(
+      "Errore import URL database. Verifica link diretto JSON e CORS del provider (es. Dropbox raw link)."
+    );
+  }
+}
 function buildAggregatedDataForPdf() {
   const emptyCounts = () => ({ "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 });
   const getCounts = (idx, skillId) => {
@@ -19052,6 +19101,16 @@ async function init() {
       const input = e.target;
       const file = input && input.files && input.files[0];
       if (file) handleImportDatabaseFile(file);
+    });
+  }
+  if (elBtnImportMatchUrl && elImportJsonUrl) {
+    elBtnImportMatchUrl.addEventListener("click", () => {
+      importMatchFromUrl(elImportJsonUrl.value || "");
+    });
+  }
+  if (elBtnImportDbUrl && elImportJsonUrl) {
+    elBtnImportDbUrl.addEventListener("click", () => {
+      importDatabaseFromUrl(elImportJsonUrl.value || "");
     });
   }
   if (elBtnOpenMatchManager) {

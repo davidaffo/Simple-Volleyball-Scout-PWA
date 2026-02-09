@@ -2761,6 +2761,14 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   flex: 1 1 0;
   min-width: 0;
 }
+.match-actions-row--url {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.match-url-input {
+  flex: 2 1 320px;
+  min-width: 220px;
+}
 .player-management {
   display: flex;
   flex-direction: column;
