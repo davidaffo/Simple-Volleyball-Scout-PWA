@@ -6,6 +6,7 @@ Modalità allenamento
 # Minor features
 crea stampa tipo foglio gara
 gestire importazioni duplicate
+Mostrare versione del programma e tasto upgrade
 
 # Bug funzionalità
 Un match continua a ricomparire anche dopo eliminazione dei dati
