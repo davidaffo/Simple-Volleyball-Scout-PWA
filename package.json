@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "serve": "npx serve . --listen ${PORT:-3000}",
-    "tunnel": "PORT=${PORT:-3000} bash serve-tunnel.sh"
+    "version:sync": "node scripts/sync-version.mjs",
+    "serve": "npm run version:sync && npx serve . --listen ${PORT:-3000}",
+    "tunnel": "npm run version:sync && PORT=${PORT:-3000} bash serve-tunnel.sh"
   }
 }

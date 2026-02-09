@@ -1,9 +1,13 @@
-const CACHE_VERSION = "v13";
+importScripts("./js/app-version.js");
+const CACHE_VERSION =
+  (self.__APP_VERSION__ && self.__APP_VERSION__.cacheVersion) || "dev";
 const CACHE_NAME = `volley-scout-cache-${CACHE_VERSION}`;
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
+  "./version.json",
+  "./js/app-version.js",
   "./js/globals.js",
   "./js/shared/lineup-core.js",
   "./js/shared/auto-role.js",

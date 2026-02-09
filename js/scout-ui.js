@@ -18378,13 +18378,22 @@ function registerServiceWorker() {
   const supportsSw = "serviceWorker" in navigator;
   const secureContext =
     window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost";
-  if (!supportsSw || !secureContext) {
-    return;
+  const appVersionMeta =
+    typeof window !== "undefined" && window.__APP_VERSION__ ? window.__APP_VERSION__ : null;
+  const currentVersion = appVersionMeta && appVersionMeta.version ? appVersionMeta.version : "";
+  const versionLabel = document.getElementById("app-version-label");
+  if (versionLabel && currentVersion) {
+    versionLabel.textContent = currentVersion;
   }
   const banner = document.getElementById("update-banner");
+  const bannerText = banner ? banner.querySelector(".update-banner-text") : null;
   const bannerRefresh = document.getElementById("update-banner-refresh");
   const bannerDismiss = document.getElementById("update-banner-dismiss");
   let waitingWorker = null;
+  const setBannerMessage = msg => {
+    if (!bannerText) return;
+    bannerText.textContent = msg || "Aggiornamento disponibile.";
+  };
   const showBanner = () => {
     if (!banner) return;
     banner.classList.remove("hidden");
@@ -18400,7 +18409,10 @@ function registerServiceWorker() {
   };
   if (bannerRefresh && !bannerRefresh._swBound) {
     bannerRefresh.addEventListener("click", () => {
-      if (!waitingWorker) return;
+      if (!waitingWorker) {
+        window.location.reload();
+        return;
+      }
       sessionStorage.setItem("sw-refresh-requested", "1");
       waitingWorker.postMessage({ type: "SKIP_WAITING" });
     });
@@ -18409,6 +18421,25 @@ function registerServiceWorker() {
   if (bannerDismiss && !bannerDismiss._swBound) {
     bannerDismiss.addEventListener("click", hideBanner);
     bannerDismiss._swBound = true;
+  }
+  const checkRemoteVersion = async () => {
+    if (!currentVersion) return;
+    try {
+      const response = await fetch("version.json", { cache: "no-store" });
+      if (!response.ok) return;
+      const remote = await response.json();
+      const nextVersion = remote && remote.version ? String(remote.version) : "";
+      if (nextVersion && nextVersion !== currentVersion) {
+        setBannerMessage(`Aggiornamento disponibile (${currentVersion} -> ${nextVersion}).`);
+        showBanner();
+      }
+    } catch (_) {
+      // ignore version check errors
+    }
+  };
+  if (!supportsSw || !secureContext) {
+    checkRemoteVersion();
+    return;
   }
   window.addEventListener("load", () => {
     navigator.serviceWorker
@@ -18422,6 +18453,7 @@ function registerServiceWorker() {
         }
         if (reg.waiting) {
           waitingWorker = reg.waiting;
+          setBannerMessage("Aggiornamento disponibile.");
           showBanner();
         }
         reg.addEventListener("updatefound", () => {
@@ -18430,6 +18462,7 @@ function registerServiceWorker() {
           installing.addEventListener("statechange", () => {
             if (installing.state === "installed" && navigator.serviceWorker.controller) {
               waitingWorker = reg.waiting;
+              setBannerMessage("Aggiornamento disponibile.");
               showBanner();
             }
           });
@@ -18439,6 +18472,7 @@ function registerServiceWorker() {
           sessionStorage.removeItem("sw-refresh-requested");
           window.location.reload();
         });
+        checkRemoteVersion();
       })
       .catch(err => console.error("SW registration failed", err));
   });
