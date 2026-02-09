@@ -571,7 +571,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
-    return applyStateSnapshot(parsed);
+    return applyStateSnapshot(parsed, { skipStorageSync: true });
   } catch (e) {
     logError("Error loading state", e);
   }
@@ -605,7 +605,7 @@ function saveState(options = {}) {
         ? !!window.isLoadingMatch
         : isLoadingMatch;
     if (!loading && shouldPersistLocal && !skipMatchPersist) {
-      persistCurrentMatch();
+      persistCurrentMatch({ allowCreate: false });
     }
   } catch (e) {
     logError("Error saving state", e);
@@ -2409,6 +2409,10 @@ function migrateMatchesToPersistent() {
 }
 function syncMatchesFromStorage() {
   state.savedMatches = loadMatchesMapFromStorage();
+  const names = Object.keys(state.savedMatches || {});
+  if (state.selectedMatch && !names.includes(state.selectedMatch)) {
+    state.selectedMatch = "";
+  }
 }
 function renderTeamsSelect() {
   if (!elTeamsSelect) return;
@@ -2529,6 +2533,7 @@ function renderMatchesSelect() {
     state.selectedMatch = "";
   }
   renderMatchesList(names, elSavedMatchesSelect.value || "");
+  applyMatchRequirementLock();
   renderMatchSummary();
   updateMatchButtonsState();
 }
@@ -2775,7 +2780,7 @@ function getCurrentMatchPayload(name = "") {
   return payload;
 }
 function saveCurrentMatch() {
-  persistCurrentMatch();
+  persistCurrentMatch({ allowCreate: true });
 }
 function applyMatchPayload(payload, opts = {}) {
   if (!payload || !payload.state) return;
@@ -2799,7 +2804,7 @@ function loadSelectedMatch() {
     state.selectedMatch = "";
     resetMatchState();
     state.selectedMatch = generateMatchName();
-    persistCurrentMatch();
+    persistCurrentMatch({ allowCreate: true });
     if (typeof syncMatchInfoInputs === "function") {
       syncMatchInfoInputs(state.match);
     }
@@ -3544,6 +3549,33 @@ function updateMatchButtonsState() {
     elBtnDeleteMatch.disabled = !selected;
   }
 }
+function hasUsableMatch() {
+  const names = Object.keys(state.savedMatches || {});
+  if (names.length === 0) return false;
+  const selected = (state.selectedMatch || "").trim();
+  return !!selected && names.includes(selected);
+}
+function applyMatchRequirementLock() {
+  const hasMatches = hasUsableMatch();
+  if (document && document.body) {
+    document.body.dataset.noMatch = hasMatches ? "false" : "true";
+  }
+  if (tabButtons && tabButtons.forEach) {
+    tabButtons.forEach(btn => {
+      const target = btn && btn.dataset ? btn.dataset.tabTarget : "";
+      if (!target) return;
+      btn.disabled = false;
+      btn.dataset.noMatchLocked = !hasMatches && target !== "match" ? "true" : "false";
+    });
+  }
+  if (!hasMatches && typeof setActiveTab === "function" && activeTab !== "match") {
+    setActiveTab("match");
+  }
+}
+if (typeof window !== "undefined") {
+  window.hasUsableMatch = hasUsableMatch;
+  window.applyMatchRequirementLock = applyMatchRequirementLock;
+}
 const STATE_DB_NAME = "volleyScoutStateDb";
 const STATE_DB_VERSION = 1;
 const STATE_DB_STORE = "state";
@@ -3593,10 +3625,21 @@ function generateMatchName(base = "") {
   if (base) return base;
   return buildMatchDisplayName(state.match);
 }
-function persistCurrentMatch() {
+function persistCurrentMatch(options = {}) {
+  const { allowCreate = true } = options || {};
   if (typeof buildMatchExportPayload !== "function") return;
   state.savedMatches = state.savedMatches || {};
   const currentName = (state.selectedMatch || "").trim();
+  if (!currentName && !allowCreate) {
+    return;
+  }
+  if (!allowCreate) {
+    const knownInMemory = !!(state.savedMatches && state.savedMatches[currentName]);
+    const knownInStorage = !!loadMatchFromStorage(currentName);
+    if (!knownInMemory && !knownInStorage) {
+      return;
+    }
+  }
   const desiredName = currentName || generateMatchName(state.selectedMatch);
   const payload = getCurrentMatchPayload(desiredName);
   state.selectedMatch = desiredName;

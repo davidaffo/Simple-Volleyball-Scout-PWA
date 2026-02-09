@@ -18201,7 +18201,8 @@ async function resetAppData() {
   }
   await clearStateSnapshotFromIndexedDb();
   await deleteAllIndexedDbDatabases();
-  window.location.reload();
+  const cleanUrl = window.location.origin + window.location.pathname;
+  window.location.replace(cleanUrl);
 }
 function undoLastEvent() {
   if (!state.events || state.events.length === 0) {
@@ -18496,6 +18497,14 @@ function setActiveAggTab(target) {
 }
 function setActiveTab(target) {
   if (!target) return;
+  if (
+    target !== "match" &&
+    typeof window !== "undefined" &&
+    typeof window.hasUsableMatch === "function" &&
+    !window.hasUsableMatch()
+  ) {
+    target = "match";
+  }
   const prevTab = activeTab;
   activeTab = target;
   state.uiActiveTab = target;
@@ -18538,6 +18547,16 @@ function initTabs() {
     btn.addEventListener("click", () => {
       const target = btn.dataset.tabTarget;
       if (target) {
+        if (
+          target !== "match" &&
+          typeof window !== "undefined" &&
+          typeof window.hasUsableMatch === "function" &&
+          !window.hasUsableMatch()
+        ) {
+          alert("Crea e seleziona una partita prima di usare le altre sezioni.");
+          setActiveTab("match");
+          return;
+        }
         setActiveTab(target);
       }
     });

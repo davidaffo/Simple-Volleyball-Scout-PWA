@@ -1,15 +1,13 @@
 # Major features
 Aggiungere condivisione dati via socket (pagina html statica come esportazione ma con dati dell'app host come se fosse un backend?)
 Lettura Camp3 ocr
-Modalità allenamento
+Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
 crea stampa tipo foglio gara
-gestire importazioni duplicate
 Mostrare versione del programma e tasto upgrade
 
 # Bug funzionalità
-Un match continua a ricomparire anche dopo eliminazione dei dati
 Da touch si cliccano i tasti sottostanti dagli overlay
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti
 Il video youtube non mantiene lo stato di play o pause, mantiene il focus e non risponde al comando barra spaziatrice
