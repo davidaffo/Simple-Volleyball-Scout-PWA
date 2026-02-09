@@ -3180,6 +3180,10 @@ function updateNetBlockPrompt() {
   if (!elBtnNetBlockPrompt || !elNetActionsDefault) return;
   const scope = getNetBlockPromptScope();
   const show = !!scope;
+  const netDivider = elBtnNetBlockPrompt.closest(".court-net-divider");
+  if (netDivider) {
+    netDivider.classList.toggle("block-prompt-active", show);
+  }
   elBtnNetBlockPrompt.classList.toggle("hidden", !show);
   elNetActionsDefault.classList.toggle("hidden", show);
   elBtnNetBlockPrompt.dataset.scope = scope || "";
@@ -12090,6 +12094,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
       if (pending && typeof rotateOpponentCourt === "function") {
         rotateOpponentCourt("ccw");
         eventObj.autoRotationDirection = "ccw";
+        eventObj.autoRotationScope = "opponent";
       }
       pending = false;
       serving = true;
@@ -12099,6 +12104,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
       if (ourWasReceiving && typeof rotateCourt === "function") {
         rotateCourt("ccw");
         eventObj.autoRotationDirection = "ccw";
+        eventObj.autoRotationScope = "our";
       }
       state.autoRotatePending = false;
     } else {
@@ -12140,6 +12146,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     if (pending && typeof rotateCourt === "function") {
       rotateCourt("ccw");
       eventObj.autoRotationDirection = "ccw";
+      eventObj.autoRotationScope = "our";
     }
     pending = false;
     serving = true;
@@ -12149,6 +12156,7 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     if (opponentWasReceiving && typeof rotateOpponentCourt === "function") {
       rotateOpponentCourt("ccw");
       eventObj.autoRotationDirection = "ccw";
+      eventObj.autoRotationScope = "opponent";
     }
     state.opponentAutoRotatePending = false;
   } else {
@@ -18490,9 +18498,16 @@ function undoLastEvent() {
     updateRotationDisplay();
     return;
   }
-  if (ev && ev.autoRotationDirection && typeof rotateCourt === "function") {
+  if (ev && ev.autoRotationDirection) {
     const reverseDir = ev.autoRotationDirection === "ccw" ? "cw" : "ccw";
-    rotateCourt(reverseDir);
+    const scope = ev.autoRotationScope || "our";
+    if (scope === "opponent") {
+      if (typeof rotateOpponentCourt === "function") {
+        rotateOpponentCourt(reverseDir);
+      }
+    } else if (typeof rotateCourt === "function") {
+      rotateCourt(reverseDir);
+    }
   }
   if (ev && ev.actionType === "substitution") {
     undoSubstitutionEvent(ev);

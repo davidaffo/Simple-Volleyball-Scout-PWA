@@ -2274,6 +2274,29 @@ body[data-theme="light"] .next-set-inline__card {
   border-color: var(--skill-block-bg, #4a148c);
   color: var(--skill-block-text, #ede9fe);
 }
+.court-net-divider.block-prompt-active {
+  align-items: stretch;
+  flex-wrap: nowrap;
+}
+.court-net-divider.block-prompt-active > span {
+  display: none;
+}
+.court-net-divider.block-prompt-active::before,
+.court-net-divider.block-prompt-active::after {
+  display: none;
+}
+.court-net-divider.block-prompt-active .net-action-btn--block-prompt {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+}
+.court-net-divider.block-prompt-active #btn-undo {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 body[data-theme="light"] .net-action-btn--block-prompt {
   background: #7c3aed;
   border-color: #7c3aed;
