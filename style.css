@@ -2448,6 +2448,7 @@ body[data-theme="light"] #opponent-players-container {
   background: transparent;
 }
 .court-layout {
+  position: relative;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
   grid-template-areas:
     "pos4 pos3 pos2"
@@ -2940,6 +2941,56 @@ body[data-theme="light"] .skill-row {
 .event-btn.danger:hover {
   background: #c7372d;
   border-color: #c7372d;
+}
+.error-pick-row {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+.error-pick-toolbar {
+  position: absolute;
+  top: -0.8rem;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.error-pick-close {
+  position: static;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  pointer-events: auto;
+}
+.error-pick-btn {
+  width: 100%;
+}
+.error-pick-bench {
+  grid-column: 1 / -1;
+  border: 1px solid #1f2937;
+  border-radius: 0.7rem;
+  background: rgba(2, 6, 23, 0.45);
+  padding: 0.45rem;
+}
+.error-pick-bench-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.error-pick-bench-grid {
+  margin-top: 0;
+}
+.error-pick-bench-btn {
+  width: 100%;
+}
+body[data-theme="light"] .error-pick-bench {
+  background: #f8fafc;
+  border-color: #dfe3eb;
+}
+body[data-theme="light"] .error-pick-bench-title {
+  color: #475569;
 }
 body[data-theme="light"] .event-btn,
 body[data-theme="light"] .event-btn.code-positive,

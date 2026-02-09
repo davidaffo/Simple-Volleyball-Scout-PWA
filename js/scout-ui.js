@@ -298,6 +298,7 @@ const ERROR_TYPES = [
 ];
 let selectedErrorType = "Generic";
 let errorModalPrefillPlayer = null;
+let errorPickModeState = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -5326,12 +5327,65 @@ function closeSkillModal() {
   activeSkillModalContext = null;
   setSkillModalCancelVisibility(false);
 }
+function isErrorPickModeForScope(scope) {
+  return !!(errorPickModeState && errorPickModeState.scope === scope);
+}
+function stopErrorPickMode(options = {}) {
+  if (!errorPickModeState) return;
+  errorPickModeState = null;
+  if (options && options.render === false) return;
+  renderPlayers();
+}
+function startErrorPickMode(scope = "our") {
+  const players = getPlayersForScope(scope);
+  if (!players || players.length === 0) {
+    openErrorModal({ scope });
+    return;
+  }
+  closeSkillModal();
+  closePointModal();
+  closeErrorModal();
+  errorPickModeState = { scope };
+  renderPlayers();
+}
+function openErrorModalForPickedPlayer(scope, playerIdx, playerName) {
+  stopErrorPickMode({ render: false });
+  openErrorModal({
+    scope,
+    playerIdx,
+    playerName,
+    fromPicker: true
+  });
+}
+function getBenchEntriesForScope(scope) {
+  const players = getPlayersForScope(scope) || [];
+  if (!players.length) return [];
+  const courtSource = scope === "opponent" ? state.opponentCourt || [] : state.court || [];
+  const court =
+    typeof ensureCourtShapeFor === "function" ? ensureCourtShapeFor(courtSource) : getCourtShape(courtSource);
+  const inCourt = new Set();
+  court.forEach(slot => {
+    const name = slot && slot.main ? slot.main : "";
+    if (name) inCourt.add(name);
+  });
+  const entries = getSortedPlayerEntriesForScope(scope);
+  return entries.filter(entry => entry && entry.name && !inCourt.has(entry.name));
+}
 // esponi per gli handler inline (fallback mobile)
 window._closeSkillModal = closeSkillModal;
 function renderErrorModal() {
   if (!elErrorModalBody) return;
   elErrorModalBody.innerHTML = "";
   const scope = (errorModalPrefillPlayer && errorModalPrefillPlayer.scope) || "our";
+  const isPlayerPrefilled =
+    !!(errorModalPrefillPlayer && typeof errorModalPrefillPlayer.playerIdx === "number");
+  const isFromPickMode = !!(errorModalPrefillPlayer && errorModalPrefillPlayer.fromPicker);
+  const pickedIdx = isPlayerPrefilled ? errorModalPrefillPlayer.playerIdx : null;
+  const pickedName = isPlayerPrefilled
+    ? errorModalPrefillPlayer.playerName ||
+      (getPlayersForScope(scope) && getPlayersForScope(scope)[errorModalPrefillPlayer.playerIdx]) ||
+      "Giocatrice"
+    : "";
   const typeSection = document.createElement("div");
   typeSection.className = "error-type-section";
   const typeLabel = document.createElement("p");
@@ -5346,7 +5400,14 @@ function renderErrorModal() {
     btn.className = "error-choice-btn error-type-btn";
     btn.textContent = item.label;
     btn.dataset.errorType = item.id;
-    btn.addEventListener("click", () => setSelectedErrorType(item.id, typeGrid));
+    btn.addEventListener("click", () => {
+      setSelectedErrorType(item.id, typeGrid);
+      if (isFromPickMode && typeof pickedIdx === "number") {
+        addPlayerError(pickedIdx, pickedName, item.id, scope);
+        errorModalPrefillPlayer = null;
+        closeErrorModal();
+      }
+    });
     typeGrid.appendChild(btn);
   });
   typeSection.appendChild(typeGrid);
@@ -5354,36 +5415,43 @@ function renderErrorModal() {
   setSelectedErrorType(selectedErrorType || "Generic", typeGrid);
   const note = document.createElement("p");
   note.className = "section-note";
-  note.textContent = "Seleziona la giocatrice a cui assegnare l'errore/fallo oppure applicalo alla squadra.";
+  note.textContent = isFromPickMode
+    ? "Seleziona il tipo errore/fallo da assegnare."
+    : "Seleziona la giocatrice a cui assegnare l'errore/fallo oppure applicalo alla squadra.";
   elErrorModalBody.appendChild(note);
+  if (isFromPickMode && pickedName) {
+    const target = document.createElement("p");
+    target.className = "section-note";
+    target.textContent = "Giocatrice: " + formatNameWithNumber(pickedName);
+    elErrorModalBody.appendChild(target);
+    return;
+  }
   const grid = document.createElement("div");
   grid.className = "error-choice-grid";
-  if (errorModalPrefillPlayer && typeof errorModalPrefillPlayer.playerIdx === "number") {
-    const prefillName =
-      errorModalPrefillPlayer.playerName ||
-      (getPlayersForScope(scope) && getPlayersForScope(scope)[errorModalPrefillPlayer.playerIdx]) ||
-      "Giocatrice";
+  if (isPlayerPrefilled) {
     const preBtn = document.createElement("button");
     preBtn.type = "button";
     preBtn.className = "error-choice-btn";
-    preBtn.textContent = "Applica a " + formatNameWithNumber(prefillName);
+    preBtn.textContent = "Applica a " + formatNameWithNumber(pickedName);
     preBtn.addEventListener("click", () => {
-      addPlayerError(errorModalPrefillPlayer.playerIdx, prefillName, selectedErrorType, scope);
+      addPlayerError(errorModalPrefillPlayer.playerIdx, pickedName, selectedErrorType, scope);
       errorModalPrefillPlayer = null;
       closeErrorModal();
     });
     grid.appendChild(preBtn);
   }
-  const teamBtn = document.createElement("button");
-  teamBtn.type = "button";
-  teamBtn.className = "error-choice-btn danger";
-  teamBtn.textContent = "Assegna alla squadra";
-  teamBtn.addEventListener("click", () => {
-    handleTeamError(selectedErrorType, scope);
-    errorModalPrefillPlayer = null;
-    closeErrorModal();
-  });
-  grid.appendChild(teamBtn);
+  if (!isFromPickMode) {
+    const teamBtn = document.createElement("button");
+    teamBtn.type = "button";
+    teamBtn.className = "error-choice-btn danger";
+    teamBtn.textContent = "Assegna alla squadra";
+    teamBtn.addEventListener("click", () => {
+      handleTeamError(selectedErrorType, scope);
+      errorModalPrefillPlayer = null;
+      closeErrorModal();
+    });
+    grid.appendChild(teamBtn);
+  }
   const players = getPlayersForScope(scope);
   if (!players || players.length === 0) {
     const empty = document.createElement("div");
@@ -5455,6 +5523,7 @@ function renderPointModal() {
 }
 function openErrorModal(prefill = null) {
   if (!elErrorModal) return;
+  stopErrorPickMode({ render: false });
   errorModalPrefillPlayer = prefill;
   renderErrorModal();
   if (isDesktopCourtModalLayout()) {
@@ -5467,6 +5536,7 @@ function openErrorModal(prefill = null) {
 function closeErrorModal() {
   if (!elErrorModal) return;
   elErrorModal.classList.add("hidden");
+  errorModalPrefillPlayer = null;
   setModalOpenState(false);
 }
 function openPointModal() {
@@ -6456,6 +6526,20 @@ function renderTeamCourtCards(options = {}) {
   if (!container) return;
   const renderOrder = [3, 2, 1, 4, 5, 0];
   const map = displayCourt || court.map((slot, idx) => ({ slot, idx }));
+  const errorPickModeActive = isErrorPickModeForScope(scope);
+  if (errorPickModeActive) {
+    const toolbar = document.createElement("div");
+    toolbar.className = "error-pick-toolbar";
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "player-skill-cancel error-pick-close";
+    closeBtn.title = "Annulla";
+    closeBtn.setAttribute("aria-label", "Annulla selezione errore");
+    closeBtn.textContent = "✕";
+    closeBtn.addEventListener("click", () => stopErrorPickMode());
+    toolbar.appendChild(closeBtn);
+    container.appendChild(toolbar);
+  }
   renderOrder.forEach(idx => {
     const meta = POSITIONS_META[idx];
     const slotInfo = map[idx] || { slot: { main: "" }, idx: idx };
@@ -6570,13 +6654,59 @@ function renderTeamCourtCards(options = {}) {
         container.appendChild(card);
         return;
       }
-      renderSkillRows(card, playerIdx, activeName, { nextSkillId, scope });
+      if (errorPickModeActive) {
+        const errorRow = document.createElement("div");
+        errorRow.className = "skill-row error-pick-row";
+        const errorBtn = document.createElement("button");
+        errorBtn.type = "button";
+        errorBtn.className = "event-btn danger error-pick-btn";
+        errorBtn.textContent = "Errore";
+        errorBtn.addEventListener("click", () => {
+          openErrorModalForPickedPlayer(scope, playerIdx, activeName);
+        });
+        errorRow.appendChild(errorBtn);
+        card.appendChild(errorRow);
+      } else {
+        renderSkillRows(card, playerIdx, activeName, { nextSkillId, scope });
+      }
     }
     if (meta) {
       card.style.gridArea = meta.gridArea;
     }
     container.appendChild(card);
   });
+  if (!errorPickModeActive) return;
+  const benchSection = document.createElement("div");
+  benchSection.className = "error-pick-bench";
+  const benchTitle = document.createElement("div");
+  benchTitle.className = "error-pick-bench-title";
+  benchTitle.textContent = "Panchina";
+  benchSection.appendChild(benchTitle);
+  const benchGrid = document.createElement("div");
+  benchGrid.className = "error-choice-grid error-pick-bench-grid";
+  const entries = getBenchEntriesForScope(scope);
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessuna giocatrice in panchina.";
+    benchGrid.appendChild(empty);
+  } else {
+    entries.forEach(({ name, idx }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "error-choice-btn danger error-pick-bench-btn";
+      btn.textContent =
+        scope === "opponent"
+          ? formatNameWithNumberFor(name, getPlayerNumbersForScope(scope))
+          : formatNameWithNumber(name);
+      btn.addEventListener("click", () => {
+        openErrorModalForPickedPlayer(scope, idx, name);
+      });
+      benchGrid.appendChild(btn);
+    });
+  }
+  benchSection.appendChild(benchGrid);
+  container.appendChild(benchSection);
 }
 function updateFloatingServeErrorButton(isCompactMobile) {
   if (!elFloatingServeErrorBtn) return;
@@ -20597,7 +20727,7 @@ async function init() {
     elBtnScoreOppError.addEventListener("click", handleOpponentErrorPoint);
   }
   if (elBtnScoreTeamError) {
-    elBtnScoreTeamError.addEventListener("click", openErrorModal);
+    elBtnScoreTeamError.addEventListener("click", () => startErrorPickMode("our"));
   }
   if (elBtnScoreOppPoint) {
     elBtnScoreOppPoint.addEventListener("click", handleOpponentPoint);
@@ -20615,7 +20745,7 @@ async function init() {
     elBtnEndMatch.addEventListener("click", endMatch);
   }
   if (elBtnScoreTeamErrorModal) {
-    elBtnScoreTeamErrorModal.addEventListener("click", openErrorModal);
+    elBtnScoreTeamErrorModal.addEventListener("click", () => startErrorPickMode("our"));
   }
   document.addEventListener(
     "click",
@@ -20921,6 +21051,7 @@ async function init() {
   });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
+      stopErrorPickMode();
       closeSkillModal();
       closeSettingsModal();
       closeAggSkillModal();
