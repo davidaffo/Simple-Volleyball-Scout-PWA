@@ -18243,11 +18243,12 @@ async function exportAnalysisHtml() {
     const assetMap = await buildExportAssetMap();
     const assetMapJson = JSON.stringify(assetMap);
     const stateJson = JSON.stringify(exportState);
-    const prelude = `
+  const prelude = `
 (function(){
   try {
     localStorage.setItem("volleyScoutV1", ${JSON.stringify(JSON.stringify(exportState))});
   } catch (e) {}
+  window.__EXPORT_ANALYSIS_HTML__ = true;
   window.__analysisAssetMap = ${assetMapJson};
 })();
 `;
@@ -18821,7 +18822,10 @@ function setActiveAggTab(target) {
 }
 function setActiveTab(target) {
   if (!target) return;
+  const isExportAnalysisHtml =
+    typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
   if (
+    !isExportAnalysisHtml &&
     target !== "match" &&
     typeof window !== "undefined" &&
     typeof window.hasUsableMatch === "function" &&
@@ -19054,7 +19058,9 @@ async function init() {
   if (!loadedFromIndexedDb) {
     loadState();
   }
-  if (typeof syncMatchesFromStorage === "function") {
+  const isExportAnalysisHtml =
+    typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
+  if (!isExportAnalysisHtml && typeof syncMatchesFromStorage === "function") {
     syncMatchesFromStorage();
   }
   state.setResults = state.setResults || {};
