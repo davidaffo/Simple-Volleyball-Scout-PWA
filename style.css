@@ -6303,6 +6303,138 @@ body.force-mobile .attack-trajectory-stage {
   min-height: 0;
 }
 
+/* Scout Live component layer (scoped) */
+.scout-live {
+  --sl-gap: 0.35rem;
+  --sl-btn-h: 2rem;
+  --sl-btn-w-min: 4.6rem;
+  --sl-btn-w-max: 5.35rem;
+  --sl-btn-fs: 0.82rem;
+  --sl-btn-radius: 0.42rem;
+}
+.scout-live .section {
+  border-radius: 0.7rem;
+}
+.scout-live button.small,
+.scout-live .file-btn {
+  min-height: var(--sl-btn-h);
+  font-size: var(--sl-btn-fs);
+  border-radius: var(--sl-btn-radius);
+}
+.scout-live .set-bottom-actions,
+.scout-live .score-actions-set {
+  gap: var(--sl-gap);
+}
+.scout-live .scout-col-left .rotation-toggles {
+  display: grid;
+  gap: 0.2rem;
+}
+.scout-live .sl-toolbar {
+  display: grid;
+  grid-template-columns: minmax(170px, 210px) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 0.4rem;
+  align-items: start;
+}
+.scout-live .sl-toolbar .court-rotation-block {
+  grid-column: 1;
+}
+.scout-live .sl-toolbar .sl-action-row {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 0.16rem;
+  align-items: center;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.scout-live .sl-toolbar .sl-action-row > button,
+.scout-live .sl-toolbar .sl-action-row > .score-actions-inline > button,
+.scout-live .sl-toolbar .sl-action-row > .freeball-actions-inline > button {
+  inline-size: clamp(var(--sl-btn-w-min), 5.4vw, var(--sl-btn-w-max));
+  min-inline-size: clamp(var(--sl-btn-w-min), 5.4vw, var(--sl-btn-w-max));
+  max-inline-size: clamp(var(--sl-btn-w-min), 5.4vw, var(--sl-btn-w-max));
+  block-size: var(--sl-btn-h);
+  min-block-size: var(--sl-btn-h);
+  padding: 0.2rem 0.3rem;
+  font-size: var(--sl-btn-fs);
+  line-height: 1.05;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.scout-live .sl-toolbar .sl-action-row > .score-actions-inline,
+.scout-live .sl-toolbar .sl-action-row > .freeball-actions-inline {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.16rem;
+  width: auto !important;
+  min-width: 0;
+  flex: 0 0 auto !important;
+}
+.scout-live .sl-toolbar .sl-team-controls {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sl-gap);
+  width: 100%;
+}
+.scout-live .sl-toolbar .sl-team-controls .libero-inline {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.scout-live .sl-toolbar .sl-team-controls .skill-flow-panel {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin-top: 0;
+}
+.scout-live .sl-toolbar .skill-flow-grid.skill-flow-inline {
+  flex-wrap: wrap;
+}
+.scout-live .court-net-divider {
+  gap: 0.35rem;
+}
+.scout-live .net-actions-default {
+  gap: 0.25rem;
+}
+.scout-live .net-action-btn {
+  min-height: var(--sl-btn-h);
+  font-size: 0.8rem;
+  border-radius: var(--sl-btn-radius);
+}
+.scout-live #btn-undo {
+  min-width: 8.6rem;
+}
+.scout-live .log-section .card-inline {
+  border-radius: 0.6rem;
+}
+@media (max-width: 1350px) {
+  .scout-live .sl-toolbar {
+    grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .scout-live {
+    --sl-btn-w-min: 4.4rem;
+    --sl-btn-w-max: 5rem;
+    --sl-btn-fs: 0.78rem;
+  }
+  .scout-live .sl-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .scout-live .sl-toolbar .court-rotation-block,
+  .scout-live .sl-toolbar .sl-action-row,
+  .scout-live .sl-toolbar .sl-team-controls {
+    grid-column: 1;
+  }
+}
+
 @media print {
   @page { size: A4 landscape; margin: 10mm; }
   body {
