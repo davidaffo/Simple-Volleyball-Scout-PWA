@@ -2988,11 +2988,15 @@ body[data-theme="light"] .skill-row {
   width: 100%;
 }
 .error-pick-bench {
-  grid-column: 1 / -1;
   border: 1px solid #1f2937;
   border-radius: 0.7rem;
   background: rgba(2, 6, 23, 0.45);
   padding: 0.45rem;
+}
+.error-pick-bench-host {
+  order: 99;
+  width: 100%;
+  margin-top: 0.3rem;
 }
 .error-pick-bench-title {
   font-size: 0.82rem;

@@ -6531,6 +6531,11 @@ function renderTeamCourtCards(options = {}) {
   const renderOrder = [3, 2, 1, 4, 5, 0];
   const map = displayCourt || court.map((slot, idx) => ({ slot, idx }));
   const errorPickModeActive = isErrorPickModeForScope(scope);
+  const benchHostSelector = `.error-pick-bench-host[data-team-scope="${scope}"]`;
+  const parentBox = container.parentElement || null;
+  if (parentBox) {
+    parentBox.querySelectorAll(benchHostSelector).forEach(node => node.remove());
+  }
   if (errorPickModeActive) {
     const toolbar = document.createElement("div");
     toolbar.className = "error-pick-toolbar";
@@ -6680,6 +6685,10 @@ function renderTeamCourtCards(options = {}) {
     container.appendChild(card);
   });
   if (!errorPickModeActive) return;
+  if (!parentBox) return;
+  const benchHost = document.createElement("div");
+  benchHost.className = "error-pick-bench-host";
+  benchHost.dataset.teamScope = scope;
   const benchSection = document.createElement("div");
   benchSection.className = "error-pick-bench";
   const benchTitle = document.createElement("div");
@@ -6710,7 +6719,14 @@ function renderTeamCourtCards(options = {}) {
     });
   }
   benchSection.appendChild(benchGrid);
-  container.appendChild(benchSection);
+  benchHost.appendChild(benchSection);
+  const panel = parentBox.closest("[data-team-panel]");
+  const isFarPanel = !!(panel && panel.classList.contains("team-panel--far"));
+  if (isFarPanel) {
+    parentBox.insertBefore(benchHost, container);
+  } else {
+    parentBox.insertBefore(benchHost, container.nextSibling);
+  }
 }
 function updateFloatingServeErrorButton(isCompactMobile) {
   if (!elFloatingServeErrorBtn) return;
