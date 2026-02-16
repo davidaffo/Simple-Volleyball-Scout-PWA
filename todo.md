@@ -5,7 +5,7 @@ Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
 crea stampa tipo foglio gara
-Mostrare versione del programma e tasto upgrade
+aggiungere salvataggio filtri per analisi veloci o programmate
 
 # Bug funzionalità
 Da touch si cliccano i tasti sottostanti dagli overlay

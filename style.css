@@ -3944,11 +3944,12 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
 }
 .analysis-filters,
 .trajectory-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.45rem;
-  margin: 0.35rem 0 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.18rem;
+  margin: 0.12rem 0 0.28rem;
   align-items: flex-start;
+  align-content: flex-start;
 }
 .agg-topbar {
   display: flex;
@@ -3972,7 +3973,15 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
 .trajectory-filter {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.18rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #2f2f2f;
+  border-radius: 0.55rem;
+  background: #171717;
+  flex: 1 1 180px;
+  min-width: 0;
+  height: fit-content;
+  align-self: flex-start;
 }
 .analysis-filter__label,
 .trajectory-filter__label {
@@ -3983,12 +3992,12 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
 .trajectory-filter__options {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
+  gap: 0.2rem 0.4rem;
 }
 .analysis-filter__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 0.6rem;
+  gap: 0.25rem 0.45rem;
   align-items: center;
 }
 .analysis-filter__row .primary {
@@ -4022,6 +4031,31 @@ body[data-theme="light"] .agg-table td.skill-col.skill-second { background: #cff
 body[data-theme="light"] .video-filters-panel {
   background: #f8fafc;
   border-color: #e2e8f0;
+}
+body[data-theme="light"] .analysis-filter,
+body[data-theme="light"] .trajectory-filter {
+  background: #f8fafc;
+  border-color: #dbe2ee;
+}
+
+/* Video filters: compact masonry-like packing to avoid empty gaps */
+#video-filters.analysis-filters {
+  display: block;
+  column-width: 210px;
+  column-gap: 0.18rem;
+  margin: 0.12rem 0 0.2rem;
+}
+#video-filters.analysis-filters > .analysis-filter {
+  display: inline-flex;
+  width: 100%;
+  margin: 0 0 0.18rem;
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  flex: unset;
+}
+#video-filters.analysis-filters > .analysis-filter.filter-actions {
+  margin-top: 0.05rem;
 }
 .filter-scope-group {
   display: flex;
