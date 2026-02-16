@@ -386,6 +386,9 @@ const elMultiscoutTeamSelect = document.getElementById("multiscout-team-select")
 const elMultiscoutReset = document.getElementById("multiscout-reset");
 const elAggSummaryExtraBody = document.getElementById("agg-summary-extra-body");
 const elVideoFilterTeams = document.getElementById("video-filter-teams");
+const elVideoFilterPresetName = document.getElementById("video-filter-preset-name");
+const elVideoFilterPresetSave = document.getElementById("video-filter-preset-save");
+const elVideoFilterPresetsList = document.getElementById("video-filter-presets-list");
 const elBtnFixVideoScore = document.getElementById("btn-fix-video-score");
 const elBtnVideoAddEvent = document.getElementById("btn-video-add-event");
 const elVideoScoreModal = document.getElementById("video-score-modal");
@@ -13987,6 +13990,188 @@ function getVideoFilterElements() {
     reset: document.getElementById("video-filter-reset")
   };
 }
+function ensureVideoFilterPresetsState() {
+  if (!Array.isArray(state.videoFilterPresets)) {
+    state.videoFilterPresets = [];
+  }
+  return state.videoFilterPresets;
+}
+function listFromSet(setObj, { asNumber = false } = {}) {
+  const arr = Array.from(setObj || []);
+  return asNumber ? arr.map(v => Number(v)).filter(Number.isFinite) : arr.map(v => String(v));
+}
+function snapshotVideoFilters() {
+  return {
+    teams: listFromSet(videoFilterState.teams),
+    players: listFromSet(videoFilterState.players),
+    setters: listFromSet(videoFilterState.setters),
+    skills: listFromSet(videoFilterState.skills),
+    codes: listFromSet(videoFilterState.codes),
+    prevSkill: videoFilterState.prevSkill || "any",
+    sets: listFromSet(videoFilterState.sets, { asNumber: true }),
+    rotations: listFromSet(videoFilterState.rotations, { asNumber: true }),
+    zones: listFromSet(videoFilterState.zones, { asNumber: true }),
+    bases: listFromSet(videoFilterState.bases),
+    setTypes: listFromSet(videoFilterState.setTypes),
+    phases: listFromSet(videoFilterState.phases),
+    receiveEvaluations: listFromSet(videoFilterState.receiveEvaluations),
+    receiveZones: listFromSet(videoFilterState.receiveZones, { asNumber: true }),
+    serveTypes: listFromSet(videoFilterState.serveTypes)
+  };
+}
+function countActiveVideoFilters(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return 0;
+  let count = 0;
+  [
+    "teams",
+    "players",
+    "setters",
+    "skills",
+    "codes",
+    "sets",
+    "rotations",
+    "zones",
+    "bases",
+    "setTypes",
+    "phases",
+    "receiveEvaluations",
+    "receiveZones",
+    "serveTypes"
+  ].forEach(key => {
+    const val = snapshot[key];
+    if (Array.isArray(val) && val.length > 0) count += 1;
+  });
+  if (snapshot.prevSkill && snapshot.prevSkill !== "any") count += 1;
+  return count;
+}
+function applyVideoFilterSnapshot(snapshot) {
+  const src = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const toNumSet = list => new Set((Array.isArray(list) ? list : []).map(v => Number(v)).filter(Number.isFinite));
+  const toStrSet = list => new Set((Array.isArray(list) ? list : []).map(v => String(v)));
+  videoFilterState.teams = toStrSet(src.teams);
+  videoFilterState.players = toStrSet(src.players);
+  videoFilterState.setters = toStrSet(src.setters);
+  videoFilterState.skills = toStrSet(src.skills);
+  videoFilterState.codes = toStrSet(src.codes);
+  videoFilterState.prevSkill = src.prevSkill || "any";
+  videoFilterState.sets = toNumSet(src.sets);
+  videoFilterState.rotations = toNumSet(src.rotations);
+  videoFilterState.zones = toNumSet(src.zones);
+  videoFilterState.bases = toStrSet(src.bases);
+  videoFilterState.setTypes = toStrSet(src.setTypes);
+  videoFilterState.phases = toStrSet(src.phases);
+  videoFilterState.receiveEvaluations = toStrSet(src.receiveEvaluations);
+  videoFilterState.receiveZones = toNumSet(src.receiveZones);
+  videoFilterState.serveTypes = toStrSet(src.serveTypes);
+}
+function reorderVideoFilterPresetsByDom(container) {
+  if (!container) return;
+  const presets = ensureVideoFilterPresetsState();
+  const orderIds = Array.from(container.querySelectorAll("[data-video-filter-preset-id]"))
+    .map(el => el.dataset.videoFilterPresetId)
+    .filter(Boolean);
+  if (!orderIds.length) return;
+  const byId = new Map(presets.map(p => [p.id, p]));
+  const reordered = [];
+  orderIds.forEach(id => {
+    const entry = byId.get(id);
+    if (entry) reordered.push(entry);
+  });
+  presets.forEach(entry => {
+    if (!orderIds.includes(entry.id)) reordered.push(entry);
+  });
+  state.videoFilterPresets = reordered;
+  saveState({ persistLocal: true });
+}
+function renderVideoFilterPresets() {
+  if (!elVideoFilterPresetsList) return;
+  const presets = ensureVideoFilterPresetsState();
+  elVideoFilterPresetsList.innerHTML = "";
+  if (!presets.length) {
+    const empty = document.createElement("div");
+    empty.className = "video-filter-preset-empty";
+    empty.textContent = "Nessun preset salvato per questo match.";
+    elVideoFilterPresetsList.appendChild(empty);
+    return;
+  }
+  presets.forEach(entry => {
+    const card = document.createElement("div");
+    card.className = "video-filter-preset-card";
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.draggable = true;
+    card.dataset.videoFilterPresetId = entry.id;
+    const name = document.createElement("span");
+    name.className = "video-filter-preset-name";
+    name.textContent = entry.name;
+    const meta = document.createElement("span");
+    meta.className = "video-filter-preset-meta";
+    meta.textContent = String(countActiveVideoFilters(entry.filters || {})) + " filtri";
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "video-filter-preset-delete";
+    removeBtn.title = "Elimina preset";
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      state.videoFilterPresets = presets.filter(p => p.id !== entry.id);
+      saveState({ persistLocal: true });
+      renderVideoFilterPresets();
+    });
+    card.appendChild(name);
+    card.appendChild(meta);
+    card.appendChild(removeBtn);
+    card.addEventListener("click", () => {
+      applyVideoFilterSnapshot(entry.filters || {});
+      renderVideoAnalysis();
+      saveState({ persistLocal: true });
+    });
+    card.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      applyVideoFilterSnapshot(entry.filters || {});
+      renderVideoAnalysis();
+      saveState({ persistLocal: true });
+    });
+    card.addEventListener("dragstart", () => {
+      card.classList.add("dragging");
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      reorderVideoFilterPresetsByDom(elVideoFilterPresetsList);
+    });
+    card.addEventListener("dragover", ev => {
+      ev.preventDefault();
+      const dragging = elVideoFilterPresetsList.querySelector(".video-filter-preset-card.dragging");
+      if (!dragging || dragging === card) return;
+      const rect = card.getBoundingClientRect();
+      const insertAfter = ev.clientY > rect.top + rect.height / 2;
+      if (insertAfter) {
+        elVideoFilterPresetsList.insertBefore(dragging, card.nextSibling);
+      } else {
+        elVideoFilterPresetsList.insertBefore(dragging, card);
+      }
+    });
+    elVideoFilterPresetsList.appendChild(card);
+  });
+}
+function saveCurrentVideoFilterPreset() {
+  const presets = ensureVideoFilterPresetsState();
+  const rawName = elVideoFilterPresetName ? String(elVideoFilterPresetName.value || "").trim() : "";
+  const name = rawName || ("Preset " + (presets.length + 1));
+  const entry = {
+    id: "vf_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7),
+    name,
+    filters: snapshotVideoFilters()
+  };
+  presets.push(entry);
+  if (elVideoFilterPresetName) {
+    elVideoFilterPresetName.value = "";
+  }
+  saveState({ persistLocal: true });
+  renderVideoFilterPresets();
+}
 function getSecondFilterElements() {
   const setters = document.getElementById("second-filter-setters");
   if (!setters) return null;
@@ -15423,6 +15608,7 @@ function renderVideoFilters(events) {
     els.reset.addEventListener("click", resetVideoFilters);
     els.reset._videoResetBound = true;
   }
+  renderVideoFilterPresets();
 }
 function getTrajectoryBg(zone, isFarSide, cb) {
   const far = typeof isFarSide === "function" ? false : !!isFarSide;
@@ -17280,6 +17466,12 @@ function buildMatchExportPayload() {
       freeballPendingScope: state.freeballPendingScope,
       flowTeamScope: state.flowTeamScope,
       useOpponentTeam: !!state.useOpponentTeam,
+      videoFilterPresets:
+        typeof normalizeVideoFilterPresets === "function"
+          ? normalizeVideoFilterPresets(state.videoFilterPresets || [])
+          : Array.isArray(state.videoFilterPresets)
+            ? state.videoFilterPresets
+            : [],
       courtViewMirrored: !!state.courtViewMirrored,
       courtSideSwapped: !!state.courtSideSwapped
     }
@@ -17384,6 +17576,12 @@ function applyImportedMatch(nextState, options = {}) {
   }
   merged.video.youtubeId = merged.video.youtubeId || "";
   merged.video.youtubeUrl = merged.video.youtubeUrl || "";
+  merged.videoFilterPresets =
+    typeof normalizeVideoFilterPresets === "function"
+      ? normalizeVideoFilterPresets(nextState.videoFilterPresets || [])
+      : Array.isArray(nextState.videoFilterPresets)
+        ? nextState.videoFilterPresets
+        : [];
   merged.courtViewMirrored = !!nextState.courtViewMirrored;
   merged.courtSideSwapped = !!nextState.courtSideSwapped;
   merged.useOpponentTeam = !!nextState.useOpponentTeam;
@@ -18336,6 +18534,7 @@ function resetMatch() {
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
   state.video.lastPlaybackSeconds = 0;
+  state.videoFilterPresets = [];
   state.videoClock = {
     paused: true,
     pausedAtMs: null,
@@ -20561,6 +20760,16 @@ async function init() {
     });
   }
   if (elBtnResetMatch) elBtnResetMatch.addEventListener("click", resetMatch);
+  if (elVideoFilterPresetSave) {
+    elVideoFilterPresetSave.addEventListener("click", saveCurrentVideoFilterPreset);
+  }
+  if (elVideoFilterPresetName) {
+    elVideoFilterPresetName.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      saveCurrentVideoFilterPreset();
+    });
+  }
   if (elBtnForceSyncLog) {
     elBtnForceSyncLog.addEventListener("click", () => {
       forceSyncDataFromLog();

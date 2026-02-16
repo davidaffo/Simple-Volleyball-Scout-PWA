@@ -1374,6 +1374,8 @@
         </div>
       </div>
       <div class="video-filters-panel">
+        <div class="video-filters-layout">
+        <div class="video-filters-main">
         <div class="video-filters-header">Filtri</div>
         <div class="analysis-filters" id="video-filters">
         <div class="analysis-filter">
@@ -1445,6 +1447,16 @@
         <div class="analysis-filter filter-actions">
           <button id="video-filter-reset" class="secondary small" type="button">Reset filtri</button>
         </div>
+        </div>
+        </div>
+        <aside class="video-filter-presets-panel" aria-label="Preset filtri">
+          <div class="video-filters-header">Preset filtri</div>
+          <div class="video-filter-preset-create">
+            <input id="video-filter-preset-name" type="text" placeholder="Nome preset" maxlength="40" />
+            <button id="video-filter-preset-save" class="small" type="button">Salva filtri</button>
+          </div>
+          <div id="video-filter-presets-list" class="video-filter-presets-list"></div>
+        </aside>
         </div>
       </div>
       </div>

@@ -395,6 +395,18 @@ const SKILL_COLUMN_MAP = {
   defense: [22, 23, 24],
   second: []
 };
+function normalizeVideoFilterPresets(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((entry, idx) => {
+      if (!entry || typeof entry !== "object") return null;
+      const id = String(entry.id || ("preset_" + idx + "_" + Date.now()));
+      const name = String(entry.name || "").trim() || ("Preset " + (idx + 1));
+      const filters = entry.filters && typeof entry.filters === "object" ? entry.filters : {};
+      return { id, name, filters };
+    })
+    .filter(Boolean);
+}
 function applyStateSnapshot(parsed, options = {}) {
   if (!parsed || typeof parsed !== "object") return false;
   const { skipStorageSync = false } = options;
@@ -426,6 +438,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.videoScoutMode = !!parsed.videoScoutMode;
   state.videoPlayByPlay = !!parsed.videoPlayByPlay;
   state.nextSetType = parsed.nextSetType || "";
+  state.videoFilterPresets = normalizeVideoFilterPresets(parsed.videoFilterPresets || state.videoFilterPresets || []);
   state.uiTopBarHidden = !!parsed.uiTopBarHidden;
   state.forceMobileLayout = !!parsed.forceMobileLayout;
   state.liberos = Array.isArray(parsed.liberos)
@@ -2942,6 +2955,7 @@ function resetMatchState() {
   state.video.offsetSeconds = 0;
   state.video.youtubeId = "";
   state.video.youtubeUrl = "";
+  state.videoFilterPresets = [];
   state.videoClock = {
     paused: true,
     pausedAtMs: null,

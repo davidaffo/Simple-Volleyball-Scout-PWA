@@ -168,6 +168,7 @@ let state = {
     youtubeUrl: "",
     lastPlaybackSeconds: 0
   },
+  videoFilterPresets: [],
   uiPlayerAnalysis: {
     playerIdx: null,
     showAttack: true,
