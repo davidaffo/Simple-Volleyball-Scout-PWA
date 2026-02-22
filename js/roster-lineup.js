@@ -560,6 +560,8 @@ function applyStateSnapshot(parsed, options = {}) {
     state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6
       ? cloneCourtLineup(state.opponentAutoRoleBaseCourt)
       : null;
+  sanitizeAutoRoleBaseCourtForScope("our");
+  sanitizeAutoRoleBaseCourtForScope("opponent");
   state.pointRules = parsed.pointRules || state.pointRules || {};
   ensureMatchDefaults();
   syncPlayerNumbers(state.players || []);
@@ -1574,6 +1576,34 @@ function updateOpponentAutoRoleBaseCourtCache(base) {
   const shaped = cloneCourtLineup(base);
   opponentAutoRoleBaseCourt = shaped;
   state.opponentAutoRoleBaseCourt = shaped;
+}
+function sanitizeAutoRoleBaseCourtForScope(scope = "our") {
+  const isOpponent = scope === "opponent";
+  const valid = new Set(isOpponent ? state.opponentPlayers || [] : state.players || []);
+  const cached = isOpponent ? opponentAutoRoleBaseCourt : autoRoleBaseCourt;
+  const stateCached = isOpponent ? state.opponentAutoRoleBaseCourt : state.autoRoleBaseCourt;
+  const source =
+    Array.isArray(cached) && cached.length === 6
+      ? cached
+      : Array.isArray(stateCached) && stateCached.length === 6
+        ? stateCached
+        : null;
+  if (!source) return false;
+  const shaped = ensureCourtShapeFor(source);
+  const hasInvalid = shaped.some(slot => {
+    const main = (slot && slot.main) || "";
+    const replaced = (slot && slot.replaced) || "";
+    return (main && !valid.has(main)) || (replaced && !valid.has(replaced));
+  });
+  if (!hasInvalid) return false;
+  const fallback = ensureCourtShapeFor(isOpponent ? state.opponentCourt || [] : state.court || []);
+  if (isOpponent) {
+    updateOpponentAutoRoleBaseCourtCache(fallback);
+  } else {
+    updateAutoRoleBaseCourtCache(fallback);
+    resetAutoRoleCache();
+  }
+  return true;
 }
 function commitCourtChange(baseCourt, options = {}) {
   const { clean = true } = options;
@@ -5513,6 +5543,23 @@ function renderBenchChips() {
     emptyText: "Nessuna riserva disponibile.",
     replacedSet: new Set(getReplacedByLiberos())
   });
+  if (typeof isErrorPickModeForScope === "function" && isErrorPickModeForScope("our")) {
+    const teamErrorBtn = document.createElement("button");
+    teamErrorBtn.type = "button";
+    teamErrorBtn.className = "error-choice-btn danger bench-team-error-btn";
+    teamErrorBtn.textContent = "Errore squadra";
+    teamErrorBtn.addEventListener("click", () => {
+      const errorType =
+        typeof selectedErrorType !== "undefined" && selectedErrorType ? selectedErrorType : null;
+      if (typeof handleTeamError === "function") {
+        handleTeamError(errorType, "our");
+      }
+      if (typeof stopErrorPickMode === "function") {
+        stopErrorPickMode();
+      }
+    });
+    elBenchChips.prepend(teamErrorBtn);
+  }
 }
 function ensureBenchDropZone() {
   if (!elBenchChips || benchDropZoneInitialized) return;
@@ -5795,6 +5842,9 @@ function animateFlip(prevRects, selector, keyBuilder) {
 function applyAutoRolePositioning() {
   if (!state.autoRolePositioning) return;
   ensureCourtShape();
+  if (typeof sanitizeAutoRoleBaseCourtForScope === "function") {
+    sanitizeAutoRoleBaseCourtForScope("our");
+  }
   enforceAutoLiberoForState({ skipServerOnServe: true });
   const phase = getCurrentPhase("our");
   const rot = state.rotation || 1;

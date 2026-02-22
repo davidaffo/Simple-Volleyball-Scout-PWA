@@ -410,6 +410,26 @@ body[data-theme="light"] .app-footer {
   align-items: center;
   gap: 0.55rem;
 }
+.app-footer-refresh {
+  min-height: 2rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid #2563eb;
+  background: #07142b;
+  color: #bfdbfe;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.84rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.app-footer-refresh:hover {
+  border-color: #60a5fa;
+  color: #dbeafe;
+}
 .app-footer-github {
   min-height: 2rem;
   padding: 0.3rem 0.6rem;
@@ -439,6 +459,11 @@ body[data-theme="light"] .app-footer-github {
   background: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
+}
+body[data-theme="light"] .app-footer-refresh {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }
 .app-footer-sponsor {
   color: #fda4af;
@@ -3011,6 +3036,12 @@ body[data-theme="light"] .skill-row {
 .error-pick-btn {
   width: 100%;
 }
+.error-pick-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
 .error-pick-bench {
   border: 1px solid #1f2937;
   border-radius: 0.7rem;
@@ -3595,6 +3626,11 @@ body[data-theme="light"] .chip-empty {
   border: 1px solid #3a3a3a;
   cursor: grab;
   touch-action: none;
+}
+.bench-team-error-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.35rem;
 }
 body[data-theme="light"] .bench-chip {
   background: #f1f5f9;

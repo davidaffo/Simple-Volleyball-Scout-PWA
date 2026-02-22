@@ -4500,6 +4500,9 @@ function buildReceiveDisplayMapping(court, rotation, scope = "our") {
 }
 function getAutoRoleDisplayCourt(forSkillId = null, scope = "our") {
   const useAuto = !!state.autoRolePositioning;
+  if (useAuto && typeof sanitizeAutoRoleBaseCourtForScope === "function") {
+    sanitizeAutoRoleBaseCourtForScope(scope);
+  }
   const opponentBase =
     useAuto && scope === "opponent" && state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6
       ? ensureCourtShapeFor(state.opponentAutoRoleBaseCourt)
@@ -5313,6 +5316,9 @@ function isErrorPickModeForScope(scope) {
 function stopErrorPickMode(options = {}) {
   if (!errorPickModeState) return;
   errorPickModeState = null;
+  if (typeof renderBenchChips === "function") {
+    renderBenchChips();
+  }
   if (options && options.render === false) return;
   renderPlayers();
 }
@@ -5326,6 +5332,9 @@ function startErrorPickMode(scope = "our") {
   closePointModal();
   closeErrorModal();
   errorPickModeState = { scope };
+  if (typeof renderBenchChips === "function") {
+    renderBenchChips();
+  }
   renderPlayers();
 }
 function openErrorModalForPickedPlayer(scope, playerIdx, playerName) {
@@ -5360,6 +5369,7 @@ function renderErrorModal() {
   const isPlayerPrefilled =
     !!(errorModalPrefillPlayer && typeof errorModalPrefillPlayer.playerIdx === "number");
   const isFromPickMode = !!(errorModalPrefillPlayer && errorModalPrefillPlayer.fromPicker);
+  const isTeamFromPickMode = !!(errorModalPrefillPlayer && errorModalPrefillPlayer.teamFromPicker);
   const pickedIdx = isPlayerPrefilled ? errorModalPrefillPlayer.playerIdx : null;
   const pickedName = isPlayerPrefilled
     ? errorModalPrefillPlayer.playerName ||
@@ -5386,6 +5396,10 @@ function renderErrorModal() {
         addPlayerError(pickedIdx, pickedName, item.id, scope);
         errorModalPrefillPlayer = null;
         closeErrorModal();
+      } else if (isTeamFromPickMode) {
+        handleTeamError(item.id, scope);
+        errorModalPrefillPlayer = null;
+        closeErrorModal();
       }
     });
     typeGrid.appendChild(btn);
@@ -5395,7 +5409,7 @@ function renderErrorModal() {
   setSelectedErrorType(selectedErrorType || "Generic", typeGrid);
   const note = document.createElement("p");
   note.className = "section-note";
-  note.textContent = isFromPickMode
+  note.textContent = isFromPickMode || isTeamFromPickMode
     ? "Seleziona il tipo errore/fallo da assegnare."
     : "Seleziona la giocatrice a cui assegnare l'errore/fallo oppure applicalo alla squadra.";
   elErrorModalBody.appendChild(note);
@@ -5403,6 +5417,13 @@ function renderErrorModal() {
     const target = document.createElement("p");
     target.className = "section-note";
     target.textContent = "Giocatrice: " + formatNameWithNumber(pickedName);
+    elErrorModalBody.appendChild(target);
+    return;
+  }
+  if (isTeamFromPickMode) {
+    const target = document.createElement("p");
+    target.className = "section-note";
+    target.textContent = "Destinazione: squadra";
     elErrorModalBody.appendChild(target);
     return;
   }
@@ -6671,6 +6692,17 @@ function renderTeamCourtCards(options = {}) {
   benchTitle.className = "error-pick-bench-title";
   benchTitle.textContent = "Panchina";
   benchSection.appendChild(benchTitle);
+  const teamErrorBtn = document.createElement("button");
+  teamErrorBtn.type = "button";
+  teamErrorBtn.className = "error-choice-btn danger error-pick-bench-team-error";
+  teamErrorBtn.textContent = "Errore squadra";
+  teamErrorBtn.addEventListener("click", () => {
+    openErrorModal({
+      scope,
+      teamFromPicker: true
+    });
+  });
+  benchSection.appendChild(teamErrorBtn);
   const benchGrid = document.createElement("div");
   benchGrid.className = "error-choice-grid error-pick-bench-grid";
   const entries = getBenchEntriesForScope(scope);
@@ -17656,6 +17688,65 @@ function applyImportedDatabase(nextState) {
   renderOpponentTeamsSelect();
   alert("Database importato correttamente.");
 }
+function buildUniqueImportedMatchName(baseName = "") {
+  const fallbackBase =
+    (typeof buildMatchDisplayName === "function" && buildMatchDisplayName(state.match || {})) ||
+    "Match importato";
+  const rawBase = String(baseName || fallbackBase || "Match importato").trim() || "Match importato";
+  const existingInMemory = state.savedMatches || {};
+  const exists = name => {
+    const key = String(name || "").trim();
+    if (!key) return false;
+    if (Object.prototype.hasOwnProperty.call(existingInMemory, key)) return true;
+    return typeof loadMatchFromStorage === "function" ? !!loadMatchFromStorage(key) : false;
+  };
+  if (!exists(rawBase)) return rawBase;
+  let idx = 2;
+  while (idx < 10000) {
+    const candidate = `${rawBase} (import ${idx})`;
+    if (!exists(candidate)) return candidate;
+    idx += 1;
+  }
+  return `${rawBase} (import ${Date.now()})`;
+}
+function importMatchStateAsNew(nextState, options = {}) {
+  if (!nextState || !nextState.players || !nextState.events) {
+    throw new Error("Invalid imported match payload");
+  }
+  const silent = !!(options && options.silent);
+  const explicitBaseName = options && typeof options.baseName === "string" ? options.baseName : "";
+  const importedBaseName =
+    explicitBaseName.trim() ||
+    (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+    "Match importato";
+  const uniqueName = buildUniqueImportedMatchName(importedBaseName);
+  isLoadingMatch = true;
+  if (typeof window !== "undefined") {
+    window.isLoadingMatch = true;
+  }
+  try {
+    applyImportedMatch(nextState, { silent: true });
+    state.selectedMatch = uniqueName;
+    if (typeof persistCurrentMatch === "function") {
+      persistCurrentMatch({ allowCreate: true });
+    }
+    if (typeof saveState === "function") {
+      saveState({ persistLocal: true, skipMatchPersist: true });
+    }
+    if (typeof renderMatchesSelect === "function") {
+      renderMatchesSelect();
+    }
+    if (!silent) {
+      alert(`Match importato correttamente come "${uniqueName}".`);
+    }
+    return { ok: true, name: uniqueName };
+  } finally {
+    isLoadingMatch = false;
+    if (typeof window !== "undefined") {
+      window.isLoadingMatch = false;
+    }
+  }
+}
 function handleImportMatchFile(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -17664,7 +17755,11 @@ function handleImportMatchFile(file) {
       const txt = (e.target && e.target.result) || "";
       const parsed = JSON.parse(txt);
       const nextState = parsed && parsed.state ? parsed.state : parsed;
-      applyImportedMatch(nextState);
+      const importedBaseName =
+        (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
+        (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+        "Match importato";
+      importMatchStateAsNew(nextState, { baseName: importedBaseName });
     } catch (err) {
       console.error("Import match error", err);
       alert("Errore durante l'import del match.");
@@ -17719,10 +17814,13 @@ function maybeImportMatchFromUrl() {
     return { imported: false };
   }
   const nextState = parsed.state || parsed;
-  applyImportedMatch(nextState, { silent: true });
-  state.selectedMatch = buildMatchDisplayName(nextState.match || state.match);
+  const importedBaseName =
+    (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
+    (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+    "Match importato";
+  const result = importMatchStateAsNew(nextState, { baseName: importedBaseName, silent: true });
   clearMatchLinkParam();
-  return { imported: true, name: state.selectedMatch };
+  return { imported: !!(result && result.ok), name: (result && result.name) || state.selectedMatch };
 }
 function exportDatabaseToFile() {
   const payload = buildDatabaseBackupPayload();
@@ -17785,9 +17883,12 @@ async function importMatchFromUrl(url) {
   try {
     const parsed = await fetchJsonFromUrl(url);
     const nextState = parsed && parsed.state ? parsed.state : parsed;
-    applyImportedMatch(nextState);
+    const importedBaseName =
+      (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
+      (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+      "Match importato";
+    importMatchStateAsNew(nextState, { baseName: importedBaseName });
     if (elImportJsonUrl) elImportJsonUrl.value = "";
-    alert("Match importato da URL.");
   } catch (err) {
     console.error("Import match URL error", err);
     alert(
@@ -18676,6 +18777,36 @@ async function resetAppData() {
   const cleanUrl = window.location.origin + window.location.pathname;
   window.location.replace(cleanUrl);
 }
+async function forceRefreshAppAssets() {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
+    }
+  } catch (_) {
+    // ignore
+  }
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(key => caches.delete(key)));
+    }
+  } catch (_) {
+    // ignore
+  }
+  try {
+    sessionStorage.removeItem("sw-refresh-requested");
+  } catch (_) {
+    // ignore
+  }
+  const bust = "refresh=" + Date.now();
+  const url = new URL(window.location.href);
+  url.searchParams.set("_", bust);
+  window.location.replace(url.toString());
+}
+if (typeof window !== "undefined") {
+  window.forceRefreshAppAssets = forceRefreshAppAssets;
+}
 function undoLastEvent() {
   if (!state.events || state.events.length === 0) {
     alert("Non ci sono eventi da annullare.");
@@ -18857,6 +18988,10 @@ function registerServiceWorker() {
   const supportsSw = "serviceWorker" in navigator;
   const secureContext =
     window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost";
+  const isLocalDevHost =
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.hostname === "::1";
   const appVersionMeta =
     typeof window !== "undefined" && window.__APP_VERSION__ ? window.__APP_VERSION__ : null;
   const currentVersion = appVersionMeta && appVersionMeta.version ? appVersionMeta.version : "";
@@ -18916,6 +19051,20 @@ function registerServiceWorker() {
       // ignore version check errors
     }
   };
+  if (isLocalDevHost) {
+    // In local development the SW frequently serves stale assets while debugging.
+    // Force-disable it so localhost always uses files directly from the dev server.
+    if (supportsSw) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      }).catch(() => {});
+    }
+    if ("caches" in window) {
+      caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))).catch(() => {});
+    }
+    checkRemoteVersion();
+    return;
+  }
   if (!supportsSw || !secureContext) {
     checkRemoteVersion();
     return;
@@ -20791,6 +20940,10 @@ async function init() {
     });
   }
   if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
+  const elBtnForceRefreshApp = document.getElementById("btn-force-refresh-app");
+  if (elBtnForceRefreshApp) {
+    elBtnForceRefreshApp.addEventListener("click", forceRefreshAppAssets);
+  }
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
   // pulsanti lineup mobile rimossi
   const elMobileMenuBtn = document.getElementById("btn-open-menu-mobile");
