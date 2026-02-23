@@ -5,8 +5,10 @@ Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
 crea stampa tipo foglio gara
+i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiettoria
 
 # Bug funzionalità
+dopo muro rimane la x su difesa come fosse un annullamento parziale
 errore e altre cose sovrascrivibili, devono attivare annullamento parziale sulla skill, altrimenti da punto ma rimane bloccato sulla skill precedente, e dopo annullamento parziale va correttamente sulla skill successiva
 Nuova partita non resetta lo stato della partita precedente, rimane al terzo set
 Da touch si cliccano i tasti sottostanti dagli overlay
