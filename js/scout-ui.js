@@ -14133,6 +14133,51 @@ function renderVideoFilterPresets() {
     const meta = document.createElement("span");
     meta.className = "video-filter-preset-meta";
     meta.textContent = String(countActiveVideoFilters(entry.filters || {})) + " filtri";
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "video-filter-preset-rename";
+    renameBtn.title = "Rinomina preset";
+    renameBtn.setAttribute("aria-label", "Rinomina preset");
+    renameBtn.textContent = "✎";
+    renameBtn.addEventListener("click", ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (card.classList.contains("editing")) return;
+      card.classList.add("editing");
+      card.draggable = false;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "video-filter-preset-name-input";
+      input.maxLength = 40;
+      input.value = entry.name || "";
+      const finish = save => {
+        if (!card.classList.contains("editing")) return;
+        const trimmed = String(input.value || "").trim();
+        if (save && trimmed) {
+          entry.name = trimmed.slice(0, 40);
+          saveState({ persistLocal: true });
+        }
+        renderVideoFilterPresets();
+      };
+      input.addEventListener("click", e => e.stopPropagation());
+      input.addEventListener("dblclick", e => e.stopPropagation());
+      input.addEventListener("keydown", e => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener("blur", () => finish(true), { once: true });
+      name.replaceWith(input);
+      input.focus();
+      input.select();
+    });
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
     removeBtn.className = "video-filter-preset-delete";
@@ -14147,13 +14192,16 @@ function renderVideoFilterPresets() {
     });
     card.appendChild(name);
     card.appendChild(meta);
+    card.appendChild(renameBtn);
     card.appendChild(removeBtn);
     card.addEventListener("click", () => {
+      if (card.classList.contains("editing")) return;
       applyVideoFilterSnapshot(entry.filters || {});
       renderVideoAnalysis();
       saveState({ persistLocal: true });
     });
     card.addEventListener("keydown", ev => {
+      if (card.classList.contains("editing")) return;
       if (ev.key !== "Enter" && ev.key !== " ") return;
       ev.preventDefault();
       applyVideoFilterSnapshot(entry.filters || {});

@@ -4152,6 +4152,25 @@ body[data-theme="light"] .video-filters-panel {
   font-size: 0.76rem;
   opacity: 0.75;
 }
+.video-filter-preset-rename {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  min-width: 1.7rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: #172033;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.video-filter-preset-rename:hover {
+  background: #1e3a8a;
+  border-color: #2563eb;
+  color: #dbeafe;
+}
 .video-filter-preset-delete {
   flex: 0 0 auto;
   min-width: 1.6rem;
@@ -4167,6 +4186,20 @@ body[data-theme="light"] .video-filters-panel {
   background: #7f1d1d;
   border-color: #b91c1c;
 }
+.video-filter-preset-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid #2563eb;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.4rem;
+  padding: 0.18rem 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.video-filter-preset-card.editing {
+  cursor: default;
+}
 body[data-theme="light"] .video-filter-presets-panel {
   background: #eef2ff;
   border-color: #cbd5e1;
@@ -4177,6 +4210,21 @@ body[data-theme="light"] .video-filter-preset-card {
   border-color: #cbd5e1;
 }
 body[data-theme="light"] .video-filter-preset-card:hover {
+  border-color: #2563eb;
+}
+body[data-theme="light"] .video-filter-preset-rename {
+  background: #eef2ff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+body[data-theme="light"] .video-filter-preset-rename:hover {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+}
+body[data-theme="light"] .video-filter-preset-name-input {
+  background: #ffffff;
+  color: #0f172a;
   border-color: #2563eb;
 }
 @media (max-width: 1200px) {
