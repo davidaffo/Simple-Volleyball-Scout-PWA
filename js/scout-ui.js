@@ -10867,7 +10867,6 @@ function renderEventTableRows(target, events, options = {}) {
       { label: "Link" },
       { label: "Tipo errore" },
       { label: "FB N" },
-      { label: "Rot", bulkKey: "rotation" },
       { label: "Zona", bulkKey: "zone" },
       { label: "Pos Palleggio", bulkKey: "setterPosition" },
       { label: "Pos Palleggio Avv", bulkKey: "opponentSetterPosition" },
@@ -11064,11 +11063,6 @@ function renderEventTableRows(target, events, options = {}) {
             : ""
       },
       { text: ev.skillId === "attack" && ev.fromFreeball ? "FB" : "" },
-      {
-        text: ev.rotation || "-",
-        editable: td =>
-          makeEditableCell(td, "Rotazione", done => createNumberSelect(ev, "rotation", 1, 6, done), editGuard)
-      },
       {
         text: zoneDisplay ? String(zoneDisplay) : "",
         editable: td => makeEditableCell(td, "Zona", done => createNumberSelect(ev, "zone", 1, 6, done), editGuard)
