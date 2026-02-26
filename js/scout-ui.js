@@ -7646,10 +7646,14 @@ const SKILL_CHART_METRICS = [
   { id: "code", label: "Esito singolo (codice)", kind: "code" }
 ];
 const SKILL_CHART_CODE_VALUES = { "#": 2, "+": 1, "!": 0, "-": -1, "=": -2, "/": -2 };
-function getSkillChartCodeTone(code) {
-  if (code === "#" || code === "+") return "positive";
-  if (code === "!") return "neutral";
-  return "negative";
+function getSkillChartCodeTone(code, skillId = null) {
+  ensureMetricsConfigDefaults();
+  const cfg = skillId && state.metricsConfig ? state.metricsConfig[skillId] : null;
+  const positiveCodes = Array.from(new Set([...(cfg && cfg.positive ? cfg.positive : []), "#", "+"]));
+  const negativeCodes = (cfg && cfg.negative) || ["-"];
+  if (positiveCodes.includes(code)) return "positive";
+  if (negativeCodes.includes(code)) return "negative";
+  return "neutral";
 }
 function isAggSubtabVisible(tabId) {
   const currentTopTab =
@@ -7736,6 +7740,7 @@ function buildSkillMetricSeries(events, skillId, metricId) {
       x: series.length + 1,
       y,
       code: ev.code,
+      tone: getSkillChartCodeTone(ev.code, skillId),
       set: normalizeSetNumber(ev.set),
       rotation: ev.rotation || null,
       eventIndex: idx,
@@ -7841,14 +7846,14 @@ function buildSkillChartSvg(series, metricMeta) {
   }).join("");
   const lineSegments = series.slice(1).map((p, idx) => {
     const prev = series[idx];
-    const toneClass = `is-${getSkillChartCodeTone(p.code)}`;
+    const toneClass = `is-${p.tone || getSkillChartCodeTone(p.code, p.skillId || null)}`;
     return `<line class="skill-chart__segment ${toneClass}" x1="${xToPx(prev.x).toFixed(1)}" y1="${yToPx(prev.y).toFixed(1)}" x2="${xToPx(p.x).toFixed(1)}" y2="${yToPx(p.y).toFixed(1)}"></line>`;
   }).join("");
   const dots = series.map(p => {
     const cx = xToPx(p.x);
     const cy = yToPx(p.y);
     const tip = `#${p.x} · ${p.labelValue} · cod ${p.code} · set ${p.set || "-"}${p.rotation ? ` · P${p.rotation}` : ""}`;
-    const toneClass = `is-${getSkillChartCodeTone(p.code)}`;
+    const toneClass = `is-${p.tone || getSkillChartCodeTone(p.code, p.skillId || null)}`;
     return `<circle data-point-index="${p.x - 1}" class="${toneClass}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3"><title>${tip}</title></circle>`;
   }).join("");
   const xLabelLeft = series.length > 0 ? 1 : 0;
@@ -7918,7 +7923,7 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
     hoverLine.style.top = `${layout.pad.top * scaleY}px`;
     hoverLine.style.height = `${layout.plotH * scaleY}px`;
     hoverLine.classList.remove("hidden");
-    const tone = getSkillChartCodeTone(best.point.code);
+    const tone = best.point.tone || getSkillChartCodeTone(best.point.code);
     tooltip.className = `skill-chart-tooltip is-${tone}`;
     tooltip.innerHTML = `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div><div class="skill-chart-tooltip__row small">Set ${best.point.set || "-"} · Evento ${best.point.x}${best.point.rotation ? ` · P${best.point.rotation}` : ""}</div>`;
     tooltip.classList.remove("hidden");
@@ -7938,6 +7943,61 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
   };
   svgWrap.onpointerleave = clearHover;
   svgWrap.onpointermove = ev => moveHover(ev.clientX);
+}
+let skillChartToneColorCache = null;
+function withAlpha(color, alpha = 1) {
+  if (!color) return "";
+  const c = String(color).trim();
+  if (c.startsWith("rgba(")) {
+    const m = c.match(/^rgba\(([^,]+),([^,]+),([^,]+),([^)]+)\)$/i);
+    if (!m) return c;
+    return `rgba(${m[1].trim()}, ${m[2].trim()}, ${m[3].trim()}, ${alpha})`;
+  }
+  if (c.startsWith("rgb(")) {
+    const m = c.match(/^rgb\(([^,]+),([^,]+),([^)]+)\)$/i);
+    if (!m) return c;
+    return `rgba(${m[1].trim()}, ${m[2].trim()}, ${m[3].trim()}, ${alpha})`;
+  }
+  return c;
+}
+function getSkillChartToneColors() {
+  if (skillChartToneColorCache) return skillChartToneColorCache;
+  const fallback = { positive: "#22c55e", neutral: "#eab308", negative: "#ef4444" };
+  try {
+    const host = document.createElement("div");
+    host.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0;pointer-events:none;";
+    const mk = cls => {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = `metric-toggle ${cls} active`;
+      el.textContent = "•";
+      host.appendChild(el);
+      return el;
+    };
+    const posEl = mk("code-positive");
+    const neuEl = mk("code-neutral");
+    const negEl = mk("code-negative");
+    document.body.appendChild(host);
+    const pos = getComputedStyle(posEl).borderColor || fallback.positive;
+    const neu = getComputedStyle(neuEl).borderColor || fallback.neutral;
+    const neg = getComputedStyle(negEl).borderColor || fallback.negative;
+    host.remove();
+    skillChartToneColorCache = { positive: pos, neutral: neu, negative: neg };
+    return skillChartToneColorCache;
+  } catch (_err) {
+    skillChartToneColorCache = fallback;
+    return skillChartToneColorCache;
+  }
+}
+function applySkillChartToneColors(targetEl) {
+  if (!targetEl) return;
+  const tones = getSkillChartToneColors();
+  targetEl.style.setProperty("--chart-tone-positive", tones.positive);
+  targetEl.style.setProperty("--chart-tone-neutral", tones.neutral);
+  targetEl.style.setProperty("--chart-tone-negative", tones.negative);
+  targetEl.style.setProperty("--chart-tone-positive-soft", withAlpha(tones.positive, 0.2));
+  targetEl.style.setProperty("--chart-tone-neutral-soft", withAlpha(tones.neutral, 0.2));
+  targetEl.style.setProperty("--chart-tone-negative-soft", withAlpha(tones.negative, 0.2));
 }
 function inlineComputedDomStyles(sourceNode, targetNode) {
   if (!(sourceNode instanceof Element) || !(targetNode instanceof Element)) return;
@@ -8061,6 +8121,7 @@ function renderSkillMetricChartCard(container, options = {}) {
   const series = buildSkillMetricSeries(events, skillId, metricId);
   const card = document.createElement("div");
   card.className = "skill-chart-card";
+  applySkillChartToneColors(card);
   const head = document.createElement("div");
   head.className = "skill-chart-card__head";
   const titleRow = document.createElement("div");
@@ -8121,6 +8182,7 @@ function buildAnalysisSkillChartEvents({ scope, skillId, playerIdx = null } = {}
 function renderAnalysisSkillChartsPanel() {
   if (!elAnalysisSkillChartGrid) return;
   if (!isAggSubtabVisible("skill-charts")) return;
+  skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   fillSkillChartMetricSelect(elAnalysisSkillChartMetric, ui.globalMetric, () => {
     const stateUi = ensureSkillChartsUiState();
@@ -8145,6 +8207,7 @@ function renderAnalysisSkillChartsPanel() {
 function renderPlayerAnalysisSkillCharts() {
   if (!elPlayerAnalysisSkillChartGrid) return;
   if (!isAggSubtabVisible("player")) return;
+  skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   fillSkillChartMetricSelect(elPlayerAnalysisChartMetric, ui.playerMetric, () => {
     const stateUi = ensureSkillChartsUiState();
@@ -8188,6 +8251,7 @@ function renderPlayerAnalysisSkillCharts() {
 function appendAggSkillModalChart(skillId, playerIdx) {
   if (!elAggSkillModalBody) return;
   if (!elAggSkillModal || elAggSkillModal.classList.contains("hidden")) return;
+  skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   const scope = getAnalysisTeamScope();
   const modalChartWrap = document.createElement("div");
@@ -8242,6 +8306,7 @@ function renderAggSkillDetailChartPanel(skillId) {
     elAggSummaryExtraBody.innerHTML = "";
     return;
   }
+  skillChartToneColorCache = null;
   elAggSummaryExtraBody.innerHTML = "";
   const tr = document.createElement("tr");
   const td = document.createElement("td");
