@@ -10,7 +10,6 @@ i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiett
 
 # Bug funzionalità
 Da touch si cliccano i tasti sottostanti dagli overlay
-modificare il nome di una squadra sta creando una nuova squadra invece dovrebbe ricorsivamente cambiare il nome
 
 # Bug grafici
 Stampa battute non è ottimale

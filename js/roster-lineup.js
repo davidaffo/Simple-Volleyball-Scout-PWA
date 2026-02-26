@@ -3047,11 +3047,73 @@ function renameSelectedTeam() {
   }
   saveTeamToStorage(newName, currentData);
   deleteTeamFromStorage(oldName);
+  renameTeamReferencesAcrossSavedMatches(oldName, newName, "our");
   syncTeamsFromStorage();
   state.selectedTeam = newName;
   renderTeamsSelect();
   refreshTeamManagerFromSelection();
   alert("Squadra rinominata in \"" + newName + "\".");
+}
+function renameTeamReferencesInNode(node, oldName, newName, scope = "our") {
+  if (!node || typeof node !== "object") return 0;
+  const keyNames =
+    scope === "opponent"
+      ? new Set(["selectedOpponentTeam", "opponent"])
+      : new Set(["selectedTeam", "teamName"]);
+  let changes = 0;
+  const walk = value => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    Object.keys(value).forEach(key => {
+      const current = value[key];
+      if (typeof current === "string" && keyNames.has(key) && current.trim() === oldName) {
+        value[key] = newName;
+        changes += 1;
+        return;
+      }
+      if (current && typeof current === "object") {
+        walk(current);
+      }
+    });
+  };
+  walk(node);
+  return changes;
+}
+function renameTeamReferencesAcrossSavedMatches(oldName, newName, scope = "our") {
+  if (!oldName || !newName || oldName === newName) return { matchesUpdated: 0, refsUpdated: 0 };
+  const sourceMatches =
+    typeof loadMatchesMapFromStorage === "function" ? loadMatchesMapFromStorage() : state.savedMatches || {};
+  const matches = sourceMatches && typeof sourceMatches === "object" ? sourceMatches : {};
+  let matchesUpdated = 0;
+  let refsUpdated = 0;
+  Object.entries(matches).forEach(([matchName, payload]) => {
+    if (!payload || typeof payload !== "object") return;
+    const cloned = JSON.parse(JSON.stringify(payload));
+    const changed = renameTeamReferencesInNode(cloned, oldName, newName, scope);
+    if (!changed) return;
+    refsUpdated += changed;
+    matchesUpdated += 1;
+    matches[matchName] = cloned;
+    if (typeof saveMatchToStorage === "function") {
+      saveMatchToStorage(matchName, cloned);
+    }
+  });
+  state.savedMatches = matches;
+  if (scope === "our") {
+    if ((state.selectedTeam || "").trim() === oldName) state.selectedTeam = newName;
+    if (state.match && (state.match.teamName || "").trim() === oldName) {
+      state.match.teamName = newName;
+    }
+  } else {
+    if ((state.selectedOpponentTeam || "").trim() === oldName) state.selectedOpponentTeam = newName;
+    if (state.match && (state.match.opponent || "").trim() === oldName) {
+      state.match.opponent = newName;
+    }
+  }
+  return { matchesUpdated, refsUpdated };
 }
 function renameSelectedOpponentTeam() {
   if (!elOpponentTeamsSelect) return;
@@ -3079,6 +3141,7 @@ function renameSelectedOpponentTeam() {
   }
   saveOpponentTeamToStorage(newName, currentData);
   deleteOpponentTeamFromStorage(oldName);
+  renameTeamReferencesAcrossSavedMatches(oldName, newName, "opponent");
   syncOpponentTeamsFromStorage();
   state.selectedOpponentTeam = newName;
   renderOpponentTeamsSelect();
@@ -4459,6 +4522,10 @@ function refreshTeamManagerFromSelection() {
   const source = selected ? loadTeamFromStorage(selected) : null;
   teamManagerState = buildTeamManagerStateFromSource(source, "our");
   if (elTeamMetaName) elTeamMetaName.value = teamManagerState.name || "";
+  if (elTeamMetaName) {
+    elTeamMetaName.disabled = true;
+    elTeamMetaName.title = "Rinomina squadra disabilitata";
+  }
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
   if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
@@ -4475,6 +4542,10 @@ function openTeamManagerModal(scope = "our") {
     : null;
   teamManagerState = buildTeamManagerStateFromSource(source, scope);
   if (elTeamMetaName) elTeamMetaName.value = teamManagerState.name || "";
+  if (elTeamMetaName) {
+    elTeamMetaName.disabled = true;
+    elTeamMetaName.title = "Rinomina squadra disabilitata";
+  }
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
   if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
@@ -4504,6 +4575,10 @@ function openNewTeamManager() {
     preferredLibero: ""
   };
   if (elTeamMetaName) elTeamMetaName.value = "";
+  if (elTeamMetaName) {
+    elTeamMetaName.disabled = false;
+    elTeamMetaName.title = "";
+  }
   if (elTeamMetaHead) elTeamMetaHead.value = "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = "";
   if (elTeamMetaManager) elTeamMetaManager.value = "";
@@ -4596,19 +4671,17 @@ function saveTeamManagerPayload(options = {}) {
     return;
   }
   const isOpponent = teamManagerScope === "opponent";
-  const nextName = payload.name.trim();
-  if (previousName && nextName && previousName !== nextName && saveToStorage) {
-    const existing = loadTeamFromStorage(nextName);
-    if (existing) {
-      const ok = confirm("Esiste già una squadra con questo nome. Sovrascrivere?");
-      if (!ok) return;
-    }
+  let nextName = payload.name.trim();
+  if (previousName && nextName && previousName !== nextName) {
+    payload.name = previousName;
+    nextName = previousName;
   }
   if (saveToStorage) {
     if (isOpponent) {
       const compact = compactTeamPayload(payload, payload.name);
       saveOpponentTeamToStorage(nextName, compact);
       if (previousName && previousName !== nextName) {
+        renameTeamReferencesAcrossSavedMatches(previousName, nextName, "opponent");
         deleteOpponentTeamFromStorage(previousName);
       }
       syncOpponentTeamsFromStorage();
@@ -4622,6 +4695,7 @@ function saveTeamManagerPayload(options = {}) {
       const compact = compactTeamPayload(payload, payload.name);
       saveTeamToStorage(nextName, compact);
       if (previousName && previousName !== nextName) {
+        renameTeamReferencesAcrossSavedMatches(previousName, nextName, "our");
         deleteTeamFromStorage(previousName);
       }
       syncTeamsFromStorage();
