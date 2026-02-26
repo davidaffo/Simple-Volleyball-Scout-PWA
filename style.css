@@ -4863,9 +4863,10 @@ body[data-theme="light"] .rotation-table td {
   z-index: 2;
   display: none;
   cursor: default;
+  pointer-events: none;
 }
 .youtube-frame.active + .youtube-focus-guard {
-  display: block;
+  display: none;
 }
 body[data-theme="light"] .video-skills-table th,
 body[data-theme="light"] .video-skills-table td {

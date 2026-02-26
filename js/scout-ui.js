@@ -19410,42 +19410,6 @@ function setupFocusGuards() {
     },
     true
   );
-  const blurIframeFocus = () => {
-    const active = document.activeElement;
-    if (active && active.tagName && active.tagName.toLowerCase() === "iframe") {
-      if (document.body) document.body.focus();
-      active.blur();
-    }
-  };
-  if (elYoutubeFrame) {
-    elYoutubeFrame.addEventListener("pointerdown", blurIframeFocus, true);
-    elYoutubeFrame.addEventListener("click", blurIframeFocus, true);
-  }
-  if (elYoutubeFrameScout) {
-    elYoutubeFrameScout.addEventListener("pointerdown", blurIframeFocus, true);
-    elYoutubeFrameScout.addEventListener("click", blurIframeFocus, true);
-  }
-  document.querySelectorAll("[data-youtube-guard]").forEach(guard => {
-    guard.addEventListener(
-      "pointerdown",
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (document.body) document.body.focus();
-      },
-      true
-    );
-    guard.addEventListener(
-      "click",
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleYoutubePlayback();
-        if (document.body) document.body.focus();
-      },
-      true
-    );
-  });
 }
 function ensureBaseRotationDefault() {
   const rot = parseInt(state.rotation, 10);
