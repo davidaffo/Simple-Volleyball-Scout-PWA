@@ -689,6 +689,7 @@
       <div class="agg-topbar">
         <div class="agg-subnav">
           <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="skill-charts">Grafici skill</button>
           <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
           <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Traiettorie</button>
           <button class="agg-subtab-btn" data-agg-tab-target="serve">Battute</button>
@@ -777,6 +778,20 @@
           <table class="agg-table">
             <tbody id="agg-summary-extra-body"></tbody>
           </table>
+        </div>
+      </div>
+      <div class="agg-subpanel" data-agg-tab="skill-charts">
+        <div class="analysis-skill-charts-panel">
+          <div class="analysis-filters">
+            <div class="analysis-filter">
+              <div class="analysis-filter__label">Metrica grafici</div>
+              <div class="analysis-filter__row">
+                <select id="analysis-skill-chart-metric"></select>
+              </div>
+            </div>
+          </div>
+          <p class="section-note">Un punto per ogni evento del fondamentale selezionato, nell'ordine della partita (filtri analisi attivi).</p>
+          <div id="analysis-skill-chart-grid" class="analysis-skill-chart-grid"></div>
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="trajectory">
@@ -1291,6 +1306,17 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div class="analysis-skill-charts-panel player-skill-charts-panel">
+            <div class="analysis-filters">
+              <div class="analysis-filter">
+                <div class="analysis-filter__label">Metrica grafici skill</div>
+                <div class="analysis-filter__row">
+                  <select id="player-analysis-chart-metric"></select>
+                </div>
+              </div>
+            </div>
+            <div id="player-analysis-skill-chart-grid" class="analysis-skill-chart-grid player-analysis-skill-chart-grid"></div>
           </div>
         </div>
       </div>

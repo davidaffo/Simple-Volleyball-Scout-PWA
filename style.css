@@ -4363,6 +4363,239 @@ body[data-theme="light"] .analysis-filter select {
   display: grid;
   gap: 0.7rem;
 }
+.analysis-skill-charts-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+.analysis-skill-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.7rem;
+  align-items: start;
+}
+.analysis-skill-chart-grid--single {
+  grid-template-columns: 1fr;
+}
+.player-analysis-skill-chart-grid {
+  margin-bottom: 0.2rem;
+}
+.skill-chart-card {
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  border-radius: 0.75rem;
+  background: rgba(12, 18, 30, 0.56);
+  padding: 0.6rem;
+  display: grid;
+  gap: 0.45rem;
+}
+.skill-chart-card__head {
+  display: grid;
+  gap: 0.1rem;
+}
+.skill-chart-card__title {
+  font-weight: 700;
+}
+.skill-chart-card__subtitle,
+.skill-chart-card__meta {
+  font-size: 0.84rem;
+  color: #c8d5ee;
+}
+.skill-chart-card__plot {
+  width: 100%;
+  height: 220px;
+  position: relative;
+}
+.skill-chart-card__plot--interactive {
+  cursor: crosshair;
+}
+.skill-chart-hover-line {
+  position: absolute;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  pointer-events: none;
+  transform: translateX(-0.5px);
+  z-index: 4;
+}
+.skill-chart-hover-line.hidden {
+  display: none;
+}
+.skill-chart-tooltip {
+  position: absolute;
+  min-width: 118px;
+  max-width: 220px;
+  border-radius: 0.55rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(10, 15, 25, 0.95);
+  color: #eef2ff;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.skill-chart-tooltip.hidden {
+  display: none;
+}
+.skill-chart-tooltip.is-positive {
+  border-color: rgba(34, 197, 94, 0.7);
+}
+.skill-chart-tooltip.is-neutral {
+  border-color: rgba(250, 204, 21, 0.8);
+}
+.skill-chart-tooltip.is-negative {
+  border-color: rgba(239, 68, 68, 0.8);
+}
+.skill-chart-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: space-between;
+}
+.skill-chart-tooltip__row.small {
+  margin-top: 0.2rem;
+  font-size: 0.74rem;
+  color: #c9d4ee;
+}
+.skill-chart-tooltip__code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.18);
+}
+.skill-chart-tooltip.is-positive .skill-chart-tooltip__code {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+.skill-chart-tooltip.is-neutral .skill-chart-tooltip__code {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde047;
+}
+.skill-chart-tooltip.is-negative .skill-chart-tooltip__code {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+.skill-chart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.skill-chart-svg .skill-chart__bg {
+  fill: rgba(4, 10, 24, 0.5);
+}
+.skill-chart-svg .skill-chart__tick line {
+  stroke: rgba(148, 163, 184, 0.28);
+  stroke-width: 1;
+}
+.skill-chart-svg .skill-chart__tick text,
+.skill-chart-svg .skill-chart__xlabel {
+  fill: #d7e3fa;
+  font-size: 11px;
+  font-weight: 600;
+}
+.skill-chart-svg .skill-chart__set-band {
+  fill: rgba(59, 130, 246, 0.06);
+}
+.skill-chart-svg .skill-chart__set-band.is-odd {
+  fill: rgba(148, 163, 184, 0.04);
+}
+.skill-chart-svg .skill-chart__set-sep {
+  stroke: rgba(148, 163, 184, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.skill-chart-svg .skill-chart__set-label {
+  fill: #cbd8f0;
+  font-size: 10px;
+  font-weight: 700;
+}
+.skill-chart-svg .skill-chart__axis {
+  stroke: rgba(148, 163, 184, 0.38);
+  stroke-width: 1;
+}
+.skill-chart-svg .skill-chart__zero {
+  stroke: rgba(239, 68, 68, 0.35);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.skill-chart-svg .skill-chart__line {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.skill-chart-svg .skill-chart__dots circle {
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1;
+}
+.skill-chart-svg .skill-chart__dots circle.is-hover {
+  stroke: #ffffff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.35));
+}
+.skill-chart-svg .skill-chart__dots circle.is-positive {
+  fill: #22c55e;
+}
+.skill-chart-svg .skill-chart__dots circle.is-neutral {
+  fill: #facc15;
+}
+.skill-chart-svg .skill-chart__dots circle.is-negative {
+  fill: #ef4444;
+}
+.skill-chart-card__meta strong {
+  color: #f8fbff;
+}
+.skill-chart-legend {
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+.skill-chart-legend .pos { color: #22c55e; }
+.skill-chart-legend .neu { color: #facc15; }
+.skill-chart-legend .neg { color: #ef4444; }
+.skill-chart-empty {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+}
+.skill-chart-inline-filters {
+  margin-bottom: 0.15rem;
+}
+body[data-theme="light"] .skill-chart-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(59, 130, 246, 0.28);
+}
+body[data-theme="light"] .skill-chart-card__subtitle,
+body[data-theme="light"] .skill-chart-card__meta,
+body[data-theme="light"] .skill-chart-svg .skill-chart__tick text,
+body[data-theme="light"] .skill-chart-svg .skill-chart__xlabel {
+  color: #475569;
+  fill: #475569;
+}
+body[data-theme="light"] .skill-chart-svg .skill-chart__set-label {
+  fill: #334155;
+}
+body[data-theme="light"] .skill-chart-card__meta strong {
+  color: #0f172a;
+}
+body[data-theme="light"] .skill-chart-svg .skill-chart__bg {
+  fill: rgba(241, 245, 249, 0.9);
+}
+body[data-theme="light"] .skill-chart-hover-line {
+  background: rgba(15, 23, 42, 0.45);
+}
+body[data-theme="light"] .skill-chart-tooltip {
+  background: rgba(255, 255, 255, 0.97);
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.45);
+}
+body[data-theme="light"] .skill-chart-tooltip__row.small {
+  color: #475569;
+}
 .player-analysis-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -5134,6 +5367,11 @@ body[data-theme="light"] .agg-table td {
 .agg-skill-codes {
   width: 100%;
   border-collapse: collapse;
+}
+.agg-skill-modal-chart {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
 }
 .agg-skill-codes th,
 .agg-skill-codes td {
