@@ -7745,16 +7745,22 @@ function buildSkillMetricSeries(events, skillId, metricId) {
   return series;
 }
 function getSkillChartLayout(series, metricMeta) {
-  const width = 640;
-  const height = 220;
-  const pad = { top: 12, right: 14, bottom: 24, left: 40 };
+  const width = 420;
+  const height = 320;
+  const pad = { top: 18, right: 22, bottom: 30, left: 58 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   let minY = Math.min(...series.map(p => p.y));
   let maxY = Math.max(...series.map(p => p.y));
   if (metricMeta.kind === "percent") {
-    minY = 0;
-    maxY = 100;
+    if (metricMeta.id === "eff") {
+      const absMax = Math.max(5, Math.ceil(Math.max(Math.abs(minY || 0), Math.abs(maxY || 0)) / 5) * 5);
+      minY = -absMax;
+      maxY = absMax;
+    } else {
+      minY = 0;
+      maxY = 100;
+    }
   } else if (metricMeta.kind === "code") {
     minY = -2;
     maxY = 2;
@@ -7766,8 +7772,17 @@ function getSkillChartLayout(series, metricMeta) {
     maxY += 1;
     minY -= metricMeta.kind === "percent" ? 0 : 1;
   }
-  const xToPx = x => pad.left + ((x - 1) / Math.max(1, series.length - 1)) * plotW;
-  const yToPx = y => pad.top + (1 - (y - minY) / (maxY - minY)) * plotH;
+  // Keep dots/segments inside the clipped SVG area (avoid edge truncation).
+  const pointInsetX = 22;
+  const pointInsetY = 30;
+  const xToPx = x => {
+    const t = ((x - 1) / Math.max(1, series.length - 1));
+    return pad.left + pointInsetX + t * Math.max(0, plotW - pointInsetX * 2);
+  };
+  const yToPx = y => {
+    const t = (y - minY) / (maxY - minY);
+    return pad.top + pointInsetY + (1 - t) * Math.max(0, plotH - pointInsetY * 2);
+  };
   return { width, height, pad, plotW, plotH, minY, maxY, xToPx, yToPx };
 }
 function buildSkillChartSvg(series, metricMeta) {
@@ -7793,7 +7808,9 @@ function buildSkillChartSvg(series, metricMeta) {
   }
   const zeroLineY = minY <= 0 && maxY >= 0 ? yToPx(0) : null;
   const tickValues = metricMeta.kind === "percent"
-    ? [0, 25, 50, 75, 100]
+    ? metricMeta.id === "eff"
+      ? [minY, minY / 2, 0, maxY / 2, maxY]
+      : [0, 25, 50, 75, 100]
     : metricMeta.kind === "code"
       ? [-2, -1, 0, 1, 2]
       : [minY, (minY + maxY) / 2, maxY];
@@ -7822,23 +7839,29 @@ function buildSkillChartSvg(series, metricMeta) {
       </g>
     `;
   }).join("");
+  const lineSegments = series.slice(1).map((p, idx) => {
+    const prev = series[idx];
+    const toneClass = `is-${getSkillChartCodeTone(p.code)}`;
+    return `<line class="skill-chart__segment ${toneClass}" x1="${xToPx(prev.x).toFixed(1)}" y1="${yToPx(prev.y).toFixed(1)}" x2="${xToPx(p.x).toFixed(1)}" y2="${yToPx(p.y).toFixed(1)}"></line>`;
+  }).join("");
   const dots = series.map(p => {
     const cx = xToPx(p.x);
     const cy = yToPx(p.y);
     const tip = `#${p.x} · ${p.labelValue} · cod ${p.code} · set ${p.set || "-"}${p.rotation ? ` · P${p.rotation}` : ""}`;
     const toneClass = `is-${getSkillChartCodeTone(p.code)}`;
-    return `<circle data-point-index="${p.x - 1}" class="${toneClass}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5"><title>${tip}</title></circle>`;
+    return `<circle data-point-index="${p.x - 1}" class="${toneClass}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3"><title>${tip}</title></circle>`;
   }).join("");
   const xLabelLeft = series.length > 0 ? 1 : 0;
   const xLabelRight = series.length;
   return `
-    <svg viewBox="0 0 ${width} ${height}" class="skill-chart-svg" preserveAspectRatio="none" aria-label="Grafico metrica skill">
+    <svg viewBox="0 0 ${width} ${height}" class="skill-chart-svg" preserveAspectRatio="xMidYMid meet" aria-label="Grafico metrica skill">
       <rect x="0" y="0" width="${width}" height="${height}" rx="10" ry="10" class="skill-chart__bg"></rect>
       ${setBands}
       ${yTicks}
       ${zeroLineY != null ? `<line class="skill-chart__zero" x1="${pad.left}" y1="${zeroLineY.toFixed(1)}" x2="${width - pad.right}" y2="${zeroLineY.toFixed(1)}"></line>` : ""}
       <line class="skill-chart__axis" x1="${pad.left}" y1="${(height - pad.bottom).toFixed(1)}" x2="${width - pad.right}" y2="${(height - pad.bottom).toFixed(1)}"></line>
-      <polyline class="skill-chart__line" points="${linePoints}"></polyline>
+      <polyline class="skill-chart__line skill-chart__line--base" points="${linePoints}"></polyline>
+      <g class="skill-chart__segments">${lineSegments}</g>
       <g class="skill-chart__dots">${dots}</g>
       <text class="skill-chart__xlabel" x="${pad.left}" y="${height - 6}" text-anchor="start">${xLabelLeft}</text>
       <text class="skill-chart__xlabel" x="${width - pad.right}" y="${height - 6}" text-anchor="end">${xLabelRight}</text>
@@ -7916,6 +7939,115 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
   svgWrap.onpointerleave = clearHover;
   svgWrap.onpointermove = ev => moveHover(ev.clientX);
 }
+function inlineComputedDomStyles(sourceNode, targetNode) {
+  if (!(sourceNode instanceof Element) || !(targetNode instanceof Element)) return;
+  const cs = window.getComputedStyle(sourceNode);
+  for (let i = 0; i < cs.length; i += 1) {
+    const prop = cs[i];
+    const value = cs.getPropertyValue(prop);
+    if (value) targetNode.style.setProperty(prop, value);
+  }
+  const sourceChildren = Array.from(sourceNode.children || []);
+  const targetChildren = Array.from(targetNode.children || []);
+  for (let i = 0; i < Math.min(sourceChildren.length, targetChildren.length); i += 1) {
+    inlineComputedDomStyles(sourceChildren[i], targetChildren[i]);
+  }
+}
+async function copySkillChartImageToClipboard(cardEl, label = "Grafico") {
+  if (!cardEl) {
+    alert("Card grafico non trovata.");
+    return;
+  }
+  if (!navigator.clipboard || !window.ClipboardItem || !navigator.clipboard.write) {
+    alert("Copia immagine negli appunti non supportata su questo dispositivo.");
+    return;
+  }
+  const writeBlobToClipboard = async pngBlob => {
+    if (!pngBlob) throw new Error("blob");
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+  };
+  const renderSvgToPngBlob = async ({ svgMarkup, width, height, bgFill = null } = {}) => {
+    const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
+      const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas");
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      if (bgFill) {
+        ctx.fillStyle = bgFill;
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        ctx.clearRect(0, 0, width, height);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      if (!pngBlob) throw new Error("blob");
+      return pngBlob;
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  };
+  try {
+    const cardRect = cardEl.getBoundingClientRect();
+    const width = Math.max(1, Math.round(cardRect.width || cardEl.clientWidth || 420));
+    const height = Math.max(1, Math.round(cardRect.height || cardEl.clientHeight || 420));
+    const clonedCard = cardEl.cloneNode(true);
+    clonedCard.querySelectorAll(".skill-chart-hover-line, .skill-chart-tooltip, .skill-chart-copy-btn").forEach(el => el.remove());
+    clonedCard.style.margin = "0";
+    clonedCard.style.width = `${width}px`;
+    clonedCard.style.height = `${height}px`;
+    clonedCard.style.boxSizing = "border-box";
+    inlineComputedDomStyles(cardEl, clonedCard);
+    const xhtmlWrap = document.createElement("div");
+    xhtmlWrap.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    xhtmlWrap.style.width = `${width}px`;
+    xhtmlWrap.style.height = `${height}px`;
+    xhtmlWrap.style.margin = "0";
+    xhtmlWrap.style.padding = "0";
+    xhtmlWrap.appendChild(clonedCard);
+    const serializer = new XMLSerializer();
+    const foreignObjectMarkup = serializer.serializeToString(xhtmlWrap);
+    const svgMarkup = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <foreignObject x="0" y="0" width="${width}" height="${height}">${foreignObjectMarkup}</foreignObject>
+      </svg>
+    `;
+    const cardCs = window.getComputedStyle(cardEl);
+    const cardBg = cardCs.backgroundColor && cardCs.backgroundColor !== "rgba(0, 0, 0, 0)" ? cardCs.backgroundColor : "#0c121e";
+    const pngBlob = await renderSvgToPngBlob({ svgMarkup, width, height, bgFill: cardBg });
+    await writeBlobToClipboard(pngBlob);
+    alert(`${label} copiato negli appunti.`);
+  } catch (_err) {
+    try {
+      const svgWrap = cardEl.querySelector(".skill-chart-card__plot");
+      const svg = svgWrap && svgWrap.querySelector ? svgWrap.querySelector(".skill-chart-svg") : null;
+      if (!svg || !svgWrap) throw new Error("plot-missing");
+      const clonedSvg = svg.cloneNode(true);
+      clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clonedSvg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+      inlineComputedDomStyles(svg, clonedSvg);
+      const serializer = new XMLSerializer();
+      const plotSvgMarkup = serializer.serializeToString(clonedSvg);
+      const width = Math.max(1, Math.round(svgWrap.clientWidth || 420));
+      const height = Math.max(1, Math.round(svgWrap.clientHeight || 320));
+      const plotBlob = await renderSvgToPngBlob({ svgMarkup: plotSvgMarkup, width, height, bgFill: "#0c121e" });
+      await writeBlobToClipboard(plotBlob);
+      alert(`${label} copiato negli appunti (solo grafico: il browser ha bloccato titolo/legenda).`);
+    } catch (_err2) {
+      alert("Impossibile copiare immagine (browser/clipboard limita questa funzione).");
+    }
+  }
+}
 function renderSkillMetricChartCard(container, options = {}) {
   if (!container) return;
   const {
@@ -7931,10 +8063,20 @@ function renderSkillMetricChartCard(container, options = {}) {
   card.className = "skill-chart-card";
   const head = document.createElement("div");
   head.className = "skill-chart-card__head";
+  const titleRow = document.createElement("div");
+  titleRow.className = "skill-chart-card__title-row";
   const titleEl = document.createElement("div");
   titleEl.className = "skill-chart-card__title";
   titleEl.textContent = title;
-  head.appendChild(titleEl);
+  titleRow.appendChild(titleEl);
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "skill-chart-copy-btn";
+  copyBtn.setAttribute("aria-label", `Copia immagine grafico ${title}`);
+  copyBtn.title = "Copia immagine grafico";
+  copyBtn.textContent = "⧉";
+  titleRow.appendChild(copyBtn);
+  head.appendChild(titleRow);
   if (subtitle) {
     const sub = document.createElement("div");
     sub.className = "skill-chart-card__subtitle";
@@ -7954,12 +8096,16 @@ function renderSkillMetricChartCard(container, options = {}) {
     svgWrap.className = "skill-chart-card__plot";
     svgWrap.innerHTML = buildSkillChartSvg(series, metricMeta);
     attachSkillChartHover(svgWrap, series, metricMeta);
+    copyBtn.addEventListener("click", () => copySkillChartImageToClipboard(card, `Grafico ${title}`));
     body.appendChild(svgWrap);
     const footer = document.createElement("div");
     footer.className = "skill-chart-card__meta";
     const last = series[series.length - 1];
     footer.innerHTML = `Eventi: <strong>${series.length}</strong> · Ultimo valore: <strong>${last ? last.labelValue : "-"}</strong> · <span class="skill-chart-legend"><span class="pos">●</span> positivo <span class="neu">●</span> neutro <span class="neg">●</span> negativo</span>`;
     body.appendChild(footer);
+  }
+  if (!series.length) {
+    copyBtn.disabled = true;
   }
   card.appendChild(body);
   container.appendChild(card);
@@ -7979,7 +8125,6 @@ function renderAnalysisSkillChartsPanel() {
   fillSkillChartMetricSelect(elAnalysisSkillChartMetric, ui.globalMetric, () => {
     const stateUi = ensureSkillChartsUiState();
     stateUi.globalMetric = elAnalysisSkillChartMetric.value || "eff";
-    saveState();
     renderAnalysisSkillChartsPanel();
   });
   const metricId = (elAnalysisSkillChartMetric && elAnalysisSkillChartMetric.value) || ui.globalMetric || "eff";
@@ -8004,7 +8149,6 @@ function renderPlayerAnalysisSkillCharts() {
   fillSkillChartMetricSelect(elPlayerAnalysisChartMetric, ui.playerMetric, () => {
     const stateUi = ensureSkillChartsUiState();
     stateUi.playerMetric = elPlayerAnalysisChartMetric.value || "eff";
-    saveState();
     renderPlayerAnalysisSkillCharts();
   });
   const playerIdx = getPlayerAnalysisPlayerIdx();
@@ -8068,7 +8212,6 @@ function appendAggSkillModalChart(skillId, playerIdx) {
   select.addEventListener("change", () => {
     const stateUi = ensureSkillChartsUiState();
     stateUi.modalMetric = select.value || "eff";
-    saveState();
     renderAggSkillModal(skillId, playerIdx);
   });
   row.appendChild(select);
