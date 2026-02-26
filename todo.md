@@ -9,7 +9,6 @@ crea stampa tipo foglio gara
 i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiettoria
 
 # Bug funzionalità
-errore e altre cose sovrascrivibili, devono attivare annullamento parziale sulla skill, altrimenti da punto ma rimane bloccato sulla skill precedente, e dopo annullamento parziale va correttamente sulla skill successiva
 Nuova partita non resetta lo stato della partita precedente, rimane al terzo set
 Da touch si cliccano i tasti sottostanti dagli overlay
 Sincronizza prima skill non funziona come dovrebbe, dovrebbe calcolare l'offset sulla base della prima skill e dei tempi gia esistenti

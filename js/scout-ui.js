@@ -1753,6 +1753,35 @@ function resetSkillSelectionForPlayer(playerIdx, scope = "our") {
   clearAttackSelection(playerIdx, scope);
   setSelectedSkillForScope(scope, playerIdx, null);
 }
+function cancelPartialSkillFlowForScope(scope = "our") {
+  const targetScope = scope || "our";
+  const prefix = targetScope + ":";
+  const playerIdxs = new Set();
+  const collectFromKey = key => {
+    if (!key || !key.startsWith(prefix)) return;
+    const idx = parseInt(key.slice(prefix.length), 10);
+    if (!Number.isNaN(idx)) playerIdxs.add(idx);
+  };
+  [selectedSkillPerPlayer, serveMetaByPlayer, attackMetaByPlayer, blockConfirmByPlayer, serveTypeSelectHandlers]
+    .forEach(mapObj => {
+      Object.keys(mapObj || {}).forEach(collectFromKey);
+    });
+  [attackInlinePlayer, serveTypeInlinePlayer, serveTypeFocusPlayer, blockInlinePlayer].forEach(collectFromKey);
+  if (
+    activeSkillModalContext &&
+    activeSkillModalContext.scope === targetScope &&
+    typeof activeSkillModalContext.playerIdx === "number"
+  ) {
+    playerIdxs.add(activeSkillModalContext.playerIdx);
+  }
+  playerIdxs.forEach(playerIdx => resetSkillSelectionForPlayer(playerIdx, targetScope));
+  if (activeSkillModalContext && activeSkillModalContext.scope === targetScope) {
+    closeSkillModal();
+  }
+  if (isErrorPickModeForScope(targetScope)) {
+    stopErrorPickMode({ render: false });
+  }
+}
 function shouldPromptAttackSetType(scope = "our") {
   const enabled =
     scope === "opponent" ? state.opponentSetTypePromptEnabled : state.setTypePromptEnabled;
@@ -3646,6 +3675,7 @@ async function captureServeTrajectory(event, { forcePopup = false } = {}) {
 }
 function forceNextSkill(skillId, scope = "our") {
   if (!skillId) return;
+  cancelPartialSkillFlowForScope(scope);
   state.predictiveSkillFlow = true;
   state.freeballPending = false;
   state.freeballPendingScope = scope;
@@ -7134,6 +7164,7 @@ function animateEventToLog() {
   // fallback no-op: some builds don't include the log animation helper
 }
 function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null, scope = "our" } = {}) {
+  cancelPartialSkillFlowForScope(scope);
   const desiredStartSkill =
     startSkill || (isSkillEnabledForScope("second", scope) ? "second" : null);
   state.freeballPending = true;
@@ -12283,6 +12314,7 @@ function addManualPoint(
     alert("Partita in pausa. Riprendi per continuare lo scout.");
     return;
   }
+  cancelPartialSkillFlowForScope(scope);
   state.freeballPending = false;
   const playerId = getPlayerIdForScope(scope, playerIdx, playerName);
   const event = buildBaseEventPayload({
@@ -12380,6 +12412,7 @@ function handleOpponentPoint() {
 }
 function handleOpponentFreeballSingle() {
   if (state.useOpponentTeam) return;
+  cancelPartialSkillFlowForScope("our");
   state.skillFlowOverride = null;
   if (state.predictiveSkillFlow) {
     forceNextSkill("defense", "our");
