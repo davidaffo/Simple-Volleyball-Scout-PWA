@@ -5831,11 +5831,21 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   const { closeAfterAction = false, nextSkillId = null, scope = "our" } = options;
   const playerKey = makePlayerKey(scope, playerIdx);
   const selectedSkill = getSelectedSkillForScope(scope, playerIdx);
+  const attackLockedForPlayer = attackInlinePlayer === playerKey;
+  const rawNextSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
+  const isBlockContext =
+    selectedSkill === "block" || rawNextSkillId === "block" || blockInlinePlayer === playerKey;
+  if (!isBlockContext && blockConfirmByPlayer[playerKey] !== undefined) {
+    delete blockConfirmByPlayer[playerKey];
+    if (blockInlinePlayer === playerKey) {
+      blockInlinePlayer = null;
+    }
+  }
   const hasActiveSelection =
     !!selectedSkill ||
     !!serveMetaByPlayer[playerKey] ||
     !!getAttackMetaForPlayer(scope, playerIdx) ||
-    attackInlinePlayer === playerKey ||
+    attackLockedForPlayer ||
     serveTypeInlinePlayer === playerKey ||
     !!blockConfirmByPlayer[playerKey];
   let cancelBtn = targetEl.querySelector(".player-skill-cancel");
@@ -5857,14 +5867,12 @@ function renderSkillRows(targetEl, playerIdx, activeName, options = {}) {
   } else if (cancelBtn) {
     cancelBtn.remove();
   }
-  const attackLockedForPlayer = attackInlinePlayer === playerKey;
   let forcedSkillId = null;
   const getSkillColors = skillId => {
     const fallback = { bg: "#2f2f2f", text: "#e5e7eb" };
     return SKILL_COLORS[skillId] || fallback;
   };
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
-  const rawNextSkillId = attackLockedForPlayer ? "attack" : nextSkillId || null;
   const blockPromptActiveForScope =
     rawNextSkillId === "block" &&
     getNetBlockPromptScope() === scope &&
