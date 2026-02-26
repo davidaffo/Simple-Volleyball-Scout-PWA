@@ -4,7 +4,6 @@ Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
-Grafici andamento skill
 crea stampa tipo foglio gara
 i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiettoria
 
