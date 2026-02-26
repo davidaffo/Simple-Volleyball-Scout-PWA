@@ -7688,11 +7688,21 @@ function fillSkillChartMetricSelect(selectEl, value, onChange) {
     if (typeof onChange === "function") {
       selectEl.addEventListener("change", onChange);
     }
+    selectEl.addEventListener("mousedown", pauseSkillChartRender, true);
+    selectEl.addEventListener("pointerdown", pauseSkillChartRender, true);
+    selectEl.addEventListener("focus", pauseSkillChartRender, true);
+    selectEl.addEventListener("blur", () => resumeSkillChartRender({ flush: false }));
+    selectEl.addEventListener("change", () => resumeSkillChartRender({ flush: true }));
     selectEl.dataset.skillChartMetricInit = "1";
   }
   selectEl.value = SKILL_CHART_METRICS.some(m => m.id === value) ? value : "eff";
 }
 function getSkillChartBaseEvents(scope = getAnalysisTeamScope()) {
+  const extraState = getAnalysisExtraMatchState();
+  const multiMatchActive = !!(extraState && extraState[scope] && extraState[scope].size > 0);
+  const currentMatchKey = getCurrentMatchKey() || "__current__";
+  const currentMatchLabel = getCurrentMatchLabel() || "Match corrente";
+  const currentMatchDate = (state.match && state.match.date) || "";
   const source = getAnalysisEvents();
   return (source || []).filter(ev => {
     if (!ev) return false;
@@ -7701,9 +7711,108 @@ function getSkillChartBaseEvents(scope = getAnalysisTeamScope()) {
       return getTeamScopeFromEvent(ev) === scope;
     }
     return ev.team !== "opponent";
+  }).map(ev => {
+    if (!multiMatchActive) return ev;
+    const cloned = Object.assign({}, ev);
+    if (!cloned.analysisMatchKey) cloned.analysisMatchKey = currentMatchKey;
+    if (!cloned.analysisMatchLabel) cloned.analysisMatchLabel = currentMatchLabel;
+    if (!cloned.analysisMatchDate) cloned.analysisMatchDate = currentMatchDate;
+    return cloned;
   });
 }
 function buildSkillMetricSeries(events, skillId, metricId) {
+  const hasMultiMatchData = (events || []).some(ev => ev && (ev.analysisMatchKey || ev.analysisMatchLabel));
+  if (hasMultiMatchData) {
+    const grouped = [];
+    const byKey = new Map();
+    (events || []).forEach(ev => {
+      if (!ev) return;
+      const key = String(ev.analysisMatchKey || ev.analysisMatchLabel || "__current__");
+      if (!byKey.has(key)) {
+        const bucket = {
+          key,
+          label: ev.analysisMatchLabel || key,
+          date: (ev.analysisMatchDate || "").trim(),
+          events: []
+        };
+        byKey.set(key, bucket);
+        grouped.push(bucket);
+      }
+      byKey.get(key).events.push(ev);
+    });
+    grouped.sort((a, b) => {
+      const ad = (a.date || "").trim();
+      const bd = (b.date || "").trim();
+      if (ad && bd && ad !== bd) return ad.localeCompare(bd);
+      if (ad && !bd) return -1;
+      if (!ad && bd) return 1;
+      return String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "it", { sensitivity: "base" });
+    });
+    const series = [];
+    grouped.forEach((bucket, idx) => {
+      const counts = emptyCounts();
+      let codeSum = 0;
+      let codeCount = 0;
+      bucket.events.forEach(ev => {
+        if (!ev || ev.skillId !== skillId) return;
+        if (!ev.code || !NORMAL_EVAL_CODES.has(ev.code)) return;
+        counts[ev.code] = (counts[ev.code] || 0) + 1;
+        codeSum += Number(SKILL_CHART_CODE_VALUES[ev.code] || 0);
+        codeCount += 1;
+      });
+      const metrics = computeMetrics(counts, skillId);
+      if (!metrics.total && metricId !== "code") return;
+      let y = null;
+      let labelValue = "-";
+      let tone = "neutral";
+      let codeLabel = "•";
+      if (metricId === "eff") {
+        y = metrics.eff;
+        labelValue = metrics.eff == null ? "-" : formatPercent(metrics.eff);
+      } else if (metricId === "pos") {
+        y = metrics.pos;
+        labelValue = metrics.pos == null ? "-" : formatPercent(metrics.pos);
+      } else if (metricId === "prf") {
+        y = metrics.prf;
+        labelValue = metrics.prf == null ? "-" : formatPercent(metrics.prf);
+      } else if (metricId === "total") {
+        y = metrics.total;
+        labelValue = String(metrics.total || 0);
+      } else if (metricId === "positive") {
+        y = metrics.positiveCount || 0;
+        labelValue = String(metrics.positiveCount || 0);
+      } else if (metricId === "negative") {
+        y = metrics.negativeCount || 0;
+        labelValue = String(metrics.negativeCount || 0);
+      } else if (metricId === "code") {
+        if (!codeCount) return;
+        y = codeSum / codeCount;
+        labelValue = String(Math.round(y * 10) / 10);
+        codeLabel = "avg";
+        tone = y > 0 ? "positive" : y < 0 ? "negative" : "neutral";
+      }
+      if (y == null || Number.isNaN(y)) return;
+      if (metricId !== "code") {
+        if ((metrics.positiveCount || 0) > (metrics.negativeCount || 0)) tone = "positive";
+        else if ((metrics.negativeCount || 0) > (metrics.positiveCount || 0)) tone = "negative";
+      }
+      series.push({
+        x: series.length + 1,
+        y,
+        code: codeLabel,
+        tone,
+        set: null,
+        rotation: null,
+        matchLabel: bucket.label,
+        matchKey: bucket.key,
+        matchDate: bucket.date || "",
+        matchEventsCount: metrics.total || 0,
+        groupType: "match",
+        labelValue
+      });
+    });
+    return series;
+  }
   const series = [];
   const counts = emptyCounts();
   (events || []).forEach((ev, idx) => {
@@ -7796,19 +7905,22 @@ function buildSkillChartSvg(series, metricMeta) {
   }
   const { width, height, pad, plotH, minY, maxY, xToPx, yToPx } = getSkillChartLayout(series, metricMeta);
   const linePoints = series.map(p => `${xToPx(p.x).toFixed(1)},${yToPx(p.y).toFixed(1)}`).join(" ");
+  const groupByMatch = series.some(p => p && p.groupType === "match");
   const setSegments = [];
-  let segStart = 0;
-  for (let i = 1; i <= series.length; i += 1) {
-    const prev = series[i - 1];
-    const curr = series[i];
-    if (!prev) continue;
-    if (!curr || curr.set !== prev.set) {
-      setSegments.push({
-        set: prev.set || "-",
-        startIdx: segStart,
-        endIdx: i - 1
-      });
-      segStart = i;
+  if (!groupByMatch) {
+    let segStart = 0;
+    for (let i = 1; i <= series.length; i += 1) {
+      const prev = series[i - 1];
+      const curr = series[i];
+      if (!prev) continue;
+      if (!curr || curr.set !== prev.set) {
+        setSegments.push({
+          set: prev.set || "-",
+          startIdx: segStart,
+          endIdx: i - 1
+        });
+        segStart = i;
+      }
     }
   }
   const zeroLineY = minY <= 0 && maxY >= 0 ? yToPx(0) : null;
@@ -7852,12 +7964,15 @@ function buildSkillChartSvg(series, metricMeta) {
   const dots = series.map(p => {
     const cx = xToPx(p.x);
     const cy = yToPx(p.y);
-    const tip = `#${p.x} · ${p.labelValue} · cod ${p.code} · set ${p.set || "-"}${p.rotation ? ` · P${p.rotation}` : ""}`;
+    const tip =
+      p.groupType === "match"
+        ? `Partita ${p.x} · ${p.matchLabel || "-"} · ${p.labelValue}${p.matchEventsCount ? ` · ${p.matchEventsCount} eventi` : ""}`
+        : `#${p.x} · ${p.labelValue} · cod ${p.code} · set ${p.set || "-"}${p.rotation ? ` · P${p.rotation}` : ""}`;
     const toneClass = `is-${p.tone || getSkillChartCodeTone(p.code, p.skillId || null)}`;
     return `<circle data-point-index="${p.x - 1}" class="${toneClass}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3"><title>${tip}</title></circle>`;
   }).join("");
-  const xLabelLeft = series.length > 0 ? 1 : 0;
-  const xLabelRight = series.length;
+  const xLabelLeft = series.length > 0 ? (groupByMatch ? "Partita 1" : 1) : 0;
+  const xLabelRight = series.length ? (groupByMatch ? `Partita ${series.length}` : series.length) : 0;
   return `
     <svg viewBox="0 0 ${width} ${height}" class="skill-chart-svg" preserveAspectRatio="xMidYMid meet" aria-label="Grafico metrica skill">
       <rect x="0" y="0" width="${width}" height="${height}" rx="10" ry="10" class="skill-chart__bg"></rect>
@@ -7925,7 +8040,14 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
     hoverLine.classList.remove("hidden");
     const tone = best.point.tone || getSkillChartCodeTone(best.point.code);
     tooltip.className = `skill-chart-tooltip is-${tone}`;
-    tooltip.innerHTML = `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div><div class="skill-chart-tooltip__row small">Set ${best.point.set || "-"} · Evento ${best.point.x}${best.point.rotation ? ` · P${best.point.rotation}` : ""}</div>`;
+    if (best.point.groupType === "match") {
+      tooltip.innerHTML =
+        `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div>` +
+        `<div class="skill-chart-tooltip__row small">Partita ${best.point.x} · ${best.point.matchLabel || "-"}` +
+        `${best.point.matchEventsCount ? ` · ${best.point.matchEventsCount} eventi` : ""}</div>`;
+    } else {
+      tooltip.innerHTML = `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div><div class="skill-chart-tooltip__row small">Set ${best.point.set || "-"} · Evento ${best.point.x}${best.point.rotation ? ` · P${best.point.rotation}` : ""}</div>`;
+    }
     tooltip.classList.remove("hidden");
     const tooltipRect = tooltip.getBoundingClientRect();
     let tipLeft = lineLeft + 10;
@@ -7945,6 +8067,11 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
   svgWrap.onpointermove = ev => moveHover(ev.clientX);
 }
 let skillChartToneColorCache = null;
+let skillChartRenderToken = 0;
+let skillChartCacheRevision = 0;
+const skillChartSeriesCache = new Map();
+let skillChartRenderPaused = false;
+let skillChartRenderRefreshPending = false;
 function withAlpha(color, alpha = 1) {
   if (!color) return "";
   const c = String(color).trim();
@@ -7998,6 +8125,112 @@ function applySkillChartToneColors(targetEl) {
   targetEl.style.setProperty("--chart-tone-positive-soft", withAlpha(tones.positive, 0.2));
   targetEl.style.setProperty("--chart-tone-neutral-soft", withAlpha(tones.neutral, 0.2));
   targetEl.style.setProperty("--chart-tone-negative-soft", withAlpha(tones.negative, 0.2));
+}
+function collectSkillChartEventsBySkill(events, { playerIdx = null } = {}) {
+  const bySkill = {};
+  SKILLS.forEach(skill => {
+    bySkill[skill.id] = [];
+  });
+  (events || []).forEach(ev => {
+    if (!ev || !ev.skillId || !bySkill[ev.skillId]) return;
+    if (!NORMAL_EVAL_CODES.has(ev.code)) return;
+    if (playerIdx !== null && playerIdx !== undefined && Number(ev.playerIdx) !== Number(playerIdx)) return;
+    bySkill[ev.skillId].push(ev);
+  });
+  return bySkill;
+}
+function invalidateSkillChartCaches() {
+  skillChartCacheRevision += 1;
+  skillChartSeriesCache.clear();
+  skillChartRenderToken += 1;
+}
+function cancelPendingSkillChartRender() {
+  skillChartRenderToken += 1;
+}
+function pauseSkillChartRender() {
+  skillChartRenderPaused = true;
+  cancelPendingSkillChartRender();
+}
+function resumeSkillChartRender(options = {}) {
+  const flush = options && options.flush === true;
+  const hadPendingRefresh = skillChartRenderRefreshPending;
+  skillChartRenderPaused = false;
+  if (!flush) return;
+  skillChartRenderRefreshPending = false;
+  if (!hadPendingRefresh) return;
+  try {
+    if (typeof renderAnalysisSkillChartsPanel === "function") renderAnalysisSkillChartsPanel();
+    if (typeof renderPlayerAnalysisSkillCharts === "function") renderPlayerAnalysisSkillCharts();
+    if (
+      typeof elAggSkillModal !== "undefined" &&
+      elAggSkillModal &&
+      !elAggSkillModal.classList.contains("hidden") &&
+      typeof aggTableView !== "undefined" &&
+      aggTableView &&
+      aggTableView.mode === "skill" &&
+      typeof renderAggSkillModal === "function"
+    ) {
+      renderAggSkillModal(aggTableView.skillId, "team");
+    }
+  } catch (_err) {
+    // no-op: best effort refresh after menu close
+  }
+}
+function deferSkillChartRenderWhilePaused() {
+  if (!skillChartRenderPaused) return false;
+  skillChartRenderRefreshPending = true;
+  return true;
+}
+function getSkillChartFiltersCacheToken(scope = getAnalysisTeamScope()) {
+  const sets = Array.from((analysisSummaryFilterState && analysisSummaryFilterState.sets) || [])
+    .map(v => String(v))
+    .sort()
+    .join(",");
+  const extraState = getAnalysisExtraMatchState();
+  const extraMatches = Array.from((extraState && extraState[scope]) || []).sort().join(",");
+  const currentMatch = getCurrentMatchKey() || "";
+  return `rev:${skillChartCacheRevision}|scope:${scope}|sets:${sets}|extra:${extraMatches}|cur:${currentMatch}`;
+}
+function getSkillMetricSeriesCached(events, skillId, metricId, seriesCacheKey = "") {
+  if (!seriesCacheKey) return buildSkillMetricSeries(events, skillId, metricId);
+  const key = `${seriesCacheKey}|skill:${skillId}|metric:${metricId}`;
+  const cached = skillChartSeriesCache.get(key);
+  if (cached) return cached.map(p => Object.assign({}, p));
+  const series = buildSkillMetricSeries(events, skillId, metricId);
+  skillChartSeriesCache.set(key, series.map(p => Object.assign({}, p)));
+  return series;
+}
+function renderSkillChartCardsChunked(container, renderItems, options = {}) {
+  if (!container) return;
+  const token = ++skillChartRenderToken;
+  const batchSize = Math.max(1, options.batchSize || 1);
+  let index = 0;
+  const step = () => {
+    if (token !== skillChartRenderToken) return;
+    if (skillChartRenderPaused) {
+      skillChartRenderRefreshPending = true;
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    const end = Math.min(renderItems.length, index + batchSize);
+    for (; index < end; index += 1) {
+      if (skillChartRenderPaused) {
+        skillChartRenderRefreshPending = true;
+        break;
+      }
+      const item = renderItems[index];
+      if (typeof item === "function") {
+        item(frag);
+      }
+    }
+    if (frag.childNodes.length > 0) {
+      container.appendChild(frag);
+    }
+    if (index < renderItems.length) {
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
 }
 function inlineComputedDomStyles(sourceNode, targetNode) {
   if (!(sourceNode instanceof Element) || !(targetNode instanceof Element)) return;
@@ -8115,10 +8348,11 @@ function renderSkillMetricChartCard(container, options = {}) {
     subtitle = "",
     events = [],
     skillId = "",
-    metricId = "eff"
+    metricId = "eff",
+    seriesCacheKey = ""
   } = options;
   const metricMeta = getSkillChartMetricMeta(metricId);
-  const series = buildSkillMetricSeries(events, skillId, metricId);
+  const series = getSkillMetricSeriesCached(events, skillId, metricId, seriesCacheKey);
   const card = document.createElement("div");
   card.className = "skill-chart-card";
   applySkillChartToneColors(card);
@@ -8162,7 +8396,8 @@ function renderSkillMetricChartCard(container, options = {}) {
     const footer = document.createElement("div");
     footer.className = "skill-chart-card__meta";
     const last = series[series.length - 1];
-    footer.innerHTML = `Eventi: <strong>${series.length}</strong> · Ultimo valore: <strong>${last ? last.labelValue : "-"}</strong> · <span class="skill-chart-legend"><span class="pos">●</span> positivo <span class="neu">●</span> neutro <span class="neg">●</span> negativo</span>`;
+    const unitLabel = last && last.groupType === "match" ? "Partite" : "Eventi";
+    footer.innerHTML = `${unitLabel}: <strong>${series.length}</strong> · Ultimo valore: <strong>${last ? last.labelValue : "-"}</strong> · <span class="skill-chart-legend"><span class="pos">●</span> positivo <span class="neu">●</span> neutro <span class="neg">●</span> negativo</span>`;
     body.appendChild(footer);
   }
   if (!series.length) {
@@ -8182,6 +8417,7 @@ function buildAnalysisSkillChartEvents({ scope, skillId, playerIdx = null } = {}
 function renderAnalysisSkillChartsPanel() {
   if (!elAnalysisSkillChartGrid) return;
   if (!isAggSubtabVisible("skill-charts")) return;
+  if (deferSkillChartRenderWhilePaused()) return;
   skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   fillSkillChartMetricSelect(elAnalysisSkillChartMetric, ui.globalMetric, () => {
@@ -8192,21 +8428,26 @@ function renderAnalysisSkillChartsPanel() {
   const metricId = (elAnalysisSkillChartMetric && elAnalysisSkillChartMetric.value) || ui.globalMetric || "eff";
   const scope = getAnalysisTeamScope();
   const scopeEvents = getSkillChartBaseEvents(scope);
+  const eventsBySkill = collectSkillChartEventsBySkill(scopeEvents);
+  const baseCacheKey = `analysis-global|${getSkillChartFiltersCacheToken(scope)}|metric:${metricId}`;
   elAnalysisSkillChartGrid.innerHTML = "";
-  SKILLS.forEach(skill => {
-    const skillEvents = scopeEvents.filter(ev => ev && ev.skillId === skill.id);
-    renderSkillMetricChartCard(elAnalysisSkillChartGrid, {
+  const items = SKILLS.map(skill => frag => {
+    const skillEvents = eventsBySkill[skill.id] || [];
+    renderSkillMetricChartCard(frag, {
       title: getSkillLabel(skill.id),
       subtitle: `${skillEvents.length} eventi`,
       events: skillEvents,
       skillId: skill.id,
-      metricId
+      metricId,
+      seriesCacheKey: `${baseCacheKey}|${skill.id}`
     });
   });
+  renderSkillChartCardsChunked(elAnalysisSkillChartGrid, items, { batchSize: 1 });
 }
 function renderPlayerAnalysisSkillCharts() {
   if (!elPlayerAnalysisSkillChartGrid) return;
   if (!isAggSubtabVisible("player")) return;
+  if (deferSkillChartRenderWhilePaused()) return;
   skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   fillSkillChartMetricSelect(elPlayerAnalysisChartMetric, ui.playerMetric, () => {
@@ -8235,22 +8476,28 @@ function renderPlayerAnalysisSkillCharts() {
     return;
   }
   const metricId = (elPlayerAnalysisChartMetric && elPlayerAnalysisChartMetric.value) || ui.playerMetric || "eff";
-  SKILLS.forEach(skill => {
-    const events = buildAnalysisSkillChartEvents({ scope, skillId: skill.id, playerIdx });
-    renderSkillMetricChartCard(elPlayerAnalysisSkillChartGrid, {
+  const baseEvents = getSkillChartBaseEvents(scope);
+  const eventsBySkill = collectSkillChartEventsBySkill(baseEvents, { playerIdx });
+  const baseCacheKey = `analysis-player|${getSkillChartFiltersCacheToken(scope)}|player:${playerIdx}|metric:${metricId}`;
+  const playerLabelWithNumber =
+    (scope === "opponent" ? formatNameWithNumberFor(playerName, numbers) : formatNameWithNumber(playerName));
+  const items = SKILLS.map(skill => frag => {
+    const events = eventsBySkill[skill.id] || [];
+    renderSkillMetricChartCard(frag, {
       title: getSkillLabel(skill.id),
-      subtitle:
-        (scope === "opponent" ? formatNameWithNumberFor(playerName, numbers) : formatNameWithNumber(playerName)) +
-        ` · ${events.length} eventi`,
+      subtitle: `${playerLabelWithNumber} · ${events.length} eventi`,
       events,
       skillId: skill.id,
-      metricId
+      metricId,
+      seriesCacheKey: `${baseCacheKey}|${skill.id}`
     });
   });
+  renderSkillChartCardsChunked(elPlayerAnalysisSkillChartGrid, items, { batchSize: 1 });
 }
 function appendAggSkillModalChart(skillId, playerIdx) {
   if (!elAggSkillModalBody) return;
   if (!elAggSkillModal || elAggSkillModal.classList.contains("hidden")) return;
+  if (deferSkillChartRenderWhilePaused()) return;
   skillChartToneColorCache = null;
   const ui = ensureSkillChartsUiState();
   const scope = getAnalysisTeamScope();
@@ -8273,7 +8520,12 @@ function appendAggSkillModalChart(skillId, playerIdx) {
     select.appendChild(opt);
   });
   select.value = ui.modalMetric || "eff";
+  select.addEventListener("mousedown", pauseSkillChartRender, true);
+  select.addEventListener("pointerdown", pauseSkillChartRender, true);
+  select.addEventListener("focus", pauseSkillChartRender, true);
+  select.addEventListener("blur", () => resumeSkillChartRender({ flush: false }));
   select.addEventListener("change", () => {
+    resumeSkillChartRender({ flush: true });
     const stateUi = ensureSkillChartsUiState();
     stateUi.modalMetric = select.value || "eff";
     renderAggSkillModal(skillId, playerIdx);
@@ -8295,7 +8547,8 @@ function appendAggSkillModalChart(skillId, playerIdx) {
     subtitle: `${events.length} eventi`,
     events,
     skillId,
-    metricId: select.value || "eff"
+    metricId: select.value || "eff",
+    seriesCacheKey: `analysis-modal|${getSkillChartFiltersCacheToken(scope)}|skill:${skillId}|player:${playerIdx}|metric:${select.value || "eff"}`
   });
   modalChartWrap.appendChild(chartHost);
   elAggSkillModalBody.appendChild(modalChartWrap);
@@ -8306,6 +8559,7 @@ function renderAggSkillDetailChartPanel(skillId) {
     elAggSummaryExtraBody.innerHTML = "";
     return;
   }
+  if (deferSkillChartRenderWhilePaused()) return;
   skillChartToneColorCache = null;
   elAggSummaryExtraBody.innerHTML = "";
   const tr = document.createElement("tr");
@@ -8321,15 +8575,17 @@ function renderAggSkillDetailChartPanel(skillId) {
   chartGrid.className = "analysis-skill-chart-grid";
   const scope = getAnalysisTeamScope();
   const events = buildAnalysisSkillChartEvents({ scope, skillId, playerIdx: null });
-  SKILL_CHART_METRICS.forEach(meta => {
-    renderSkillMetricChartCard(chartGrid, {
+  const items = SKILL_CHART_METRICS.map(meta => frag => {
+    renderSkillMetricChartCard(frag, {
       title: `${getSkillLabel(skillId)} · ${meta.label}`,
       subtitle: `${events.length} eventi`,
       events,
       skillId,
-      metricId: meta.id
+      metricId: meta.id,
+      seriesCacheKey: `analysis-summary-skill|${getSkillChartFiltersCacheToken(scope)}|skill:${skillId}|metric:${meta.id}`
     });
   });
+  renderSkillChartCardsChunked(chartGrid, items, { batchSize: 1 });
   wrap.appendChild(chartGrid);
   td.appendChild(wrap);
   tr.appendChild(td);
@@ -9314,6 +9570,7 @@ function updateSkillStatsUI(playerIdx, skillId) {
   statsDiv.textContent = text;
 }
 function recalcAllStatsAndUpdateUI() {
+  invalidateSkillChartCaches();
   initStats();
   state.events.forEach(ev => {
     const idx = ev.playerIdx;
@@ -14028,6 +14285,9 @@ function getAnalysisEvents() {
       events.forEach(ev => {
         if (!ev) return;
         const cloned = Object.assign({}, ev);
+        cloned.analysisMatchKey = name;
+        cloned.analysisMatchLabel = buildMatchLabelFromPayload(payload) || name;
+        cloned.analysisMatchDate = (payload && payload.state && payload.state.match && payload.state.match.date) || "";
         const evScope = getTeamScopeFromEvent(cloned);
         if (!cloned.playerName && typeof cloned.playerIdx === "number") {
           const roster = evScope === "opponent" ? rosterOpp : rosterOur;
@@ -14101,6 +14361,7 @@ function ensureAnalysisTeamFilterDefault() {
 function invalidateAnalysisCaches() {
   analysisStatsCache = null;
   analysisStatsScope = null;
+  invalidateSkillChartCaches();
 }
 function handleAnalysisMatchFilterChange() {
   if (!elAnalysisFilterMatches) return;
@@ -14127,6 +14388,7 @@ function handleAnalysisTeamFilterChange(e) {
 function handleAnalysisSummarySetFilterChange() {
   if (!elAnalysisFilterSets) return;
   analysisSummaryFilterState.sets = new Set(getCheckedValues(elAnalysisFilterSets, { asNumber: true }));
+  invalidateSkillChartCaches();
   renderAggregatedTable();
   renderPlayerAnalysis();
 }
