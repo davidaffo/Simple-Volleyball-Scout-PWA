@@ -249,6 +249,9 @@ let lastUseOpponentTeamState = null;
 let aggTableHeadCache = null;
 let analysisStatsCache = null;
 let analysisStatsScope = "our";
+let analysisEventsCache = null;
+let analysisEventsCacheKey = "";
+let analysisEventsCacheRevision = 0;
 let serveTrajectoryScope = null;
 function applyTopBarVisibility() {
   const hidden = !!state.uiTopBarHidden;
@@ -7667,7 +7670,11 @@ function getSkillChartMetricMeta(metricId) {
 }
 function ensureSkillChartsUiState() {
   if (!state.uiSkillCharts || typeof state.uiSkillCharts !== "object") {
-    state.uiSkillCharts = { globalMetric: "eff", playerMetric: "eff", modalMetric: "eff" };
+    state.uiSkillCharts = {
+      globalMetric: "eff",
+      playerMetric: "eff",
+      modalMetric: "eff"
+    };
   }
   const ui = state.uiSkillCharts;
   if (!SKILL_CHART_METRICS.some(m => m.id === ui.globalMetric)) ui.globalMetric = "eff";
@@ -7688,6 +7695,13 @@ function fillSkillChartMetricSelect(selectEl, value, onChange) {
     if (typeof onChange === "function") {
       selectEl.addEventListener("change", onChange);
     }
+    const swallowMetricSelectEvent = e => {
+      if (!e) return;
+      if (typeof e.stopPropagation === "function") e.stopPropagation();
+    };
+    selectEl.addEventListener("mousedown", swallowMetricSelectEvent, true);
+    selectEl.addEventListener("pointerdown", swallowMetricSelectEvent, true);
+    selectEl.addEventListener("click", swallowMetricSelectEvent, true);
     selectEl.addEventListener("mousedown", pauseSkillChartRender, true);
     selectEl.addEventListener("pointerdown", pauseSkillChartRender, true);
     selectEl.addEventListener("focus", pauseSkillChartRender, true);
@@ -7696,6 +7710,31 @@ function fillSkillChartMetricSelect(selectEl, value, onChange) {
     selectEl.dataset.skillChartMetricInit = "1";
   }
   selectEl.value = SKILL_CHART_METRICS.some(m => m.id === value) ? value : "eff";
+  selectEl.classList.add("skill-chart-metric-select-hidden");
+  let buttonsWrap = selectEl.parentElement && selectEl.parentElement.querySelector(".skill-chart-metric-buttons");
+  if (!buttonsWrap && selectEl.parentElement) {
+    buttonsWrap = document.createElement("div");
+    buttonsWrap.className = "skill-chart-metric-buttons";
+    selectEl.parentElement.appendChild(buttonsWrap);
+  }
+  if (buttonsWrap) {
+    buttonsWrap.innerHTML = "";
+    SKILL_CHART_METRICS.forEach(meta => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "skill-chart-metric-btn" + (selectEl.value === meta.id ? " active" : "");
+      btn.textContent = meta.label;
+      btn.dataset.metricId = meta.id;
+      btn.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectEl.value === meta.id) return;
+        selectEl.value = meta.id;
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      buttonsWrap.appendChild(btn);
+    });
+  }
 }
 function getSkillChartBaseEvents(scope = getAnalysisTeamScope()) {
   const extraState = getAnalysisExtraMatchState();
@@ -8520,6 +8559,13 @@ function appendAggSkillModalChart(skillId, playerIdx) {
     select.appendChild(opt);
   });
   select.value = ui.modalMetric || "eff";
+  const swallowMetricSelectEvent = e => {
+    if (!e) return;
+    if (typeof e.stopPropagation === "function") e.stopPropagation();
+  };
+  select.addEventListener("mousedown", swallowMetricSelectEvent, true);
+  select.addEventListener("pointerdown", swallowMetricSelectEvent, true);
+  select.addEventListener("click", swallowMetricSelectEvent, true);
   select.addEventListener("mousedown", pauseSkillChartRender, true);
   select.addEventListener("pointerdown", pauseSkillChartRender, true);
   select.addEventListener("focus", pauseSkillChartRender, true);
@@ -9570,6 +9616,9 @@ function updateSkillStatsUI(playerIdx, skillId) {
   statsDiv.textContent = text;
 }
 function recalcAllStatsAndUpdateUI() {
+  analysisEventsCache = null;
+  analysisEventsCacheKey = "";
+  analysisEventsCacheRevision += 1;
   invalidateSkillChartCaches();
   initStats();
   state.events.forEach(ev => {
@@ -14233,11 +14282,23 @@ function getAnalysisScopesForExtras() {
   return Array.from(analysisTeamFilterState.teams);
 }
 function getAnalysisEvents() {
+  const extraStateForKey = getAnalysisExtraMatchState();
+  const scopesForKey = getAnalysisScopesForExtras();
+  const cacheKey =
+    `rev:${analysisEventsCacheRevision}` +
+    `|base:${Array.isArray(state.events) ? state.events.length : 0}` +
+    `|useOpp:${state.useOpponentTeam ? 1 : 0}` +
+    `|scopes:${(scopesForKey || []).join(",")}` +
+    `|our:${Array.from((extraStateForKey && extraStateForKey.our) || []).sort().join(",")}` +
+    `|opp:${Array.from((extraStateForKey && extraStateForKey.opponent) || []).sort().join(",")}`;
+  if (analysisEventsCache && analysisEventsCacheKey === cacheKey) {
+    return analysisEventsCache;
+  }
   syncEventPlayerLinks(state.events || []);
   const baseEvents = Array.isArray(state.events) ? state.events : [];
-  const extraState = getAnalysisExtraMatchState();
+  const extraState = extraStateForKey;
   const extraEvents = [];
-  const scopes = getAnalysisScopesForExtras();
+  const scopes = scopesForKey;
   scopes.forEach(scope => {
     const matchNames = extraState[scope] || new Set();
     matchNames.forEach(name => {
@@ -14306,7 +14367,9 @@ function getAnalysisEvents() {
       });
     });
   });
-  return baseEvents.concat(extraEvents);
+  analysisEventsCache = baseEvents.concat(extraEvents);
+  analysisEventsCacheKey = cacheKey;
+  return analysisEventsCache;
 }
 function renderAnalysisCourtSideRadios(container, selectedValue, onChange, groupName) {
   if (!container) return;
@@ -14361,6 +14424,9 @@ function ensureAnalysisTeamFilterDefault() {
 function invalidateAnalysisCaches() {
   analysisStatsCache = null;
   analysisStatsScope = null;
+  analysisEventsCache = null;
+  analysisEventsCacheKey = "";
+  analysisEventsCacheRevision += 1;
   invalidateSkillChartCaches();
 }
 function handleAnalysisMatchFilterChange() {
