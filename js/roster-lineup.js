@@ -1101,7 +1101,10 @@ function setAutoLiberoRole(role) {
   state.autoLiberoRole = sanitized;
   state.autoLiberoBackline = sanitized !== "" ? true : state.autoLiberoBackline;
   // Cambiando ruolo, azzera i vecchi abbinamenti per forzare la nuova sostituzione
-  state.autoLiberoMap = {};
+  state.liberoAutoMap = {};
+  if (Object.prototype.hasOwnProperty.call(state, "autoLiberoMap")) {
+    state.autoLiberoMap = {};
+  }
   enforceAutoLiberoForState({ skipServerOnServe: true });
   saveState();
   renderPlayers();

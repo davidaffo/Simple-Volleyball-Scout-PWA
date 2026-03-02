@@ -302,6 +302,7 @@ const ERROR_TYPES = [
 let selectedErrorType = "Generic";
 let errorModalPrefillPlayer = null;
 let errorPickModeState = null;
+let pointPickModeState = null;
 const elAttackTrajectoryModal = document.getElementById("attack-trajectory-modal");
 const elAttackTrajectoryCanvas = document.getElementById("attack-trajectory-canvas");
 const elAttackTrajectoryImage = document.getElementById("attack-trajectory-image");
@@ -1875,10 +1876,6 @@ async function startServeTypeSelection(playerIdx, type, onDone, scope = "our") {
     return;
   }
   const meta = { serveType: type };
-  if (state.videoScoutMode) {
-    const videoTime = getActiveVideoPlaybackSeconds();
-    if (typeof videoTime === "number") meta.videoTime = videoTime;
-  }
   const serveTrajEnabled =
     scope === "opponent" ? state.opponentServeTrajectoryEnabled : state.serveTrajectoryEnabled;
   if (serveTrajEnabled) {
@@ -1887,6 +1884,12 @@ async function startServeTypeSelection(playerIdx, type, onDone, scope = "our") {
     meta.serveType = traj.serveType || type;
     meta.serveStart = traj.serveStart || null;
     meta.serveEnd = traj.serveEnd || null;
+    if (typeof traj.videoTime === "number") {
+      meta.videoTime = traj.videoTime;
+    }
+  } else if (state.videoScoutMode) {
+    const videoTime = getActiveVideoPlaybackSeconds();
+    if (typeof videoTime === "number") meta.videoTime = videoTime;
   }
   const shouldQueueServe = state.useOpponentTeam && state.predictiveSkillFlow;
   if (shouldQueueServe) {
@@ -1935,7 +1938,14 @@ async function collectServeTrajectory(prefill = {}) {
     scope: prefill.scope
   });
   const serveEnd = endRes && endRes.point ? endRes.point : prefill.serveEnd || null;
-  return { serveType, serveStart, serveEnd };
+  let videoTime = null;
+  if (state.videoScoutMode && endRes && endRes.point) {
+    const activeVideoTime = getActiveVideoPlaybackSeconds();
+    if (typeof activeVideoTime === "number") {
+      videoTime = activeVideoTime;
+    }
+  }
+  return { serveType, serveStart, serveEnd, videoTime };
 }
 function getBenchForLineup(court) {
   const libSet = new Set(state.liberos || []);
@@ -5346,6 +5356,9 @@ function closeSkillModal() {
 function isErrorPickModeForScope(scope) {
   return !!(errorPickModeState && errorPickModeState.scope === scope);
 }
+function isPointPickModeForScope(scope) {
+  return !!(pointPickModeState && pointPickModeState.scope === scope);
+}
 function stopErrorPickMode(options = {}) {
   if (!errorPickModeState) return;
   errorPickModeState = null;
@@ -5355,12 +5368,19 @@ function stopErrorPickMode(options = {}) {
   if (options && options.render === false) return;
   renderPlayers();
 }
+function stopPointPickMode(options = {}) {
+  if (!pointPickModeState) return;
+  pointPickModeState = null;
+  if (options && options.render === false) return;
+  renderPlayers();
+}
 function startErrorPickMode(scope = "our") {
   const players = getPlayersForScope(scope);
   if (!players || players.length === 0) {
     openErrorModal({ scope });
     return;
   }
+  stopPointPickMode({ render: false });
   closeSkillModal();
   closePointModal();
   closeErrorModal();
@@ -5368,6 +5388,19 @@ function startErrorPickMode(scope = "our") {
   if (typeof renderBenchChips === "function") {
     renderBenchChips();
   }
+  renderPlayers();
+}
+function startPointPickMode(scope = "our") {
+  const players = getPlayersForScope(scope);
+  if (!players || players.length === 0) {
+    openPointModal();
+    return;
+  }
+  stopErrorPickMode({ render: false });
+  closeSkillModal();
+  closeErrorModal();
+  closePointModal();
+  pointPickModeState = { scope };
   renderPlayers();
 }
 function openErrorModalForPickedPlayer(scope, playerIdx, playerName) {
@@ -5378,6 +5411,10 @@ function openErrorModalForPickedPlayer(scope, playerIdx, playerName) {
     playerName,
     fromPicker: true
   });
+}
+function applyPointForPickedPlayer(scope, playerIdx, playerName) {
+  addPlayerPoint(playerIdx, playerName, scope);
+  stopPointPickMode();
 }
 function getBenchEntriesForScope(scope) {
   const players = getPlayersForScope(scope) || [];
@@ -6569,21 +6606,33 @@ function renderTeamCourtCards(options = {}) {
   const renderOrder = [3, 2, 1, 4, 5, 0];
   const map = displayCourt || court.map((slot, idx) => ({ slot, idx }));
   const errorPickModeActive = isErrorPickModeForScope(scope);
+  const pointPickModeActive = isPointPickModeForScope(scope);
   const benchHostSelector = `.error-pick-bench-host[data-team-scope="${scope}"]`;
+  const pointHostSelector = `.point-pick-host[data-team-scope="${scope}"]`;
   const parentBox = container.parentElement || null;
   if (parentBox) {
     parentBox.querySelectorAll(benchHostSelector).forEach(node => node.remove());
+    parentBox.querySelectorAll(pointHostSelector).forEach(node => node.remove());
   }
-  if (errorPickModeActive) {
+  if (errorPickModeActive || pointPickModeActive) {
     const toolbar = document.createElement("div");
     toolbar.className = "error-pick-toolbar";
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "player-skill-cancel error-pick-close";
     closeBtn.title = "Annulla";
-    closeBtn.setAttribute("aria-label", "Annulla selezione errore");
+    closeBtn.setAttribute(
+      "aria-label",
+      pointPickModeActive ? "Annulla selezione punto" : "Annulla selezione errore"
+    );
     closeBtn.textContent = "✕";
-    closeBtn.addEventListener("click", () => stopErrorPickMode());
+    closeBtn.addEventListener("click", () => {
+      if (pointPickModeActive) {
+        stopPointPickMode();
+      } else {
+        stopErrorPickMode();
+      }
+    });
     toolbar.appendChild(closeBtn);
     container.appendChild(toolbar);
   }
@@ -6701,7 +6750,19 @@ function renderTeamCourtCards(options = {}) {
         container.appendChild(card);
         return;
       }
-      if (errorPickModeActive) {
+      if (pointPickModeActive) {
+        const pointRow = document.createElement("div");
+        pointRow.className = "skill-row error-pick-row";
+        const pointBtn = document.createElement("button");
+        pointBtn.type = "button";
+        pointBtn.className = "event-btn success error-pick-btn";
+        pointBtn.textContent = "Punto";
+        pointBtn.addEventListener("click", () => {
+          applyPointForPickedPlayer(scope, playerIdx, activeName);
+        });
+        pointRow.appendChild(pointBtn);
+        card.appendChild(pointRow);
+      } else if (errorPickModeActive) {
         const errorRow = document.createElement("div");
         errorRow.className = "skill-row error-pick-row";
         const errorBtn = document.createElement("button");
@@ -6722,8 +6783,37 @@ function renderTeamCourtCards(options = {}) {
     }
     container.appendChild(card);
   });
-  if (!errorPickModeActive) return;
+  if (!errorPickModeActive && !pointPickModeActive) return;
   if (!parentBox) return;
+  if (pointPickModeActive) {
+    const pointHost = document.createElement("div");
+    pointHost.className = "point-pick-host";
+    pointHost.dataset.teamScope = scope;
+    const pointSection = document.createElement("div");
+    pointSection.className = "error-pick-bench";
+    const pointTitle = document.createElement("div");
+    pointTitle.className = "error-pick-bench-title";
+    pointTitle.textContent = "Punto";
+    pointSection.appendChild(pointTitle);
+    const teamPointBtn = document.createElement("button");
+    teamPointBtn.type = "button";
+    teamPointBtn.className = "error-choice-btn success";
+    teamPointBtn.textContent = "Assegna alla squadra";
+    teamPointBtn.addEventListener("click", () => {
+      handleTeamPoint(scope);
+      stopPointPickMode();
+    });
+    pointSection.appendChild(teamPointBtn);
+    pointHost.appendChild(pointSection);
+    const panel = parentBox.closest("[data-team-panel]");
+    const isFarPanel = !!(panel && panel.classList.contains("team-panel--far"));
+    if (isFarPanel) {
+      parentBox.insertBefore(pointHost, container);
+    } else {
+      parentBox.insertBefore(pointHost, container.nextSibling);
+    }
+    return;
+  }
   const benchHost = document.createElement("div");
   benchHost.className = "error-pick-bench-host";
   benchHost.dataset.teamScope = scope;
@@ -7411,6 +7501,10 @@ async function handleEventClick(
         playerName: serverName,
         skillId: "serve",
         code: serveCode,
+        videoTime:
+          state.videoScoutMode && typeof serveMetaToUse.videoTime === "number"
+            ? serveMetaToUse.videoTime
+            : null,
         teamScope: servingScope
       });
       serveEvent.derivedFromPassServe = true;
@@ -11180,14 +11274,9 @@ async function clearVideoBlobFromDb() {
 async function persistLocalVideo(file) {
   if (!file) return;
   try {
-    if ("caches" in window) {
-      const cache = await caches.open(LOCAL_VIDEO_CACHE);
-      await cache.put(
-        LOCAL_VIDEO_REQUEST,
-        new Response(file, { headers: { "Content-Type": file.type || "video/mp4" } })
-      );
-    }
-    await saveVideoBlobToDb(file);
+    // Non persistere più il blob completo del video: occupa troppo storage.
+    // Manteniamo solo la sessione corrente via objectURL.
+    await clearCachedLocalVideo();
   } catch (_) {
     // ignore cache errors
   }
@@ -11196,41 +11285,8 @@ async function restoreCachedLocalVideo() {
   if (!elAnalysisVideo && !elAnalysisVideoScout) return;
   if (state.video && state.video.youtubeId) return;
   try {
-    let blob = null;
-    if ("caches" in window) {
-      const cache = await caches.open(LOCAL_VIDEO_CACHE);
-      const match = await cache.match(LOCAL_VIDEO_REQUEST);
-      if (match) {
-        blob = await match.blob();
-      }
-    }
-    if (!blob) {
-      blob = await loadVideoBlobFromDb();
-    }
-    if (!blob) return;
-    if (videoObjectUrl) {
-      try {
-        URL.revokeObjectURL(videoObjectUrl);
-      } catch (_) {
-        // ignore
-      }
-    }
-    const url = URL.createObjectURL(blob);
-    videoObjectUrl = url;
-    if (elAnalysisVideo) {
-      elAnalysisVideo.src = url;
-      elAnalysisVideo.load();
-      applySavedPlaybackToVideo(elAnalysisVideo);
-    }
-    if (elAnalysisVideoScout) {
-      elAnalysisVideoScout.src = url;
-      elAnalysisVideoScout.load();
-      applySavedPlaybackToVideo(elAnalysisVideoScout);
-    }
-    if (state.video) {
-      state.video.fileName = state.video.fileName || "Video locale";
-    }
-    renderVideoAnalysis();
+    // Pulizia di eventuale storage legacy (vecchie versioni che salvavano i blob).
+    await clearCachedLocalVideo();
   } catch (_) {
     // ignore cache errors
   }
@@ -22072,7 +22128,7 @@ async function init() {
   if (elBtnScoreAgainstPlusModal) elBtnScoreAgainstPlusModal.addEventListener("click", () => handleManualScore("against", 1));
   if (elBtnScoreAgainstMinusModal) elBtnScoreAgainstMinusModal.addEventListener("click", () => handleManualScore("against", -1));
   if (elBtnScoreTeamPointModal) {
-    elBtnScoreTeamPointModal.addEventListener("click", openPointModal);
+    elBtnScoreTeamPointModal.addEventListener("click", () => startPointPickMode("our"));
   }
   if (elVideoFileInput) {
     elVideoFileInput.addEventListener("change", e => {
@@ -22208,7 +22264,7 @@ async function init() {
     elBtnScoreAgainstMinus.addEventListener("click", () => handleManualScore("against", -1));
   }
   if (elBtnScoreTeamPoint) {
-    elBtnScoreTeamPoint.addEventListener("click", openPointModal);
+    elBtnScoreTeamPoint.addEventListener("click", () => startPointPickMode("our"));
   }
   if (elBtnScoreOppError) {
     elBtnScoreOppError.addEventListener("click", handleOpponentErrorPoint);
@@ -22508,6 +22564,7 @@ async function init() {
   });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
+      stopPointPickMode();
       stopErrorPickMode();
       closeSkillModal();
       closeSettingsModal();

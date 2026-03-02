@@ -4,12 +4,18 @@ Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
+foto giocatrici
+roatazione avversario nella modalita singola
 crea stampa tipo foglio gara
+
+# Features teoricamente implementate
 i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiettoria
 
 # Bug funzionalità
-Cliccare il menu a tendina delle metriche dei grafici fa partire il rendering di tutti i grafici
+
+# bug in teoria risolti
 Da touch si cliccano i tasti sottostanti dagli overlay
+il libero non entra piu da solo a volte
 
 # Bug grafici
 Stampa battute non è ottimale

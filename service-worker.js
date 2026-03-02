@@ -85,6 +85,12 @@ self.addEventListener("fetch", event => {
   if (url.origin !== self.location.origin) {
     return;
   }
+  if (url.pathname === "/__local-video__") {
+    return;
+  }
+  if (request.destination === "video" || request.destination === "audio") {
+    return;
+  }
 
   // Statici: stale-while-revalidate per aggiornarsi senza perdere offline
   event.respondWith(
