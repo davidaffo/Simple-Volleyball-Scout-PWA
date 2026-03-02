@@ -8921,8 +8921,9 @@ function buildSetStartInfoList(setNumbers, scope) {
     return { setNum, positions, setterPos, subsIn };
   });
 }
-function renderAggSummaryHeader(thead, setNumbers) {
+function renderAggSummaryHeader(thead, setNumbers, options = {}) {
   if (!thead) return;
+  const includeOpponentErrors = !!options.includeOpponentErrors;
   thead.innerHTML = "";
   const rowTop = document.createElement("tr");
   const rowBottom = document.createElement("tr");
@@ -8952,7 +8953,7 @@ function renderAggSummaryHeader(thead, setNumbers) {
       rowBottom.appendChild(th);
     });
   }
-  addCell(rowTop, "Punti", { colspan: 4 });
+  addCell(rowTop, "Punti", { colspan: includeOpponentErrors ? 5 : 4 });
   addCell(rowTop, "Battuta", { colspan: 5, className: "skill-col skill-serve" });
   addCell(rowTop, "Ricezione", { colspan: 6, className: "skill-col skill-pass" });
   addCell(rowTop, "Attacco", { colspan: 6, className: "skill-col skill-attack" });
@@ -8963,6 +8964,9 @@ function renderAggSummaryHeader(thead, setNumbers) {
   addCell(rowBottom, "Subiti");
   addCell(rowBottom, "Δ");
   addCell(rowBottom, "Falli/Errori");
+  if (includeOpponentErrors) {
+    addCell(rowBottom, "Errori avv.");
+  }
 
   addCell(rowBottom, "Tot", { className: "skill-col skill-serve" });
   addCell(rowBottom, "Err", { className: "skill-col skill-serve" });
@@ -13137,6 +13141,32 @@ function computePlayerErrorsMap(events = state.events || []) {
     map[idx] = (map[idx] || 0) + Math.max(0, val);
   });
   return map;
+}
+function computeOpponentErrorsMap(events = state.events || []) {
+  const map = {};
+  (events || []).forEach(ev => {
+    if (!ev || ev.code !== "opp-error") return;
+    const rawIdx = ev.playerIdx;
+    const idx =
+      typeof rawIdx === "number"
+        ? rawIdx
+        : typeof rawIdx === "string" && rawIdx.trim() !== ""
+          ? parseInt(rawIdx, 10)
+          : null;
+    if (idx === null || isNaN(idx)) return;
+    const val = typeof ev.value === "number" ? ev.value : 1;
+    map[idx] = (map[idx] || 0) + Math.max(0, val);
+  });
+  return map;
+}
+function computeOpponentErrorsTotal(events = state.events || []) {
+  let total = 0;
+  (events || []).forEach(ev => {
+    if (!ev || ev.code !== "opp-error") return;
+    const val = typeof ev.value === "number" ? ev.value : 1;
+    total += Math.max(0, val);
+  });
+  return total;
 }
 function computePlayerPassAceMap(events = state.events || [], scope = "our") {
   const map = {};
@@ -17316,7 +17346,8 @@ function renderAggregatedTable() {
   const analysisScope = getAnalysisTeamScope();
   const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
-  const summaryColCount = 27 + playedSets.length;
+  const includeOpponentErrorsCol = !state.useOpponentTeam;
+  const summaryColCount = 27 + (includeOpponentErrorsCol ? 1 : 0) + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
     analysisTeamFilterState.teams.size === 0 &&
@@ -17338,7 +17369,7 @@ function renderAggregatedTable() {
     return;
   }
   if (thead) {
-    renderAggSummaryHeader(thead, playedSets);
+    renderAggSummaryHeader(thead, playedSets, { includeOpponentErrors: includeOpponentErrorsCol });
     bindSetStartHeaderClicks(thead);
     aggTableHeadCache = thead.innerHTML;
   }
@@ -17610,6 +17641,7 @@ function renderAggregatedTable() {
     }
     const playerPoints = computePlayerPointsMap(summaryEvents, scope);
     const playerErrors = computePlayerErrorsMap(summaryEvents);
+    const playerOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsMap(summaryEvents) : {};
     const playerPassAces = computePlayerPassAceMap(summaryEvents, scope);
     const totalsBySkill = {
       serve: emptyCounts(),
@@ -17643,6 +17675,7 @@ function renderAggregatedTable() {
 
       const points = playerPoints[idx] || { for: 0, against: 0 };
       const personalErrors = playerErrors[idx] || 0;
+      const opponentErrors = includeOpponentErrorsCol ? playerOpponentErrors[idx] || 0 : 0;
       const passAces = playerPassAces[idx] || 0;
       totalErrors += personalErrors;
       totalPassAces += passAces;
@@ -17677,6 +17710,7 @@ function renderAggregatedTable() {
         { text: points.against || 0 },
         { text: formatDelta((points.for || 0) - (points.against || 0)) },
         { text: personalErrors || 0 },
+        ...(includeOpponentErrorsCol ? [{ text: opponentErrors > 0 ? opponentErrors : "-" }] : []),
 
         { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
         { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
@@ -17730,6 +17764,7 @@ function renderAggregatedTable() {
       elAggTableBody.appendChild(row);
     });
     const teamTotals = computeTeamTotalsForEvents(summaryEvents, scope);
+    const teamOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(summaryEvents) : 0;
     const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
     const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
@@ -17749,6 +17784,7 @@ function renderAggregatedTable() {
       { text: teamTotals.totalAgainst || 0 },
       { text: formatDelta((teamTotals.totalFor || 0) - (teamTotals.totalAgainst || 0)) },
       { text: teamTotals.totalErrors || 0 },
+      ...(includeOpponentErrorsCol ? [{ text: teamOpponentErrors || 0 }] : []),
 
       { text: totalFromCounts(totalsBySkill.serve), className: "skill-col skill-serve" },
       { text: totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
@@ -17787,6 +17823,7 @@ function renderAggregatedTable() {
     playedSets.forEach(setNum => {
       const setEvents = summaryEvents.filter(ev => normalizeSetNumber(ev.set) === setNum);
       const setTotals = computeTeamTotalsForEvents(setEvents, scope);
+      const setOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(setEvents) : 0;
       const setServeMetrics = computeMetrics(setTotals.totalsBySkill.serve, "serve");
       const setPassMetrics = computeMetrics(setTotals.totalsBySkill.pass, "pass");
       const setAttackMetrics = computeMetrics(setTotals.totalsBySkill.attack, "attack");
@@ -17810,6 +17847,7 @@ function renderAggregatedTable() {
         { text: setTotals.totalAgainst || 0 },
         { text: formatDelta((setTotals.totalFor || 0) - (setTotals.totalAgainst || 0)) },
         { text: setTotals.totalErrors || 0 },
+        ...(includeOpponentErrorsCol ? [{ text: setOpponentErrors || 0 }] : []),
 
         { text: totalFromCounts(setTotals.totalsBySkill.serve), className: "skill-col skill-serve" },
         { text: setTotals.totalsBySkill.serve["="] || 0, className: "skill-col skill-serve" },
