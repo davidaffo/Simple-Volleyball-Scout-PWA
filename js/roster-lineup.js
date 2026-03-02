@@ -2863,6 +2863,15 @@ function loadSelectedMatch() {
     }
     state.selectedMatch = "";
     resetMatchState();
+    // Hard reset del set per evitare trascinamenti da match precedenti.
+    state.setResults = {};
+    state.setStarts = {};
+    if (typeof setCurrentSet === "function") {
+      setCurrentSet(1, { save: false });
+    } else {
+      state.currentSet = 1;
+      if (typeof syncCurrentSetUI === "function") syncCurrentSetUI(1);
+    }
     state.selectedMatch = generateMatchName();
     persistCurrentMatch({ allowCreate: true });
     if (typeof syncMatchInfoInputs === "function") {

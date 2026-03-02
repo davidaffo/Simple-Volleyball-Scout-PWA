@@ -5092,6 +5092,9 @@ body[data-theme="light"] .rotation-table td {
   min-height: 200px;
   max-height: 320px;
 }
+.video-player-wrap--scout video {
+  object-fit: contain;
+}
 .video-skills {
   display: flex;
   flex-direction: column;
@@ -5243,7 +5246,7 @@ body[data-theme="light"] .rotation-table td {
   border: none;
   min-height: 320px;
   aspect-ratio: 16 / 9;
-  object-fit: cover;
+  object-fit: contain;
 }
 .youtube-frame {
   display: none;
