@@ -1323,48 +1323,70 @@ function updateSetScoreDisplays() {
   if (elLiveSetScore) elLiveSetScore.textContent = label;
   if (elAggSetScore) elAggSetScore.textContent = label;
 }
+function getDerivedServeForSetStart(setNum) {
+  const targetSet = Math.min(5, Math.max(1, parseInt(setNum, 10) || 1));
+  const setStarts = state.setStarts || {};
+  const existing = setStarts[targetSet];
+  if (existing && typeof existing.isServing === "boolean") {
+    return !!existing.isServing;
+  }
+  for (let prevSet = targetSet - 1; prevSet >= 1; prevSet -= 1) {
+    const prevEntry = setStarts[prevSet];
+    if (prevEntry && typeof prevEntry.isServing === "boolean") {
+      const distance = targetSet - prevSet;
+      return distance % 2 === 0 ? !!prevEntry.isServing : !prevEntry.isServing;
+    }
+  }
+  return targetSet <= 1 ? !!state.isServing : !state.isServing;
+}
 function buildNextSetDraft(setNum) {
   const nextSet = Math.min(5, Math.max(1, setNum || 1));
   const useDefaults = nextSet === 1;
   const defaultsOur = useDefaults ? getDefaultSetStartForScope("our") : null;
   const defaultsOpp = useDefaults ? getDefaultSetStartForScope("opponent") : null;
+  const savedStart = state.setStarts && state.setStarts[nextSet] ? state.setStarts[nextSet] : null;
+  const savedOur = savedStart && savedStart.our ? savedStart.our : null;
+  const savedOpp = savedStart && savedStart.opponent ? savedStart.opponent : null;
   const baseOurCourt =
-    defaultsOur && defaultsOur.court
+    savedOur && savedOur.court
+      ? cloneCourt(savedOur.court)
+      : defaultsOur && defaultsOur.court
       ? cloneCourt(defaultsOur.court)
       : typeof removeLiberosAndRestoreForScope === "function"
         ? removeLiberosAndRestoreForScope(state.court || [], "our")
         : cloneCourt(state.court || []);
   const baseOppCourt =
-    defaultsOpp && defaultsOpp.court
+    savedOpp && savedOpp.court
+      ? cloneCourt(savedOpp.court)
+      : defaultsOpp && defaultsOpp.court
       ? cloneCourt(defaultsOpp.court)
       : typeof removeLiberosAndRestoreForScope === "function"
         ? removeLiberosAndRestoreForScope(state.opponentCourt || [], "opponent")
         : cloneCourt(state.opponentCourt || []);
   const our = {
     court: cloneCourt(baseOurCourt),
-    rotation: defaultsOur && defaultsOur.rotation ? defaultsOur.rotation : state.rotation || 1
+    rotation:
+      savedOur && typeof savedOur.rotation === "number"
+        ? savedOur.rotation
+        : defaultsOur && defaultsOur.rotation
+          ? defaultsOur.rotation
+          : state.rotation || 1
   };
   const opponent = {
     court: cloneCourt(baseOppCourt),
-    rotation: defaultsOpp && defaultsOpp.rotation ? defaultsOpp.rotation : state.opponentRotation || 1
+    rotation:
+      savedOpp && typeof savedOpp.rotation === "number"
+        ? savedOpp.rotation
+        : defaultsOpp && defaultsOpp.rotation
+          ? defaultsOpp.rotation
+          : state.opponentRotation || 1
   };
-  const serveDefault = (() => {
-    if (nextSet <= 1) return !!state.isServing;
-    const prevSetStart = state.setStarts && state.setStarts[nextSet - 1];
-    if (prevSetStart && typeof prevSetStart.isServing === "boolean") {
-      return !prevSetStart.isServing;
-    }
-    const firstSetStart = state.setStarts && state.setStarts[1];
-    if (firstSetStart && typeof firstSetStart.isServing === "boolean") {
-      return nextSet % 2 === 1 ? !!firstSetStart.isServing : !firstSetStart.isServing;
-    }
-    return !state.isServing;
-  })();
+  const serveDefault = getDerivedServeForSetStart(nextSet);
   return {
     setNum: nextSet,
     our,
     opponent,
-    swapCourt: nextSet > 1 ? !state.courtSideSwapped : false,
+    swapCourt: savedStart ? !!savedStart.swapCourt : nextSet > 1 ? !state.courtSideSwapped : false,
     isServing: serveDefault
   };
 }
@@ -3945,22 +3967,69 @@ const BASE_KEY_MAP = {
   "7": "K7",
   F: "KF"
 };
-let baseModalTargetEvent = null;
-let setterModalTargetEvent = null;
+let baseModalTargetEvents = [];
+let setterModalTargetEvents = [];
 const ATTACK_TYPE_KEY_MAP = {
   R: "Regolare",
   P: "Pallonetto",
   Z: "Piazzata",
   S: "Spinta"
 };
-let attackTypeModalTargetEvent = null;
+let attackTypeModalTargetEvents = [];
 const BLOCK_NUMBER_KEY_MAP = {
   "0": 0,
   "1": 1,
   "2": 2,
   "3": 3
 };
-let blockNumberModalTargetEvent = null;
+let blockNumberModalTargetEvents = [];
+function getSelectedVideoAttackEvents() {
+  if (!(document && document.body && document.body.dataset.activeTab === "video")) return [];
+  const rows = getSelectedRows("video");
+  return rows
+    .map(row => row.ev)
+    .filter(ev => ev && ev.skillId === "attack");
+}
+function getAttackShortcutTargetEvents() {
+  const videoEvents = getSelectedVideoAttackEvents();
+  if (videoEvents.length) return videoEvents;
+  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
+  if (activeTab === "scout") {
+    const ev = getLastAttackEventForScope();
+    return ev ? [ev] : [];
+  }
+  return [];
+}
+function applyAttackFieldToEvents(events, updater, { shouldRecalc = true } = {}) {
+  const targetEvents = Array.isArray(events) ? events.filter(Boolean) : [];
+  if (!targetEvents.length || typeof updater !== "function") return false;
+  if (targetEvents.length > 1 || (document && document.body && document.body.dataset.activeTab === "video")) {
+    pushVideoUndoSnapshot(true);
+  }
+  targetEvents.forEach(ev => updater(ev));
+  if (document && document.body && document.body.dataset.activeTab === "video") {
+    refreshAfterVideoEdit(shouldRecalc);
+    renderEventsLog({ suppressScroll: true });
+    renderVideoAnalysis();
+    updateVideoAnalysisOverlay();
+  } else {
+    saveState({ persistLocal: true });
+    if (shouldRecalc) {
+      invalidateAnalysisCaches();
+      recalcAllStatsAndUpdateUI();
+    }
+    renderEventsLog({ suppressScroll: true });
+    if (document && document.body && document.body.dataset.activeTab === "video") {
+      renderVideoAnalysis();
+    }
+  }
+  return true;
+}
+function getSetterShortcutScope(events) {
+  const scopes = new Set((events || []).map(ev => getTeamScopeFromEvent(ev)));
+  if (scopes.size !== 1) return null;
+  return Array.from(scopes)[0] || null;
+}
 function openMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.remove("hidden");
@@ -3985,27 +4054,21 @@ function getLastAttackEventForScope(scope) {
   return null;
 }
 function applyBaseToTarget(baseValue) {
-  if (!baseModalTargetEvent) return;
-  baseModalTargetEvent.base = baseValue || null;
-  saveState({ persistLocal: true });
-  recalcAllStatsAndUpdateUI();
-  renderEventsLog({ suppressScroll: true });
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab === "video") {
-    renderVideoAnalysis();
-  }
+  const targetEvents = baseModalTargetEvents || [];
+  if (!targetEvents.length) return;
+  applyAttackFieldToEvents(targetEvents, ev => {
+    ev.base = baseValue || null;
+  });
   closeBaseModal();
 }
 function openBaseModal() {
   if (!elBaseModal) return;
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab !== "scout") return;
-  const ev = getLastAttackEventForScope();
-  if (!ev) {
-    alert("Nessun attacco recente per assegnare la base.");
+  const targetEvents = getAttackShortcutTargetEvents();
+  if (!targetEvents.length) {
+    alert("Seleziona uno o più attacchi per assegnare la base.");
     return;
   }
-  baseModalTargetEvent = ev;
+  baseModalTargetEvents = targetEvents;
   elBaseModal.classList.remove("hidden");
   setGlobalModalState(true);
 }
@@ -4013,7 +4076,7 @@ function closeBaseModal() {
   if (!elBaseModal) return;
   elBaseModal.classList.add("hidden");
   setGlobalModalState(false);
-  baseModalTargetEvent = null;
+  baseModalTargetEvents = [];
 }
 function renderSetterModalOptions(scope, setterIdx) {
   if (!elAttackSetterModalGrid) return;
@@ -4057,36 +4120,37 @@ function renderSetterModalOptions(scope, setterIdx) {
   emptyBtn.addEventListener("click", () => applySetterToTarget(null));
 }
 function applySetterToTarget(setterIdx) {
-  if (!setterModalTargetEvent) return;
-  const scope = getTeamScopeFromEvent(setterModalTargetEvent);
+  const targetEvents = setterModalTargetEvents || [];
+  if (!targetEvents.length) return;
+  const scope = getSetterShortcutScope(targetEvents);
+  if (!scope) return;
   const players = getPlayersForScope(scope) || [];
-  if (setterIdx === null || typeof setterIdx !== "number" || !players[setterIdx]) {
-    setterModalTargetEvent.setterIdx = null;
-    setterModalTargetEvent.setterName = null;
-  } else {
-    setterModalTargetEvent.setterIdx = setterIdx;
-    setterModalTargetEvent.setterName = players[setterIdx];
-  }
-  saveState({ persistLocal: true });
-  invalidateAnalysisCaches();
-  recalcAllStatsAndUpdateUI();
-  renderEventsLog({ suppressScroll: true });
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab === "video") renderVideoAnalysis();
+  applyAttackFieldToEvents(targetEvents, ev => {
+    if (setterIdx === null || typeof setterIdx !== "number" || !players[setterIdx]) {
+      ev.setterIdx = null;
+      ev.setterName = null;
+    } else {
+      ev.setterIdx = setterIdx;
+      ev.setterName = players[setterIdx];
+    }
+  });
   closeAttackSetterModal();
 }
 function openAttackSetterModal() {
   if (!elAttackSetterModal) return;
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab !== "scout") return;
-  const ev = getLastAttackEventForScope();
-  if (!ev) {
-    alert("Nessun attacco recente per assegnare l'alzatrice.");
+  const targetEvents = getAttackShortcutTargetEvents();
+  if (!targetEvents.length) {
+    alert("Seleziona uno o più attacchi per assegnare l'alzatrice.");
     return;
   }
-  setterModalTargetEvent = ev;
-  const scope = getTeamScopeFromEvent(ev);
-  const setterIdx = typeof ev.setterIdx === "number" ? ev.setterIdx : null;
+  const scope = getSetterShortcutScope(targetEvents);
+  if (!scope) {
+    alert("Per assegnare l'alzatrice seleziona attacchi della stessa squadra.");
+    return;
+  }
+  setterModalTargetEvents = targetEvents;
+  const seed = targetEvents[0];
+  const setterIdx = typeof seed.setterIdx === "number" ? seed.setterIdx : null;
   renderSetterModalOptions(scope, setterIdx);
   elAttackSetterModal.classList.remove("hidden");
   setGlobalModalState(true);
@@ -4095,27 +4159,24 @@ function closeAttackSetterModal() {
   if (!elAttackSetterModal) return;
   elAttackSetterModal.classList.add("hidden");
   setGlobalModalState(false);
-  setterModalTargetEvent = null;
+  setterModalTargetEvents = [];
 }
 function applyAttackTypeToTarget(value) {
-  if (!attackTypeModalTargetEvent) return;
-  attackTypeModalTargetEvent.attackType = value || null;
-  saveState({ persistLocal: true });
-  renderEventsLog({ suppressScroll: true });
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab === "video") renderVideoAnalysis();
+  const targetEvents = attackTypeModalTargetEvents || [];
+  if (!targetEvents.length) return;
+  applyAttackFieldToEvents(targetEvents, ev => {
+    ev.attackType = value || null;
+  }, { shouldRecalc: false });
   closeAttackTypeModal();
 }
 function openAttackTypeModal() {
   if (!elAttackTypeModal) return;
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab !== "scout") return;
-  const ev = getLastAttackEventForScope();
-  if (!ev) {
-    alert("Nessun attacco recente per assegnare il tipo.");
+  const targetEvents = getAttackShortcutTargetEvents();
+  if (!targetEvents.length) {
+    alert("Seleziona uno o più attacchi per assegnare il tipo.");
     return;
   }
-  attackTypeModalTargetEvent = ev;
+  attackTypeModalTargetEvents = targetEvents;
   elAttackTypeModal.classList.remove("hidden");
   setGlobalModalState(true);
 }
@@ -4123,27 +4184,24 @@ function closeAttackTypeModal() {
   if (!elAttackTypeModal) return;
   elAttackTypeModal.classList.add("hidden");
   setGlobalModalState(false);
-  attackTypeModalTargetEvent = null;
+  attackTypeModalTargetEvents = [];
 }
 function applyBlockNumberToTarget(value) {
-  if (!blockNumberModalTargetEvent) return;
-  blockNumberModalTargetEvent.blockNumber = typeof value === "number" ? value : null;
-  saveState({ persistLocal: true });
-  renderEventsLog({ suppressScroll: true });
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab === "video") renderVideoAnalysis();
+  const targetEvents = blockNumberModalTargetEvents || [];
+  if (!targetEvents.length) return;
+  applyAttackFieldToEvents(targetEvents, ev => {
+    ev.blockNumber = typeof value === "number" ? value : null;
+  }, { shouldRecalc: false });
   closeBlockNumberModal();
 }
 function openBlockNumberModal() {
   if (!elBlockNumberModal) return;
-  const activeTab = document && document.body ? document.body.dataset.activeTab : "";
-  if (activeTab !== "scout") return;
-  const ev = getLastAttackEventForScope();
-  if (!ev) {
-    alert("Nessun attacco recente per assegnare il muro.");
+  const targetEvents = getAttackShortcutTargetEvents();
+  if (!targetEvents.length) {
+    alert("Seleziona uno o più attacchi per assegnare il muro.");
     return;
   }
-  blockNumberModalTargetEvent = ev;
+  blockNumberModalTargetEvents = targetEvents;
   elBlockNumberModal.classList.remove("hidden");
   setGlobalModalState(true);
 }
@@ -4151,7 +4209,7 @@ function closeBlockNumberModal() {
   if (!elBlockNumberModal) return;
   elBlockNumberModal.classList.add("hidden");
   setGlobalModalState(false);
-  blockNumberModalTargetEvent = null;
+  blockNumberModalTargetEvents = [];
 }
 function buildPlayersDbUsage(teamsMap) {
   const usage = {};
@@ -7908,6 +7966,16 @@ function isAggSubtabVisible(tabId) {
 function getSkillChartMetricMeta(metricId) {
   return SKILL_CHART_METRICS.find(m => m.id === metricId) || SKILL_CHART_METRICS[0];
 }
+function getSkillChartEventPlayerLabel(ev) {
+  if (!ev) return "";
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope) || [];
+  const numbers = getPlayerNumbersForScope(scope);
+  const idx = resolvePlayerIdx(ev);
+  const name = ev.playerName || (typeof idx === "number" ? players[idx] : "") || "";
+  if (!name) return "";
+  return formatNameWithNumberFor(name, numbers) || name;
+}
 function ensureSkillChartsUiState() {
   if (!state.uiSkillCharts || typeof state.uiSkillCharts !== "object") {
     state.uiSkillCharts = {
@@ -8132,7 +8200,8 @@ function buildSkillMetricSeries(events, skillId, metricId) {
       set: normalizeSetNumber(ev.set),
       rotation: ev.rotation || null,
       eventIndex: idx,
-      labelValue
+      labelValue,
+      playerLabel: getSkillChartEventPlayerLabel(ev)
     });
   });
   return series;
@@ -8325,7 +8394,12 @@ function attachSkillChartHover(svgWrap, series, metricMeta) {
         `<div class="skill-chart-tooltip__row small">Partita ${best.point.x} · ${best.point.matchLabel || "-"}` +
         `${best.point.matchEventsCount ? ` · ${best.point.matchEventsCount} eventi` : ""}</div>`;
     } else {
-      tooltip.innerHTML = `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div><div class="skill-chart-tooltip__row small">Set ${best.point.set || "-"} · Evento ${best.point.x}${best.point.rotation ? ` · P${best.point.rotation}` : ""}</div>`;
+      tooltip.innerHTML =
+        `<div class="skill-chart-tooltip__row"><strong>${best.point.labelValue}</strong> <span class="skill-chart-tooltip__code">${best.point.code}</span></div>` +
+        (best.point.playerLabel
+          ? `<div class="skill-chart-tooltip__row small">${best.point.playerLabel}</div>`
+          : "") +
+        `<div class="skill-chart-tooltip__row small">Set ${best.point.set || "-"} · Evento ${best.point.x}${best.point.rotation ? ` · P${best.point.rotation}` : ""}</div>`;
     }
     tooltip.classList.remove("hidden");
     const tooltipRect = tooltip.getBoundingClientRect();
@@ -14615,6 +14689,18 @@ function handleSetTypeHotkeys(e) {
   };
   const choice = keyMap[e.key];
   if (!choice) return;
+  const videoAttackEvents = getSelectedVideoAttackEvents();
+  if (videoAttackEvents.length) {
+    e.preventDefault();
+    applyAttackFieldToEvents(videoAttackEvents, ev => {
+      ev.setType = choice;
+    });
+    return;
+  }
+  if (document && document.body && document.body.dataset.activeTab === "video") {
+    e.preventDefault();
+    return;
+  }
   e.preventDefault();
   queuedSetTypeChoice = choice;
   setNextSetType(choice);
