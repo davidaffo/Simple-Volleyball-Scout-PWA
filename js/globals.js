@@ -179,6 +179,10 @@ let state = {
     analysisHeight: 320,
     scoutHeight: 320
   },
+  uiVideoAnalysisSort: {
+    key: "",
+    dir: ""
+  },
   uiTopBarHidden: false
 };
 function canUseShare() {

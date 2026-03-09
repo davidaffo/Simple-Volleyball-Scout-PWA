@@ -5413,6 +5413,13 @@ body[data-theme="light"] .rotation-table td {
   border-bottom: 1px solid #1f2937;
   vertical-align: middle;
 }
+.video-skills-table th.video-sortable-header {
+  cursor: pointer;
+  user-select: none;
+}
+.video-skills-table th.video-sortable-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
 .video-skills-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.04);
 }

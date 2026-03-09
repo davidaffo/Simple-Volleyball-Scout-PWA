@@ -1,21 +1,25 @@
-importScripts("./js/app-version.js");
+const APP_CACHE_VERSION = "v318-a55358a";
+const withVersion = asset => `${asset}?v=${encodeURIComponent(APP_CACHE_VERSION || "dev")}`;
+
+importScripts(withVersion("./js/app-version.js"));
 const CACHE_VERSION =
   (self.__APP_VERSION__ && self.__APP_VERSION__.cacheVersion) || "dev";
 const CACHE_NAME = `volley-scout-cache-${CACHE_VERSION}`;
 const ASSETS = [
   "./",
   "./index.html",
-  "./style.css",
+  withVersion("./style.css"),
   "./version.json",
-  "./js/app-version.js",
-  "./js/globals.js",
-  "./js/shared/lineup-core.js",
-  "./js/shared/auto-role.js",
-  "./js/shared/roster-manager.js",
-  "./js/match-settings.js",
-  "./js/opponent-settings.js",
-  "./js/roster-lineup.js",
-  "./js/scout-ui.js",
+  withVersion("./js/app-version.js"),
+  withVersion("./js/globals.js"),
+  withVersion("./js/shared/team-ui.js"),
+  withVersion("./js/shared/lineup-core.js"),
+  withVersion("./js/shared/auto-role.js"),
+  withVersion("./js/shared/roster-manager.js"),
+  withVersion("./js/match-settings.js"),
+  withVersion("./js/opponent-settings.js"),
+  withVersion("./js/roster-lineup.js"),
+  withVersion("./js/scout-ui.js"),
   "./images/trajectory/attack_empty_near.png",
   "./images/trajectory/attack_empty_far.png",
   "./images/trajectory/attack_2_near.png",
@@ -24,11 +28,30 @@ const ASSETS = [
   "./images/trajectory/attack_2_far.png",
   "./images/trajectory/attack_3_far.png",
   "./images/trajectory/attack_4_far.png",
-  "./manifest.json",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/icon-1024.png"
+  withVersion("./manifest.json"),
+  withVersion("./icons/icon-192.png"),
+  withVersion("./icons/icon-512.png"),
+  withVersion("./icons/icon-1024.png")
 ];
+const NETWORK_FIRST_PATHS = new Set([
+  "/",
+  "/index.html",
+  "/style.css",
+  "/manifest.json",
+  "/js/app-version.js",
+  "/js/globals.js",
+  "/js/shared/team-ui.js",
+  "/js/shared/lineup-core.js",
+  "/js/shared/auto-role.js",
+  "/js/shared/roster-manager.js",
+  "/js/match-settings.js",
+  "/js/opponent-settings.js",
+  "/js/roster-lineup.js",
+  "/js/scout-ui.js",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-1024.png"
+]);
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -89,6 +112,18 @@ self.addEventListener("fetch", event => {
     return;
   }
   if (request.destination === "video" || request.destination === "audio") {
+    return;
+  }
+  if (NETWORK_FIRST_PATHS.has(url.pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
     return;
   }
 

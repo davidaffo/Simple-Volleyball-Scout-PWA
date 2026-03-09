@@ -7,6 +7,8 @@ const packagePath = resolve(root, "package.json");
 const versionConfigPath = resolve(root, "version.config.json");
 const versionJsonPath = resolve(root, "version.json");
 const appVersionJsPath = resolve(root, "js/app-version.js");
+const indexHtmlPath = resolve(root, "index.html");
+const serviceWorkerPath = resolve(root, "service-worker.js");
 
 function runGit(cmd, fallback = "") {
   try {
@@ -60,9 +62,38 @@ const appVersionJs = `(function attachAppVersion(root) {
 
 const changedJson = writeIfChanged(versionJsonPath, versionJson);
 const changedJs = writeIfChanged(appVersionJsPath, appVersionJs);
+let changedIndex = false;
+let changedSw = false;
+
+if (existsSync(indexHtmlPath)) {
+  const prevIndex = readFileSync(indexHtmlPath, "utf8");
+  let nextIndex = prevIndex.replace(
+    /window\.__APP_CACHE_VERSION__ = ".*?";/,
+    `window.__APP_CACHE_VERSION__ = "${cacheVersion}";`
+  );
+  nextIndex = nextIndex.replace(/\?v=[^"'`\s>]+/g, `?v=${cacheVersion}`);
+  if (nextIndex !== prevIndex) {
+    writeFileSync(indexHtmlPath, nextIndex, "utf8");
+    changedIndex = true;
+  }
+}
+
+if (existsSync(serviceWorkerPath)) {
+  const prevSw = readFileSync(serviceWorkerPath, "utf8");
+  const nextSw = prevSw.replace(
+    /const APP_CACHE_VERSION = ".*?";/,
+    `const APP_CACHE_VERSION = "${cacheVersion}";`
+  );
+  if (nextSw !== prevSw) {
+    writeFileSync(serviceWorkerPath, nextSw, "utf8");
+    changedSw = true;
+  }
+}
 
 const changed = [];
 if (changedJson) changed.push("version.json");
 if (changedJs) changed.push("js/app-version.js");
+if (changedIndex) changed.push("index.html");
+if (changedSw) changed.push("service-worker.js");
 const suffix = changed.length ? ` updated: ${changed.join(", ")}` : " no changes";
 console.log(`[version-sync] ${version}${suffix}`);

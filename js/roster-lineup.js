@@ -2528,6 +2528,13 @@ function loadMatchFromStorage(name) {
     return null;
   }
 }
+function getMatchPayloadTimestamp(payload) {
+  if (!payload || typeof payload !== "object") return 0;
+  const stateTs = Number(payload.state && payload.state.lastSavedAt);
+  if (Number.isFinite(stateTs) && stateTs > 0) return stateTs;
+  const savedAt = Date.parse(payload.savedAt || payload.exportedAt || "");
+  return Number.isFinite(savedAt) ? savedAt : 0;
+}
 function saveMatchToStorage(name, data) {
   if (!name) return;
   try {
@@ -2545,10 +2552,17 @@ function deleteMatchFromStorage(name) {
   }
 }
 function loadMatchesMapFromStorage() {
-  const map = {};
+  const map =
+    state && state.savedMatches && typeof state.savedMatches === "object"
+      ? JSON.parse(JSON.stringify(state.savedMatches))
+      : {};
   listMatchesFromStorage().forEach(name => {
     const data = loadMatchFromStorage(name);
-    if (data) map[name] = data;
+    if (!data) return;
+    const existing = map[name];
+    if (!existing || getMatchPayloadTimestamp(data) >= getMatchPayloadTimestamp(existing)) {
+      map[name] = data;
+    }
   });
   return map;
 }

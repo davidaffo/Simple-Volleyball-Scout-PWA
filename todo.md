@@ -4,8 +4,7 @@ Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
-Aggiungi grafico punteggio set, con informazioni aggiuntive
-Aggiungi tasti scorciatoie rete anche su analisi video, per la skill selezionata o per le skill selezionate
+Aggiungere analisi attacco per tipo di attacco
 aggiungere modalita comparazione tra giocatrici
 foto giocatrici
 roatazione avversario nella modalita singola
