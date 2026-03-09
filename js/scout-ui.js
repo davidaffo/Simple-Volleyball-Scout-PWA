@@ -253,6 +253,15 @@ let analysisEventsCache = null;
 let analysisEventsCacheKey = "";
 let analysisEventsCacheRevision = 0;
 let serveTrajectoryScope = null;
+const VIDEO_LAYOUT_DEFAULTS = {
+  analysisHeight: 320,
+  scoutHeight: 320
+};
+const VIDEO_LAYOUT_LIMITS = {
+  analysisHeight: { min: 220, max: 1200 },
+  scoutHeight: { min: 200, max: 1200 }
+};
+let activeVideoResizeSession = null;
 function applyTopBarVisibility() {
   const hidden = !!state.uiTopBarHidden;
   document.body.classList.toggle("top-bar-hidden", hidden);
@@ -262,6 +271,95 @@ function applyTopBarVisibility() {
     elBtnToggleTopbar.setAttribute("aria-label", hidden ? "Mostra barra" : "Nascondi barra");
     elBtnToggleTopbar.setAttribute("aria-pressed", hidden ? "true" : "false");
   }
+}
+function ensureVideoLayoutState() {
+  const current = state.uiVideoLayout && typeof state.uiVideoLayout === "object" ? state.uiVideoLayout : {};
+  state.uiVideoLayout = {
+    analysisHeight:
+      Number.isFinite(current.analysisHeight) && current.analysisHeight > 0
+        ? current.analysisHeight
+        : Number.isFinite(current.analysisWidth) && current.analysisWidth > 0
+          ? current.analysisWidth
+          : VIDEO_LAYOUT_DEFAULTS.analysisHeight,
+    scoutHeight:
+      Number.isFinite(current.scoutHeight) && current.scoutHeight > 0
+        ? current.scoutHeight
+        : Number.isFinite(current.scoutWidth) && current.scoutWidth > 0
+          ? current.scoutWidth
+          : VIDEO_LAYOUT_DEFAULTS.scoutHeight
+  };
+  return state.uiVideoLayout;
+}
+function clampVideoLayoutSize(kind, size) {
+  const limits = VIDEO_LAYOUT_LIMITS[kind] || VIDEO_LAYOUT_LIMITS.analysisHeight;
+  const viewportMax = Math.max(limits.min, window.innerHeight - 140);
+  const hardMax = Math.max(limits.min, Math.min(limits.max, viewportMax));
+  return Math.max(limits.min, Math.min(hardMax, Math.round(size)));
+}
+function applyVideoLayoutWidths() {
+  ensureVideoLayoutState();
+  const root = document.documentElement;
+  root.style.setProperty(
+    "--video-panel-height",
+    `${clampVideoLayoutSize("analysisHeight", state.uiVideoLayout.analysisHeight)}px`
+  );
+  root.style.setProperty(
+    "--video-scout-height",
+    `${clampVideoLayoutSize("scoutHeight", state.uiVideoLayout.scoutHeight)}px`
+  );
+}
+function setVideoLayoutWidth(kind, width, persist = true) {
+  ensureVideoLayoutState();
+  state.uiVideoLayout[kind] = clampVideoLayoutSize(kind, width);
+  applyVideoLayoutWidths();
+  if (persist) {
+    saveState({ persistLocal: true });
+  }
+}
+function stopVideoResizeDrag() {
+  if (!activeVideoResizeSession) return;
+  document.body.classList.remove("video-panel-resizing");
+  window.removeEventListener("pointermove", activeVideoResizeSession.onMove);
+  window.removeEventListener("pointerup", activeVideoResizeSession.onUp);
+  window.removeEventListener("pointercancel", activeVideoResizeSession.onUp);
+  const { kind, currentSize } = activeVideoResizeSession;
+  activeVideoResizeSession = null;
+  setVideoLayoutWidth(kind, currentSize, true);
+}
+function startVideoResizeDrag(event, kind) {
+  if (window.matchMedia("(max-width: 900px)").matches) return;
+  if (event.cancelable) event.preventDefault();
+  ensureVideoLayoutState();
+  const startY = event.clientY;
+  const startSize = clampVideoLayoutSize(kind, state.uiVideoLayout[kind]);
+  const onMove = moveEvent => {
+    const delta = moveEvent.clientY - startY;
+    const nextSize = clampVideoLayoutSize(kind, startSize + delta);
+    if (!activeVideoResizeSession) return;
+    activeVideoResizeSession.currentSize = nextSize;
+    state.uiVideoLayout[kind] = nextSize;
+    applyVideoLayoutWidths();
+  };
+  const onUp = () => stopVideoResizeDrag();
+  activeVideoResizeSession = {
+    kind,
+    currentSize: startSize,
+    onMove,
+    onUp
+  };
+  document.body.classList.add("video-panel-resizing");
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
+function bindVideoResizeHandle(handle, kind) {
+  if (!handle || handle.dataset.resizeBound === "true") return;
+  handle.dataset.resizeBound = "true";
+  handle.addEventListener("pointerdown", event => startVideoResizeDrag(event, kind));
+  handle.addEventListener("dblclick", event => {
+    if (event.cancelable) event.preventDefault();
+    setVideoLayoutWidth(kind, VIDEO_LAYOUT_DEFAULTS[kind], true);
+  });
 }
 function getAttackMetaForPlayer(scope, playerIdx) {
   const scopedKey = scope + ":" + playerIdx;
@@ -395,6 +493,8 @@ const elVideoFilterPresetSave = document.getElementById("video-filter-preset-sav
 const elVideoFilterPresetsList = document.getElementById("video-filter-presets-list");
 const elBtnFixVideoScore = document.getElementById("btn-fix-video-score");
 const elBtnVideoAddEvent = document.getElementById("btn-video-add-event");
+const elVideoAnalysisResizeHandle = document.getElementById("video-analysis-resize-handle");
+const elVideoScoutResizeHandle = document.getElementById("video-scout-resize-handle");
 const elVideoScoreModal = document.getElementById("video-score-modal");
 const elVideoScoreClose = document.getElementById("video-score-close");
 const elVideoScoreCancel = document.getElementById("video-score-cancel");
@@ -20577,6 +20677,7 @@ async function init() {
   if (!loadedFromIndexedDb) {
     loadState();
   }
+  applyVideoLayoutWidths();
   const isExportAnalysisHtml =
     typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
   if (!isExportAnalysisHtml && typeof syncMatchesFromStorage === "function") {
@@ -22598,6 +22699,7 @@ async function init() {
     });
   }
   window.addEventListener("resize", () => {
+    applyVideoLayoutWidths();
     renderPlayers();
   });
   document.addEventListener("keydown", e => {
@@ -22718,6 +22820,8 @@ async function init() {
     }
   });
   startVideoPlaybackSnapshotTimer();
+  bindVideoResizeHandle(elVideoAnalysisResizeHandle, "analysisHeight");
+  bindVideoResizeHandle(elVideoScoutResizeHandle, "scoutHeight");
   updateVideoScoutModeLayout();
   renderVideoAnalysis();
   attachModalCloseHandlers();

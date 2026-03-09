@@ -407,6 +407,13 @@
                 ></iframe>
                 <div class="youtube-focus-guard" data-youtube-guard></div>
               </div>
+              <button
+                id="video-scout-resize-handle"
+                class="video-resize-handle"
+                type="button"
+                aria-label="Allarga finestra video scout"
+                title="Trascina per allargare. Doppio click per reset."
+              ></button>
             </div>
           </div>
         </div>
@@ -1350,7 +1357,7 @@
             <button id="btn-video-undo" class="danger">Annulla ultima</button>
           </div>
         </div>
-        <div class="video-player-wrap">
+        <div class="video-player-wrap video-player-wrap--analysis">
           <div class="video-analysis__actions">
             <label class="file-btn" for="video-file-input">Carica video</label>
             <input id="video-file-input" type="file" accept="video/*" hidden />
@@ -1384,6 +1391,13 @@
             ></iframe>
             <div class="youtube-focus-guard" data-youtube-guard></div>
           </div>
+          <button
+            id="video-analysis-resize-handle"
+            class="video-resize-handle"
+            type="button"
+            aria-label="Allarga finestra video"
+            title="Trascina per allargare. Doppio click per reset."
+          ></button>
           <div class="video-frame-actions">
             <button id="btn-video-frame-prev" class="secondary" type="button">Frame - (Shift + ←)</button>
             <button id="btn-video-frame-next" class="secondary" type="button">Frame + (Shift + →)</button>

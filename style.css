@@ -4913,6 +4913,17 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
   .tab-panel[data-tab="aggregated"] .serve-trajectory-grid {
     min-width: 520px;
   }
+  .video-analysis__grid {
+    grid-template-columns: 1fr;
+  }
+  .video-player-wrap,
+  .video-player-wrap--scout {
+    min-width: 0;
+    width: 100%;
+  }
+  .video-resize-handle {
+    display: none;
+  }
 }
 .event-time-cell {
   min-width: 92px;
@@ -5085,12 +5096,17 @@ body[data-theme="light"] .rotation-table td {
   gap: 0.4rem;
 }
 .video-player-wrap--scout {
-  position: static;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  align-self: stretch;
 }
 .video-player-wrap--scout video,
 .video-player-wrap--scout .youtube-frame {
-  min-height: 200px;
-  max-height: 320px;
+  min-height: var(--video-scout-height, 320px);
+  height: var(--video-scout-height, 320px);
+  max-height: none;
 }
 .video-player-wrap--scout video {
   object-fit: contain;
@@ -5176,6 +5192,51 @@ body[data-theme="light"] .rotation-table td {
   flex-direction: column;
   gap: 0.35rem;
   align-self: stretch;
+  min-width: 360px;
+  width: 100%;
+}
+.video-player-wrap--analysis {
+  position: sticky;
+}
+.video-player-wrap--analysis video,
+.video-player-wrap--analysis .youtube-frame {
+  min-height: var(--video-panel-height, 320px);
+  height: var(--video-panel-height, 320px);
+}
+.video-resize-handle {
+  position: relative;
+  align-self: center;
+  width: min(220px, 55%);
+  height: 12px;
+  border: 0;
+  margin: 0.15rem auto 0.2rem;
+  padding: 0;
+  border-radius: 999px;
+  cursor: ns-resize;
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.92), rgba(16, 185, 129, 0.72));
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35), 0 10px 24px rgba(15, 23, 42, 0.28);
+}
+.video-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 4px 26px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.94) 0 4px,
+    transparent 4px 9px
+  );
+}
+.video-resize-handle:hover {
+  filter: brightness(1.05);
+}
+.video-resize-handle:active {
+  filter: brightness(0.96);
+}
+body.video-panel-resizing,
+body.video-panel-resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
 }
 .video-frame-actions {
   display: flex;
@@ -5280,6 +5341,9 @@ body[data-theme="light"] .video-skills-table input[type="number"] {
   background: #ffffff;
   color: #0f172a;
   border-color: #e2e8f0;
+}
+body[data-theme="light"] .video-resize-handle {
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.45), 0 10px 24px rgba(15, 23, 42, 0.12);
 }
 body[data-theme="light"] .video-time-label {
   color: #475569;

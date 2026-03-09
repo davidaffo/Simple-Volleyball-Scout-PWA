@@ -175,6 +175,10 @@ let state = {
     showServe: true,
     showSecond: false
   },
+  uiVideoLayout: {
+    analysisHeight: 320,
+    scoutHeight: 320
+  },
   uiTopBarHidden: false
 };
 function canUseShare() {
