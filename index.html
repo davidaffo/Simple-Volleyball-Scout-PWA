@@ -705,6 +705,7 @@
       <div class="agg-topbar">
         <div class="agg-subnav">
           <button class="agg-subtab-btn active" data-agg-tab-target="summary">Tabellino</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="set-trend">Andamento set</button>
           <button class="agg-subtab-btn" data-agg-tab-target="skill-charts">Grafici skill</button>
           <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
           <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Traiettorie</button>
@@ -794,6 +795,15 @@
           <table class="agg-table">
             <tbody id="agg-summary-extra-body"></tbody>
           </table>
+        </div>
+      </div>
+      <div class="agg-subpanel" data-agg-tab="set-trend">
+        <div class="set-trend-panel">
+          <p class="section-note">Zero centrale: sopra siamo avanti noi, sotto vanno avanti le avversarie. Passa sopra i punti per vedere il punteggio, clicca un rally per il dettaglio.</p>
+          <div id="set-trend-grid" class="set-trend-grid"></div>
+          <div id="set-trend-detail" class="set-trend-detail">
+            <div class="players-empty">Seleziona un punto del grafico per vedere il dettaglio.</div>
+          </div>
         </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="skill-charts">

@@ -4437,6 +4437,274 @@ body[data-theme="light"] .analysis-filter select {
   display: grid;
   gap: 0.7rem;
 }
+.set-trend-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+.set-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.8rem;
+}
+.set-trend-card {
+  background: rgba(12, 18, 30, 0.56);
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.7rem;
+}
+.set-trend-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.set-trend-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.set-trend-card__score {
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 0.82);
+}
+.set-trend-card__plot {
+  position: relative;
+  width: 100%;
+  min-height: 260px;
+  border-radius: 0.7rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(148, 163, 184, 0.08), transparent 58%),
+    rgba(2, 6, 23, 0.48);
+}
+.set-trend-card__plot svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.set-trend-svg .set-trend__bg {
+  fill: transparent;
+}
+.set-trend-svg .set-trend__grid line,
+.set-trend-svg .set-trend__axis {
+  stroke: rgba(148, 163, 184, 0.2);
+  stroke-width: 1;
+}
+.set-trend-svg .set-trend__zero {
+  stroke: rgba(250, 204, 21, 0.82);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 4;
+}
+.set-trend-svg .set-trend__tick text,
+.set-trend-svg .set-trend__label {
+  fill: rgba(226, 232, 240, 0.72);
+  font-size: 11px;
+}
+.set-trend-svg .set-trend__segment {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+.set-trend-svg .set-trend__segment.is-positive {
+  stroke: #22c55e;
+}
+.set-trend-svg .set-trend__segment.is-neutral {
+  stroke: #facc15;
+}
+.set-trend-svg .set-trend__segment.is-negative {
+  stroke: #ef4444;
+}
+.set-trend-svg .set-trend__guide {
+  opacity: 0;
+  pointer-events: none;
+  stroke: rgba(248, 250, 252, 0.3);
+  stroke-width: 2;
+  stroke-dasharray: 4 5;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+.set-trend-svg .set-trend__guide.is-selected {
+  opacity: 0.5;
+  stroke: rgba(248, 250, 252, 0.5);
+}
+.set-trend-svg .set-trend__guide.is-hover {
+  opacity: 1;
+  stroke: rgba(248, 250, 252, 0.92);
+  stroke-width: 2.5;
+}
+.set-trend-svg .set-trend__dot {
+  cursor: pointer;
+  stroke: rgba(15, 23, 42, 0.95);
+  stroke-width: 1.5;
+  transition: r 120ms ease, stroke-width 120ms ease, stroke 120ms ease, filter 120ms ease;
+}
+.set-trend-svg .set-trend__dot.is-positive {
+  fill: #22c55e;
+}
+.set-trend-svg .set-trend__dot.is-neutral {
+  fill: #facc15;
+}
+.set-trend-svg .set-trend__dot.is-negative {
+  fill: #ef4444;
+}
+.set-trend-svg .set-trend__dot.is-selected {
+  r: 6;
+  stroke: #f8fafc;
+  stroke-width: 2;
+}
+.set-trend-svg .set-trend__dot.is-hover {
+  r: 7;
+  stroke: #ffffff;
+  stroke-width: 2.75;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
+}
+.set-trend-svg .set-trend__hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.set-trend-card__tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  min-width: 130px;
+  max-width: min(220px, 90%);
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  color: #f8fafc;
+  font-size: 0.8rem;
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.35);
+}
+.set-trend-card__tooltip.hidden {
+  display: none;
+}
+.set-trend-card__tooltip strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+.set-trend-detail {
+  background: rgba(12, 18, 30, 0.56);
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  border-radius: 0.75rem;
+  padding: 0.95rem;
+}
+.set-trend-detail__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.set-trend-detail__title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.set-trend-detail__score {
+  color: rgba(226, 232, 240, 0.8);
+}
+.set-trend-detail__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.set-trend-detail__card {
+  background: rgba(2, 6, 23, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+.set-trend-detail__card-label {
+  display: block;
+  font-size: 0.78rem;
+  color: rgba(226, 232, 240, 0.72);
+  margin-bottom: 0.2rem;
+}
+.set-trend-detail__card-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.set-trend-detail__events-wrap {
+  background: rgba(2, 6, 23, 0.34);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 0.8rem;
+}
+.set-trend-detail__events-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(226, 232, 240, 0.78);
+  margin-bottom: 0.65rem;
+}
+.set-trend-detail__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.set-trend-detail__event {
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-left: 4px solid rgba(250, 204, 21, 0.8);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+.set-trend-detail__event.pos {
+  border-left-color: #22c55e;
+}
+.set-trend-detail__event.neg {
+  border-left-color: #ef4444;
+}
+.set-trend-detail__event.is-scoring {
+  box-shadow: 0 0 0 1px rgba(248, 250, 252, 0.16);
+}
+.set-trend-detail__event-main {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.2rem;
+}
+.set-trend-detail__event-actor {
+  font-weight: 700;
+}
+.set-trend-detail__event-skill {
+  color: rgba(191, 219, 254, 0.92);
+  font-size: 0.84rem;
+}
+.set-trend-detail__event-score {
+  margin-left: auto;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.18);
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  color: rgba(226, 232, 240, 0.88);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.set-trend-detail__event-reason {
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 0.86rem;
+}
+.set-trend-detail__event-point {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.set-trend-detail__event-point.pos {
+  color: #22c55e;
+}
+.set-trend-detail__event-point.neg {
+  color: #ef4444;
+}
+.set-trend-detail__event-point.neu {
+  color: #facc15;
+}
+.set-trend-detail__event.empty {
+  color: rgba(226, 232, 240, 0.68);
+}
 .analysis-skill-chart-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -252,6 +252,7 @@ let analysisStatsScope = "our";
 let analysisEventsCache = null;
 let analysisEventsCacheKey = "";
 let analysisEventsCacheRevision = 0;
+let setTrendSelectionKey = "";
 let serveTrajectoryScope = null;
 const VIDEO_LAYOUT_DEFAULTS = {
   analysisHeight: 320,
@@ -478,6 +479,8 @@ const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
 const elAnalysisScoreSummary = document.getElementById("analysis-score-summary");
+const elSetTrendGrid = document.getElementById("set-trend-grid");
+const elSetTrendDetail = document.getElementById("set-trend-detail");
 const elBtnOpenMultiscout = document.getElementById("btn-open-multiscout");
 const elMultiscoutModal = document.getElementById("multiscout-modal");
 const elMultiscoutList = document.getElementById("multiscout-list");
@@ -13247,6 +13250,419 @@ function computeSetScores(teamScope = "our", options = {}) {
   const totalAgainst = sets.reduce((sum, s) => sum + s.against, 0);
   return { sets, totalFor: Math.max(0, totalFor), totalAgainst: Math.max(0, totalAgainst) };
 }
+function getSetTrendScopeLabels(scope) {
+  const focus = getTeamNameForScope(scope) || (scope === "opponent" ? "Avversarie" : "Noi");
+  const opponent = getTeamNameForScope(getOppositeScope(scope)) || (scope === "opponent" ? "Noi" : "Avversarie");
+  return { focus, opponent };
+}
+function getEventTimelineSortValue(ev, fallbackIdx = 0) {
+  const time = ev && ev.t ? new Date(ev.t).getTime() : NaN;
+  if (Number.isFinite(time)) return time;
+  const eventId = ev && typeof ev.eventId === "number" ? ev.eventId : fallbackIdx;
+  return eventId;
+}
+function buildSetTrendGroups(scope = getAnalysisTeamScope()) {
+  const sourceEvents = getAnalysisEvents() || [];
+  const groups = new Map();
+  sourceEvents
+    .map((ev, idx) => ({ ev, idx }))
+    .filter(({ ev }) => {
+      const setNum = normalizeSetNumber(ev && ev.set);
+      return setNum !== null && matchesSummarySetFilter(ev);
+    })
+    .sort((a, b) => {
+      const aMatchDate = a.ev && a.ev.analysisMatchDate ? new Date(a.ev.analysisMatchDate).getTime() : NaN;
+      const bMatchDate = b.ev && b.ev.analysisMatchDate ? new Date(b.ev.analysisMatchDate).getTime() : NaN;
+      if (Number.isFinite(aMatchDate) && Number.isFinite(bMatchDate) && aMatchDate !== bMatchDate) {
+        return aMatchDate - bMatchDate;
+      }
+      const aMatch = (a.ev && (a.ev.analysisMatchKey || a.ev.analysisMatchLabel)) || "";
+      const bMatch = (b.ev && (b.ev.analysisMatchKey || b.ev.analysisMatchLabel)) || "";
+      if (aMatch !== bMatch) return aMatch.localeCompare(bMatch, "it", { sensitivity: "base" });
+      const aSet = normalizeSetNumber(a.ev && a.ev.set) || 1;
+      const bSet = normalizeSetNumber(b.ev && b.ev.set) || 1;
+      if (aSet !== bSet) return aSet - bSet;
+      const timeDiff = getEventTimelineSortValue(a.ev, a.idx) - getEventTimelineSortValue(b.ev, b.idx);
+      if (timeDiff !== 0) return timeDiff;
+      return a.idx - b.idx;
+    })
+    .forEach(({ ev, idx }) => {
+      const setNum = normalizeSetNumber(ev && ev.set) || 1;
+      const matchKey = ev && ev.analysisMatchKey ? ev.analysisMatchKey : "__current__";
+      const matchLabel = ev && ev.analysisMatchLabel ? ev.analysisMatchLabel : "";
+      const key = `${matchKey}::${setNum}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          setNum,
+          matchKey,
+          matchLabel,
+          title: matchLabel ? `${matchLabel} · Set ${setNum}` : `Set ${setNum}`,
+          allEvents: [],
+          points: []
+        });
+      }
+      groups.get(key).allEvents.push({ ev, idx });
+    });
+  const overrideForSingleMatch = group =>
+    group.matchKey === "__current__" ? getScoreOverrideForSet(group.setNum) : { for: 0, against: 0 };
+  return Array.from(groups.values()).map(group => {
+    const override = overrideForSingleMatch(group);
+    let scoreFor = Math.max(0, override.for || 0);
+    let scoreAgainst = Math.max(0, override.against || 0);
+    let diff = scoreFor - scoreAgainst;
+    const series = [
+      {
+        pointKey: `${group.key}::start`,
+        x: 0,
+        forScore: scoreFor,
+        againstScore: scoreAgainst,
+        diff,
+        label: `${scoreFor}-${scoreAgainst}`,
+        tone: "neutral",
+        eventIndex: -1,
+        allEventIndex: -1,
+        ev: null
+      }
+    ];
+    group.allEvents.forEach(({ ev }, eventIdx) => {
+      const direction = getPointDirectionFor(scope, ev);
+      if (!direction) return;
+      const value = typeof ev.value === "number" ? ev.value : 1;
+      if (direction === "for") scoreFor += value;
+      if (direction === "against") scoreAgainst += value;
+      diff = scoreFor - scoreAgainst;
+      const tone = diff > 0 ? "positive" : diff < 0 ? "negative" : "neutral";
+      series.push({
+        pointKey: `${group.key}::${eventIdx}`,
+        x: series.length,
+        forScore: scoreFor,
+        againstScore: scoreAgainst,
+        diff,
+        label: `${scoreFor}-${scoreAgainst}`,
+        tone,
+        eventIndex: series.length - 1,
+        allEventIndex: eventIdx,
+        ev
+      });
+    });
+    group.points = series;
+    group.final = series[series.length - 1] || series[0];
+    group.maxAbs = series.reduce((acc, point) => Math.max(acc, Math.abs(point.diff)), 0);
+    return group;
+  });
+}
+function computeSetTrendTickIndexes(points) {
+  if (!points || !points.length) return [];
+  const maxIdx = points.length - 1;
+  const seeds = [0, Math.round(maxIdx * 0.25), Math.round(maxIdx * 0.5), Math.round(maxIdx * 0.75), maxIdx];
+  const unique = [];
+  seeds.forEach(idx => {
+    const safe = Math.max(0, Math.min(maxIdx, idx));
+    if (!unique.includes(safe)) unique.push(safe);
+  });
+  return unique;
+}
+function getSetTrendEventSkillLabel(ev) {
+  if (!ev) return "";
+  if (ev.actionType === "timeout") return "Timeout";
+  if (ev.actionType === "substitution") return "Cambio";
+  const meta = SKILLS.find(skill => skill.id === ev.skillId);
+  return meta ? meta.label : ev.skillId || "Evento";
+}
+function getSetTrendEventActorLabel(ev, scope) {
+  if (!ev) return "Squadra";
+  const eventScope = getTeamScopeFromEvent(ev);
+  const numbers = getPlayerNumbersForScope(eventScope);
+  const teamLabel = getTeamNameForScope(eventScope);
+  if (ev.code === "team-error" || ev.code === "opp-point" || ev.code === "opp-error") {
+    return teamLabel;
+  }
+  if (ev.playerName) {
+    return formatNameWithNumberFor(ev.playerName, numbers);
+  }
+  return eventScope === scope ? "Squadra" : teamLabel;
+}
+function getSetTrendEventReasonLabel(ev, scope) {
+  if (!ev) return "";
+  const direction = getPointDirectionFor(scope, ev);
+  const code = normalizeEvalCode(ev.code || ev.evaluation || "");
+  const skillLabel = getSetTrendEventSkillLabel(ev);
+  if (ev.skillId === "manual") {
+    if (ev.code === "opp-error") return "Errore avversario manuale";
+    if (ev.code === "opp-point") return "Punto avversario manuale";
+    if (ev.code === "team-error") {
+      const errorLabel = ev.errorType ? getErrorTypeLabel(ev.errorType) : "errore di squadra";
+      return `Errore di squadra${errorLabel ? " · " + errorLabel : ""}`;
+    }
+    if (ev.code === "error") {
+      const errorLabel = ev.errorType ? getErrorTypeLabel(ev.errorType) : "errore";
+      return `Errore manuale${errorLabel ? " · " + errorLabel : ""}`;
+    }
+    return "Override manuale";
+  }
+  if (direction === "for") {
+    return `${skillLabel} ${code || ""}`.trim();
+  }
+  if (direction === "against") {
+    return `${skillLabel} ${code || ""}`.trim();
+  }
+  if (ev.errorType && (ev.code === "error" || ev.code === "team-error")) {
+    return `${skillLabel} · ${getErrorTypeLabel(ev.errorType)}`;
+  }
+  return `${skillLabel}${code ? " " + code : ""}`.trim();
+}
+function buildSetTrendScoringHistory(group, selected, scope) {
+  if (!group || !selected || selected.allEventIndex < 0) return [];
+  const scoringEvents = group.allEvents
+    .slice(0, selected.allEventIndex + 1)
+    .map((entry, idx) => ({ ev: entry.ev, idx }))
+    .filter(({ ev }) => ev && getPointDirectionFor(scope, ev) && !ev.pendingBlockEval && !ev.derivedFromPassServe && !ev.derivedFromBlock);
+  const visibleEvents = scoringEvents.slice(-6);
+  return visibleEvents.map(({ ev, idx: eventIdx }, idx) => {
+    const direction = getPointDirectionFor(scope, ev);
+    const isSelectedEvent = eventIdx === selected.allEventIndex;
+    return {
+      key: getEventKey(ev, eventIdx),
+      actor: getSetTrendEventActorLabel(ev, scope),
+      skill: getSetTrendEventSkillLabel(ev),
+      reason: getSetTrendEventReasonLabel(ev, scope),
+      scoreLabel: (() => {
+        const point = group.points.find(entry => entry.allEventIndex === eventIdx);
+        return point ? point.label : "";
+      })(),
+      pointLabel: direction === "for" ? "Punto nostro" : direction === "against" ? "Punto avversario" : "",
+      tone: direction === "for" ? "pos" : direction === "against" ? "neg" : "neu",
+      isScoringEvent: isSelectedEvent
+    };
+  });
+}
+function renderSetTrendDetailFromSelection(selectionKey = setTrendSelectionKey) {
+  if (!elSetTrendDetail) return;
+  const groups = buildSetTrendGroups(getAnalysisTeamScope());
+  const group = groups.find(entry => entry.points.some(point => point.pointKey === selectionKey));
+  const selected = group ? group.points.find(point => point.pointKey === selectionKey) : null;
+  if (!group || !selected || selected.allEventIndex < 0) {
+    elSetTrendDetail.innerHTML = '<div class="players-empty">Seleziona un punto del grafico per vedere il dettaglio.</div>';
+    return;
+  }
+  const scope = getAnalysisTeamScope();
+  const labels = getSetTrendScopeLabels(scope);
+  const detailEvents = buildSetTrendScoringHistory(group, selected, scope);
+  const decisiveEvent = detailEvents[detailEvents.length - 1] || null;
+  const detailCards = [
+    { label: "Punteggio", value: `${selected.forScore} - ${selected.againstScore}` },
+    { label: "Delta", value: formatDelta(selected.diff) },
+    { label: "Esito punto", value: decisiveEvent ? decisiveEvent.pointLabel || "-" : "-" },
+    { label: "Perché", value: decisiveEvent ? decisiveEvent.reason : "-" }
+  ];
+  const timelineItems = detailEvents.length
+    ? detailEvents
+        .map(
+          item => `<li class="set-trend-detail__event ${item.tone}${item.isScoringEvent ? " is-scoring" : ""}">
+            <div class="set-trend-detail__event-main">
+              <span class="set-trend-detail__event-actor">${item.actor}</span>
+              <span class="set-trend-detail__event-skill">${item.skill}</span>
+              ${item.scoreLabel ? `<span class="set-trend-detail__event-score">${item.scoreLabel}</span>` : ""}
+            </div>
+            <div class="set-trend-detail__event-reason">${item.reason}</div>
+            ${item.pointLabel ? `<div class="set-trend-detail__event-point ${item.tone}">${item.pointLabel}</div>` : ""}
+          </li>`
+        )
+        .join("")
+    : '<li class="set-trend-detail__event empty">Nessuna azione utile trovata per questo rally.</li>';
+  elSetTrendDetail.innerHTML = `
+    <div class="set-trend-detail__head">
+      <div class="set-trend-detail__title">${group.title}</div>
+      <div class="set-trend-detail__score">${labels.focus} ${selected.forScore} - ${selected.againstScore} ${labels.opponent}</div>
+    </div>
+    <div class="set-trend-detail__summary">
+      ${detailCards
+        .map(
+          card => `<div class="set-trend-detail__card">
+            <span class="set-trend-detail__card-label">${card.label}</span>
+            <div class="set-trend-detail__card-value">${card.value}</div>
+          </div>`
+        )
+        .join("")}
+    </div>
+    <div class="set-trend-detail__events-wrap">
+      <div class="set-trend-detail__events-title">Ultimi punti che hanno mosso il set</div>
+      <ul class="set-trend-detail__events">${timelineItems}</ul>
+    </div>
+  `;
+}
+function renderSetTrendChartCard(group) {
+  const width = 680;
+  const height = 280;
+  const pad = { top: 18, right: 14, bottom: 32, left: 42 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const points = group.points || [];
+  const maxX = Math.max(1, points.length - 1);
+  const maxAbs = Math.max(1, group.maxAbs || 0);
+  const xToPx = x => pad.left + (x / maxX) * plotW;
+  const yToPx = y => pad.top + (1 - (y + maxAbs) / (maxAbs * 2)) * plotH;
+  const yTicks = [];
+  for (let value = maxAbs; value >= -maxAbs; value -= Math.max(1, Math.ceil((maxAbs * 2) / 4))) {
+    if (!yTicks.includes(value)) yTicks.push(value);
+  }
+  if (!yTicks.includes(0)) yTicks.push(0);
+  yTicks.sort((a, b) => b - a);
+  const tickIndexes = computeSetTrendTickIndexes(points);
+  const segments = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1];
+    const next = points[i];
+    const tone = next.diff > 0 ? "positive" : next.diff < 0 ? "negative" : "neutral";
+    segments.push(
+      `<line class="set-trend__segment is-${tone}" x1="${xToPx(prev.x).toFixed(1)}" y1="${yToPx(prev.diff).toFixed(
+        1
+      )}" x2="${xToPx(next.x).toFixed(1)}" y2="${yToPx(next.diff).toFixed(1)}"></line>`
+    );
+  }
+  const guides = points
+    .filter(point => point.ev)
+    .map(point => {
+      const selected = point.pointKey === setTrendSelectionKey;
+      return `<line class="set-trend__guide${selected ? " is-selected" : ""}" data-point-key="${point.pointKey}" x1="${xToPx(
+        point.x
+      ).toFixed(1)}" y1="${pad.top}" x2="${xToPx(point.x).toFixed(1)}" y2="${(height - pad.bottom).toFixed(1)}"></line>`;
+    })
+    .join("");
+  const dots = points
+    .filter(point => point.ev)
+    .map(point => {
+      const selected = point.pointKey === setTrendSelectionKey;
+      return `<circle class="set-trend__dot is-${point.tone}${selected ? " is-selected" : ""}" data-point-key="${
+        point.pointKey
+      }" cx="${xToPx(point.x).toFixed(1)}" cy="${yToPx(point.diff).toFixed(1)}" r="${selected ? 6 : 4.5}"></circle>`;
+    })
+    .join("");
+  const hoverBands = points
+    .filter(point => point.ev)
+    .map(point => {
+      const idx = point.x;
+      const prev = points[idx - 1] || points[0];
+      const next = points[idx + 1] || points[points.length - 1];
+      const left = idx <= 1 ? xToPx(point.x) - (xToPx(next.x) - xToPx(point.x)) / 2 : (xToPx(prev.x) + xToPx(point.x)) / 2;
+      const right =
+        idx >= points.length - 1 ? xToPx(point.x) + (xToPx(point.x) - xToPx(prev.x)) / 2 : (xToPx(point.x) + xToPx(next.x)) / 2;
+      return `<rect class="set-trend__hit" data-point-key="${point.pointKey}" x="${Math.max(pad.left, left).toFixed(
+        1
+      )}" y="${pad.top}" width="${Math.max(8, Math.min(width - pad.right, right) - Math.max(pad.left, left)).toFixed(
+        1
+      )}" height="${plotH.toFixed(1)}"></rect>`;
+    })
+    .join("");
+  const yGrid = yTicks
+    .map(
+      tick => `<g class="set-trend__tick">
+        <line x1="${pad.left}" y1="${yToPx(tick).toFixed(1)}" x2="${width - pad.right}" y2="${yToPx(tick).toFixed(1)}"></line>
+        <text x="${pad.left - 8}" y="${(yToPx(tick) + 4).toFixed(1)}" text-anchor="end">${formatDelta(tick)}</text>
+      </g>`
+    )
+    .join("");
+  const xTicks = tickIndexes
+    .map(idx => {
+      const point = points[idx];
+      return `<g class="set-trend__tick">
+        <line x1="${xToPx(point.x).toFixed(1)}" y1="${height - pad.bottom}" x2="${xToPx(point.x).toFixed(1)}" y2="${
+          height - pad.bottom + 6
+        }"></line>
+        <text x="${xToPx(point.x).toFixed(1)}" y="${height - 8}" text-anchor="middle">${point.label}</text>
+      </g>`;
+    })
+    .join("");
+  const card = document.createElement("div");
+  card.className = "set-trend-card";
+  card.innerHTML = `
+    <div class="set-trend-card__head">
+      <div class="set-trend-card__title">${group.title}</div>
+      <div class="set-trend-card__score">${group.final ? group.final.label : "0-0"}</div>
+    </div>
+    <div class="set-trend-card__plot">
+      <svg viewBox="0 0 ${width} ${height}" class="set-trend-svg" preserveAspectRatio="xMidYMid meet" aria-label="Andamento set">
+        <rect class="set-trend__bg" x="0" y="0" width="${width}" height="${height}" rx="12" ry="12"></rect>
+        <g class="set-trend__grid">${yGrid}</g>
+        <line class="set-trend__zero" x1="${pad.left}" y1="${yToPx(0).toFixed(1)}" x2="${width - pad.right}" y2="${yToPx(0).toFixed(1)}"></line>
+        <line class="set-trend__axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
+        <g class="set-trend__segments">${segments.join("")}</g>
+        <g class="set-trend__guides">${guides}</g>
+        <g class="set-trend__hits">${hoverBands}</g>
+        <g class="set-trend__dots">${dots}</g>
+        <g class="set-trend__x-ticks">${xTicks}</g>
+        <text class="set-trend__label" x="${pad.left}" y="${pad.top - 4}">Delta punti</text>
+      </svg>
+      <div class="set-trend-card__tooltip hidden"></div>
+    </div>
+  `;
+  const plot = card.querySelector(".set-trend-card__plot");
+  const tooltip = card.querySelector(".set-trend-card__tooltip");
+  const syncActivePoint = pointKey => {
+    card.querySelectorAll(".set-trend__guide").forEach(guide => {
+      guide.classList.toggle("is-hover", !!pointKey && guide.getAttribute("data-point-key") === pointKey);
+    });
+    card.querySelectorAll(".set-trend__dot").forEach(dot => {
+      dot.classList.toggle("is-hover", !!pointKey && dot.getAttribute("data-point-key") === pointKey);
+    });
+  };
+  card.querySelectorAll(".set-trend__hit").forEach(hit => {
+    const pointKey = hit.getAttribute("data-point-key");
+    const point = points.find(entry => entry.pointKey === pointKey);
+    if (!point || !tooltip) return;
+    const showTooltip = () => {
+      syncActivePoint(pointKey);
+      tooltip.innerHTML = `<strong>${point.label}</strong><div>Delta ${formatDelta(point.diff)}</div>`;
+      tooltip.classList.remove("hidden");
+      const dotX = xToPx(point.x) / width;
+      const dotY = yToPx(point.diff) / height;
+      const plotRect = plot.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        const tipRect = tooltip.getBoundingClientRect();
+        let left = dotX * plotRect.width + 10;
+        if (left + tipRect.width > plotRect.width - 6) left = dotX * plotRect.width - tipRect.width - 10;
+        let top = dotY * plotRect.height - tipRect.height - 10;
+        if (top < 6) top = dotY * plotRect.height + 10;
+        tooltip.style.left = `${Math.max(6, left)}px`;
+        tooltip.style.top = `${Math.max(6, top)}px`;
+      });
+    };
+    const hideTooltip = () => {
+      tooltip.classList.add("hidden");
+      syncActivePoint("");
+    };
+    hit.addEventListener("mouseenter", showTooltip);
+    hit.addEventListener("mouseleave", hideTooltip);
+    hit.addEventListener("click", () => {
+      setTrendSelectionKey = point.pointKey;
+      renderSetTrendAnalysis();
+    });
+  });
+  return card;
+}
+function renderSetTrendAnalysis() {
+  if (!elSetTrendGrid) return;
+  if (!isAggSubtabVisible("set-trend")) return;
+  const groups = buildSetTrendGroups(getAnalysisTeamScope());
+  elSetTrendGrid.innerHTML = "";
+  if (!groups.length) {
+    elSetTrendGrid.innerHTML = '<div class="players-empty">Registra alcuni eventi per vedere l’andamento del set.</div>';
+    setTrendSelectionKey = "";
+    renderSetTrendDetailFromSelection("");
+    return;
+  }
+  const validKeys = new Set(groups.flatMap(group => group.points.map(point => point.pointKey)));
+  if (!setTrendSelectionKey || !validKeys.has(setTrendSelectionKey)) {
+    const fallbackGroup = groups.find(group => group.points.length > 1) || groups[0];
+    const fallbackPoint = fallbackGroup.points[fallbackGroup.points.length - 1] || null;
+    setTrendSelectionKey = fallbackPoint ? fallbackPoint.pointKey : "";
+  }
+  groups.forEach(group => {
+    elSetTrendGrid.appendChild(renderSetTrendChartCard(group));
+  });
+  renderSetTrendDetailFromSelection(setTrendSelectionKey);
+}
 function computePlayerPointsMap(events = state.events || [], scope = "our") {
   const map = {};
   (events || []).forEach(ev => {
@@ -17486,6 +17902,9 @@ function renderAggregatedTable() {
   ensureAggTableHeadCache(thead);
   renderAnalysisTeamFilter();
   renderAnalysisSummarySetFilter();
+  if (isAggSubtabVisible("set-trend")) {
+    renderSetTrendAnalysis();
+  }
   const analysisScope = getAnalysisTeamScope();
   const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
@@ -20505,6 +20924,15 @@ function setActiveAggTab(target) {
     requestAnimationFrame(refreshPlayer);
     setTimeout(refreshPlayer, 0);
   }
+  if (desired === "set-trend") {
+    const refreshSetTrend = () => {
+      if (typeof renderSetTrendAnalysis === "function") {
+        renderSetTrendAnalysis();
+      }
+    };
+    requestAnimationFrame(refreshSetTrend);
+    setTimeout(refreshSetTrend, 0);
+  }
   if (desired === "skill-charts") {
     const refreshCharts = () => {
       if (typeof renderAnalysisSkillChartsPanel === "function") {
@@ -20544,7 +20972,11 @@ function setActiveTab(target) {
   });
   if (
     target === "aggregated" &&
-    (activeAggTab === "trajectory" || activeAggTab === "serve" || activeAggTab === "player" || activeAggTab === "skill-charts")
+    (activeAggTab === "trajectory" ||
+      activeAggTab === "serve" ||
+      activeAggTab === "player" ||
+      activeAggTab === "skill-charts" ||
+      activeAggTab === "set-trend")
   ) {
     const refresh = () => {
       if (typeof renderTrajectoryAnalysis === "function" && activeAggTab === "trajectory") {
@@ -20555,6 +20987,9 @@ function setActiveTab(target) {
       }
       if (typeof renderPlayerAnalysis === "function" && activeAggTab === "player") {
         renderPlayerAnalysis();
+      }
+      if (typeof renderSetTrendAnalysis === "function" && activeAggTab === "set-trend") {
+        renderSetTrendAnalysis();
       }
       if (typeof renderAnalysisSkillChartsPanel === "function" && activeAggTab === "skill-charts") {
         renderAnalysisSkillChartsPanel();
