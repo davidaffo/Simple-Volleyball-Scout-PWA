@@ -5061,6 +5061,110 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
 .player-analysis-compare-toggle {
   align-self: flex-end;
 }
+.player-analysis-compare-view.hidden {
+  display: none;
+}
+.player-analysis-compare-view {
+  margin-top: 0.35rem;
+}
+.player-analysis-compare-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+.player-analysis-compare-card {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 18px;
+  padding: 0.9rem 1rem 1rem;
+  background: rgba(15, 23, 42, 0.48);
+}
+body[data-theme="light"] .player-analysis-compare-card {
+  background: rgba(255, 255, 255, 0.92);
+}
+.player-analysis-compare-card.is-primary {
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.45);
+}
+.player-analysis-compare-card.is-compare {
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.45);
+}
+.player-analysis-compare-card h3 {
+  margin: 0 0 0.75rem;
+}
+.player-analysis-compare-sections {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.9rem;
+}
+.player-analysis-compare-subsection {
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.28);
+}
+body[data-theme="light"] .player-analysis-compare-subsection {
+  background: rgba(241, 245, 249, 0.88);
+}
+.player-analysis-compare-subsection h4 {
+  margin: 0 0 0.6rem;
+}
+.player-analysis-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.player-analysis-compare-table th,
+.player-analysis-compare-table td {
+  padding: 0.42rem 0.45rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  text-align: left;
+  vertical-align: middle;
+}
+.player-analysis-compare-table th {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.95);
+}
+.player-analysis-compare-table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.player-analysis-compare-section-row th {
+  padding-top: 0.8rem;
+  background: rgba(148, 163, 184, 0.08);
+}
+.player-analysis-compare-section-row.skill-serve th {
+  background: rgba(59, 130, 246, 0.14);
+}
+.player-analysis-compare-section-row.skill-pass th {
+  background: rgba(16, 185, 129, 0.14);
+}
+.player-analysis-compare-section-row.skill-attack th {
+  background: rgba(239, 68, 68, 0.14);
+}
+.player-analysis-compare-section-row.skill-block th {
+  background: rgba(168, 85, 247, 0.14);
+}
+.player-analysis-compare-section-row.skill-defense th {
+  background: rgba(245, 158, 11, 0.14);
+}
+.player-analysis-compare-section-row.skill-points th {
+  background: rgba(148, 163, 184, 0.12);
+}
+.player-analysis-compare-value.is-better {
+  color: #22c55e;
+  font-weight: 700;
+}
+.player-analysis-compare-value.is-worse {
+  color: #ef4444;
+  font-weight: 700;
+}
+.player-analysis-compare-value.is-neutral {
+  color: inherit;
+}
+.player-analysis-columns.hidden,
+.player-skill-charts-panel.hidden {
+  display: none;
+}
 .player-analysis-compare-row.is-primary td:first-child {
   box-shadow: inset 3px 0 0 rgba(59, 130, 246, 0.9);
 }
@@ -5087,6 +5191,9 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
   display: none;
 }
 @media (max-width: 1200px) {
+  .player-analysis-compare-layout {
+    grid-template-columns: 1fr;
+  }
   .player-analysis-columns {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }

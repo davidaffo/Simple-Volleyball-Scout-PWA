@@ -6,11 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v318-a55358a";
+    window.__APP_CACHE_VERSION__ = "v319-c28ad96";
+    if (location.protocol === "file:") {
+      document.documentElement.dataset.fileOrigin = "true";
+    }
   </script>
-  <link rel="stylesheet" href="style.css?v=v318-a55358a" />
-  <link rel="manifest" href="manifest.json?v=v318-a55358a" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v318-a55358a" />
+  <link rel="stylesheet" href="style.css?v=v319-c28ad96" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v319-c28ad96" />
+  <script>
+    if (location.protocol !== "file:") {
+      const manifest = document.createElement("link");
+      manifest.rel = "manifest";
+      manifest.href = "manifest.json?v=v319-c28ad96";
+      document.head.appendChild(manifest);
+    }
+  </script>
 </head>
 <body>
   <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
@@ -1092,7 +1102,7 @@
               </label>
             </div>
           </div>
-          <div class="table-wrapper">
+          <div id="player-analysis-table-wrap" class="table-wrapper">
             <table class="agg-table player-analysis-table">
               <thead>
                 <tr>
@@ -1145,6 +1155,7 @@
               </tbody>
             </table>
           </div>
+          <div id="player-analysis-compare-view" class="player-analysis-compare-view hidden"></div>
           <div class="player-analysis-columns">
             <div id="player-analysis-attack" class="player-analysis-section">
               <div class="player-analysis-column">
@@ -2107,15 +2118,15 @@
       </a>
     </div>
   </footer>
-  <script src="js/app-version.js?v=v318-a55358a"></script>
-  <script src="js/globals.js?v=v318-a55358a"></script>
-  <script src="js/shared/team-ui.js?v=v318-a55358a"></script>
-  <script src="js/shared/lineup-core.js?v=v318-a55358a"></script>
-  <script src="js/shared/auto-role.js?v=v318-a55358a"></script>
-  <script src="js/shared/roster-manager.js?v=v318-a55358a"></script>
-  <script src="js/match-settings.js?v=v318-a55358a"></script>
-  <script src="js/opponent-settings.js?v=v318-a55358a"></script>
-  <script src="js/roster-lineup.js?v=v318-a55358a"></script>
-  <script src="js/scout-ui.js?v=v318-a55358a"></script>
+  <script src="js/app-version.js?v=v319-c28ad96"></script>
+  <script src="js/globals.js?v=v319-c28ad96"></script>
+  <script src="js/shared/team-ui.js?v=v319-c28ad96"></script>
+  <script src="js/shared/lineup-core.js?v=v319-c28ad96"></script>
+  <script src="js/shared/auto-role.js?v=v319-c28ad96"></script>
+  <script src="js/shared/roster-manager.js?v=v319-c28ad96"></script>
+  <script src="js/match-settings.js?v=v319-c28ad96"></script>
+  <script src="js/opponent-settings.js?v=v319-c28ad96"></script>
+  <script src="js/roster-lineup.js?v=v319-c28ad96"></script>
+  <script src="js/scout-ui.js?v=v319-c28ad96"></script>
 </body>
 </html>

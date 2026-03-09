@@ -8841,14 +8841,17 @@ function renderPlayerAnalysisSkillCharts() {
     stateUi.playerMetric = elPlayerAnalysisChartMetric.value || "eff";
     renderPlayerAnalysisSkillCharts();
   });
-  const playerIdx = getPlayerAnalysisPlayerIdx();
+  renderSkillChartsForPlayer(elPlayerAnalysisSkillChartGrid, getPlayerAnalysisPlayerIdx());
+}
+function renderSkillChartsForPlayer(targetGrid, playerIdx) {
+  if (!targetGrid) return;
   const scope = getAnalysisTeamScope();
-  elPlayerAnalysisSkillChartGrid.innerHTML = "";
+  targetGrid.innerHTML = "";
   if (playerIdx === null) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
     empty.textContent = "Seleziona una giocatrice per vedere i grafici skill.";
-    elPlayerAnalysisSkillChartGrid.appendChild(empty);
+    targetGrid.appendChild(empty);
     return;
   }
   const players = getPlayersForScope(scope);
@@ -8858,9 +8861,10 @@ function renderPlayerAnalysisSkillCharts() {
     const empty = document.createElement("div");
     empty.className = "players-empty";
     empty.textContent = "Giocatrice non disponibile.";
-    elPlayerAnalysisSkillChartGrid.appendChild(empty);
+    targetGrid.appendChild(empty);
     return;
   }
+  const ui = ensureSkillChartsUiState();
   const metricId = (elPlayerAnalysisChartMetric && elPlayerAnalysisChartMetric.value) || ui.playerMetric || "eff";
   const baseEvents = getSkillChartBaseEvents(scope);
   const eventsBySkill = collectSkillChartEventsBySkill(baseEvents, { playerIdx });
@@ -8878,7 +8882,15 @@ function renderPlayerAnalysisSkillCharts() {
       seriesCacheKey: `${baseCacheKey}|${skill.id}`
     });
   });
-  renderSkillChartCardsChunked(elPlayerAnalysisSkillChartGrid, items, { batchSize: 1 });
+  if (targetGrid === elPlayerAnalysisSkillChartGrid) {
+    renderSkillChartCardsChunked(targetGrid, items, { batchSize: 1 });
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  items.forEach(item => {
+    if (typeof item === "function") item(frag);
+  });
+  targetGrid.appendChild(frag);
 }
 function appendAggSkillModalChart(skillId, playerIdx) {
   if (!elAggSkillModalBody) return;
@@ -9776,7 +9788,7 @@ function renderPlayerAnalysisTable() {
   const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
   const playerErrors = computePlayerErrorsMap(filteredEvents);
   const playerPassAces = computePlayerPassAceMap(filteredEvents, analysisScope);
-  const buildPlayerRow = playerIdx => {
+  const buildPlayerSnapshot = playerIdx => {
     const name = players[playerIdx];
     const serveCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].serve);
     const passCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].pass);
@@ -9794,51 +9806,97 @@ function renderPlayerAnalysisTable() {
     const servePointCount = countPointsForSkill(serveCounts, "serve");
     const attackPointCount = countPointsForSkill(attackCounts, "attack");
     const blockPointCount = countPointsForSkill(blockCounts, "block");
+    return {
+      playerIdx,
+      name:
+        analysisScope === "opponent"
+          ? formatNameWithNumberFor(name, numbers)
+          : formatNameWithNumber(name),
+      metrics: [
+        {
+          title: "Punti",
+          entries: [
+            { label: "Fatti", text: String(points.for || 0), value: points.for || 0, better: "higher" },
+            { label: "Subiti", text: String(points.against || 0), value: points.against || 0, better: "lower" },
+            {
+              label: "Delta",
+              text: formatDelta((points.for || 0) - (points.against || 0)),
+              value: (points.for || 0) - (points.against || 0),
+              better: "higher"
+            },
+            { label: "Falli/Errori", text: String(personalErrors || 0), value: personalErrors || 0, better: "lower" }
+          ]
+        },
+        {
+          title: "Battuta",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(serveCounts)), value: totalFromCounts(serveCounts), better: "neutral" },
+            { label: "Err", text: String(serveCounts["="] || 0), value: serveCounts["="] || 0, better: "lower" },
+            { label: "Punti", text: String(servePointCount || 0), value: servePointCount || 0, better: "higher" },
+            { label: "Eff", text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), value: serveMetrics.eff, better: "higher" },
+            { label: "Pos", text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), value: serveMetrics.pos, better: "higher" }
+          ]
+        },
+        {
+          title: "Ricezione",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(passCounts)), value: totalFromCounts(passCounts), better: "neutral" },
+            { label: "Err", text: String(passMetrics.negativeCount || 0), value: passMetrics.negativeCount || 0, better: "lower" },
+            { label: "Ace", text: String(passAces || 0), value: passAces || 0, better: "lower" },
+            { label: "Pos", text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), value: passMetrics.pos, better: "higher" },
+            { label: "Prf", text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), value: passMetrics.prf, better: "higher" },
+            { label: "Eff", text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), value: passMetrics.eff, better: "higher" }
+          ]
+        },
+        {
+          title: "Attacco",
+          entries: [
+            { label: "Tot", text: String(attackTotal), value: attackTotal, better: "neutral" },
+            { label: "Err", text: String(attackCounts["="] || 0), value: attackCounts["="] || 0, better: "lower" },
+            { label: "Mur", text: String(attackCounts["/"] || 0), value: attackCounts["/"] || 0, better: "lower" },
+            { label: "Punti", text: String(attackPointCount || 0), value: attackPointCount || 0, better: "higher" },
+            {
+              label: "% Punti",
+              text: formatPercentValue(attackPointCount || 0, attackTotal),
+              value: attackTotal > 0 ? (attackPointCount || 0) / attackTotal : null,
+              better: "higher"
+            },
+            { label: "Eff", text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), value: attackMetrics.eff, better: "higher" }
+          ]
+        },
+        {
+          title: "Muro",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(blockCounts)), value: totalFromCounts(blockCounts), better: "neutral" },
+            { label: "Punti", text: String(blockPointCount || 0), value: blockPointCount || 0, better: "higher" }
+          ]
+        },
+        {
+          title: "Difesa",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(defenseCounts)), value: totalFromCounts(defenseCounts), better: "neutral" },
+            { label: "Err", text: String(defenseMetrics.negativeCount || 0), value: defenseMetrics.negativeCount || 0, better: "lower" },
+            { label: "Eff", text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), value: defenseMetrics.eff, better: "higher" }
+          ]
+        }
+      ]
+    };
+  };
+  const buildPlayerRow = snapshot => {
     const row = document.createElement("tr");
     if (prefs.compareEnabled) {
       row.classList.add("player-analysis-compare-row");
-      if (playerIdx === idx) row.classList.add("is-primary");
-      if (playerIdx === compareIdx) row.classList.add("is-compare");
+      if (snapshot.playerIdx === idx) row.classList.add("is-primary");
+      if (snapshot.playerIdx === compareIdx) row.classList.add("is-compare");
     }
-    const cells = [
-      {
-        text:
-          analysisScope === "opponent"
-            ? formatNameWithNumberFor(name, numbers)
-            : formatNameWithNumber(name)
-      },
-      { text: points.for || 0 },
-      { text: points.against || 0 },
-      { text: formatDelta((points.for || 0) - (points.against || 0)) },
-      { text: personalErrors || 0 },
-
-      { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
-      { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
-      { text: servePointCount || 0, className: "skill-col skill-serve" },
-      { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
-      { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
-
-      { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
-      { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
-      { text: passAces || 0, className: "skill-col skill-pass" },
-      { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
-      { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
-      { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
-
-      { text: attackTotal, className: "skill-col skill-attack" },
-      { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
-      { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
-      { text: attackPointCount || 0, className: "skill-col skill-attack" },
-      { text: formatPercentValue(attackPointCount || 0, attackTotal), className: "skill-col skill-attack" },
-      { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
-
-      { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
-      { text: blockPointCount || 0, className: "skill-col skill-block" },
-
-      { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
-      { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
-      { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
-    ];
+    const flattenedEntries = snapshot.metrics.flatMap(section => section.entries);
+    const cells = [{ text: snapshot.name }]
+      .concat(flattenedEntries.slice(0, 4).map(entry => ({ text: entry.text })))
+      .concat(flattenedEntries.slice(4, 9).map(entry => ({ text: entry.text, className: "skill-col skill-serve" })))
+      .concat(flattenedEntries.slice(9, 15).map(entry => ({ text: entry.text, className: "skill-col skill-pass" })))
+      .concat(flattenedEntries.slice(15, 21).map(entry => ({ text: entry.text, className: "skill-col skill-attack" })))
+      .concat(flattenedEntries.slice(21, 23).map(entry => ({ text: entry.text, className: "skill-col skill-block" })))
+      .concat(flattenedEntries.slice(23).map(entry => ({ text: entry.text, className: "skill-col skill-defense" })));
     cells.forEach(cell => {
       const td = document.createElement("td");
       td.textContent = cell.text;
@@ -9847,9 +9905,149 @@ function renderPlayerAnalysisTable() {
     });
     return row;
   };
-  elPlayerAnalysisBody.appendChild(buildPlayerRow(idx));
-  if (prefs.compareEnabled && compareIdx !== null && players[compareIdx]) {
-    elPlayerAnalysisBody.appendChild(buildPlayerRow(compareIdx));
+  const primarySnapshot = buildPlayerSnapshot(idx);
+  const compareSnapshot = prefs.compareEnabled && compareIdx !== null && players[compareIdx]
+    ? buildPlayerSnapshot(compareIdx)
+    : null;
+  const buildCompareExtraSections = snapshot => {
+    const wrap = document.createElement("div");
+    wrap.className = "player-analysis-compare-sections";
+    if (prefs.showAttack) {
+      const section = document.createElement("section");
+      section.className = "player-analysis-compare-subsection";
+      const title = document.createElement("h4");
+      title.textContent = "Traiettorie attacco";
+      const grid = buildPlayerTrajectoryGridSkeleton();
+      section.appendChild(title);
+      section.appendChild(grid);
+      renderAttackTrajectoryGridForPlayer(grid, snapshot.playerIdx);
+      wrap.appendChild(section);
+    }
+    if (prefs.showServe) {
+      const section = document.createElement("section");
+      section.className = "player-analysis-compare-subsection";
+      const title = document.createElement("h4");
+      title.textContent = "Traiettorie battuta";
+      const grid = document.createElement("div");
+      grid.className = "trajectory-grid serve-trajectory-grid";
+      section.appendChild(title);
+      section.appendChild(grid);
+      renderServeTrajectoryGridForPlayer(grid, snapshot.playerIdx);
+      wrap.appendChild(section);
+    }
+    if (prefs.showSecond) {
+      const section = document.createElement("section");
+      section.className = "player-analysis-compare-subsection";
+      const title = document.createElement("h4");
+      title.textContent = "Distribuzione alzate";
+      const dist = document.createElement("div");
+      dist.className = "distribution-grid";
+      const tableWrap = document.createElement("div");
+      tableWrap.className = "table-wrapper";
+      const table = document.createElement("table");
+      table.className = "agg-table";
+      table.innerHTML =
+        '<thead><tr><th>Alzate</th><th class="skill-col skill-second">Tot</th><th class="skill-col skill-second">#</th><th class="skill-col skill-second">+</th><th class="skill-col skill-second">!</th><th class="skill-col skill-second">-</th><th class="skill-col skill-second">=</th><th class="skill-col skill-second">/</th><th class="skill-col skill-second">Pos</th><th class="skill-col skill-second">Prf</th><th class="skill-col skill-second">Eff</th></tr></thead>';
+      const body = document.createElement("tbody");
+      table.appendChild(body);
+      tableWrap.appendChild(table);
+      section.appendChild(title);
+      section.appendChild(dist);
+      section.appendChild(tableWrap);
+      renderSecondTableForPlayer(body, dist, snapshot.playerIdx);
+      wrap.appendChild(section);
+    }
+    const chartsSection = document.createElement("section");
+    chartsSection.className = "player-analysis-compare-subsection";
+    const chartsTitle = document.createElement("h4");
+    chartsTitle.textContent = "Grafici skill";
+    const chartsGrid = document.createElement("div");
+    chartsGrid.className = "analysis-skill-chart-grid player-analysis-skill-chart-grid";
+    chartsSection.appendChild(chartsTitle);
+    chartsSection.appendChild(chartsGrid);
+    renderSkillChartsForPlayer(chartsGrid, snapshot.playerIdx);
+    wrap.appendChild(chartsSection);
+    return wrap;
+  };
+  const renderCompareCard = (snapshot, otherSnapshot, cardClass) => {
+    const card = document.createElement("div");
+    card.className = `player-analysis-compare-card ${cardClass}`;
+    const title = document.createElement("h3");
+    title.textContent = snapshot.name;
+    card.appendChild(title);
+    const table = document.createElement("table");
+    table.className = "player-analysis-compare-table";
+    snapshot.metrics.forEach((section, sectionIdx) => {
+      const sectionRow = document.createElement("tr");
+      const skillClassMap = {
+        Punti: "skill-points",
+        Battuta: "skill-serve",
+        Ricezione: "skill-pass",
+        Attacco: "skill-attack",
+        Muro: "skill-block",
+        Difesa: "skill-defense"
+      };
+      sectionRow.className = `player-analysis-compare-section-row ${skillClassMap[section.title] || ""}`.trim();
+      const sectionHead = document.createElement("th");
+      sectionHead.colSpan = 2;
+      sectionHead.textContent = section.title;
+      sectionRow.appendChild(sectionHead);
+      table.appendChild(sectionRow);
+      section.entries.forEach((entry, entryIdx) => {
+        const tr = document.createElement("tr");
+        const labelTd = document.createElement("td");
+        labelTd.textContent = entry.label;
+        const valueTd = document.createElement("td");
+        valueTd.textContent = entry.text;
+        valueTd.className = "player-analysis-compare-value is-neutral";
+        const otherEntry =
+          otherSnapshot && otherSnapshot.metrics[sectionIdx] && otherSnapshot.metrics[sectionIdx].entries[entryIdx]
+            ? otherSnapshot.metrics[sectionIdx].entries[entryIdx]
+            : null;
+        if (
+          otherEntry &&
+          entry.better !== "neutral" &&
+          entry.value !== null &&
+          otherEntry.value !== null &&
+          entry.value !== otherEntry.value
+        ) {
+          const isBetter =
+            entry.better === "lower" ? entry.value < otherEntry.value : entry.value > otherEntry.value;
+          valueTd.classList.remove("is-neutral");
+          valueTd.classList.add(isBetter ? "is-better" : "is-worse");
+        }
+        tr.appendChild(labelTd);
+        tr.appendChild(valueTd);
+        table.appendChild(tr);
+      });
+    });
+    card.appendChild(table);
+    card.appendChild(buildCompareExtraSections(snapshot));
+    return card;
+  };
+  if (elPlayerAnalysisTableWrap) {
+    elPlayerAnalysisTableWrap.classList.toggle("hidden", !!compareSnapshot);
+  }
+  const columnsWrap = document.querySelector(".player-analysis-columns");
+  const chartsPanel = document.querySelector(".player-skill-charts-panel");
+  if (columnsWrap) columnsWrap.classList.toggle("hidden", !!compareSnapshot);
+  if (chartsPanel) chartsPanel.classList.toggle("hidden", !!compareSnapshot);
+  if (elPlayerAnalysisCompareView) {
+    elPlayerAnalysisCompareView.innerHTML = "";
+    elPlayerAnalysisCompareView.classList.toggle("hidden", !compareSnapshot);
+    if (compareSnapshot) {
+      const layout = document.createElement("div");
+      layout.className = "player-analysis-compare-layout";
+      layout.appendChild(renderCompareCard(primarySnapshot, compareSnapshot, "is-primary"));
+      layout.appendChild(renderCompareCard(compareSnapshot, primarySnapshot, "is-compare"));
+      elPlayerAnalysisCompareView.appendChild(layout);
+    }
+  }
+  if (!compareSnapshot) {
+    elPlayerAnalysisBody.appendChild(buildPlayerRow(primarySnapshot));
+  } else {
+    elPlayerAnalysisBody.appendChild(buildPlayerRow(primarySnapshot));
+    elPlayerAnalysisBody.appendChild(buildPlayerRow(compareSnapshot));
   }
 }
 function updatePlayerAnalysisVisibility() {
@@ -9868,9 +10066,12 @@ function renderPlayerAnalysis() {
   if (!elPlayerAnalysisBody) return;
   renderPlayerAnalysisControls();
   renderPlayerAnalysisTable();
-  renderPlayerAnalysisSkillCharts();
   updatePlayerAnalysisVisibility();
   const prefs = ensurePlayerAnalysisState();
+  if (prefs.compareEnabled && getPlayerAnalysisCompareIdx() !== null) {
+    return;
+  }
+  renderPlayerAnalysisSkillCharts();
   if (prefs.showAttack) {
     renderPlayerTrajectoryAnalysis();
   }
@@ -16811,6 +17012,31 @@ function renderPlayerTrajectoryFilters() {
 }
 function getFilteredPlayerTrajectoryEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
+  return getFilteredPlayerTrajectoryEventsForPlayer(playerIdx);
+}
+function buildPlayerTrajectoryGridSkeleton() {
+  const grid = document.createElement("div");
+  grid.className = "trajectory-grid";
+  [4, 3, 2, 5, 6, 1].forEach(zone => {
+    const card = document.createElement("div");
+    card.className = `trajectory-card traj-area-z${zone}`;
+    card.dataset.zone = String(zone);
+    const title = document.createElement("div");
+    title.className = "trajectory-card__title";
+    title.textContent = "Zona " + zone;
+    const canvas = document.createElement("canvas");
+    canvas.dataset.trajCanvas = String(zone);
+    const empty = document.createElement("div");
+    empty.className = "trajectory-card__empty";
+    empty.textContent = "Nessuna traiettoria";
+    card.appendChild(title);
+    card.appendChild(canvas);
+    card.appendChild(empty);
+    grid.appendChild(card);
+  });
+  return grid;
+}
+function getFilteredPlayerTrajectoryEventsForPlayer(playerIdx) {
   const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     const dir = ev.attackDirection || ev.attackTrajectory;
@@ -16833,13 +17059,17 @@ function getFilteredPlayerTrajectoryEvents() {
 function renderPlayerTrajectoryAnalysis() {
   if (!elPlayerTrajectoryGrid) return;
   renderPlayerTrajectoryFilters();
-  const canvases = elPlayerTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
+  renderAttackTrajectoryGridForPlayer(elPlayerTrajectoryGrid, getPlayerAnalysisPlayerIdx());
+}
+function renderAttackTrajectoryGridForPlayer(targetGrid, playerIdx) {
+  if (!targetGrid) return;
+  const canvases = targetGrid.querySelectorAll("canvas[data-traj-canvas]");
   if (!canvases || canvases.length === 0) return;
   const prefs = ensurePlayerAnalysisState();
   const analysisScope = getAnalysisTeamScope();
   const isFarView = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]) === "far";
-  elPlayerTrajectoryGrid.classList.toggle("is-far", isFarView);
-  const events = getFilteredPlayerTrajectoryEvents();
+  targetGrid.classList.toggle("is-far", isFarView);
+  const events = getFilteredPlayerTrajectoryEventsForPlayer(playerIdx);
   const grouped = {};
   events.forEach(ev => {
     const traj = ev.attackDirection || ev.attackTrajectory || {};
@@ -16852,7 +17082,7 @@ function renderPlayerTrajectoryAnalysis() {
     const zone = parseInt(canvas.dataset.trajCanvas, 10);
     const card = canvas.closest(".trajectory-card");
     const list = grouped[zone] || [];
-    const img = getTrajectoryBg(zone, isFarView, () => renderPlayerTrajectoryAnalysis());
+    const img = getTrajectoryBg(zone, isFarView, () => renderPlayerAnalysis());
     const ratio = img && img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.65;
     const width = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 320;
     const height = Math.max(120, Math.round(width * ratio || width * 0.65));
@@ -17039,6 +17269,9 @@ function renderPlayerServeTrajectoryFilters() {
 }
 function getFilteredPlayerServeTrajectoryEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
+  return getFilteredPlayerServeTrajectoryEventsForPlayer(playerIdx);
+}
+function getFilteredPlayerServeTrajectoryEventsForPlayer(playerIdx) {
   const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "serve") return false;
     if (!ev.serveStart || !ev.serveEnd) return false;
@@ -17059,9 +17292,12 @@ function getFilteredPlayerServeTrajectoryEvents() {
 function renderPlayerServeTrajectoryAnalysis() {
   if (!elPlayerServeTrajectoryGrid) return;
   renderPlayerServeTrajectoryFilters();
-  const events = getFilteredPlayerServeTrajectoryEvents();
-  const playerIdx = getPlayerAnalysisPlayerIdx();
-  elPlayerServeTrajectoryGrid.innerHTML = "";
+  renderServeTrajectoryGridForPlayer(elPlayerServeTrajectoryGrid, getPlayerAnalysisPlayerIdx());
+}
+function renderServeTrajectoryGridForPlayer(targetGrid, playerIdx) {
+  if (!targetGrid) return;
+  const events = getFilteredPlayerServeTrajectoryEventsForPlayer(playerIdx);
+  targetGrid.innerHTML = "";
   if (playerIdx === null) return;
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
@@ -17083,13 +17319,13 @@ function renderPlayerServeTrajectoryAnalysis() {
   card.appendChild(title);
   card.appendChild(canvas);
   card.appendChild(empty);
-  elPlayerServeTrajectoryGrid.appendChild(card);
+  targetGrid.appendChild(card);
   const prefs = ensurePlayerAnalysisState();
   const isFarView = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]) === "far";
   drawServeTrajectoryCanvas(canvas, card, events, {
     scope: analysisScope,
     isFarServe: isFarView,
-    onImagesLoad: () => renderPlayerServeTrajectoryAnalysis()
+    onImagesLoad: () => renderPlayerAnalysis()
   });
 }
 function syncPlayerSecondFilterState() {
@@ -17223,6 +17459,9 @@ function renderPlayerSecondFilters() {
 }
 function getFilteredPlayerSecondEvents() {
   const playerIdx = getPlayerAnalysisPlayerIdx();
+  return getFilteredPlayerSecondEventsForPlayer(playerIdx);
+}
+function getFilteredPlayerSecondEventsForPlayer(playerIdx) {
   const events = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
     if (playerIdx === null) return false;
@@ -17238,8 +17477,8 @@ function getFilteredPlayerSecondEvents() {
     return true;
   });
 }
-function getFilteredPlayerAttacksForSecondDistribution() {
-  return getFilteredPlayerSecondEvents().filter(ev => {
+function getFilteredPlayerAttacksForSecondDistribution(playerIdx = getPlayerAnalysisPlayerIdx()) {
+  return getFilteredPlayerSecondEventsForPlayer(playerIdx).filter(ev => {
     const setType = normalizeSetTypeValue(
       ev.setType || (ev.combination && ev.combination.set_type) || (ev.combination && ev.combination.setType)
     );
@@ -17330,25 +17569,28 @@ function renderDistributionGrid(targetEl, events) {
 }
 function renderPlayerSecondTable() {
   if (!elPlayerSecondBody) return;
-  elPlayerSecondBody.innerHTML = "";
   renderPlayerSecondFilters();
+  renderSecondTableForPlayer(elPlayerSecondBody, elPlayerSecondDistribution, getPlayerAnalysisPlayerIdx());
+}
+function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx) {
+  if (!targetBody) return;
+  targetBody.innerHTML = "";
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
-  const playerIdx = getPlayerAnalysisPlayerIdx();
   if (playerIdx === null) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 11;
     td.textContent = "Seleziona una giocatrice per vedere la distribuzione.";
     tr.appendChild(td);
-    elPlayerSecondBody.appendChild(tr);
-    renderDistributionGrid(elPlayerSecondDistribution, []);
+    targetBody.appendChild(tr);
+    renderDistributionGrid(targetDistribution, []);
     return;
   }
   const totals = emptyCounts();
   const counts = emptyCounts();
-  getFilteredPlayerSecondEvents().forEach(ev => {
+  getFilteredPlayerSecondEventsForPlayer(playerIdx).forEach(ev => {
     const code = normalizeEvalCode(ev.code || ev.evaluation);
     if (!code) return;
     counts[code] = (counts[code] || 0) + 1;
@@ -17361,8 +17603,8 @@ function renderPlayerSecondTable() {
     td.colSpan = 11;
     td.textContent = "Registra alzate per vedere il dettaglio.";
     tr.appendChild(td);
-    elPlayerSecondBody.appendChild(tr);
-    renderDistributionGrid(elPlayerSecondDistribution, getFilteredPlayerAttacksForSecondDistribution());
+    targetBody.appendChild(tr);
+    renderDistributionGrid(targetDistribution, getFilteredPlayerAttacksForSecondDistribution(playerIdx));
     return;
   }
   const metrics = computeMetrics(counts, "second");
@@ -17391,8 +17633,8 @@ function renderPlayerSecondTable() {
     if (cell.className) td.className = cell.className;
     tr.appendChild(td);
   });
-  elPlayerSecondBody.appendChild(tr);
-  renderDistributionGrid(elPlayerSecondDistribution, getFilteredPlayerAttacksForSecondDistribution());
+  targetBody.appendChild(tr);
+  renderDistributionGrid(targetDistribution, getFilteredPlayerAttacksForSecondDistribution(playerIdx));
 }
 function renderVideoFilters(events) {
   const els = getVideoFilterElements();
