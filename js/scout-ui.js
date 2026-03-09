@@ -4030,6 +4030,25 @@ function getSetterShortcutScope(events) {
   if (scopes.size !== 1) return null;
   return Array.from(scopes)[0] || null;
 }
+function resetAttackShortcutModals() {
+  baseModalTargetEvents = [];
+  setterModalTargetEvents = [];
+  attackTypeModalTargetEvents = [];
+  blockNumberModalTargetEvents = [];
+  if (elBaseModal) {
+    elBaseModal.classList.add("hidden");
+  }
+  if (elAttackSetterModal) {
+    elAttackSetterModal.classList.add("hidden");
+  }
+  if (elAttackTypeModal) {
+    elAttackTypeModal.classList.add("hidden");
+  }
+  if (elBlockNumberModal) {
+    elBlockNumberModal.classList.add("hidden");
+  }
+  setGlobalModalState(false);
+}
 function openMatchManagerModal() {
   if (!elMatchManagerModal) return;
   elMatchManagerModal.classList.remove("hidden");
@@ -4073,10 +4092,7 @@ function openBaseModal() {
   setGlobalModalState(true);
 }
 function closeBaseModal() {
-  if (!elBaseModal) return;
-  elBaseModal.classList.add("hidden");
-  setGlobalModalState(false);
-  baseModalTargetEvents = [];
+  resetAttackShortcutModals();
 }
 function renderSetterModalOptions(scope, setterIdx) {
   if (!elAttackSetterModalGrid) return;
@@ -4156,10 +4172,7 @@ function openAttackSetterModal() {
   setGlobalModalState(true);
 }
 function closeAttackSetterModal() {
-  if (!elAttackSetterModal) return;
-  elAttackSetterModal.classList.add("hidden");
-  setGlobalModalState(false);
-  setterModalTargetEvents = [];
+  resetAttackShortcutModals();
 }
 function applyAttackTypeToTarget(value) {
   const targetEvents = attackTypeModalTargetEvents || [];
@@ -4177,14 +4190,23 @@ function openAttackTypeModal() {
     return;
   }
   attackTypeModalTargetEvents = targetEvents;
+  if (elAttackTypeModalGrid) {
+    elAttackTypeModalGrid.querySelectorAll(".base-modal-btn").forEach(btn => {
+      if (btn._attackTypeBound) return;
+      btn._attackTypeBound = true;
+      btn.addEventListener("click", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const value = btn.dataset.attackType;
+        if (value) applyAttackTypeToTarget(value);
+      });
+    });
+  }
   elAttackTypeModal.classList.remove("hidden");
   setGlobalModalState(true);
 }
 function closeAttackTypeModal() {
-  if (!elAttackTypeModal) return;
-  elAttackTypeModal.classList.add("hidden");
-  setGlobalModalState(false);
-  attackTypeModalTargetEvents = [];
+  resetAttackShortcutModals();
 }
 function applyBlockNumberToTarget(value) {
   const targetEvents = blockNumberModalTargetEvents || [];
@@ -4206,10 +4228,7 @@ function openBlockNumberModal() {
   setGlobalModalState(true);
 }
 function closeBlockNumberModal() {
-  if (!elBlockNumberModal) return;
-  elBlockNumberModal.classList.add("hidden");
-  setGlobalModalState(false);
-  blockNumberModalTargetEvents = [];
+  resetAttackShortcutModals();
 }
 function buildPlayersDbUsage(teamsMap) {
   const usage = {};
@@ -4704,7 +4723,6 @@ const elAttackSetterModalGrid = document.getElementById("attack-setter-modal-gri
 const elBlockNumberModal = document.getElementById("block-number-modal");
 const elBlockNumberModalClose = document.getElementById("block-number-modal-close");
 const elBlockNumberModalGrid = document.getElementById("block-number-modal-grid");
-courtModalElements.push(elBaseModal, elAttackTypeModal, elAttackSetterModal, elBlockNumberModal);
 const LOCAL_VIDEO_CACHE = "volley-video-cache";
 const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
@@ -8977,6 +8995,8 @@ function ensurePlayerAnalysisState() {
   if (!state.uiPlayerAnalysis || typeof state.uiPlayerAnalysis !== "object") {
     state.uiPlayerAnalysis = {
       playerIdx: null,
+      compareEnabled: false,
+      comparePlayerIdx: null,
       showAttack: true,
       showServe: true,
       showSecond: false,
@@ -8998,6 +9018,10 @@ function ensurePlayerAnalysisState() {
   if (typeof prefs.playerIdx !== "number") {
     prefs.playerIdx = null;
   }
+  prefs.compareEnabled = prefs.compareEnabled === true;
+  if (typeof prefs.comparePlayerIdx !== "number") {
+    prefs.comparePlayerIdx = null;
+  }
   return prefs;
 }
 function getPlayerAnalysisPlayerIdx() {
@@ -9011,6 +9035,25 @@ function getPlayerAnalysisPlayerIdx() {
     prefs.playerIdx = 0;
   }
   return prefs.playerIdx;
+}
+function getPlayerAnalysisCompareIdx() {
+  const prefs = ensurePlayerAnalysisState();
+  const players = getPlayersForScope(getAnalysisTeamScope());
+  if (!prefs.compareEnabled || !players.length) {
+    prefs.comparePlayerIdx = null;
+    return null;
+  }
+  const primaryIdx = getPlayerAnalysisPlayerIdx();
+  const isInvalid =
+    typeof prefs.comparePlayerIdx !== "number" ||
+    prefs.comparePlayerIdx < 0 ||
+    prefs.comparePlayerIdx >= players.length ||
+    prefs.comparePlayerIdx === primaryIdx;
+  if (isInvalid) {
+    const fallbackIdx = players.findIndex((_name, idx) => idx !== primaryIdx);
+    prefs.comparePlayerIdx = fallbackIdx >= 0 ? fallbackIdx : null;
+  }
+  return prefs.comparePlayerIdx;
 }
 function getAggTableElements() {
   const table = elAggTableBody ? elAggTableBody.closest("table") : null;
@@ -9556,6 +9599,10 @@ function renderPlayerAnalysisControls() {
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
+  const entries =
+    analysisScope === "opponent"
+      ? getSortedPlayerEntriesForScope(analysisScope)
+      : getSortedPlayerEntries();
   elPlayerAnalysisSelect.innerHTML = "";
   if (!players.length) {
     const opt = document.createElement("option");
@@ -9564,10 +9611,6 @@ function renderPlayerAnalysisControls() {
     elPlayerAnalysisSelect.appendChild(opt);
     elPlayerAnalysisSelect.disabled = true;
   } else {
-    const entries =
-      analysisScope === "opponent"
-        ? getSortedPlayerEntriesForScope(analysisScope)
-        : getSortedPlayerEntries();
     entries.forEach(({ name, idx }) => {
       const opt = document.createElement("option");
       opt.value = String(idx);
@@ -9590,10 +9633,67 @@ function renderPlayerAnalysisControls() {
     elPlayerAnalysisSelect.addEventListener("change", () => {
       const idx = parseInt(elPlayerAnalysisSelect.value, 10);
       prefs.playerIdx = isNaN(idx) ? null : idx;
+      if (prefs.compareEnabled && prefs.comparePlayerIdx === prefs.playerIdx) {
+        prefs.comparePlayerIdx = null;
+      }
       saveState();
       renderPlayerAnalysis();
     });
     elPlayerAnalysisSelect._playerAnalysisBound = true;
+  }
+  if (elPlayerAnalysisCompareEnabled) {
+    elPlayerAnalysisCompareEnabled.checked = !!prefs.compareEnabled;
+    if (!elPlayerAnalysisCompareEnabled._bound) {
+      elPlayerAnalysisCompareEnabled.addEventListener("change", () => {
+        prefs.compareEnabled = !!elPlayerAnalysisCompareEnabled.checked;
+        if (prefs.compareEnabled) {
+          getPlayerAnalysisCompareIdx();
+        } else {
+          prefs.comparePlayerIdx = null;
+        }
+        saveState();
+        renderPlayerAnalysis();
+      });
+      elPlayerAnalysisCompareEnabled._bound = true;
+    }
+  }
+  if (elPlayerAnalysisCompareFilter) {
+    elPlayerAnalysisCompareFilter.classList.toggle("hidden", !prefs.compareEnabled || players.length < 2);
+  }
+  if (elPlayerAnalysisCompareSelect) {
+    elPlayerAnalysisCompareSelect.innerHTML = "";
+    const primaryIdx = getPlayerAnalysisPlayerIdx();
+    const compareEntries = entries.filter(entry => entry.idx !== primaryIdx);
+    if (!prefs.compareEnabled || compareEntries.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = compareEntries.length === 0 ? "Nessuna altra giocatrice" : "Confronto disattivato";
+      elPlayerAnalysisCompareSelect.appendChild(opt);
+      elPlayerAnalysisCompareSelect.disabled = true;
+    } else {
+      compareEntries.forEach(({ name, idx }) => {
+        const opt = document.createElement("option");
+        opt.value = String(idx);
+        opt.textContent =
+          analysisScope === "opponent"
+            ? formatNameWithNumberFor(name, numbers) || name || "Giocatrice " + (idx + 1)
+            : formatNameWithNumber(name) || name || "Giocatrice " + (idx + 1);
+        elPlayerAnalysisCompareSelect.appendChild(opt);
+      });
+      elPlayerAnalysisCompareSelect.disabled = false;
+      const compareIdx = getPlayerAnalysisCompareIdx();
+      elPlayerAnalysisCompareSelect.value =
+        compareIdx !== null ? String(compareIdx) : (compareEntries[0] ? String(compareEntries[0].idx) : "");
+    }
+    if (!elPlayerAnalysisCompareSelect._bound) {
+      elPlayerAnalysisCompareSelect.addEventListener("change", () => {
+        const idx = parseInt(elPlayerAnalysisCompareSelect.value, 10);
+        prefs.comparePlayerIdx = isNaN(idx) ? null : idx;
+        saveState();
+        renderPlayerAnalysis();
+      });
+      elPlayerAnalysisCompareSelect._bound = true;
+    }
   }
   if (elPlayerAnalysisCourtSide) {
     const scopeSide = getAnalysisCourtSide(prefs.courtSideByScope[analysisScope]);
@@ -9642,9 +9742,11 @@ function renderPlayerAnalysisTable() {
   if (!elPlayerAnalysisBody) return;
   elPlayerAnalysisBody.innerHTML = "";
   const idx = getPlayerAnalysisPlayerIdx();
+  const compareIdx = getPlayerAnalysisCompareIdx();
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
+  const prefs = ensurePlayerAnalysisState();
   const filteredEvents = filterEventsByAnalysisTeam().filter(ev => matchesSummarySetFilter(ev));
   const statsByPlayer = computeStatsByPlayerForEvents(filteredEvents, players);
   if (idx === null || !players || !players[idx]) {
@@ -9656,76 +9758,84 @@ function renderPlayerAnalysisTable() {
     elPlayerAnalysisBody.appendChild(tr);
     return;
   }
-  const name = players[idx];
-  const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
-  const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
-  const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
-  const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
-  const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
-
-  const serveMetrics = computeMetrics(serveCounts, "serve");
-  const passMetrics = computeMetrics(passCounts, "pass");
-  const attackMetrics = computeMetrics(attackCounts, "attack");
-  const defenseMetrics = computeMetrics(defenseCounts, "defense");
-
   const playerPoints = computePlayerPointsMap(filteredEvents, analysisScope);
   const playerErrors = computePlayerErrorsMap(filteredEvents);
   const playerPassAces = computePlayerPassAceMap(filteredEvents, analysisScope);
-  const points = playerPoints[idx] || { for: 0, against: 0 };
-  const personalErrors = playerErrors[idx] || 0;
-  const passAces = playerPassAces[idx] || 0;
-  const attackTotal = totalFromCounts(attackCounts);
-  const servePointCount = countPointsForSkill(serveCounts, "serve");
-  const attackPointCount = countPointsForSkill(attackCounts, "attack");
-  const blockPointCount = countPointsForSkill(blockCounts, "block");
+  const buildPlayerRow = playerIdx => {
+    const name = players[playerIdx];
+    const serveCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].serve);
+    const passCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].pass);
+    const attackCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].attack);
+    const blockCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].block);
+    const defenseCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].defense);
+    const serveMetrics = computeMetrics(serveCounts, "serve");
+    const passMetrics = computeMetrics(passCounts, "pass");
+    const attackMetrics = computeMetrics(attackCounts, "attack");
+    const defenseMetrics = computeMetrics(defenseCounts, "defense");
+    const points = playerPoints[playerIdx] || { for: 0, against: 0 };
+    const personalErrors = playerErrors[playerIdx] || 0;
+    const passAces = playerPassAces[playerIdx] || 0;
+    const attackTotal = totalFromCounts(attackCounts);
+    const servePointCount = countPointsForSkill(serveCounts, "serve");
+    const attackPointCount = countPointsForSkill(attackCounts, "attack");
+    const blockPointCount = countPointsForSkill(blockCounts, "block");
+    const row = document.createElement("tr");
+    if (prefs.compareEnabled) {
+      row.classList.add("player-analysis-compare-row");
+      if (playerIdx === idx) row.classList.add("is-primary");
+      if (playerIdx === compareIdx) row.classList.add("is-compare");
+    }
+    const cells = [
+      {
+        text:
+          analysisScope === "opponent"
+            ? formatNameWithNumberFor(name, numbers)
+            : formatNameWithNumber(name)
+      },
+      { text: points.for || 0 },
+      { text: points.against || 0 },
+      { text: formatDelta((points.for || 0) - (points.against || 0)) },
+      { text: personalErrors || 0 },
 
-  const row = document.createElement("tr");
-  const cells = [
-    {
-      text:
-        analysisScope === "opponent"
-          ? formatNameWithNumberFor(name, numbers)
-          : formatNameWithNumber(name)
-    },
-    { text: points.for || 0 },
-    { text: points.against || 0 },
-    { text: formatDelta((points.for || 0) - (points.against || 0)) },
-    { text: personalErrors || 0 },
+      { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
+      { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
+      { text: servePointCount || 0, className: "skill-col skill-serve" },
+      { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
+      { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
 
-    { text: totalFromCounts(serveCounts), className: "skill-col skill-serve" },
-    { text: serveCounts["="] || 0, className: "skill-col skill-serve" },
-    { text: servePointCount || 0, className: "skill-col skill-serve" },
-    { text: serveMetrics.eff === null ? "-" : formatPercent(serveMetrics.eff), className: "skill-col skill-serve" },
-    { text: serveMetrics.pos === null ? "-" : formatPercent(serveMetrics.pos), className: "skill-col skill-serve" },
+      { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
+      { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
+      { text: passAces || 0, className: "skill-col skill-pass" },
+      { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
+      { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
+      { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
 
-    { text: totalFromCounts(passCounts), className: "skill-col skill-pass" },
-    { text: passMetrics.negativeCount || 0, className: "skill-col skill-pass" },
-    { text: passAces || 0, className: "skill-col skill-pass" },
-    { text: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos), className: "skill-col skill-pass" },
-    { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
-    { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
+      { text: attackTotal, className: "skill-col skill-attack" },
+      { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
+      { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
+      { text: attackPointCount || 0, className: "skill-col skill-attack" },
+      { text: formatPercentValue(attackPointCount || 0, attackTotal), className: "skill-col skill-attack" },
+      { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
 
-    { text: attackTotal, className: "skill-col skill-attack" },
-    { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
-    { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
-    { text: attackPointCount || 0, className: "skill-col skill-attack" },
-    { text: formatPercentValue(attackPointCount || 0, attackTotal), className: "skill-col skill-attack" },
-    { text: attackMetrics.eff === null ? "-" : formatPercent(attackMetrics.eff), className: "skill-col skill-attack" },
+      { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
+      { text: blockPointCount || 0, className: "skill-col skill-block" },
 
-    { text: totalFromCounts(blockCounts), className: "skill-col skill-block" },
-    { text: blockPointCount || 0, className: "skill-col skill-block" },
-
-    { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
-    { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
-    { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
-  ];
-  cells.forEach(cell => {
-    const td = document.createElement("td");
-    td.textContent = cell.text;
-    if (cell.className) td.className = cell.className;
-    row.appendChild(td);
-  });
-  elPlayerAnalysisBody.appendChild(row);
+      { text: totalFromCounts(defenseCounts), className: "skill-col skill-defense" },
+      { text: defenseMetrics.negativeCount || 0, className: "skill-col skill-defense" },
+      { text: defenseMetrics.eff === null ? "-" : formatPercent(defenseMetrics.eff), className: "skill-col skill-defense" }
+    ];
+    cells.forEach(cell => {
+      const td = document.createElement("td");
+      td.textContent = cell.text;
+      if (cell.className) td.className = cell.className;
+      row.appendChild(td);
+    });
+    return row;
+  };
+  elPlayerAnalysisBody.appendChild(buildPlayerRow(idx));
+  if (prefs.compareEnabled && compareIdx !== null && players[compareIdx]) {
+    elPlayerAnalysisBody.appendChild(buildPlayerRow(compareIdx));
+  }
 }
 function updatePlayerAnalysisVisibility() {
   const prefs = ensurePlayerAnalysisState();
@@ -21043,6 +21153,9 @@ function setActiveTab(target) {
     target = "match";
   }
   const prevTab = activeTab;
+  if (prevTab === "video" && target !== "video") {
+    resetAttackShortcutModals();
+  }
   activeTab = target;
   state.uiActiveTab = target;
   if (!isLoadingMatch) saveState();
@@ -21230,6 +21343,7 @@ async function init() {
   initTabs();
   initSwipeTabs();
   setupFocusGuards();
+  resetAttackShortcutModals();
   initSetTypeShortcuts();
   document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;

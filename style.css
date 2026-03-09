@@ -2416,6 +2416,9 @@ body[data-theme="light"] .court-net-divider::after {
   padding: 0.6rem 0.4rem;
   font-weight: 700;
   font-size: 1rem;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
 }
 .base-modal-btn:hover {
   filter: brightness(1.05);
@@ -5055,6 +5058,15 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
   gap: 0.7rem 1rem;
   align-items: flex-end;
 }
+.player-analysis-compare-toggle {
+  align-self: flex-end;
+}
+.player-analysis-compare-row.is-primary td:first-child {
+  box-shadow: inset 3px 0 0 rgba(59, 130, 246, 0.9);
+}
+.player-analysis-compare-row.is-compare td:first-child {
+  box-shadow: inset 3px 0 0 rgba(16, 185, 129, 0.9);
+}
 .player-analysis-toggles {
   display: flex;
   flex-wrap: wrap;
@@ -5922,14 +5934,19 @@ body[data-theme="light"] .agg-skill-codes th {
 .skill-modal.hidden {
   display: none;
 }
+.skill-modal.force-popup {
+  z-index: 3200 !important;
+}
 .skill-modal__backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
+  z-index: 0;
 }
 .skill-modal__content {
   position: relative;
+  z-index: 1;
   background: #0f0f0f;
   border: 1px solid #2f2f2f;
   border-radius: 0.8rem;
@@ -5942,6 +5959,7 @@ body[data-theme="light"] .agg-skill-codes th {
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
 }
 #lineup-modal .skill-modal__content,
 .lineup-modal__content {

@@ -12,7 +12,6 @@ roatazione avversario nella modalita singola
 crea stampa tipo foglio gara
 
 # Features teoricamente implementate
-i tempi di battuta andrebbero calcolati quando si finisce di inserire la traiettoria
 
 # Bug funzionalità
 
