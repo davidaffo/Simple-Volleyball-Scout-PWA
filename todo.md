@@ -4,8 +4,6 @@ Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
-Aggiungere analisi attacco per tipo di attacco
-aggiungere modalita comparazione tra giocatrici
 foto giocatrici
 roatazione avversario nella modalita singola
 crea stampa tipo foglio gara

@@ -5048,6 +5048,41 @@ body[data-theme="light"] .skill-chart-tooltip__row.small {
 body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
   border-left-color: rgba(37, 99, 235, 0.45);
 }
+.attack-analysis-summary {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.attack-analysis-type-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.attack-analysis-type-table th,
+.attack-analysis-type-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  text-align: right;
+}
+.attack-analysis-type-table th:first-child,
+.attack-analysis-type-table td:first-child {
+  text-align: left;
+}
+.attack-analysis-type-table thead th {
+  background: rgba(239, 68, 68, 0.12);
+}
+.attack-analysis-type-table td.is-better {
+  color: #22c55e;
+  font-weight: 700;
+}
+.attack-analysis-type-table td.is-worse {
+  color: #ef4444;
+  font-weight: 700;
+}
+.attack-analysis-total-row td {
+  font-weight: 800;
+  background: rgba(148, 163, 184, 0.08);
+}
 .player-analysis-column {
   display: grid;
   gap: 0.6rem;

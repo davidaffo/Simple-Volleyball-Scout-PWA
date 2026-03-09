@@ -9909,17 +9909,25 @@ function renderPlayerAnalysisTable() {
   const compareSnapshot = prefs.compareEnabled && compareIdx !== null && players[compareIdx]
     ? buildPlayerSnapshot(compareIdx)
     : null;
-  const buildCompareExtraSections = snapshot => {
+  const buildCompareExtraSections = (snapshot, otherSnapshot = null) => {
     const wrap = document.createElement("div");
     wrap.className = "player-analysis-compare-sections";
     if (prefs.showAttack) {
       const section = document.createElement("section");
       section.className = "player-analysis-compare-subsection";
       const title = document.createElement("h4");
-      title.textContent = "Traiettorie attacco";
+      title.textContent = "Attacco";
+      const summary = document.createElement("div");
+      summary.className = "attack-analysis-summary";
       const grid = buildPlayerTrajectoryGridSkeleton();
       section.appendChild(title);
+      section.appendChild(summary);
       section.appendChild(grid);
+      renderAttackMetricsSummary(
+        summary,
+        getFilteredPlayerAttackSummaryEventsForPlayer(snapshot.playerIdx),
+        otherSnapshot ? getFilteredPlayerAttackSummaryEventsForPlayer(otherSnapshot.playerIdx) : null
+      );
       renderAttackTrajectoryGridForPlayer(grid, snapshot.playerIdx);
       wrap.appendChild(section);
     }
@@ -10022,7 +10030,7 @@ function renderPlayerAnalysisTable() {
       });
     });
     card.appendChild(table);
-    card.appendChild(buildCompareExtraSections(snapshot));
+    card.appendChild(buildCompareExtraSections(snapshot, otherSnapshot));
     return card;
   };
   if (elPlayerAnalysisTableWrap) {
@@ -17056,9 +17064,31 @@ function getFilteredPlayerTrajectoryEventsForPlayer(playerIdx) {
     return true;
   });
 }
+function getFilteredPlayerAttackSummaryEventsForPlayer(playerIdx) {
+  const events = getAnalysisEvents().filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    if (playerIdx === null) return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
+    return ev.playerIdx === playerIdx;
+  });
+  return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    const setNum = normalizeSetNumber(ev.set);
+    if (!matchesAdvancedFilters(ev, playerTrajectoryFilterState)) return false;
+    if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(setNum)) return false;
+    if (playerTrajectoryFilterState.codes.size && !playerTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (playerTrajectoryFilterState.zones.size && !playerTrajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
 function renderPlayerTrajectoryAnalysis() {
   if (!elPlayerTrajectoryGrid) return;
   renderPlayerTrajectoryFilters();
+  renderAttackMetricsSummary(
+    elPlayerAttackSummary,
+    getFilteredPlayerAttackSummaryEventsForPlayer(getPlayerAnalysisPlayerIdx())
+  );
   renderAttackTrajectoryGridForPlayer(elPlayerTrajectoryGrid, getPlayerAnalysisPlayerIdx());
 }
 function renderAttackTrajectoryGridForPlayer(targetGrid, playerIdx) {
@@ -18354,6 +18384,7 @@ function getFilteredServeTrajectoryEvents() {
 function renderTrajectoryAnalysis() {
   if (!elTrajectoryGrid) return;
   renderTrajectoryFilters();
+  renderAttackMetricsSummary(elTrajectoryAttackSummary, getFilteredAttackSummaryEvents());
   const canvases = elTrajectoryGrid.querySelectorAll("canvas[data-traj-canvas]");
   if (!canvases || canvases.length === 0) return;
   const analysisScope = getAnalysisTeamScope();
@@ -18408,6 +18439,162 @@ function renderTrajectoryAnalysis() {
       ctx.stroke();
     });
   });
+}
+function buildAttackTypeLabel(value) {
+  const normalized = valueToString(value).trim();
+  return normalized || "Non specificato";
+}
+function getFilteredAttackSummaryEvents() {
+  const events = getAnalysisEvents().filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
+    return true;
+  });
+  return events.filter(ev => {
+    const traj = ev.attackDirection || ev.attackTrajectory || {};
+    const startZone = ev.attackStartZone || traj.startZone || ev.zone || ev.playerPosition || null;
+    const setNum = normalizeSetNumber(ev.set);
+    if (!matchesAdvancedFilters(ev, trajectoryFilterState)) return false;
+    if (trajectoryFilterState.setters.size) {
+      const setterIdx = getSetterFromEvent(ev);
+      if (setterIdx === null || !trajectoryFilterState.setters.has(setterIdx)) return false;
+    }
+    if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
+    if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(setNum)) return false;
+    if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
+    if (trajectoryFilterState.zones.size && !trajectoryFilterState.zones.has(startZone)) return false;
+    return true;
+  });
+}
+function renderAttackMetricsSummary(target, events, compareEvents = null) {
+  if (!target) return;
+  const list = Array.isArray(events) ? events.filter(ev => ev && ev.skillId === "attack") : [];
+  const compareList = Array.isArray(compareEvents)
+    ? compareEvents.filter(ev => ev && ev.skillId === "attack")
+    : null;
+  target.innerHTML = "";
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessun attacco per i filtri selezionati.";
+    target.appendChild(empty);
+    return;
+  }
+  const counts = emptyCounts();
+  const byType = {};
+  const compareCounts = emptyCounts();
+  const compareByType = {};
+  list.forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (code) counts[code] = (counts[code] || 0) + 1;
+    const key = buildAttackTypeLabel(ev.attackType);
+    if (!byType[key]) byType[key] = emptyCounts();
+    if (code) byType[key][code] = (byType[key][code] || 0) + 1;
+  });
+  if (compareList) {
+    compareList.forEach(ev => {
+      const code = normalizeEvalCode(ev.code || ev.evaluation);
+      if (code) compareCounts[code] = (compareCounts[code] || 0) + 1;
+      const key = buildAttackTypeLabel(ev.attackType);
+      if (!compareByType[key]) compareByType[key] = emptyCounts();
+      if (code) compareByType[key][code] = (compareByType[key][code] || 0) + 1;
+    });
+  }
+  const total = totalFromCounts(counts);
+  const pointCount = countPointsForSkill(counts, "attack");
+  const metrics = computeMetrics(counts, "attack");
+  const compareTotal = totalFromCounts(compareCounts);
+  const comparePointCount = countPointsForSkill(compareCounts, "attack");
+  const compareMetrics = computeMetrics(compareCounts, "attack");
+  const buildAttackCompareClass = (value, otherValue, better = "higher") => {
+    if (!compareList || value === null || otherValue === null || value === otherValue) return "";
+    const isBetter = better === "lower" ? value < otherValue : value > otherValue;
+    return isBetter ? "is-better" : "is-worse";
+  };
+  const table = document.createElement("table");
+  table.className = "attack-analysis-type-table";
+  table.innerHTML =
+    "<thead><tr><th>Tipo attacco</th><th>Tot</th><th>Err</th><th>Mur</th><th>Punti</th><th>% Punti</th><th>Eff</th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  Object.keys(byType)
+    .sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }))
+    .forEach(type => {
+      const rowCounts = normalizeCounts(byType[type]);
+      const rowTotal = totalFromCounts(rowCounts);
+      const rowPoints = countPointsForSkill(rowCounts, "attack");
+      const rowMetrics = computeMetrics(rowCounts, "attack");
+      const compareRowCounts = normalizeCounts(compareByType[type]);
+      const compareRowTotal = totalFromCounts(compareRowCounts);
+      const compareRowPoints = countPointsForSkill(compareRowCounts, "attack");
+      const compareRowMetrics = computeMetrics(compareRowCounts, "attack");
+      const tr = document.createElement("tr");
+      [
+        { text: type, compare: null, better: "neutral" },
+        { text: rowTotal, compare: compareRowTotal, better: "neutral" },
+        { text: rowCounts["="] || 0, compare: compareRowCounts["="] || 0, better: "lower" },
+        { text: rowCounts["/"] || 0, compare: compareRowCounts["/"] || 0, better: "lower" },
+        { text: rowPoints || 0, compare: compareRowPoints || 0, better: "higher" },
+        {
+          text: formatPercentValue(rowPoints || 0, rowTotal),
+          compare: compareRowTotal ? (compareRowPoints || 0) / compareRowTotal : null,
+          better: "higher",
+          raw: rowTotal ? (rowPoints || 0) / rowTotal : null
+        },
+        {
+          text: rowMetrics.eff === null ? "-" : formatPercent(rowMetrics.eff),
+          compare: compareRowMetrics.eff,
+          better: "higher",
+          raw: rowMetrics.eff
+        }
+      ].forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell.text;
+        const compareClass = buildAttackCompareClass(
+          Object.prototype.hasOwnProperty.call(cell, "raw") ? cell.raw : cell.text,
+          cell.compare,
+          cell.better
+        );
+        if (compareClass) td.classList.add(compareClass);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  table.appendChild(tbody);
+  const tfoot = document.createElement("tfoot");
+  const totalRow = document.createElement("tr");
+  totalRow.className = "attack-analysis-total-row";
+  [
+    { text: "Totale", compare: null, better: "neutral" },
+    { text: total, compare: compareTotal, better: "neutral" },
+    { text: counts["="] || 0, compare: compareCounts["="] || 0, better: "lower" },
+    { text: counts["/"] || 0, compare: compareCounts["/"] || 0, better: "lower" },
+    { text: pointCount || 0, compare: comparePointCount || 0, better: "higher" },
+    {
+      text: formatPercentValue(pointCount || 0, total),
+      compare: compareTotal ? (comparePointCount || 0) / compareTotal : null,
+      better: "higher",
+      raw: total ? (pointCount || 0) / total : null
+    },
+    {
+      text: metrics.eff === null ? "-" : formatPercent(metrics.eff),
+      compare: compareMetrics.eff,
+      better: "higher",
+      raw: metrics.eff
+    }
+  ].forEach(cell => {
+    const td = document.createElement("td");
+    td.textContent = cell.text;
+    const compareClass = buildAttackCompareClass(
+      Object.prototype.hasOwnProperty.call(cell, "raw") ? cell.raw : cell.text,
+      cell.compare,
+      cell.better
+    );
+    if (compareClass) td.classList.add(compareClass);
+    totalRow.appendChild(td);
+  });
+  tfoot.appendChild(totalRow);
+  table.appendChild(tfoot);
+  target.appendChild(table);
 }
 function renderServeTrajectoryAnalysis() {
   if (!elServeTrajectoryGrid) return;
