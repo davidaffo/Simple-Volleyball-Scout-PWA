@@ -312,7 +312,16 @@
               <button id="btn-toggle-court-view" class="small secondary" type="button">Cambia campo</button>
             </div>
             <div class="court-actions-bar team-panel team-panel--home" data-team-panel="home-settings">
-              <h3 class="panel-title">Impostazioni squadra</h3>
+              <div class="panel-title-row">
+                <h3 class="panel-title">Impostazioni squadra</h3>
+                <button
+                  id="btn-open-live-team-editor"
+                  class="icon-button team-panel-edit-btn"
+                  type="button"
+                  aria-label="Modifica squadra in partita"
+                  title="Modifica squadra in partita"
+                >✎</button>
+              </div>
               <div class="rotation-toggles">
                 <label class="auto-rotate-toggle">
                   <input type="checkbox" id="auto-role-p1american-toggle" />
@@ -1525,6 +1534,7 @@
             <input type="text" id="team-meta-manager" placeholder="Dirigente" />
           </label>
         </div>
+        <p id="team-manager-live-note" class="section-note hidden">Modifica rapida in partita: puoi aggiungere giocatrici e correggere nomi o numeri senza resettare formazione e dati gara. Le rimozioni restano disabilitate.</p>
         <p class="section-note">Imposta staff, capitana (K), liberi (L) e chi è fuori rosa. La formazione di default si gestisce dal pannello a destra. I ruoli in campo sono sempre inferiti automaticamente dalla posizione del palleggiatore nella rotazione reale.</p>
         <div class="team-manager-actions">
           <button id="team-manager-add" class="secondary">Aggiungi giocatrice</button>

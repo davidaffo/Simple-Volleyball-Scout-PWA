@@ -156,11 +156,14 @@ const elTeamMetaName = document.getElementById("team-meta-name");
 const elTeamMetaHead = document.getElementById("team-meta-head");
 const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
 const elTeamMetaManager = document.getElementById("team-meta-manager");
+const elTeamManagerLiveNote = document.getElementById("team-manager-live-note");
 const elTeamManagerDup = document.getElementById("team-manager-duplicate");
 const elTeamManagerTemplate = document.getElementById("team-manager-template");
+const elTeamManagerDialog = document.querySelector("#team-manager-modal .team-modal__dialog");
 const DEFAULT_STAFF = { headCoach: "", assistantCoach: "", manager: "" };
 let teamManagerState = null;
 let teamManagerScope = "our";
+let teamManagerLiveEditMode = false;
 if (elDefaultLineupRotateCw) {
   elDefaultLineupRotateCw.addEventListener("click", () => rotateDefaultLineup("cw"));
 }
@@ -748,6 +751,90 @@ function replacePlayerNameEverywhere(oldName, newName, idx) {
       ev.playerName = newName;
     }
   });
+}
+function replacePlayerNameInLineup(lineup, oldName, newName) {
+  if (!Array.isArray(lineup)) return lineup;
+  return lineup.map(slot => ({
+    main: slot && slot.main === oldName ? newName : (slot && slot.main) || "",
+    replaced: slot && slot.replaced === oldName ? newName : (slot && slot.replaced) || ""
+  }));
+}
+function renamePlayerAcrossCurrentMatchById(playerId, nextNameRaw) {
+  const normalized = normalizePlayers([nextNameRaw])[0];
+  if (!normalized) return false;
+  const currentPayload = getCurrentTeamPayload();
+  const detailed = Array.isArray(currentPayload.playersDetailed) ? currentPayload.playersDetailed : [];
+  const previous = detailed.find(player => player && player.id === playerId && !player.out);
+  if (!previous || !previous.name) return false;
+  const oldName = previous.name;
+  if (oldName === normalized) return false;
+  const idx = (state.players || []).findIndex(name => name === oldName);
+  if (idx === -1) return false;
+  state.players[idx] = normalized;
+  state.playerNumbers = state.playerNumbers || {};
+  const oldNumber = state.playerNumbers[oldName];
+  delete state.playerNumbers[oldName];
+  if (oldNumber !== undefined) {
+    state.playerNumbers[normalized] = oldNumber;
+  }
+  replacePlayerNameEverywhere(oldName, normalized, idx);
+  state.autoRoleBaseCourt = replacePlayerNameInLineup(state.autoRoleBaseCourt, oldName, normalized);
+  autoRoleBaseCourt = replacePlayerNameInLineup(autoRoleBaseCourt, oldName, normalized);
+  if (
+    state.pendingServe &&
+    state.pendingServe.scope === "our" &&
+    (state.pendingServe.playerId === playerId || state.pendingServe.playerName === oldName)
+  ) {
+    state.pendingServe.playerName = normalized;
+  }
+  return true;
+}
+function applyLiveTeamManagerPayload(payload) {
+  const currentPayload = getCurrentTeamPayload();
+  const currentDetailed = Array.isArray(currentPayload.playersDetailed)
+    ? currentPayload.playersDetailed.filter(player => player && !player.out)
+    : [];
+  const nextDetailed = Array.isArray(payload.playersDetailed)
+    ? payload.playersDetailed.filter(player => player && !player.out)
+    : [];
+  const currentIds = new Set(currentDetailed.map(player => player.id).filter(Boolean));
+  const nextIds = new Set(nextDetailed.map(player => player.id).filter(Boolean));
+  const removed = currentDetailed.filter(player => player.id && !nextIds.has(player.id));
+  if (removed.length > 0) {
+    alert("Durante la partita non puoi rimuovere giocatrici dal roster rapido.");
+    return false;
+  }
+  currentDetailed.forEach(player => {
+    const next = nextDetailed.find(entry => entry.id === player.id);
+    if (!next || !next.name || next.name === player.name) return;
+    renamePlayerAcrossCurrentMatchById(player.id, next.name);
+  });
+  const orderedCurrentNames = currentDetailed.map(player => {
+    const renamed = nextDetailed.find(entry => entry.id === player.id);
+    return renamed && renamed.name ? renamed.name : player.name;
+  });
+  const addedNames = nextDetailed
+    .filter(player => player.id && !currentIds.has(player.id))
+    .map(player => player.name)
+    .filter(Boolean);
+  const nextNames = orderedCurrentNames.concat(addedNames);
+  updatePlayersList(nextNames, {
+    askReset: false,
+    liberos: payload.liberos,
+    playerNumbers: payload.numbers,
+    captains: payload.captains,
+    preserveCourt: true,
+    preferredLibero: payload.preferredLibero || ""
+  });
+  return true;
+}
+function syncTeamManagerModeUI() {
+  if (elTeamManagerDialog) {
+    elTeamManagerDialog.classList.toggle("team-modal__dialog--live-edit", !!teamManagerLiveEditMode);
+  }
+  if (elTeamManagerLiveNote) {
+    elTeamManagerLiveNote.classList.toggle("hidden", !teamManagerLiveEditMode);
+  }
 }
 function renamePlayerAtIndex(idx, nextNameRaw) {
   if (!state.players || !state.players[idx]) return;
@@ -4066,6 +4153,10 @@ function renderTeamManagerTable() {
     const outChk = document.createElement("input");
     outChk.type = "checkbox";
     outChk.checked = !!p.out;
+    outChk.disabled = !!teamManagerLiveEditMode;
+    if (teamManagerLiveEditMode) {
+      outChk.title = "Fuori rosa disabilitato durante la partita.";
+    }
     outChk.addEventListener("change", () => {
       p.out = outChk.checked;
       renderTeamManagerTable();
@@ -4074,6 +4165,10 @@ function renderTeamManagerTable() {
     delBtn.type = "button";
     delBtn.className = "small danger";
     delBtn.textContent = "✕";
+    delBtn.disabled = !!teamManagerLiveEditMode;
+    if (teamManagerLiveEditMode) {
+      delBtn.title = "Rimozione disabilitata durante la partita.";
+    }
     delBtn.addEventListener("click", () => {
       const label = p.name || "questa giocatrice";
       const ok = confirm("Eliminare " + label + "?");
@@ -4533,6 +4628,7 @@ function refreshTeamManagerPlayersFromState() {
 function refreshTeamManagerFromSelection() {
   if (!elTeamManagerModal || elTeamManagerModal.classList.contains("hidden")) return;
   if (teamManagerScope !== "our") return;
+  teamManagerLiveEditMode = false;
   const selected = state.selectedTeam || (elTeamsSelect && elTeamsSelect.value) || "";
   const source = selected ? loadTeamFromStorage(selected) : null;
   teamManagerState = buildTeamManagerStateFromSource(source, "our");
@@ -4544,17 +4640,29 @@ function refreshTeamManagerFromSelection() {
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
   if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
+  syncTeamManagerModeUI();
   renderTeamManagerTable();
 }
 function openTeamManagerModal(scope = "our") {
+  let options = {};
+  if (scope && typeof scope === "object") {
+    options = scope;
+    scope = options.scope || "our";
+  }
+  const { liveEdit = false } = options;
   teamManagerScope = scope;
+  teamManagerLiveEditMode = !!liveEdit;
   const isOpponent = scope === "opponent";
   const selected = isOpponent ? state.selectedOpponentTeam : state.selectedTeam;
-  const source = selected
+  const source = liveEdit
     ? isOpponent
-      ? loadOpponentTeamFromStorage(selected)
-      : loadTeamFromStorage(selected)
-    : null;
+      ? getCurrentOpponentPayload()
+      : getCurrentTeamPayload()
+    : selected
+      ? isOpponent
+        ? loadOpponentTeamFromStorage(selected)
+        : loadTeamFromStorage(selected)
+      : null;
   teamManagerState = buildTeamManagerStateFromSource(source, scope);
   if (elTeamMetaName) elTeamMetaName.value = teamManagerState.name || "";
   if (elTeamMetaName) {
@@ -4564,6 +4672,7 @@ function openTeamManagerModal(scope = "our") {
   if (elTeamMetaHead) elTeamMetaHead.value = teamManagerState.staff.headCoach || "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = teamManagerState.staff.assistantCoach || "";
   if (elTeamMetaManager) elTeamMetaManager.value = teamManagerState.staff.manager || "";
+  syncTeamManagerModeUI();
   renderTeamManagerTable();
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
@@ -4571,11 +4680,16 @@ function openTeamManagerModal(scope = "our") {
   }
   const title = document.querySelector("#team-manager-modal h3");
   if (title) {
-    title.textContent = isOpponent ? "Gestione squadra avversaria" : "Gestione squadra";
+    title.textContent = liveEdit
+      ? "Modifica squadra in partita"
+      : isOpponent
+        ? "Gestione squadra avversaria"
+        : "Gestione squadra";
   }
 }
 function openNewTeamManager() {
   teamManagerScope = "our";
+  teamManagerLiveEditMode = false;
   const players = buildTemplatePlayersDetailed();
   const defaultLineup =
     typeof buildRoleBasedDefaultLineup === "function"
@@ -4597,6 +4711,7 @@ function openNewTeamManager() {
   if (elTeamMetaHead) elTeamMetaHead.value = "";
   if (elTeamMetaAssistant) elTeamMetaAssistant.value = "";
   if (elTeamMetaManager) elTeamMetaManager.value = "";
+  syncTeamManagerModeUI();
   renderTeamManagerTable();
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.remove("hidden");
@@ -4611,6 +4726,8 @@ function closeTeamManagerModal() {
   if (elTeamManagerModal) {
     elTeamManagerModal.classList.add("hidden");
   }
+  teamManagerLiveEditMode = false;
+  syncTeamManagerModeUI();
   window.setGlobalModalState(false);
 }
 function collectTeamManagerPayload() {
@@ -4679,6 +4796,7 @@ function saveTeamManagerPayload(options = {}) {
     showAlert = true,
     preserveCourt = false
   } = options;
+  const liveEditMode = !!teamManagerLiveEditMode;
   const previousName = teamManagerState && teamManagerState.name ? teamManagerState.name.trim() : "";
   const payload = collectTeamManagerPayload();
   if (!payload || !payload.name) {
@@ -4686,6 +4804,10 @@ function saveTeamManagerPayload(options = {}) {
     return;
   }
   const isOpponent = teamManagerScope === "opponent";
+  if (liveEditMode && isOpponent) {
+    alert("La modifica rapida in partita è disponibile solo per la squadra principale.");
+    return;
+  }
   let nextName = payload.name.trim();
   if (previousName && nextName && previousName !== nextName) {
     payload.name = previousName;
@@ -4741,6 +4863,10 @@ function saveTeamManagerPayload(options = {}) {
     state.opponentPreferredLibero = roster.preferredLibero || roster.liberos?.[0] || "";
     renderOpponentLiberoChipsInline();
   } else {
+    if (liveEditMode) {
+      const applied = applyLiveTeamManagerPayload(payload);
+      if (!applied) return;
+    } else {
     const defaultLineup =
       roster.defaultLineup && roster.defaultLineup.length > 0
         ? roster.defaultLineup
@@ -4756,10 +4882,17 @@ function saveTeamManagerPayload(options = {}) {
       defaultLineupNames: defaultLineup,
       preferredLibero: roster.preferredLibero || ""
     });
+    }
   }
   saveState();
   if (closeModal) closeTeamManagerModal();
-  if (showAlert) alert((isOpponent ? "Avversaria salvata: " : "Squadra salvata: ") + nextName);
+  if (showAlert) {
+    alert(
+      liveEditMode
+        ? "Squadra aggiornata senza reset della partita."
+        : (isOpponent ? "Avversaria salvata: " : "Squadra salvata: ") + nextName
+    );
+  }
 }
 function toggleMetricAssignment(skillId, category, code) {
   ensureMetricsConfigDefaults();

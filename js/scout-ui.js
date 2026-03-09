@@ -20927,6 +20927,12 @@ async function init() {
   if (elBtnOpenTeamManager) {
     elBtnOpenTeamManager.addEventListener("click", () => openTeamManagerModal("our"));
   }
+  {
+    const elBtnOpenLiveTeamEditor = document.getElementById("btn-open-live-team-editor");
+    if (elBtnOpenLiveTeamEditor) {
+      elBtnOpenLiveTeamEditor.addEventListener("click", () => openTeamManagerModal({ scope: "our", liveEdit: true }));
+    }
+  }
   const elBtnNewTeam = document.getElementById("btn-new-team");
   if (elBtnNewTeam) {
     elBtnNewTeam.addEventListener("click", () => {
@@ -20994,7 +21000,7 @@ async function init() {
         openTeamManagerModal(teamManagerScope || "our");
         return;
       }
-      teamManagerState.players.unshift({
+      const nextPlayer = {
         id: typeof generatePlayerId === "function" ? generatePlayerId() : Date.now() + "_" + Math.random(),
         name: "",
         firstName: "",
@@ -21003,7 +21009,12 @@ async function init() {
         role: "",
         isCaptain: false,
         out: false
-      });
+      };
+      if (typeof teamManagerLiveEditMode !== "undefined" && teamManagerLiveEditMode) {
+        teamManagerState.players.push(nextPlayer);
+      } else {
+        teamManagerState.players.unshift(nextPlayer);
+      }
       renderTeamManagerTable();
     });
   }

@@ -6184,6 +6184,25 @@ body[data-theme="light"] .error-choice-btn.danger {
   gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.team-panel-edit-btn {
+  min-width: 2rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  color: #bfdbfe;
+  flex: 0 0 auto;
+}
+.team-panel-edit-btn:hover {
+  background: rgba(59, 130, 246, 0.22);
+}
 .team-modal__content {
   display: flex;
   flex-direction: column;
@@ -6191,6 +6210,16 @@ body[data-theme="light"] .error-choice-btn.danger {
   max-height: calc(92vh - 140px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+.team-modal__dialog.team-modal__dialog--live-edit {
+  width: min(980px, 96vw);
+}
+.team-modal__dialog.team-modal__dialog--live-edit .team-manager-default,
+.team-modal__dialog.team-modal__dialog--live-edit #btn-export-team {
+  display: none;
+}
+.team-modal__dialog.team-modal__dialog--live-edit .team-manager-roster-layout {
+  display: block;
 }
 .team-manager-import summary {
   cursor: pointer;
