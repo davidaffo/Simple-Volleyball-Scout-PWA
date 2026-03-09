@@ -15122,6 +15122,10 @@ function handleSetTypeHotkeys(e) {
   if (e.defaultPrevented) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (isTypingTarget(e.target)) return;
+  const isVideoTab = document && document.body && document.body.dataset.activeTab === "video";
+  if (isVideoTab && (e.key === "q" || e.key === "Q" || e.key === "w" || e.key === "W")) {
+    return;
+  }
   if (e.key === "Escape") {
     setNextSetType("");
     e.preventDefault();
@@ -15153,7 +15157,7 @@ function handleSetTypeHotkeys(e) {
     });
     return;
   }
-  if (document && document.body && document.body.dataset.activeTab === "video") {
+  if (isVideoTab) {
     e.preventDefault();
     return;
   }
@@ -16003,6 +16007,10 @@ function matchesVideoFilters(ev, filters) {
   if (filters.serveTypes && filters.serveTypes.size) {
     if (!ev.serveType || !filters.serveTypes.has(ev.serveType)) return false;
   }
+  if (filters.attackTypes && filters.attackTypes.size) {
+    if (ev.skillId !== "attack") return false;
+    if (!filters.attackTypes.has(buildAttackTypeLabel(ev.attackType))) return false;
+  }
   if (filters.prevSkill && !matchesPreviousSkill(ev, filters.prevSkill)) return false;
   return true;
 }
@@ -16011,6 +16019,7 @@ const trajectoryFilterState = {
   players: new Set(),
   sets: new Set(),
   codes: new Set(),
+  attackTypes: new Set(),
   zones: new Set(),
   setTypes: new Set(),
   bases: new Set(),
@@ -16039,6 +16048,7 @@ const serveTrajectoryFilterState = {
 const playerTrajectoryFilterState = {
   sets: new Set(),
   codes: new Set(),
+  attackTypes: new Set(),
   zones: new Set(),
   setTypes: new Set(),
   bases: new Set(),
@@ -16094,7 +16104,8 @@ const videoFilterState = {
   phases: new Set(),
   receiveEvaluations: new Set(),
   receiveZones: new Set(),
-  serveTypes: new Set()
+  serveTypes: new Set(),
+  attackTypes: new Set()
 };
 const TRAJECTORY_BG_BY_ZONE = {
   1: "images/trajectory/attack_2_near.png",
@@ -16146,6 +16157,7 @@ function syncTrajectoryFilterState() {
   trajectoryFilterState.players = new Set(getCheckedValues(elTrajFilterPlayers, { asNumber: true }));
   trajectoryFilterState.sets = new Set(getCheckedValues(elTrajFilterSets, { asNumber: true }));
   trajectoryFilterState.codes = new Set(getCheckedValues(elTrajFilterCodes));
+  trajectoryFilterState.attackTypes = new Set(getCheckedValues(elTrajFilterAttackTypes));
   trajectoryFilterState.zones = new Set(getCheckedValues(elTrajFilterZones, { asNumber: true }));
   trajectoryFilterState.setTypes = new Set(getCheckedValues(elTrajFilterSetTypes));
   trajectoryFilterState.bases = new Set(getCheckedValues(elTrajFilterBases));
@@ -16183,6 +16195,7 @@ function syncVideoFilterState() {
   videoFilterState.receiveEvaluations = new Set(getCheckedValues(els.receiveEvals));
   videoFilterState.receiveZones = new Set(getCheckedValues(els.receiveZones, { asNumber: true }));
   videoFilterState.serveTypes = new Set(getCheckedValues(els.serveTypes));
+  videoFilterState.attackTypes = new Set(getCheckedValues(els.attackTypes));
 }
 function handleTrajectoryFilterChange() {
   syncTrajectoryFilterState();
@@ -16201,6 +16214,7 @@ function resetTrajectoryFilters() {
   trajectoryFilterState.players.clear();
   trajectoryFilterState.sets.clear();
   trajectoryFilterState.codes.clear();
+  trajectoryFilterState.attackTypes.clear();
   trajectoryFilterState.zones.clear();
   trajectoryFilterState.setTypes.clear();
   trajectoryFilterState.bases.clear();
@@ -16241,6 +16255,7 @@ function resetVideoFilters() {
   videoFilterState.receiveEvaluations.clear();
   videoFilterState.receiveZones.clear();
   videoFilterState.serveTypes.clear();
+  videoFilterState.attackTypes.clear();
   const els = getVideoFilterElements();
   if (els && els.prev) {
     els.prev.value = "any";
@@ -16268,6 +16283,7 @@ function getVideoFilterElements() {
     receiveEvals: document.getElementById("video-filter-receive-evals"),
     receiveZones: document.getElementById("video-filter-receive-zones"),
     serveTypes: document.getElementById("video-filter-serve-types"),
+    attackTypes: document.getElementById("video-filter-attack-types"),
     reset: document.getElementById("video-filter-reset")
   };
 }
@@ -16297,7 +16313,8 @@ function snapshotVideoFilters() {
     phases: listFromSet(videoFilterState.phases),
     receiveEvaluations: listFromSet(videoFilterState.receiveEvaluations),
     receiveZones: listFromSet(videoFilterState.receiveZones, { asNumber: true }),
-    serveTypes: listFromSet(videoFilterState.serveTypes)
+    serveTypes: listFromSet(videoFilterState.serveTypes),
+    attackTypes: listFromSet(videoFilterState.attackTypes)
   };
 }
 function countActiveVideoFilters(snapshot) {
@@ -16317,7 +16334,8 @@ function countActiveVideoFilters(snapshot) {
     "phases",
     "receiveEvaluations",
     "receiveZones",
-    "serveTypes"
+    "serveTypes",
+    "attackTypes"
   ].forEach(key => {
     const val = snapshot[key];
     if (Array.isArray(val) && val.length > 0) count += 1;
@@ -16344,6 +16362,7 @@ function applyVideoFilterSnapshot(snapshot) {
   videoFilterState.receiveEvaluations = toStrSet(src.receiveEvaluations);
   videoFilterState.receiveZones = toNumSet(src.receiveZones);
   videoFilterState.serveTypes = toStrSet(src.serveTypes);
+  videoFilterState.attackTypes = toStrSet(src.attackTypes);
 }
 function reorderVideoFilterPresetsByDom(container) {
   if (!container) return;
@@ -16567,6 +16586,10 @@ function renderTrajectoryFilters() {
   const codesOpts = filterNormalEvalOptions(
     buildUniqueOptions(trajEvents.map(ev => ev.code), { labelFn: val => val })
   );
+  const attackTypeOpts = buildUniqueOptions(
+    attackEvents.map(ev => buildAttackTypeLabel(ev.attackType)),
+    { labelFn: val => val }
+  );
   const zonesOpts = buildUniqueOptions(
     trajEvents.map(ev => {
       const traj = ev.attackDirection || ev.attackTrajectory || {};
@@ -16607,6 +16630,9 @@ function renderTrajectoryFilters() {
   );
   trajectoryFilterState.codes = new Set(
     [...trajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  trajectoryFilterState.attackTypes = new Set(
+    [...trajectoryFilterState.attackTypes].filter(val => attackTypeOpts.some(o => o.value === val))
   );
   trajectoryFilterState.zones = new Set(
     [...trajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
@@ -16677,6 +16703,11 @@ function renderTrajectoryFilters() {
   );
   visibleFilters.push(
     renderDynamicFilter(elTrajFilterCodes, codesOpts, trajectoryFilterState.codes, {
+      onChange: handleTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elTrajFilterAttackTypes, attackTypeOpts, trajectoryFilterState.attackTypes, {
       onChange: handleTrajectoryFilterChange
     })
   );
@@ -16859,6 +16890,7 @@ function renderServeTrajectoryFilters() {
 function syncPlayerTrajectoryFilterState() {
   playerTrajectoryFilterState.sets = new Set(getCheckedValues(elPlayerTrajFilterSets, { asNumber: true }));
   playerTrajectoryFilterState.codes = new Set(getCheckedValues(elPlayerTrajFilterCodes));
+  playerTrajectoryFilterState.attackTypes = new Set(getCheckedValues(elPlayerTrajFilterAttackTypes));
   playerTrajectoryFilterState.zones = new Set(getCheckedValues(elPlayerTrajFilterZones, { asNumber: true }));
   playerTrajectoryFilterState.setTypes = new Set(getCheckedValues(elPlayerTrajFilterSetTypes));
   playerTrajectoryFilterState.bases = new Set(getCheckedValues(elPlayerTrajFilterBases));
@@ -16874,6 +16906,7 @@ function handlePlayerTrajectoryFilterChange() {
 function resetPlayerTrajectoryFilters() {
   playerTrajectoryFilterState.sets.clear();
   playerTrajectoryFilterState.codes.clear();
+  playerTrajectoryFilterState.attackTypes.clear();
   playerTrajectoryFilterState.zones.clear();
   playerTrajectoryFilterState.setTypes.clear();
   playerTrajectoryFilterState.bases.clear();
@@ -16888,13 +16921,17 @@ function resetPlayerTrajectoryFilters() {
 function renderPlayerTrajectoryFilters() {
   if (!elPlayerTrajectoryGrid) return;
   const playerIdx = getPlayerAnalysisPlayerIdx();
-  const events = getAnalysisEvents().filter(ev => {
+  const allAttackEvents = getAnalysisEvents().filter(ev => {
     if (!ev || ev.skillId !== "attack") return false;
-    const dir = ev.attackDirection || ev.attackTrajectory;
-    if (!dir || !dir.start || !dir.end) return false;
     if (playerIdx === null) return false;
     if (!matchesTeamFilter(ev, analysisTeamFilterState.teams)) return false;
     return ev.playerIdx === playerIdx;
+  });
+  const events = allAttackEvents.filter(ev => {
+    if (!ev || ev.skillId !== "attack") return false;
+    const dir = ev.attackDirection || ev.attackTrajectory;
+    if (!dir || !dir.start || !dir.end) return false;
+    return true;
   });
   const setsOpts = buildUniqueOptions(events.map(ev => normalizeSetNumber(ev.set)), {
     asNumber: true,
@@ -16902,6 +16939,10 @@ function renderPlayerTrajectoryFilters() {
   });
   const codesOpts = filterNormalEvalOptions(
     buildUniqueOptions(events.map(ev => ev.code), { labelFn: val => val })
+  );
+  const attackTypeOpts = buildUniqueOptions(
+    allAttackEvents.map(ev => buildAttackTypeLabel(ev.attackType)),
+    { labelFn: val => val }
   );
   const zonesOpts = buildUniqueOptions(
     events.map(ev => {
@@ -16937,6 +16978,9 @@ function renderPlayerTrajectoryFilters() {
   );
   playerTrajectoryFilterState.codes = new Set(
     [...playerTrajectoryFilterState.codes].filter(code => codesOpts.some(c => c.value === code))
+  );
+  playerTrajectoryFilterState.attackTypes = new Set(
+    [...playerTrajectoryFilterState.attackTypes].filter(val => attackTypeOpts.some(o => o.value === val))
   );
   playerTrajectoryFilterState.zones = new Set(
     [...playerTrajectoryFilterState.zones].filter(z => zonesOpts.some(o => Number(o.value) === z))
@@ -16995,6 +17039,11 @@ function renderPlayerTrajectoryFilters() {
   );
   visibleFilters.push(
     renderDynamicFilter(elPlayerTrajFilterCodes, codesOpts, playerTrajectoryFilterState.codes, {
+      onChange: handlePlayerTrajectoryFilterChange
+    })
+  );
+  visibleFilters.push(
+    renderDynamicFilter(elPlayerTrajFilterAttackTypes, attackTypeOpts, playerTrajectoryFilterState.attackTypes, {
       onChange: handlePlayerTrajectoryFilterChange
     })
   );
@@ -17060,6 +17109,7 @@ function getFilteredPlayerTrajectoryEventsForPlayer(playerIdx) {
     if (!matchesAdvancedFilters(ev, playerTrajectoryFilterState)) return false;
     if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(setNum)) return false;
     if (playerTrajectoryFilterState.codes.size && !playerTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (playerTrajectoryFilterState.attackTypes.size && !playerTrajectoryFilterState.attackTypes.has(buildAttackTypeLabel(ev.attackType))) return false;
     if (playerTrajectoryFilterState.zones.size && !playerTrajectoryFilterState.zones.has(startZone)) return false;
     return true;
   });
@@ -17078,6 +17128,7 @@ function getFilteredPlayerAttackSummaryEventsForPlayer(playerIdx) {
     if (!matchesAdvancedFilters(ev, playerTrajectoryFilterState)) return false;
     if (playerTrajectoryFilterState.sets.size && !playerTrajectoryFilterState.sets.has(setNum)) return false;
     if (playerTrajectoryFilterState.codes.size && !playerTrajectoryFilterState.codes.has(ev.code)) return false;
+    if (playerTrajectoryFilterState.attackTypes.size && !playerTrajectoryFilterState.attackTypes.has(buildAttackTypeLabel(ev.attackType))) return false;
     if (playerTrajectoryFilterState.zones.size && !playerTrajectoryFilterState.zones.has(startZone)) return false;
     return true;
   });
@@ -17836,6 +17887,12 @@ function renderVideoFilters(events) {
     { asNumber: true, labelFn: val => "Z" + val }
   );
   const serveTypeOpts = buildUniqueOptions(filteredByTeam.map(ev => ev.serveType), { labelFn: val => val });
+  const attackTypeOpts = buildUniqueOptions(
+    filteredByTeam
+      .filter(ev => ev && ev.skillId === "attack")
+      .map(ev => buildAttackTypeLabel(ev.attackType)),
+    { labelFn: val => val }
+  );
 
   const playerOptValues = new Set(playerOpts.map(opt => opt.value));
   const setterOptValues = new Set(setterOpts.map(opt => opt.value));
@@ -17877,6 +17934,9 @@ function renderVideoFilters(events) {
   );
   videoFilterState.serveTypes = new Set(
     [...videoFilterState.serveTypes].filter(val => serveTypeOpts.some(o => o.value === val))
+  );
+  videoFilterState.attackTypes = new Set(
+    [...videoFilterState.attackTypes].filter(val => attackTypeOpts.some(o => o.value === val))
   );
   videoFilterState.teams = new Set(
     [...videoFilterState.teams].filter(val => getTeamFilterOptions().some(o => o.value === val))
@@ -17966,6 +18026,9 @@ function renderVideoFilters(events) {
   renderDynamicFilter(els.serveTypes, serveTypeOpts, videoFilterState.serveTypes, {
     onChange: handleVideoFilterChange
   });
+  renderDynamicFilter(els.attackTypes, attackTypeOpts, videoFilterState.attackTypes, {
+    onChange: handleVideoFilterChange
+  });
 
   toggleFilterVisibility(els.prev, true);
   if (els.prev) {
@@ -17990,7 +18053,8 @@ function renderVideoFilters(events) {
     phaseOpts.length,
     recvEvalOpts.length,
     recvZoneOpts.length,
-    serveTypeOpts.length
+    serveTypeOpts.length,
+    attackTypeOpts.length
   ];
   if (els.wrap) {
     els.wrap.style.display = visibleFilters.some(Boolean) ? "" : "none";
@@ -18087,6 +18151,7 @@ function getFilteredTrajectoryEvents() {
     if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(ev.set)) return false;
     if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
+    if (trajectoryFilterState.attackTypes.size && !trajectoryFilterState.attackTypes.has(buildAttackTypeLabel(ev.attackType))) return false;
     if (trajectoryFilterState.zones.size && !trajectoryFilterState.zones.has(startZone)) return false;
     return true;
   });
@@ -18462,6 +18527,7 @@ function getFilteredAttackSummaryEvents() {
     if (trajectoryFilterState.players.size && !trajectoryFilterState.players.has(ev.playerIdx)) return false;
     if (trajectoryFilterState.sets.size && !trajectoryFilterState.sets.has(setNum)) return false;
     if (trajectoryFilterState.codes.size && !trajectoryFilterState.codes.has(ev.code)) return false;
+    if (trajectoryFilterState.attackTypes.size && !trajectoryFilterState.attackTypes.has(buildAttackTypeLabel(ev.attackType))) return false;
     if (trajectoryFilterState.zones.size && !trajectoryFilterState.zones.has(startZone)) return false;
     return true;
   });
@@ -24059,9 +24125,11 @@ async function init() {
       adjustSelectedVideoTimes(0.2);
     } else if (e.key === "q" || e.key === "Q") {
       e.preventDefault();
+      e.stopPropagation();
       adjustCurrentRowVideoTime(-0.5);
     } else if (e.key === "w" || e.key === "W") {
       e.preventDefault();
+      e.stopPropagation();
       adjustCurrentRowVideoTime(0.5);
     }
   });

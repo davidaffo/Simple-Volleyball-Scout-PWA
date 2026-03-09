@@ -1,9 +1,9 @@
 {
   "appName": "Simple Volleyball Scout PWA",
-  "baseVersion": "0.10.0",
-  "version": "0.10.0+320.201f9c8",
-  "commitCount": 320,
-  "commitHash": "201f9c8",
-  "cacheVersion": "v320-201f9c8",
-  "buildDate": "2026-03-09T21:25:36.348Z"
+  "baseVersion": "0.10.1",
+  "version": "0.10.1+321.0b7ac20",
+  "commitCount": 321,
+  "commitHash": "0b7ac20",
+  "cacheVersion": "v321-0b7ac20",
+  "buildDate": "2026-03-09T21:39:50.662Z"
 }
