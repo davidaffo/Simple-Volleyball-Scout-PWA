@@ -1149,6 +1149,33 @@ function renderNextSetLineups() {
   syncNextSetPreferredLiberoSelects();
 }
 function syncNextSetPreferredLiberoSelects() {
+  const applyPreferredLiberoSelection = (scope, next) => {
+    if (typeof setTeamPreferredLibero === "function") {
+      setTeamPreferredLibero(scope, next);
+    } else if (scope === "opponent") {
+      state.opponentPreferredLibero = next;
+    } else {
+      state.preferredLibero = next;
+    }
+    if (typeof setTeamLiberoAutoMap === "function") {
+      setTeamLiberoAutoMap(scope, {});
+    }
+    if (typeof enforceAutoLiberoForScope === "function") {
+      enforceAutoLiberoForScope(scope, { skipServerOnServe: true });
+    }
+    saveState();
+    if (scope === "opponent") {
+      if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+      if (typeof renderOpponentLiberoChipsInline === "function") renderOpponentLiberoChipsInline();
+      if (typeof updateOpponentRotationDisplay === "function") updateOpponentRotationDisplay();
+    } else {
+      if (typeof renderPlayers === "function") renderPlayers();
+      if (typeof renderBenchChips === "function") renderBenchChips();
+      if (typeof renderLineupChips === "function") renderLineupChips();
+      if (typeof renderLiberoChipsInline === "function") renderLiberoChipsInline();
+      if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+    }
+  };
   const syncForScope = scope => {
     const select = scope === "opponent" ? elNextSetPreferredLiberoOpp : elNextSetPreferredLiberoOur;
     if (!select) return;
@@ -1178,20 +1205,7 @@ function syncNextSetPreferredLiberoSelects() {
     if (!select._preferredBound) {
       select.addEventListener("change", () => {
         const next = select.value || "";
-        if (typeof setTeamPreferredLibero === "function") {
-          setTeamPreferredLibero(scope, next);
-        } else if (scope === "opponent") {
-          state.opponentPreferredLibero = next;
-        } else {
-          state.preferredLibero = next;
-        }
-        saveState();
-        if (typeof renderLiberoChipsInline === "function") {
-          renderLiberoChipsInline();
-        }
-        if (typeof renderOpponentLiberoChipsInline === "function") {
-          renderOpponentLiberoChipsInline();
-        }
+        applyPreferredLiberoSelection(scope, next);
       });
       select._preferredBound = true;
     }
@@ -1545,12 +1559,19 @@ function getLineupModalPreferredLibero() {
   return lineupModalScope === "opponent" ? state.opponentPreferredLibero || "" : state.preferredLibero || "";
 }
 function setLineupModalPreferredLibero(name) {
+  const next = name || "";
   if (typeof setTeamPreferredLibero === "function") {
-    setTeamPreferredLibero(lineupModalScope, name);
+    setTeamPreferredLibero(lineupModalScope, next);
   } else if (lineupModalScope === "opponent") {
-    state.opponentPreferredLibero = name || "";
+    state.opponentPreferredLibero = next;
   } else {
-    state.preferredLibero = name || "";
+    state.preferredLibero = next;
+  }
+  if (typeof setTeamLiberoAutoMap === "function") {
+    setTeamLiberoAutoMap(lineupModalScope, {});
+  }
+  if (typeof enforceAutoLiberoForScope === "function") {
+    enforceAutoLiberoForScope(lineupModalScope, { skipServerOnServe: true });
   }
 }
 function syncLineupPreferredLiberoSelect() {
@@ -1580,6 +1601,17 @@ function syncLineupPreferredLiberoSelect() {
       const next = elLineupPreferredLibero.value || "";
       setLineupModalPreferredLibero(next);
       saveState();
+      if (lineupModalScope === "opponent") {
+        if (typeof renderOpponentPlayers === "function") renderOpponentPlayers();
+        if (typeof renderOpponentLiberoChipsInline === "function") renderOpponentLiberoChipsInline();
+        if (typeof updateOpponentRotationDisplay === "function") updateOpponentRotationDisplay();
+      } else {
+        if (typeof renderPlayers === "function") renderPlayers();
+        if (typeof renderBenchChips === "function") renderBenchChips();
+        if (typeof renderLineupChips === "function") renderLineupChips();
+        if (typeof renderLiberoChipsInline === "function") renderLiberoChipsInline();
+        if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+      }
       if (typeof renderLiberoChipsInline === "function") {
         renderLiberoChipsInline();
       }

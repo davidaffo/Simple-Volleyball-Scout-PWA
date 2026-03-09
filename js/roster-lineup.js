@@ -1342,7 +1342,10 @@ function restorePlayerFromLiberoForScope(posIdx, scope = "our") {
   setTeamCourt(scope, shaped);
   setTeamLiberoAutoMap(scope, {});
   const liberos = getTeamLiberos(scope);
-  setTeamPreferredLibero(scope, liberos[0] || "");
+  const currentPreferred = getTeamPreferredLibero(scope);
+  const nextPreferred =
+    currentPreferred && liberos.includes(currentPreferred) ? currentPreferred : liberos[0] || "";
+  setTeamPreferredLibero(scope, nextPreferred);
   if (scope === "our" && state.autoRolePositioning) {
     updateAutoRoleBaseCourtCache(state.court);
     resetAutoRoleCache();
