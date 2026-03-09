@@ -1345,7 +1345,18 @@ function buildNextSetDraft(setNum) {
     court: cloneCourt(baseOppCourt),
     rotation: defaultsOpp && defaultsOpp.rotation ? defaultsOpp.rotation : state.opponentRotation || 1
   };
-  const serveDefault = !!state.isServing;
+  const serveDefault = (() => {
+    if (nextSet <= 1) return !!state.isServing;
+    const prevSetStart = state.setStarts && state.setStarts[nextSet - 1];
+    if (prevSetStart && typeof prevSetStart.isServing === "boolean") {
+      return !prevSetStart.isServing;
+    }
+    const firstSetStart = state.setStarts && state.setStarts[1];
+    if (firstSetStart && typeof firstSetStart.isServing === "boolean") {
+      return nextSet % 2 === 1 ? !!firstSetStart.isServing : !firstSetStart.isServing;
+    }
+    return !state.isServing;
+  })();
   return {
     setNum: nextSet,
     our,
