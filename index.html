@@ -6,18 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v321-0b7ac20";
+    window.__APP_CACHE_VERSION__ = "v322-921eff0";
     if (location.protocol === "file:") {
       document.documentElement.dataset.fileOrigin = "true";
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=v321-0b7ac20" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v321-0b7ac20" />
+  <link rel="stylesheet" href="style.css?v=v322-921eff0" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v322-921eff0" />
   <script>
     if (location.protocol !== "file:") {
       const manifest = document.createElement("link");
       manifest.rel = "manifest";
-      manifest.href = "manifest.json?v=v321-0b7ac20";
+      manifest.href = "manifest.json?v=v322-921eff0";
       document.head.appendChild(manifest);
     }
   </script>
@@ -1068,8 +1068,32 @@
                 <td colspan="11">Registra alzate per vedere il dettaglio.</td>
               </tr>
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+          <div class="table-wrapper">
+            <table class="agg-table">
+              <thead>
+                <tr>
+                  <th>Attacchi dopo alzata</th>
+                  <th class="skill-col skill-attack">Tot</th>
+                  <th class="skill-col skill-attack">#</th>
+                  <th class="skill-col skill-attack">+</th>
+                  <th class="skill-col skill-attack">!</th>
+                  <th class="skill-col skill-attack">-</th>
+                  <th class="skill-col skill-attack">=</th>
+                  <th class="skill-col skill-attack">/</th>
+                  <th class="skill-col skill-attack">Pos</th>
+                  <th class="skill-col skill-attack">Prf</th>
+                  <th class="skill-col skill-attack">Eff</th>
+                </tr>
+              </thead>
+              <tbody id="agg-second-attack-body">
+                <tr>
+                  <td colspan="11">Nessun attacco associato alle alzate filtrate.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="player">
           <div class="player-analysis">
@@ -1320,6 +1344,30 @@
                       <tbody id="player-second-body">
                         <tr>
                           <td colspan="11">Seleziona una giocatrice per vedere la distribuzione.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="table-wrapper">
+                    <table class="agg-table">
+                      <thead>
+                        <tr>
+                          <th>Attacchi dopo alzata</th>
+                          <th class="skill-col skill-attack">Tot</th>
+                          <th class="skill-col skill-attack">#</th>
+                          <th class="skill-col skill-attack">+</th>
+                          <th class="skill-col skill-attack">!</th>
+                          <th class="skill-col skill-attack">-</th>
+                          <th class="skill-col skill-attack">=</th>
+                          <th class="skill-col skill-attack">/</th>
+                          <th class="skill-col skill-attack">Pos</th>
+                          <th class="skill-col skill-attack">Prf</th>
+                          <th class="skill-col skill-attack">Eff</th>
+                        </tr>
+                      </thead>
+                      <tbody id="player-second-attack-body">
+                        <tr>
+                          <td colspan="11">Seleziona una giocatrice per vedere gli esiti attacco dopo alzata.</td>
                         </tr>
                       </tbody>
                     </table>
@@ -2132,15 +2180,15 @@
       </a>
     </div>
   </footer>
-  <script src="js/app-version.js?v=v321-0b7ac20"></script>
-  <script src="js/globals.js?v=v321-0b7ac20"></script>
-  <script src="js/shared/team-ui.js?v=v321-0b7ac20"></script>
-  <script src="js/shared/lineup-core.js?v=v321-0b7ac20"></script>
-  <script src="js/shared/auto-role.js?v=v321-0b7ac20"></script>
-  <script src="js/shared/roster-manager.js?v=v321-0b7ac20"></script>
-  <script src="js/match-settings.js?v=v321-0b7ac20"></script>
-  <script src="js/opponent-settings.js?v=v321-0b7ac20"></script>
-  <script src="js/roster-lineup.js?v=v321-0b7ac20"></script>
-  <script src="js/scout-ui.js?v=v321-0b7ac20"></script>
+  <script src="js/app-version.js?v=v322-921eff0"></script>
+  <script src="js/globals.js?v=v322-921eff0"></script>
+  <script src="js/shared/team-ui.js?v=v322-921eff0"></script>
+  <script src="js/shared/lineup-core.js?v=v322-921eff0"></script>
+  <script src="js/shared/auto-role.js?v=v322-921eff0"></script>
+  <script src="js/shared/roster-manager.js?v=v322-921eff0"></script>
+  <script src="js/match-settings.js?v=v322-921eff0"></script>
+  <script src="js/opponent-settings.js?v=v322-921eff0"></script>
+  <script src="js/roster-lineup.js?v=v322-921eff0"></script>
+  <script src="js/scout-ui.js?v=v322-921eff0"></script>
 </body>
 </html>

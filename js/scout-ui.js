@@ -8866,13 +8866,11 @@ function renderSkillChartsForPlayer(targetGrid, playerIdx) {
   }
   const ui = ensureSkillChartsUiState();
   const metricId = (elPlayerAnalysisChartMetric && elPlayerAnalysisChartMetric.value) || ui.playerMetric || "eff";
-  const baseEvents = getSkillChartBaseEvents(scope);
-  const eventsBySkill = collectSkillChartEventsBySkill(baseEvents, { playerIdx });
   const baseCacheKey = `analysis-player|${getSkillChartFiltersCacheToken(scope)}|player:${playerIdx}|metric:${metricId}`;
   const playerLabelWithNumber =
     (scope === "opponent" ? formatNameWithNumberFor(playerName, numbers) : formatNameWithNumber(playerName));
   const items = SKILLS.map(skill => frag => {
-    const events = eventsBySkill[skill.id] || [];
+    const events = buildAnalysisSkillChartEvents({ scope, skillId: skill.id, playerIdx });
     renderSkillMetricChartCard(frag, {
       title: getSkillLabel(skill.id),
       subtitle: `${playerLabelWithNumber} · ${events.length} eventi`,
@@ -9959,10 +9957,20 @@ function renderPlayerAnalysisTable() {
       const body = document.createElement("tbody");
       table.appendChild(body);
       tableWrap.appendChild(table);
+      const attackTableWrap = document.createElement("div");
+      attackTableWrap.className = "table-wrapper";
+      const attackTable = document.createElement("table");
+      attackTable.className = "agg-table";
+      attackTable.innerHTML =
+        '<thead><tr><th>Attacchi dopo alzata</th><th class="skill-col skill-attack">Tot</th><th class="skill-col skill-attack">#</th><th class="skill-col skill-attack">+</th><th class="skill-col skill-attack">!</th><th class="skill-col skill-attack">-</th><th class="skill-col skill-attack">=</th><th class="skill-col skill-attack">/</th><th class="skill-col skill-attack">Pos</th><th class="skill-col skill-attack">Prf</th><th class="skill-col skill-attack">Eff</th></tr></thead>';
+      const attackBody = document.createElement("tbody");
+      attackTable.appendChild(attackBody);
+      attackTableWrap.appendChild(attackTable);
       section.appendChild(title);
       section.appendChild(dist);
       section.appendChild(tableWrap);
-      renderSecondTableForPlayer(body, dist, snapshot.playerIdx);
+      section.appendChild(attackTableWrap);
+      renderSecondTableForPlayer(body, dist, snapshot.playerIdx, attackBody);
       wrap.appendChild(section);
     }
     const chartsSection = document.createElement("section");
@@ -17651,14 +17659,91 @@ function renderDistributionGrid(targetEl, events) {
 function renderPlayerSecondTable() {
   if (!elPlayerSecondBody) return;
   renderPlayerSecondFilters();
-  renderSecondTableForPlayer(elPlayerSecondBody, elPlayerSecondDistribution, getPlayerAnalysisPlayerIdx());
+  renderSecondTableForPlayer(
+    elPlayerSecondBody,
+    elPlayerSecondDistribution,
+    getPlayerAnalysisPlayerIdx(),
+    document.getElementById("player-second-attack-body")
+  );
 }
-function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx) {
+function renderAttackOutcomesSummaryTable(targetBody, rows, {
+  emptyText = "Nessun attacco trovato.",
+  totalLabel = "Totale attacchi"
+} = {}) {
   if (!targetBody) return;
   targetBody.innerHTML = "";
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = emptyText;
+    tr.appendChild(td);
+    targetBody.appendChild(tr);
+    return;
+  }
+  const totals = emptyCounts();
+  rows.forEach(row => {
+    mergeCounts(totals, row.counts);
+    const metrics = computeMetrics(row.counts, "attack");
+    const total = totalFromCounts(row.counts);
+    const tr = document.createElement("tr");
+    const cells = [
+      { text: row.name },
+      { text: total, className: "skill-col skill-attack" },
+      { text: row.counts["#"] || 0, className: "skill-col skill-attack" },
+      { text: row.counts["+"] || 0, className: "skill-col skill-attack" },
+      { text: row.counts["!"] || 0, className: "skill-col skill-attack" },
+      { text: row.counts["-"] || 0, className: "skill-col skill-attack" },
+      { text: row.counts["="] || 0, className: "skill-col skill-attack" },
+      { text: row.counts["/"] || 0, className: "skill-col skill-attack" },
+      { text: metrics.pos === null ? "-" : formatPercent(metrics.pos), className: "skill-col skill-attack" },
+      { text: metrics.prf === null ? "-" : formatPercent(metrics.prf), className: "skill-col skill-attack" },
+      { text: metrics.eff === null ? "-" : formatPercent(metrics.eff), className: "skill-col skill-attack" }
+    ];
+    cells.forEach(cell => {
+      const td = document.createElement("td");
+      td.textContent = cell.text;
+      if (cell.className) td.className = cell.className;
+      tr.appendChild(td);
+    });
+    targetBody.appendChild(tr);
+  });
+  const totalMetrics = computeMetrics(totals, "attack");
+  const totalsRow = document.createElement("tr");
+  totalsRow.className = "rotation-row total";
+  const totalCells = [
+    { text: totalLabel },
+    { text: totalFromCounts(totals), className: "skill-col skill-attack" },
+    { text: totals["#"] || 0, className: "skill-col skill-attack" },
+    { text: totals["+"] || 0, className: "skill-col skill-attack" },
+    { text: totals["!"] || 0, className: "skill-col skill-attack" },
+    { text: totals["-"] || 0, className: "skill-col skill-attack" },
+    { text: totals["="] || 0, className: "skill-col skill-attack" },
+    { text: totals["/"] || 0, className: "skill-col skill-attack" },
+    { text: totalMetrics.pos === null ? "-" : formatPercent(totalMetrics.pos), className: "skill-col skill-attack" },
+    { text: totalMetrics.prf === null ? "-" : formatPercent(totalMetrics.prf), className: "skill-col skill-attack" },
+    { text: totalMetrics.eff === null ? "-" : formatPercent(totalMetrics.eff), className: "skill-col skill-attack" }
+  ];
+  totalCells.forEach(cell => {
+    const td = document.createElement("td");
+    td.textContent = cell.text;
+    if (cell.className) td.className = cell.className;
+    totalsRow.appendChild(td);
+  });
+  targetBody.appendChild(totalsRow);
+}
+function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, targetAttackBody = null) {
+  if (!targetBody) return;
+  targetBody.innerHTML = "";
+  const attackOutcomeBody = targetAttackBody;
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
+  const formatScopedPlayerName = idx => (
+    analysisScope === "opponent"
+      ? formatNameWithNumberFor(players[idx], numbers)
+      : formatNameWithNumber(players[idx])
+  );
   if (playerIdx === null) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -17666,18 +17751,53 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx) {
     td.textContent = "Seleziona una giocatrice per vedere la distribuzione.";
     tr.appendChild(td);
     targetBody.appendChild(tr);
+    renderAttackOutcomesSummaryTable(attackOutcomeBody, [], {
+      emptyText: "Seleziona una giocatrice per vedere gli esiti attacco dopo alzata.",
+      totalLabel: "Totale attacchi"
+    });
     renderDistributionGrid(targetDistribution, []);
     return;
   }
+  const secondEvents = getAnalysisEvents().filter(ev =>
+    ev &&
+    ev.skillId === "second" &&
+    matchesTeamFilter(ev, analysisTeamFilterState.teams) &&
+    typeof ev.playerIdx === "number" &&
+    ev.playerIdx === playerIdx
+  );
   const totals = emptyCounts();
-  const counts = emptyCounts();
-  getFilteredPlayerSecondEventsForPlayer(playerIdx).forEach(ev => {
+  const secondCounts = emptyCounts();
+  const filteredAttackEvents = getFilteredPlayerSecondEventsForPlayer(playerIdx);
+  const attackRowsMap = new Map();
+  filteredAttackEvents.forEach(ev => {
     const code = normalizeEvalCode(ev.code || ev.evaluation);
     if (!code) return;
-    counts[code] = (counts[code] || 0) + 1;
+    const attackerIdx = resolvePlayerIdx(ev);
+    const attackerName =
+      typeof attackerIdx === "number" && players[attackerIdx]
+        ? formatScopedPlayerName(attackerIdx)
+        : ev.playerName || "Attaccante";
+    const key = typeof attackerIdx === "number" ? `idx-${attackerIdx}` : attackerName;
+    if (!attackRowsMap.has(key)) {
+      attackRowsMap.set(key, { name: attackerName, counts: emptyCounts() });
+    }
+    const bucket = attackRowsMap.get(key);
+    bucket.counts[code] = (bucket.counts[code] || 0) + 1;
   });
-  mergeCounts(totals, counts);
-  const total = totalFromCounts(counts);
+  const attackRows = Array.from(attackRowsMap.values()).sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "it", { sensitivity: "base" })
+  );
+  renderAttackOutcomesSummaryTable(attackOutcomeBody, attackRows, {
+    emptyText: "Nessun attacco associato alle alzate filtrate.",
+    totalLabel: "Totale attacchi"
+  });
+  secondEvents.forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    secondCounts[code] = (secondCounts[code] || 0) + 1;
+  });
+  mergeCounts(totals, secondCounts);
+  const total = totalFromCounts(secondCounts);
   if (!total) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -17688,22 +17808,22 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx) {
     renderDistributionGrid(targetDistribution, getFilteredPlayerAttacksForSecondDistribution(playerIdx));
     return;
   }
-  const metrics = computeMetrics(counts, "second");
+  const metrics = computeMetrics(secondCounts, "second");
   const tr = document.createElement("tr");
   const cells = [
     {
       text:
-        analysisScope === "opponent"
-          ? formatNameWithNumberFor(players[playerIdx], numbers)
-          : formatNameWithNumber(players[playerIdx])
+        typeof playerIdx === "number" && players[playerIdx]
+          ? formatScopedPlayerName(playerIdx)
+          : "Alzatrice"
     },
     { text: total, className: "skill-col skill-second" },
-    { text: counts["#"] || 0, className: "skill-col skill-second" },
-    { text: counts["+"] || 0, className: "skill-col skill-second" },
-    { text: counts["!"] || 0, className: "skill-col skill-second" },
-    { text: counts["-"] || 0, className: "skill-col skill-second" },
-    { text: counts["="] || 0, className: "skill-col skill-second" },
-    { text: counts["/"] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["#"] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["+"] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["!"] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["-"] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["="] || 0, className: "skill-col skill-second" },
+    { text: secondCounts["/"] || 0, className: "skill-col skill-second" },
     { text: metrics.pos === null ? "-" : formatPercent(metrics.pos), className: "skill-col skill-second" },
     { text: metrics.prf === null ? "-" : formatPercent(metrics.prf), className: "skill-col skill-second" },
     { text: metrics.eff === null ? "-" : formatPercent(metrics.eff), className: "skill-col skill-second" }
@@ -19548,6 +19668,7 @@ function getFilteredAttacksForSecondDistribution() {
 function renderSecondTable() {
   if (!elAggSecondBody) return;
   elAggSecondBody.innerHTML = "";
+  const aggSecondAttackBody = document.getElementById("agg-second-attack-body");
   renderSecondFilters();
   const analysisScope = getAnalysisTeamScope();
   const analysisPlayers = getPlayersForScope(analysisScope);
@@ -19559,6 +19680,10 @@ function renderSecondTable() {
     td.textContent = "Aggiungi giocatrici per vedere il riepilogo.";
     tr.appendChild(td);
     elAggSecondBody.appendChild(tr);
+    renderAttackOutcomesSummaryTable(aggSecondAttackBody, [], {
+      emptyText: "Nessun attacco associato alle alzate filtrate.",
+      totalLabel: "Totale attacchi"
+    });
     renderSecondDistribution();
     return;
   }
@@ -19593,6 +19718,25 @@ function renderSecondTable() {
       metrics: computeMetrics(bucket.counts, "second")
     });
   });
+  const attackRowsMap = new Map();
+  getFilteredSecondEvents().forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    const setterIdx = getSetterFromEvent(ev);
+    const setterName =
+      typeof setterIdx === "number" && analysisPlayers[setterIdx]
+        ? (analysisScope === "opponent"
+            ? formatNameWithNumberFor(analysisPlayers[setterIdx], analysisNumbers)
+            : formatNameWithNumber(analysisPlayers[setterIdx]))
+        : ev.setterName || "Alzatrice";
+    const key = typeof setterIdx === "number" ? `idx-${setterIdx}` : setterName;
+    if (!attackRowsMap.has(key)) {
+      attackRowsMap.set(key, { name: setterName, counts: emptyCounts() });
+    }
+    const bucket = attackRowsMap.get(key);
+    bucket.counts[code] = (bucket.counts[code] || 0) + 1;
+  });
+  const attackRows = Array.from(attackRowsMap.values()).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   if (rows.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -19600,6 +19744,10 @@ function renderSecondTable() {
     td.textContent = "Registra alzate per vedere il dettaglio.";
     tr.appendChild(td);
     elAggSecondBody.appendChild(tr);
+    renderAttackOutcomesSummaryTable(aggSecondAttackBody, attackRows, {
+      emptyText: "Nessun attacco associato alle alzate filtrate.",
+      totalLabel: "Totale attacchi"
+    });
     renderSecondDistribution();
     return;
   }
@@ -19650,6 +19798,10 @@ function renderSecondTable() {
     totalsRow.appendChild(td);
   });
   elAggSecondBody.appendChild(totalsRow);
+  renderAttackOutcomesSummaryTable(aggSecondAttackBody, attackRows, {
+    emptyText: "Nessun attacco associato alle alzate filtrate.",
+    totalLabel: "Totale attacchi"
+  });
   renderSecondDistribution();
 }
 function computeAttackDistribution(events = state.events || []) {
