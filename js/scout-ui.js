@@ -9970,7 +9970,7 @@ function renderPlayerAnalysisTable() {
       section.appendChild(dist);
       section.appendChild(tableWrap);
       section.appendChild(attackTableWrap);
-      renderSecondTableForPlayer(body, dist, snapshot.playerIdx, attackBody);
+      renderSecondTableForPlayer(body, dist, snapshot.playerIdx, attackBody, otherSnapshot ? otherSnapshot.playerIdx : null);
       wrap.appendChild(section);
     }
     const chartsSection = document.createElement("section");
@@ -17574,10 +17574,11 @@ function getFilteredPlayerAttacksForSecondDistribution(playerIdx = getPlayerAnal
     return !(setType && setType.toLowerCase() === "damp");
   });
 }
-function renderDistributionGrid(targetEl, events) {
+function renderDistributionGrid(targetEl, events, compareEvents = null) {
   if (!targetEl) return;
   targetEl.innerHTML = "";
   const dist = computeAttackDistribution(events);
+  const compareDist = Array.isArray(compareEvents) ? computeAttackDistribution(compareEvents) : null;
   targetEl.classList.add("distribution-grid", "distribution-grid-layout");
   const layout = [
     { key: 4, area: "r4" },
@@ -17597,6 +17598,15 @@ function renderDistributionGrid(targetEl, events) {
         zones: { 1: emptyCounts(), 2: emptyCounts(), 3: emptyCounts(), 4: emptyCounts(), 5: emptyCounts(), 6: emptyCounts() },
         total: 0
       };
+    const compareData = compareDist
+      ? (
+          compareDist[rot] ||
+          {
+            zones: { 1: emptyCounts(), 2: emptyCounts(), 3: emptyCounts(), 4: emptyCounts(), 5: emptyCounts(), 6: emptyCounts() },
+            total: 0
+          }
+        )
+      : null;
     const totalAttacks = data.total || 0;
     const card = document.createElement("div");
     card.className = "distribution-card";
@@ -17627,9 +17637,13 @@ function renderDistributionGrid(targetEl, events) {
     });
     zoneOrder.forEach(zoneNum => {
       const counts = data.zones[zoneNum] || emptyCounts();
+      const compareCounts = compareData ? (compareData.zones[zoneNum] || emptyCounts()) : emptyCounts();
       const zoneTotal = totalFromCounts(counts);
+      const compareZoneTotal = totalFromCounts(compareCounts);
       const metrics = computeMetrics(counts, "attack");
+      const compareMetrics = computeMetrics(compareCounts, "attack");
       const perc = totalAttacks ? Math.round((zoneTotal / totalAttacks) * 100) : 0;
+      const comparePerc = compareData && compareData.total ? Math.round((compareZoneTotal / compareData.total) * 100) : null;
       const cell = document.createElement("div");
       cell.className = "court-cell";
       if (bestVolumeZone === zoneNum && zoneTotal > 0 && totalAttacks > 0) {
@@ -17644,9 +17658,18 @@ function renderDistributionGrid(targetEl, events) {
       const main = document.createElement("div");
       main.className = "cell-main";
       main.textContent = perc ? perc + "%" : "0%";
+      if (comparePerc !== null && perc !== comparePerc) {
+        main.classList.add("player-analysis-compare-value", perc > comparePerc ? "is-better" : "is-worse");
+      }
       const sub = document.createElement("div");
       sub.className = "cell-sub";
       sub.textContent = "Eff " + (metrics.eff === null ? "-" : formatPercent(metrics.eff));
+      if (compareData && metrics.eff !== null && compareMetrics.eff !== null && metrics.eff !== compareMetrics.eff) {
+        sub.classList.add(
+          "player-analysis-compare-value",
+          metrics.eff > compareMetrics.eff ? "is-better" : "is-worse"
+        );
+      }
       cell.appendChild(label);
       cell.appendChild(main);
       cell.appendChild(sub);
@@ -17732,18 +17755,35 @@ function renderAttackOutcomesSummaryTable(targetBody, rows, {
   });
   targetBody.appendChild(totalsRow);
 }
-function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, targetAttackBody = null) {
+function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, targetAttackBody = null, comparePlayerIdx = null) {
   if (!targetBody) return;
   targetBody.innerHTML = "";
   const attackOutcomeBody = targetAttackBody;
   const analysisScope = getAnalysisTeamScope();
   const players = getPlayersForScope(analysisScope);
   const numbers = getPlayerNumbersForScope(analysisScope);
+  const isCompareTable = !!targetBody.closest(".player-analysis-compare-subsection");
   const formatScopedPlayerName = idx => (
     analysisScope === "opponent"
       ? formatNameWithNumberFor(players[idx], numbers)
       : formatNameWithNumber(players[idx])
   );
+  const getSecondMetricCompareClass = (value, metricKey) => {
+    if (!isCompareTable || value === null || value === undefined) return "";
+    if (metricKey === "eff") {
+      if (value > 0) return "is-better";
+      if (value < 0) return "is-worse";
+      return "";
+    }
+    return value > 0 ? "is-better" : "is-worse";
+  };
+  const getMetricDeltaClass = (value, otherValue, better = "higher") => {
+    if (!isCompareTable || value === null || value === undefined || otherValue === null || otherValue === undefined || value === otherValue) {
+      return "";
+    }
+    const isBetter = better === "lower" ? value < otherValue : value > otherValue;
+    return isBetter ? "is-better" : "is-worse";
+  };
   if (playerIdx === null) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -17765,9 +17805,21 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, t
     typeof ev.playerIdx === "number" &&
     ev.playerIdx === playerIdx
   );
+  const compareSecondEvents = typeof comparePlayerIdx === "number"
+    ? getAnalysisEvents().filter(ev =>
+        ev &&
+        ev.skillId === "second" &&
+        matchesTeamFilter(ev, analysisTeamFilterState.teams) &&
+        typeof ev.playerIdx === "number" &&
+        ev.playerIdx === comparePlayerIdx
+      )
+    : [];
   const totals = emptyCounts();
   const secondCounts = emptyCounts();
   const filteredAttackEvents = getFilteredPlayerSecondEventsForPlayer(playerIdx);
+  const compareAttackEvents = typeof comparePlayerIdx === "number"
+    ? getFilteredPlayerSecondEventsForPlayer(comparePlayerIdx)
+    : [];
   const attackRowsMap = new Map();
   filteredAttackEvents.forEach(ev => {
     const code = normalizeEvalCode(ev.code || ev.evaluation);
@@ -17784,17 +17836,120 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, t
     const bucket = attackRowsMap.get(key);
     bucket.counts[code] = (bucket.counts[code] || 0) + 1;
   });
-  const attackRows = Array.from(attackRowsMap.values()).sort((a, b) =>
+  const compareAttackRowsMap = new Map();
+  compareAttackEvents.forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    const attackerIdx = resolvePlayerIdx(ev);
+    const attackerName =
+      typeof attackerIdx === "number" && players[attackerIdx]
+        ? formatScopedPlayerName(attackerIdx)
+        : ev.playerName || "Attaccante";
+    const key = typeof attackerIdx === "number" ? `idx-${attackerIdx}` : attackerName;
+    if (!compareAttackRowsMap.has(key)) {
+      compareAttackRowsMap.set(key, { name: attackerName, counts: emptyCounts() });
+    }
+    const bucket = compareAttackRowsMap.get(key);
+    bucket.counts[code] = (bucket.counts[code] || 0) + 1;
+  });
+  const attackRows = Array.from(attackRowsMap.entries()).map(([key, value]) => ({ key, ...value })).sort((a, b) =>
     (a.name || "").localeCompare(b.name || "", "it", { sensitivity: "base" })
   );
-  renderAttackOutcomesSummaryTable(attackOutcomeBody, attackRows, {
-    emptyText: "Nessun attacco associato alle alzate filtrate.",
-    totalLabel: "Totale attacchi"
-  });
+  if (attackOutcomeBody && isCompareTable) {
+    attackOutcomeBody.innerHTML = "";
+    if (!attackRows.length) {
+      renderAttackOutcomesSummaryTable(attackOutcomeBody, [], {
+        emptyText: "Nessun attacco associato alle alzate filtrate.",
+        totalLabel: "Totale attacchi"
+      });
+    } else {
+      const compareAttackTotals = emptyCounts();
+      const attackTotals = emptyCounts();
+      attackRows.forEach(row => {
+        mergeCounts(attackTotals, row.counts);
+        const compareRow = compareAttackRowsMap.get(row.key);
+        const compareCounts = compareRow ? compareRow.counts : emptyCounts();
+        const metrics = computeMetrics(row.counts, "attack");
+        const compareMetrics = computeMetrics(compareCounts, "attack");
+        const rowTotal = totalFromCounts(row.counts);
+        const compareTotal = totalFromCounts(compareCounts);
+        const tr = document.createElement("tr");
+        [
+          { text: row.name, compare: null },
+          { text: rowTotal, compare: compareTotal, better: "higher" },
+          { text: row.counts["#"] || 0, compare: compareCounts["#"] || 0, better: "higher" },
+          { text: row.counts["+"] || 0, compare: compareCounts["+"] || 0, better: "higher" },
+          { text: row.counts["!"] || 0, compare: compareCounts["!"] || 0, better: "higher" },
+          { text: row.counts["-"] || 0, compare: compareCounts["-"] || 0, better: "lower" },
+          { text: row.counts["="] || 0, compare: compareCounts["="] || 0, better: "lower" },
+          { text: row.counts["/"] || 0, compare: compareCounts["/"] || 0, better: "lower" },
+          { text: metrics.pos === null ? "-" : formatPercent(metrics.pos), compare: compareMetrics.pos, better: "higher", raw: metrics.pos },
+          { text: metrics.prf === null ? "-" : formatPercent(metrics.prf), compare: compareMetrics.prf, better: "higher", raw: metrics.prf },
+          { text: metrics.eff === null ? "-" : formatPercent(metrics.eff), compare: compareMetrics.eff, better: "higher", raw: metrics.eff }
+        ].forEach((cell, cellIdx) => {
+          const td = document.createElement("td");
+          td.textContent = cell.text;
+          const compareClass = getMetricDeltaClass(
+            Object.prototype.hasOwnProperty.call(cell, "raw") ? cell.raw : cell.text,
+            cell.compare,
+            cell.better
+          );
+          if (compareClass) td.classList.add("player-analysis-compare-value", compareClass);
+          if (cellIdx > 0) {
+            td.classList.add("skill-col", "skill-attack");
+          }
+          tr.appendChild(td);
+        });
+        attackOutcomeBody.appendChild(tr);
+      });
+      compareAttackRowsMap.forEach(bucket => mergeCounts(compareAttackTotals, bucket.counts));
+      const totalMetrics = computeMetrics(attackTotals, "attack");
+      const compareTotalMetrics = computeMetrics(compareAttackTotals, "attack");
+      const totalRow = document.createElement("tr");
+      totalRow.className = "rotation-row total";
+      [
+        { text: "Totale attacchi", compare: null },
+        { text: totalFromCounts(attackTotals), compare: totalFromCounts(compareAttackTotals), better: "higher" },
+        { text: attackTotals["#"] || 0, compare: compareAttackTotals["#"] || 0, better: "higher" },
+        { text: attackTotals["+"] || 0, compare: compareAttackTotals["+"] || 0, better: "higher" },
+        { text: attackTotals["!"] || 0, compare: compareAttackTotals["!"] || 0, better: "higher" },
+        { text: attackTotals["-"] || 0, compare: compareAttackTotals["-"] || 0, better: "lower" },
+        { text: attackTotals["="] || 0, compare: compareAttackTotals["="] || 0, better: "lower" },
+        { text: attackTotals["/"] || 0, compare: compareAttackTotals["/"] || 0, better: "lower" },
+        { text: totalMetrics.pos === null ? "-" : formatPercent(totalMetrics.pos), compare: compareTotalMetrics.pos, better: "higher", raw: totalMetrics.pos },
+        { text: totalMetrics.prf === null ? "-" : formatPercent(totalMetrics.prf), compare: compareTotalMetrics.prf, better: "higher", raw: totalMetrics.prf },
+        { text: totalMetrics.eff === null ? "-" : formatPercent(totalMetrics.eff), compare: compareTotalMetrics.eff, better: "higher", raw: totalMetrics.eff }
+      ].forEach(cell => {
+        const td = document.createElement("td");
+        td.textContent = cell.text;
+        const compareClass = getMetricDeltaClass(
+          Object.prototype.hasOwnProperty.call(cell, "raw") ? cell.raw : cell.text,
+          cell.compare,
+          cell.better
+        );
+        if (compareClass) td.classList.add("player-analysis-compare-value", compareClass);
+        td.classList.add("skill-col", "skill-attack");
+        totalRow.appendChild(td);
+      });
+      totalRow.firstChild.classList.remove("skill-col", "skill-attack");
+      attackOutcomeBody.appendChild(totalRow);
+    }
+  } else {
+    renderAttackOutcomesSummaryTable(attackOutcomeBody, attackRows, {
+      emptyText: "Nessun attacco associato alle alzate filtrate.",
+      totalLabel: "Totale attacchi"
+    });
+  }
   secondEvents.forEach(ev => {
     const code = normalizeEvalCode(ev.code || ev.evaluation);
     if (!code) return;
     secondCounts[code] = (secondCounts[code] || 0) + 1;
+  });
+  const compareSecondCounts = emptyCounts();
+  compareSecondEvents.forEach(ev => {
+    const code = normalizeEvalCode(ev.code || ev.evaluation);
+    if (!code) return;
+    compareSecondCounts[code] = (compareSecondCounts[code] || 0) + 1;
   });
   mergeCounts(totals, secondCounts);
   const total = totalFromCounts(secondCounts);
@@ -17805,10 +17960,15 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, t
     td.textContent = "Registra alzate per vedere il dettaglio.";
     tr.appendChild(td);
     targetBody.appendChild(tr);
-    renderDistributionGrid(targetDistribution, getFilteredPlayerAttacksForSecondDistribution(playerIdx));
+    renderDistributionGrid(
+      targetDistribution,
+      getFilteredPlayerAttacksForSecondDistribution(playerIdx),
+      typeof comparePlayerIdx === "number" ? getFilteredPlayerAttacksForSecondDistribution(comparePlayerIdx) : null
+    );
     return;
   }
   const metrics = computeMetrics(secondCounts, "second");
+  const compareMetrics = computeMetrics(compareSecondCounts, "second");
   const tr = document.createElement("tr");
   const cells = [
     {
@@ -17824,18 +17984,41 @@ function renderSecondTableForPlayer(targetBody, targetDistribution, playerIdx, t
     { text: secondCounts["-"] || 0, className: "skill-col skill-second" },
     { text: secondCounts["="] || 0, className: "skill-col skill-second" },
     { text: secondCounts["/"] || 0, className: "skill-col skill-second" },
-    { text: metrics.pos === null ? "-" : formatPercent(metrics.pos), className: "skill-col skill-second" },
-    { text: metrics.prf === null ? "-" : formatPercent(metrics.prf), className: "skill-col skill-second" },
-    { text: metrics.eff === null ? "-" : formatPercent(metrics.eff), className: "skill-col skill-second" }
+    {
+      text: metrics.pos === null ? "-" : formatPercent(metrics.pos),
+      className: "skill-col skill-second",
+      compareClass: isCompareTable
+        ? getMetricDeltaClass(metrics.pos, compareMetrics.pos, "higher")
+        : getSecondMetricCompareClass(metrics.pos, "pos")
+    },
+    {
+      text: metrics.prf === null ? "-" : formatPercent(metrics.prf),
+      className: "skill-col skill-second",
+      compareClass: isCompareTable
+        ? getMetricDeltaClass(metrics.prf, compareMetrics.prf, "higher")
+        : getSecondMetricCompareClass(metrics.prf, "prf")
+    },
+    {
+      text: metrics.eff === null ? "-" : formatPercent(metrics.eff),
+      className: "skill-col skill-second",
+      compareClass: isCompareTable
+        ? getMetricDeltaClass(metrics.eff, compareMetrics.eff, "higher")
+        : getSecondMetricCompareClass(metrics.eff, "eff")
+    }
   ];
   cells.forEach(cell => {
     const td = document.createElement("td");
     td.textContent = cell.text;
     if (cell.className) td.className = cell.className;
+    if (cell.compareClass) td.classList.add("player-analysis-compare-value", cell.compareClass);
     tr.appendChild(td);
   });
   targetBody.appendChild(tr);
-  renderDistributionGrid(targetDistribution, getFilteredPlayerAttacksForSecondDistribution(playerIdx));
+  renderDistributionGrid(
+    targetDistribution,
+    getFilteredPlayerAttacksForSecondDistribution(playerIdx),
+    typeof comparePlayerIdx === "number" ? getFilteredPlayerAttacksForSecondDistribution(comparePlayerIdx) : null
+  );
 }
 function renderVideoFilters(events) {
   const els = getVideoFilterElements();

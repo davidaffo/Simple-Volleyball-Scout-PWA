@@ -5196,6 +5196,14 @@ body[data-theme="light"] .player-analysis-compare-subsection {
 .player-analysis-compare-value.is-neutral {
   color: inherit;
 }
+.player-analysis-compare-subsection .agg-table td.player-analysis-compare-value.is-better {
+  color: #22c55e !important;
+  font-weight: 700;
+}
+.player-analysis-compare-subsection .agg-table td.player-analysis-compare-value.is-worse {
+  color: #ef4444 !important;
+  font-weight: 700;
+}
 .player-analysis-columns.hidden,
 .player-skill-charts-panel.hidden {
   display: none;
