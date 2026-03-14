@@ -21691,6 +21691,30 @@ function parseDvwPlayersSection(lines, teamMeta, side = "our") {
     numberToName
   };
 }
+function buildImportedTeamPayloadFromDvw(parsedTeam) {
+  if (!parsedTeam) return null;
+  const playersDetailed = (parsedTeam.playersDetailed || []).map(player =>
+    Object.assign({}, player, {
+      id: player && player.id ? player.id : (typeof generatePlayerId === "function" ? generatePlayerId() : ""),
+      out: !!(player && player.out)
+    })
+  );
+  const defaultLineup = playersDetailed
+    .filter(player => player && !player.out && player.role !== "L")
+    .slice(0, 6)
+    .map(player => player.name);
+  return {
+    version: 3,
+    name: parsedTeam.name || "",
+    staff: Object.assign({}, DEFAULT_STAFF),
+    officialCode: parsedTeam.officialCode || "",
+    officialId: parsedTeam.officialId || "",
+    playersDetailed,
+    defaultLineup,
+    defaultRotation: 1,
+    preferredLibero: (parsedTeam.liberos && parsedTeam.liberos[0]) || ""
+  };
+}
 function buildDvwSetStarts(homePayload, awayPayload, scoutRows) {
   const setStarts = {};
   const tryBuildFromPlayers = (payload, setNum) => {
@@ -21974,6 +21998,11 @@ function parseDataVolleyDvwToMatchState(text) {
   });
   const playedSetNumbers = Array.from(new Set(events.map(ev => parseInt(ev.set, 10)).filter(Boolean))).sort((a, b) => a - b);
   const currentSet = playedSetNumbers.length ? playedSetNumbers[playedSetNumbers.length - 1] : 1;
+  const homeTeamPayload = buildImportedTeamPayloadFromDvw(homePayload);
+  const awayTeamPayload = buildImportedTeamPayloadFromDvw(awayPayload);
+  const savedTeams = {};
+  if (homeTeamPayload && homeTeamPayload.name) savedTeams[homeTeamPayload.name] = homeTeamPayload;
+  if (awayTeamPayload && awayTeamPayload.name) savedTeams[awayTeamPayload.name] = awayTeamPayload;
   return {
     match: {
       opponent: awayPayload.name,
@@ -22011,6 +22040,8 @@ function parseDataVolleyDvwToMatchState(text) {
     opponentAutoRotatePending: false,
     matchFinished: !!setResults[currentSet],
     events,
+    savedTeams,
+    savedOpponentTeams: savedTeams,
     stats: {},
     scoreOverrides: {},
     metricsConfig: state.metricsConfig || {},
@@ -22029,6 +22060,14 @@ function handleImportMatchFile(file) {
       let importedBaseName = "Match importato";
       if (/^\s*\[3DATAVOLLEYSCOUT\]/i.test(txt)) {
         nextState = parseDataVolleyDvwToMatchState(txt);
+        if (nextState && nextState.savedTeams && typeof saveTeamToStorage === "function") {
+          Object.entries(nextState.savedTeams).forEach(([name, payload]) => {
+            if (!name || !payload) return;
+            saveTeamToStorage(name, payload);
+          });
+          if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+          if (typeof syncOpponentTeamsFromStorage === "function") syncOpponentTeamsFromStorage();
+        }
         importedBaseName =
           (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
           `${(nextState.match && nextState.match.teamName) || "Squadra"} - ${(nextState.match && nextState.match.opponent) || "Match"}`;
