@@ -21509,20 +21509,55 @@ function buildDvwTimestamp(dateIso, timeValue) {
   );
   return local.toISOString();
 }
-function buildDvwZonePoint(zone, side = "start") {
+function buildDvwZonePoint(zone, side = "start", attackCode = "") {
   const z = parseInt(zone, 10) || 0;
-  const map = {
-    1: { x: 0.83, y: side === "end" ? 0.38 : 0.58 },
-    2: { x: 0.83, y: side === "end" ? 0.18 : 0.82 },
-    3: { x: 0.5, y: side === "end" ? 0.18 : 0.82 },
-    4: { x: 0.17, y: side === "end" ? 0.18 : 0.82 },
-    5: { x: 0.17, y: side === "end" ? 0.38 : 0.58 },
-    6: { x: 0.5, y: side === "end" ? 0.38 : 0.58 },
-    7: { x: 0.2, y: 0.12 },
-    8: { x: 0.5, y: 0.12 },
-    9: { x: 0.8, y: 0.12 }
+  const normalizedCode = String(attackCode || "").trim().toUpperCase();
+  // Mappa entro il rettangolo del campo arancione, non sull'intera immagine.
+  // attack_empty_near.png: bbox campo circa x=[61,1016], y=[122,1077] su 1080.
+  const startMap = {
+    1: { x: 0.83, y: 0.992 },
+    2: { x: 0.83, y: 0.992 },
+    3: { x: 0.5, y: 0.992 },
+    4: { x: 0.17, y: 0.992 },
+    5: { x: 0.17, y: 0.992 },
+    6: { x: 0.5, y: 0.992 },
+    7: { x: 0.14, y: 0.992 },
+    8: { x: 0.5, y: 0.992 },
+    9: { x: 0.86, y: 0.992 }
   };
-  return map[z] ? { x: map[z].x, y: map[z].y } : null;
+  const endMap = {
+    1: { x: 0.84, y: 0.32 },
+    2: { x: 0.84, y: 0.14 },
+    3: { x: 0.5, y: 0.14 },
+    4: { x: 0.16, y: 0.14 },
+    5: { x: 0.16, y: 0.32 },
+    6: { x: 0.5, y: 0.32 },
+    7: { x: 0.8, y: 0.50 },
+    8: { x: 0.5, y: 0.50 },
+    9: { x: 0.2, y: 0.50 }
+  };
+  const point = Object.assign({}, side === "end" ? endMap[z] : startMap[z]);
+  if (!point || point.x === undefined || point.y === undefined) return null;
+  if (side === "start") {
+    if (normalizedCode === "V5" || normalizedCode === "X5" || normalizedCode === "JJ" || normalizedCode === "VJ") point.x = 0.22;
+    if (normalizedCode === "V6" || normalizedCode === "X6" || normalizedCode === "VI" || normalizedCode === "II") point.x = 0.78;
+    if (normalizedCode === "V8" || normalizedCode === "X8" || normalizedCode === "VO" || normalizedCode === "XO") {
+      point.x = 0.84;
+      point.y = 0.992;
+    }
+    if (normalizedCode === "XP" || normalizedCode === "VP" || normalizedCode === "XB" || normalizedCode === "VB" || normalizedCode === "XR" || normalizedCode === "VR") {
+      point.x = 0.5;
+      point.y = 0.992;
+    }
+    if (normalizedCode === "VV") {
+      point.x = 0.1;
+      point.y = 0.992;
+    }
+  } else {
+    if (z === 7) point.x = 0.78;
+    if (z === 9) point.x = 0.22;
+  }
+  return point;
 }
 function makeImportedCourtFromNames(names = []) {
   return Array.from({ length: 6 }, (_, idx) => ({ main: String(names[idx] || "").trim(), replaced: "" }));
@@ -21912,8 +21947,8 @@ function parseDataVolleyDvwToMatchState(text) {
       dv: normalizeDataVolleyEventMeta(dvMeta)
     };
     if (skillId === "attack" && decoded.zonePair) {
-      const start = buildDvwZonePoint(decoded.zonePair.startZone, "start");
-      const end = buildDvwZonePoint(decoded.zonePair.endZone, "end");
+      const start = buildDvwZonePoint(decoded.zonePair.startZone, "start", decoded.advancedCode);
+      const end = buildDvwZonePoint(decoded.zonePair.endZone, "end", decoded.advancedCode);
       event.attackStart = start;
       event.attackEnd = end;
       event.attackDirection = {
