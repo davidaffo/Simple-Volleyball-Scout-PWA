@@ -8,3 +8,4 @@ android/capacitor-cordova-android-plugins/build/
 *.jks
 .DS_Store
 intelliscout*
+resources/
