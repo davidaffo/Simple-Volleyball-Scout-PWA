@@ -1,5 +1,9 @@
 # DataVolley Code Rules
 
+Riferimenti usati:
+- [resources/DataVolleyMedia_handbook.pdf](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/DataVolleyMedia_handbook.pdf)
+- [resources/Example file.csv](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/Example%20file.csv)
+- [resources/data volley example file.dvw](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/data%20volley%20example%20file.dvw)
 
 Questo file raccoglie le regole operative del codice DataVolley per la modalita di inserimento scout via codici.
 Qui dentro distinguo:
@@ -19,6 +23,82 @@ Il `Main Code` e sempre obbligatorio.
 Le altre parti sono opzionali e servono a specificare meglio il colpo.
 
 Il manuale dice anche che il codice e `positional`, cioe il significato di ogni carattere dipende dalla posizione in cui compare.
+
+## Compatibilita con il nostro modello eventi
+
+Obiettivo architetturale:
+- il nostro evento resta il formato sorgente
+- in export DataVolley inferiamo tutto cio che e ricostruibile
+- salviamo nell'evento solo i dati non inferibili in modo affidabile
+
+### Tabella compatibilita
+
+| Campo DataVolley | Nel nostro modello oggi | Inferibile in export | Azione |
+| --- | --- | --- | --- |
+| `team` | si (`team`, `teamName`) | si | nessuna duplicazione |
+| `player_number` | si, ma mutabile da roster | no in modo storico se il numero cambia | aggiungere `playerNumberAtEvent` |
+| `player_name` | si (`playerName`) | si | nessuna duplicazione |
+| `player_id` | si (`playerId`) | si se roster coerente | gia presente |
+| `player_code` ufficiale DV | no | no | aggiungere `playerCodeOfficial` e supporto in roster |
+| `team_id` ufficiale DV | no | no | aggiungere `teamIdOfficial` e supporto in squadra |
+| `team_code` ufficiale DV | no | no | aggiungere `teamCodeOfficial` e supporto in squadra |
+| `skill` | si (`skillId`) | si | nessuna duplicazione |
+| `skill_type` | in parte | non sempre | aggiungere in `dv.skillType` |
+| `evaluation_code` | si (`code`) | si | nessuna duplicazione |
+| `evaluation` descrizione | no | si | inferire da mapping export |
+| `set_type` ufficiale DV | in parte (`setType`) | non sempre 1:1 | aggiungere `dv.setType` solo se serve override |
+| `attack_code` | no | non sempre | aggiungere `dv.attackCode` |
+| `set_code` | no | non sempre | aggiungere `dv.setCode` |
+| `skill_subtype` | no | non sempre | aggiungere `dv.skillSubtype` |
+| `special_code` | no | non sempre | aggiungere `dv.specialCode` |
+| `start_zone` | in parte (`zone`, `attackStartZone`) | spesso si | aggiungere `dv.startZone` come override opzionale |
+| `end_zone` | in parte (`attackEndZone`) | spesso si | aggiungere `dv.endZone` come override opzionale |
+| `end_subzone` | no | no | aggiungere `dv.endSubzone` |
+| `end_cone` | no | no | aggiungere `dv.endCone` |
+| `num_players_numeric` a muro | in parte (`blockNumber`) | talvolta si | aggiungere `dv.numPlayersNumeric` come campo ufficiale export |
+| `point_id` | no | si dalla sequenza rally | inferire |
+| `team_touch_id` | no | si dalla sequenza | inferire |
+| `point` / assegnazione rally | in parte | si | inferire dai codici e dal log |
+| `home_team_score` / `visiting_team_score` | si (`homeScore`, `visitorScore`) | si | inferire o usare snapshot |
+| `home_score_start_of_point` / `visiting_score_start_of_point` | no | si | inferire |
+| `home_setter_position` / `visiting_setter_position` | si (`setterPosition`, `opponentSetterPosition`) | si | inferire/export |
+| `home_p1..p6` / `visiting_p1..p6` | no per evento | si da lineup + cambi | inferire |
+| `home_player_id1..6` / `visiting_player_id1..6` | no per evento | si da lineup + player ids | inferire |
+| `serving_team` | non esplicito per evento | si | inferire |
+| `point_won_by` | non esplicito per evento | si | inferire |
+| `winning_attack` | non esplicito per evento | quasi sempre si | inferire, con fallback su `dv.rallyEndReason` |
+| codici automatici `*z`, `*p`, `*P`, `*c`, `$$&` | no come righe autonome | si | generare in export |
+
+### Decisione implementativa
+
+Nei nostri eventi aggiungiamo solo:
+
+```js
+{
+  playerNumberAtEvent: "",
+  playerCodeOfficial: "",
+  teamCodeOfficial: "",
+  teamIdOfficial: "",
+  dv: {
+    skillType: "",
+    attackCode: "",
+    setCode: "",
+    setType: "",
+    skillSubtype: "",
+    specialCode: "",
+    startZone: "",
+    endZone: "",
+    endSubzone: "",
+    endCone: "",
+    numPlayersNumeric: null,
+    rallyEndReason: ""
+  }
+}
+```
+
+Ragione:
+- tutto il resto e meglio inferirlo al momento dell'export
+- questi campi sono quelli che non sono affidabilmente ricostruibili a posteriori
 
 ## Sintassi base del singolo colpo
 

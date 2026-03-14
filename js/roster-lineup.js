@@ -119,6 +119,7 @@ const elBtnExportHtml = document.getElementById("btn-export-html");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnResetApp = document.getElementById("btn-reset-app");
 const elBtnExportMatch = document.getElementById("btn-export-match");
+const elBtnExportDvw = document.getElementById("btn-export-dvw");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
 const elSavedMatchesSelect = document.getElementById("saved-matches");
@@ -2259,6 +2260,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
   if (!raw) return null;
   const name = raw.name || fallbackName || "";
   const staff = raw.staff || Object.assign({}, DEFAULT_STAFF);
+  const officialCode = typeof raw.officialCode === "string" ? raw.officialCode.trim() : "";
+  const officialId = typeof raw.officialId === "string" ? raw.officialId.trim() : "";
   const makeId = () => generatePlayerId();
   const rawDefaultLineup = Array.isArray(raw.defaultLineup) ? normalizePlayers(raw.defaultLineup) : [];
   const rawDefaultRotation = parseInt(raw.defaultRotation, 10);
@@ -2278,6 +2281,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
           name: p.name || buildFullName(p.lastName, p.firstName),
           firstName: p.firstName || parts.firstName || "",
           lastName: p.lastName || parts.lastName || "",
+          codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
           number: p.number || "",
           role: p.role === "L" ? "L" : "",
           isCaptain: !!p.isCaptain,
@@ -2297,6 +2301,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
       version: 2,
       name,
       staff,
+      officialCode,
+      officialId,
       playersDetailed,
       liberos,
       numbers,
@@ -2314,6 +2320,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     id: makeId(),
     name: n,
     ...splitNameParts(n),
+    codeOfficial: "",
     number: numbers[n] || "",
     role: liberos.includes(n) ? "L" : "",
     isCaptain: false,
@@ -2326,6 +2333,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     version: 2,
     name,
     staff,
+    officialCode,
+    officialId,
     playersDetailed,
     liberos,
     numbers,
@@ -2351,6 +2360,7 @@ function compactTeamPayload(data, fallbackName = "") {
             id: p.id || generatePlayerId(),
             firstName: p.firstName || parts.firstName || "",
             lastName: p.lastName || parts.lastName || "",
+            codeOfficial: p.codeOfficial || "",
             number: p.number || "",
             role: p.role === "L" ? "L" : "",
             isCaptain: !!p.isCaptain,
@@ -2362,6 +2372,8 @@ function compactTeamPayload(data, fallbackName = "") {
     version: 3,
     name: normalized.name || fallbackName,
     staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
+    officialCode: normalized.officialCode || "",
+    officialId: normalized.officialId || "",
     playersDetailed,
     defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup.slice(0, 6) : [],
     defaultRotation: normalized.defaultRotation || 1,
@@ -2749,6 +2761,7 @@ function getCurrentTeamPayload(name = "") {
           const isLib = (state.liberos || []).includes(p.name) || p.role === "L";
           return Object.assign({}, p, {
             id: isValidPlayerId(p.id) ? p.id : generatePlayerId(),
+            codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial : "",
             number: currentNumber,
             role: isLib ? "L" : "",
             isCaptain: captainSet.has(p.name) || !!p.isCaptain,
@@ -2758,6 +2771,7 @@ function getCurrentTeamPayload(name = "") {
       : (state.players || []).map(pName => ({
           id: generatePlayerId(),
           name: pName,
+          codeOfficial: "",
           number: (state.playerNumbers && state.playerNumbers[pName]) || "",
           role: (state.liberos || []).includes(pName) ? "L" : "",
           isCaptain: captainSet.has(pName),
@@ -2779,6 +2793,8 @@ function getCurrentTeamPayload(name = "") {
     version: 2,
     name: safeName,
     staff,
+    officialCode: existing?.officialCode || "",
+    officialId: existing?.officialId || "",
     playersDetailed,
     players,
     liberos,
@@ -2812,6 +2828,7 @@ function getCurrentOpponentPayload(name = "") {
       id: prev && isValidPlayerId(prev.id) ? prev.id : generatePlayerId(),
       name: p,
       ...splitNameParts(p),
+      codeOfficial: prev && typeof prev.codeOfficial === "string" ? prev.codeOfficial : "",
       number: currentNumber,
       role: liberos.includes(p) ? "L" : "",
       isCaptain: captains.includes(p),
@@ -2823,6 +2840,8 @@ function getCurrentOpponentPayload(name = "") {
     version: 2,
     name: safeName,
     staff: DEFAULT_STAFF,
+    officialCode: existing?.officialCode || "",
+    officialId: existing?.officialId || "",
     playersDetailed,
     players,
     liberos,
@@ -4049,6 +4068,8 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
       state.match.opponent ||
       (isOpponent ? "Avversaria" : "Squadra"),
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
+    officialCode: (normalized && normalized.officialCode) || "",
+    officialId: (normalized && normalized.officialId) || "",
     players: playersDetailed,
     defaultLineup,
     defaultRotation: (normalized && normalized.defaultRotation) || 1,
@@ -4760,6 +4781,7 @@ function collectTeamManagerPayload() {
         name: buildFullName(p.lastName, p.firstName) || p.name.trim(),
         firstName: p.firstName || splitNameParts(p.name).firstName || "",
         lastName: p.lastName || splitNameParts(p.name).lastName || "",
+        codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
         number: p.number || "",
         role: p.role === "L" ? "L" : "",
         isCaptain: !!p.isCaptain,
@@ -4792,6 +4814,8 @@ function collectTeamManagerPayload() {
     version: 3,
     name,
     staff,
+    officialCode: typeof teamManagerState.officialCode === "string" ? teamManagerState.officialCode.trim() : "",
+    officialId: typeof teamManagerState.officialId === "string" ? teamManagerState.officialId.trim() : "",
     playersDetailed,
     players,
     liberos,
