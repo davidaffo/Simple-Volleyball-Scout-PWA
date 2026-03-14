@@ -21450,18 +21450,561 @@ function importMatchStateAsNew(nextState, options = {}) {
     }
   }
 }
+function parseDvwSections(text) {
+  const sections = new Map();
+  let current = "";
+  String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .forEach(rawLine => {
+      const line = rawLine.replace(/\uFEFF/g, "");
+      const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+      if (sectionMatch) {
+        current = sectionMatch[1];
+        if (!sections.has(current)) sections.set(current, []);
+        return;
+      }
+      if (!current) return;
+      sections.get(current).push(line);
+    });
+  return sections;
+}
+function parseDvwRow(line) {
+  return String(line || "").split(";").map(part => part.trim());
+}
+function formatDvwImportedName(lastName = "", firstName = "") {
+  const raw = [String(lastName || "").trim(), String(firstName || "").trim()].filter(Boolean).join(" ");
+  if (!raw) return "";
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+function buildDvwImportDateIso(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  const mdy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (mdy) {
+    return `${mdy[3]}-${mdy[1]}-${mdy[2]}`;
+  }
+  const ymd = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  }
+  return raw;
+}
+function buildDvwTimestamp(dateIso, timeValue) {
+  const datePart = buildDvwImportDateIso(dateIso) || new Date().toISOString().slice(0, 10);
+  const timeMatch = String(timeValue || "").trim().match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+  if (!timeMatch) return `${datePart}T00:00:00.000Z`;
+  const local = new Date(
+    Number(datePart.slice(0, 4)),
+    Number(datePart.slice(5, 7)) - 1,
+    Number(datePart.slice(8, 10)),
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+    Number(timeMatch[3])
+  );
+  return local.toISOString();
+}
+function buildDvwZonePoint(zone, side = "start") {
+  const z = parseInt(zone, 10) || 0;
+  const map = {
+    1: { x: 0.83, y: side === "end" ? 0.38 : 0.58 },
+    2: { x: 0.83, y: side === "end" ? 0.18 : 0.82 },
+    3: { x: 0.5, y: side === "end" ? 0.18 : 0.82 },
+    4: { x: 0.17, y: side === "end" ? 0.18 : 0.82 },
+    5: { x: 0.17, y: side === "end" ? 0.38 : 0.58 },
+    6: { x: 0.5, y: side === "end" ? 0.38 : 0.58 },
+    7: { x: 0.2, y: 0.12 },
+    8: { x: 0.5, y: 0.12 },
+    9: { x: 0.8, y: 0.12 }
+  };
+  return map[z] ? { x: map[z].x, y: map[z].y } : null;
+}
+function makeImportedCourtFromNames(names = []) {
+  return Array.from({ length: 6 }, (_, idx) => ({ main: String(names[idx] || "").trim(), replaced: "" }));
+}
+function decodeDvwSetType(typeLetter) {
+  switch (String(typeLetter || "").toUpperCase()) {
+    case "M":
+      return "mezza";
+    case "U":
+      return "super";
+    case "Q":
+      return "quick";
+    case "T":
+      return "veloce";
+    case "N":
+      return "fast";
+    case "H":
+      return "alta";
+    case "O":
+      return "damp";
+    default:
+      return null;
+  }
+}
+function decodeDvwServeType(typeLetter) {
+  switch (String(typeLetter || "").toUpperCase()) {
+    case "H":
+      return "F";
+    case "Q":
+      return "S";
+    case "M":
+    default:
+      return "JF";
+  }
+}
+function parseDvwSkillCode(code) {
+  const raw = String(code || "").trim();
+  const substitution = raw.match(/^([*a])c(\d{1,2}):(\d{1,2})$/i);
+  if (substitution) {
+    return {
+      kind: "substitution",
+      teamScope: substitution[1] === "a" ? "opponent" : "our",
+      playerInNumber: padDv(substitution[2], 2),
+      playerOutNumber: padDv(substitution[3], 2)
+    };
+  }
+  const timeout = raw.match(/^([*a])T$/i);
+  if (timeout) {
+    return {
+      kind: "timeout",
+      teamScope: timeout[1] === "a" ? "opponent" : "our"
+    };
+  }
+  if (/^[*a]\$\$&/i.test(raw)) {
+    return { kind: "point-marker" };
+  }
+  if (/^[*a]p\d+:\d+/i.test(raw)) {
+    return { kind: "score" };
+  }
+  if (/^[*a]z\d+/i.test(raw)) {
+    return { kind: "rotation" };
+  }
+  if (/^[*a]P\d+>LUp/i.test(raw)) {
+    return { kind: "lineup" };
+  }
+  if (/^\*\*\d+set/i.test(raw)) {
+    return { kind: "set-end" };
+  }
+  const skill = raw.match(/^([*a])(\d{1,2})([SRABDEF])([HMQTUNO])([#=!+\-/])(.*)$/i);
+  if (!skill) return { kind: "unknown" };
+  const tail = skill[6] || "";
+  const zoneMatch = tail.match(/~(\d)(\d)/);
+  const leadingCodeMatch = tail.match(/^([A-Z0-9]{2})/i);
+  return {
+    kind: "skill",
+    teamScope: skill[1] === "a" ? "opponent" : "our",
+    playerNumber: padDv(skill[2], 2),
+    skillLetter: skill[3].toUpperCase(),
+    typeLetter: skill[4].toUpperCase(),
+    evaluation: skill[5],
+    tail,
+    advancedCode: leadingCodeMatch ? leadingCodeMatch[1].toUpperCase() : "",
+    zonePair: zoneMatch ? { startZone: Number(zoneMatch[1]), endZone: Number(zoneMatch[2]) } : null
+  };
+}
+function parseDvwPlayersSection(lines, teamMeta, side = "our") {
+  const playersDetailed = [];
+  const players = [];
+  const numbers = {};
+  const liberos = [];
+  const captains = [];
+  const numberToName = new Map();
+  (lines || [])
+    .map(parseDvwRow)
+    .filter(row => row.some(Boolean))
+    .forEach((row, idx) => {
+      const shirtNumber = padDv(row[1] || idx + 1, 2);
+      const lastName = row[9] || "";
+      const firstName = row[10] || "";
+      const name = formatDvwImportedName(lastName, firstName) || `${side === "opponent" ? "Avv." : "Gioc."} ${idx + 1}`;
+      const isLibero = String(row[12] || "").toUpperCase() === "L";
+      const isCaptain = String(row[13] || "").trim() === "1";
+      const player = {
+        id: typeof generatePlayerId === "function" ? generatePlayerId() : `dvw-${side}-${idx + 1}`,
+        name,
+        firstName: firstName || "",
+        lastName: lastName || "",
+        number: shirtNumber,
+        codeOfficial: String(row[8] || "").trim(),
+        role: isLibero ? "L" : "",
+        isCaptain,
+        out: false,
+        dvSetCols: row.slice(3, 8)
+      };
+      playersDetailed.push(player);
+      players.push(name);
+      numbers[name] = shirtNumber;
+      numberToName.set(shirtNumber, name);
+      if (isLibero) liberos.push(name);
+      if (isCaptain) captains.push(name);
+    });
+  return {
+    name: teamMeta && teamMeta.name ? teamMeta.name : side === "opponent" ? "Avversaria" : "Squadra",
+    officialCode: teamMeta && teamMeta.code ? teamMeta.code : "",
+    officialId: teamMeta && teamMeta.id ? teamMeta.id : "",
+    playersDetailed,
+    players,
+    numbers,
+    liberos,
+    captains: captains.slice(0, 1),
+    numberToName
+  };
+}
+function buildDvwSetStarts(homePayload, awayPayload, scoutRows) {
+  const setStarts = {};
+  const tryBuildFromPlayers = (payload, setNum) => {
+    const lineup = Array(6).fill("");
+    (payload.playersDetailed || []).forEach(player => {
+      const val = player.dvSetCols && player.dvSetCols[setNum - 1] ? String(player.dvSetCols[setNum - 1]).trim() : "";
+      const pos = parseInt(val, 10);
+      if (pos >= 1 && pos <= 6) lineup[pos - 1] = player.name;
+    });
+    return lineup.some(Boolean) ? lineup : null;
+  };
+  [1, 2, 3, 4, 5].forEach(setNum => {
+    const homeLineup = tryBuildFromPlayers(homePayload, setNum);
+    const awayLineup = tryBuildFromPlayers(awayPayload, setNum);
+    if (homeLineup || awayLineup) {
+      setStarts[setNum] = {
+        our: { court: makeImportedCourtFromNames(homeLineup || []), rotation: 1 },
+        opponent: { court: makeImportedCourtFromNames(awayLineup || []), rotation: 1 },
+        swapCourt: false,
+        isServing: false
+      };
+    }
+  });
+  (scoutRows || []).forEach(row => {
+    const cells = parseDvwRow(row);
+    const code = String(cells[0] || "").trim();
+    const setNum = parseInt(cells[9], 10) || 1;
+    const homeRotation = parseInt(cells[10], 10) || 1;
+    const awayRotation = parseInt(cells[11], 10) || 1;
+    const homeLineupNums = cells.slice(15, 21);
+    const awayLineupNums = cells.slice(21, 27);
+    const homeLineup = homeLineupNums.map(num => homePayload.numberToName.get(padDv(num, 2)) || "");
+    const awayLineup = awayLineupNums.map(num => awayPayload.numberToName.get(padDv(num, 2)) || "");
+    if (!setStarts[setNum] && (homeLineup.some(Boolean) || awayLineup.some(Boolean))) {
+      setStarts[setNum] = {
+        our: { court: makeImportedCourtFromNames(homeLineup), rotation: homeRotation },
+        opponent: { court: makeImportedCourtFromNames(awayLineup), rotation: awayRotation },
+        swapCourt: false,
+        isServing: /^[*]/.test(code)
+      };
+    }
+  });
+  return setStarts;
+}
+function parseDataVolleyDvwToMatchState(text) {
+  const sections = parseDvwSections(text);
+  if (!sections.has("3DATAVOLLEYSCOUT") || !sections.has("3SCOUT")) {
+    throw new Error("Formato DVW non valido");
+  }
+  const matchRows = (sections.get("3MATCH") || []).filter(line => String(line || "").trim());
+  const teamRows = (sections.get("3TEAMS") || []).filter(line => String(line || "").trim()).map(parseDvwRow);
+  const setRows = (sections.get("3SET") || []).filter(line => String(line || "").trim()).map(parseDvwRow);
+  const scoutRows = (sections.get("3SCOUT") || []).filter(line => String(line || "").trim());
+  const matchInfo = matchRows.length ? parseDvwRow(matchRows[0]) : [];
+  const homeTeamMeta = teamRows[0]
+    ? { code: teamRows[0][0] || "", name: teamRows[0][1] || "Squadra", id: teamRows[0][0] || "" }
+    : { code: "OUR", name: "Squadra", id: "OUR" };
+  const awayTeamMeta = teamRows[1]
+    ? { code: teamRows[1][0] || "", name: teamRows[1][1] || "Avversaria", id: teamRows[1][0] || "" }
+    : { code: "OPP", name: "Avversaria", id: "OPP" };
+  const homePayload = parseDvwPlayersSection(sections.get("3PLAYERS-H") || [], homeTeamMeta, "our");
+  const awayPayload = parseDvwPlayersSection(sections.get("3PLAYERS-V") || [], awayTeamMeta, "opponent");
+  const setStarts = buildDvwSetStarts(homePayload, awayPayload, scoutRows);
+  const setResults = {};
+  setRows.forEach((row, idx) => {
+    const setNum = idx + 1;
+    const finalScore = String(row[4] || "").trim();
+    const scoreMatch = finalScore.match(/^(\d+)-(\d+)$/);
+    if (!scoreMatch) return;
+    setResults[setNum] = Number(scoreMatch[1]) > Number(scoreMatch[2]) ? "our" : "opponent";
+  });
+  const events = [];
+  const playerIdByScopeAndName = {
+    our: new Map((homePayload.playersDetailed || []).map(player => [player.name, player.id])),
+    opponent: new Map((awayPayload.playersDetailed || []).map(player => [player.name, player.id]))
+  };
+  const lastSecondByScope = { our: null, opponent: null };
+  let lastHomeCourt = setStarts[1] ? cloneDvCourt(setStarts[1].our.court || []) : makeImportedCourtFromNames([]);
+  let lastAwayCourt = setStarts[1] ? cloneDvCourt(setStarts[1].opponent.court || []) : makeImportedCourtFromNames([]);
+  let lastHomeRotation = setStarts[1] ? setStarts[1].our.rotation || 1 : 1;
+  let lastAwayRotation = setStarts[1] ? setStarts[1].opponent.rotation || 1 : 1;
+  scoutRows.forEach((line, idx) => {
+    const cells = parseDvwRow(line);
+    const rawCode = String(cells[0] || "").trim();
+    const decoded = parseDvwSkillCode(rawCode);
+    const setNum = parseInt(cells[9], 10) || 1;
+    const homeRotation = parseInt(cells[10], 10) || lastHomeRotation || 1;
+    const awayRotation = parseInt(cells[11], 10) || lastAwayRotation || 1;
+    const homeLineupNums = cells.slice(15, 21);
+    const awayLineupNums = cells.slice(21, 27);
+    const homeLineup = homeLineupNums.map(num => homePayload.numberToName.get(padDv(num, 2)) || "");
+    const awayLineup = awayLineupNums.map(num => awayPayload.numberToName.get(padDv(num, 2)) || "");
+    if (homeLineup.some(Boolean)) lastHomeCourt = makeImportedCourtFromNames(homeLineup);
+    if (awayLineup.some(Boolean)) lastAwayCourt = makeImportedCourtFromNames(awayLineup);
+    lastHomeRotation = homeRotation;
+    lastAwayRotation = awayRotation;
+    if (!setStarts[setNum] && (homeLineup.some(Boolean) || awayLineup.some(Boolean))) {
+      setStarts[setNum] = {
+        our: { court: cloneDvCourt(lastHomeCourt), rotation: homeRotation },
+        opponent: { court: cloneDvCourt(lastAwayCourt), rotation: awayRotation },
+        swapCourt: false,
+        isServing: /^[*]/.test(rawCode)
+      };
+    }
+    if (decoded.kind === "lineup" || decoded.kind === "rotation" || decoded.kind === "score" || decoded.kind === "set-end" || decoded.kind === "point-marker" || decoded.kind === "unknown") {
+      return;
+    }
+    if (decoded.kind === "timeout") {
+      events.push({
+        eventId: `dvw-${idx + 1}`,
+        t: buildDvwTimestamp(matchInfo[0], cells[8]),
+        set: setNum,
+        rotation: decoded.teamScope === "opponent" ? awayRotation : homeRotation,
+        playerIdx: null,
+        playerId: null,
+        playerName: decoded.teamScope === "opponent" ? "Timeout Avv." : "Timeout",
+        skillId: "manual",
+        code: decoded.teamScope === "opponent" ? "TOA" : "TO",
+        value: 1,
+        team: decoded.teamScope === "opponent" ? "opponent" : "our",
+        teamName: decoded.teamScope === "opponent" ? awayPayload.name : homePayload.name,
+        actionType: "timeout",
+        playerIn: null,
+        playerOut: null,
+        homeScore: 0,
+        visitorScore: 0,
+        videoTime: 0,
+        dv: normalizeDataVolleyEventMeta({})
+      });
+      return;
+    }
+    if (decoded.kind === "substitution") {
+      const scope = decoded.teamScope;
+      const payload = scope === "opponent" ? awayPayload : homePayload;
+      const playerIn = payload.numberToName.get(decoded.playerInNumber) || "";
+      const playerOut = payload.numberToName.get(decoded.playerOutNumber) || "";
+      events.push({
+        eventId: `dvw-${idx + 1}`,
+        t: buildDvwTimestamp(matchInfo[0], cells[8]),
+        set: setNum,
+        rotation: scope === "opponent" ? awayRotation : homeRotation,
+        playerIdx: null,
+        playerId: null,
+        playerName: playerIn || "Cambio",
+        skillId: "manual",
+        code: "CH",
+        value: 1,
+        team: scope === "opponent" ? "opponent" : "our",
+        teamName: payload.name,
+        actionType: "substitution",
+        playerIn,
+        playerOut,
+        homeScore: 0,
+        visitorScore: 0,
+        videoTime: 0,
+        dv: normalizeDataVolleyEventMeta({})
+      });
+      return;
+    }
+    if (decoded.kind !== "skill") return;
+    const scope = decoded.teamScope;
+    const payload = scope === "opponent" ? awayPayload : homePayload;
+    const players = payload.players || [];
+    const playerName = payload.numberToName.get(decoded.playerNumber) || "";
+    const playerIdx = players.indexOf(playerName);
+    const skillMap = {
+      S: "serve",
+      R: "pass",
+      A: "attack",
+      B: "block",
+      D: "defense",
+      E: "second",
+      F: "manual"
+    };
+    const skillId = skillMap[decoded.skillLetter] || "manual";
+    const dvMeta = {
+      skillType: decoded.typeLetter,
+      attackCode: decoded.skillLetter === "A" ? decoded.advancedCode : "",
+      setCode: decoded.skillLetter === "E" ? decoded.advancedCode : "",
+      setType: decodeDvwSetType(decoded.typeLetter) || "",
+      skillSubtype: "",
+      specialCode: "",
+      startZone: decoded.zonePair ? decoded.zonePair.startZone : null,
+      endZone: decoded.zonePair ? decoded.zonePair.endZone : null,
+      endSubzone: "",
+      endCone: "",
+      numPlayersNumeric: null,
+      rallyEndReason: ""
+    };
+    const event = {
+      eventId: `dvw-${idx + 1}`,
+      t: buildDvwTimestamp(matchInfo[0], cells[8]),
+      durationMs: 0,
+      clockMs: idx * 1000,
+      set: setNum,
+      rotation: scope === "opponent" ? awayRotation : homeRotation,
+      courtSideSwapped: false,
+      playerIdx: playerIdx >= 0 ? playerIdx : null,
+      playerId: playerIdByScopeAndName[scope].get(playerName) || null,
+      playerCodeOfficial: (() => {
+        const player = (payload.playersDetailed || []).find(item => item && item.name === playerName);
+        return player && player.codeOfficial ? player.codeOfficial : "";
+      })(),
+      playerNumberAtEvent: decoded.playerNumber,
+      playerName: playerName || null,
+      zone: decoded.zonePair ? decoded.zonePair.startZone : null,
+      originZone: decoded.zonePair ? decoded.zonePair.startZone : null,
+      skillId,
+      code: decoded.evaluation,
+      pointDirection: null,
+      value: 1,
+      autoRotationDirection: null,
+      autoRotateNext: null,
+      setterPosition: scope === "opponent" ? awayRotation : homeRotation,
+      opponentSetterPosition: scope === "opponent" ? homeRotation : awayRotation,
+      playerPosition: decoded.zonePair ? decoded.zonePair.startZone : null,
+      receivePosition: null,
+      base: decoded.skillLetter === "E" ? decoded.advancedCode || null : null,
+      setType: skillId === "attack" || skillId === "second" ? decodeDvwSetType(decoded.typeLetter) : null,
+      combination: null,
+      serveStart: null,
+      serveEnd: null,
+      serveType: skillId === "serve" ? decodeDvwServeType(decoded.typeLetter) : null,
+      receiveEvaluation: null,
+      attackEvaluation: null,
+      attackBp: null,
+      attackType: decoded.skillLetter === "A" ? (decoded.advancedCode || null) : null,
+      attackStartZone: decoded.zonePair ? decoded.zonePair.startZone : null,
+      attackEndZone: decoded.zonePair ? decoded.zonePair.endZone : null,
+      attackStart: null,
+      attackEnd: null,
+      attackDirection: null,
+      blockNumber: null,
+      errorType: null,
+      playerIn: null,
+      playerOut: null,
+      relatedEvents: [],
+      team: scope === "opponent" ? "opponent" : "our",
+      teamName: payload.name,
+      teamCodeOfficial: payload.officialCode || "",
+      teamIdOfficial: payload.officialId || "",
+      homeScore: 0,
+      visitorScore: 0,
+      actionType: null,
+      prevSet: null,
+      nextSet: null,
+      prevMatchFinished: null,
+      nextMatchFinished: null,
+      prevClock: null,
+      nextClock: null,
+      prevVideoClock: null,
+      nextVideoClock: null,
+      videoTime: 0,
+      dv: normalizeDataVolleyEventMeta(dvMeta)
+    };
+    if (skillId === "attack" && decoded.zonePair) {
+      const start = buildDvwZonePoint(decoded.zonePair.startZone, "start");
+      const end = buildDvwZonePoint(decoded.zonePair.endZone, "end");
+      event.attackStart = start;
+      event.attackEnd = end;
+      event.attackDirection = {
+        start,
+        end,
+        startZone: decoded.zonePair.startZone,
+        endZone: decoded.zonePair.endZone,
+        directionDeg: computeAttackDirectionDeg(start, end)
+      };
+      event.attackTrajectory = event.attackDirection;
+    }
+    if (skillId === "serve" && decoded.zonePair) {
+      event.serveStart = buildDvwZonePoint(decoded.zonePair.startZone, "start");
+      event.serveEnd = buildDvwZonePoint(decoded.zonePair.endZone, "end");
+    }
+    if (skillId === "second") {
+      lastSecondByScope[scope] = event;
+    } else if (skillId === "attack" && lastSecondByScope[scope]) {
+      event.relatedEvents = [lastSecondByScope[scope].eventId];
+      event.setterIdx = lastSecondByScope[scope].playerIdx;
+    }
+    events.push(event);
+  });
+  const playedSetNumbers = Array.from(new Set(events.map(ev => parseInt(ev.set, 10)).filter(Boolean))).sort((a, b) => a - b);
+  const currentSet = playedSetNumbers.length ? playedSetNumbers[playedSetNumbers.length - 1] : 1;
+  return {
+    match: {
+      opponent: awayPayload.name,
+      category: matchInfo[3] || "",
+      date: buildDvwImportDateIso(matchInfo[0]),
+      notes: "",
+      leg: "",
+      matchType: matchInfo[4] || "",
+      teamName: homePayload.name
+    },
+    players: homePayload.players,
+    playerNumbers: homePayload.numbers,
+    captains: homePayload.captains,
+    liberos: homePayload.liberos,
+    opponentPlayers: awayPayload.players,
+    opponentPlayerNumbers: awayPayload.numbers,
+    opponentLiberos: awayPayload.liberos,
+    opponentCaptains: awayPayload.captains,
+    selectedTeam: homePayload.name,
+    selectedOpponentTeam: awayPayload.name,
+    useOpponentTeam: true,
+    setStarts,
+    setResults,
+    currentSet,
+    rotation: setStarts[currentSet] && setStarts[currentSet].our ? setStarts[currentSet].our.rotation || 1 : 1,
+    opponentRotation:
+      setStarts[currentSet] && setStarts[currentSet].opponent ? setStarts[currentSet].opponent.rotation || 1 : 1,
+    court: setStarts[currentSet] && setStarts[currentSet].our ? cloneDvCourt(setStarts[currentSet].our.court || []) : makeImportedCourtFromNames([]),
+    opponentCourt:
+      setStarts[currentSet] && setStarts[currentSet].opponent
+        ? cloneDvCourt(setStarts[currentSet].opponent.court || [])
+        : makeImportedCourtFromNames([]),
+    isServing: false,
+    autoRotatePending: false,
+    opponentAutoRotatePending: false,
+    matchFinished: !!setResults[currentSet],
+    events,
+    stats: {},
+    scoreOverrides: {},
+    metricsConfig: state.metricsConfig || {},
+    pointRules: state.pointRules || {},
+    video: { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "", lastPlaybackSeconds: 0 }
+  };
+}
 function handleImportMatchFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
       const txt = (e.target && e.target.result) || "";
-      const parsed = JSON.parse(txt);
-      const nextState = parsed && parsed.state ? parsed.state : parsed;
-      const importedBaseName =
-        (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
-        (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
-        "Match importato";
+      let parsed = null;
+      let nextState = null;
+      let importedBaseName = "Match importato";
+      if (/^\s*\[3DATAVOLLEYSCOUT\]/i.test(txt)) {
+        nextState = parseDataVolleyDvwToMatchState(txt);
+        importedBaseName =
+          (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+          `${(nextState.match && nextState.match.teamName) || "Squadra"} - ${(nextState.match && nextState.match.opponent) || "Match"}`;
+      } else {
+        parsed = JSON.parse(txt);
+        nextState = parsed && parsed.state ? parsed.state : parsed;
+        importedBaseName =
+          (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
+          (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+          "Match importato";
+      }
       importMatchStateAsNew(nextState, { baseName: importedBaseName });
     } catch (err) {
       console.error("Import match error", err);

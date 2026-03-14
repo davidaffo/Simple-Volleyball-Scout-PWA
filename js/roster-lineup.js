@@ -602,6 +602,41 @@ function getSnapshotTimestamp(snapshot) {
   const ts = Number(snapshot.lastSavedAt || 0);
   return Number.isFinite(ts) ? ts : 0;
 }
+function buildCompactLocalStateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const compact = {
+    __compactLocalSnapshot: true,
+    lastSavedAt: Number(snapshot.lastSavedAt || Date.now()) || Date.now(),
+    theme: snapshot.theme || "dark",
+    match: snapshot.match || {},
+    selectedMatch: snapshot.selectedMatch || "",
+    selectedTeam: snapshot.selectedTeam || "",
+    selectedOpponentTeam: snapshot.selectedOpponentTeam || "",
+    currentSet: snapshot.currentSet || 1,
+    rotation: snapshot.rotation || 1,
+    opponentRotation: snapshot.opponentRotation || 1,
+    courtSideSwapped: !!snapshot.courtSideSwapped,
+    useOpponentTeam: !!snapshot.useOpponentTeam,
+    matchFinished: !!snapshot.matchFinished,
+    uiTopBarHidden: !!snapshot.uiTopBarHidden,
+    video: snapshot.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "", lastPlaybackSeconds: 0 },
+    players: Array.isArray(snapshot.players) ? snapshot.players : [],
+    playerNumbers: snapshot.playerNumbers || {},
+    liberos: Array.isArray(snapshot.liberos) ? snapshot.liberos : [],
+    captains: Array.isArray(snapshot.captains) ? snapshot.captains.slice(0, 1) : [],
+    opponentPlayers: Array.isArray(snapshot.opponentPlayers) ? snapshot.opponentPlayers : [],
+    opponentPlayerNumbers: snapshot.opponentPlayerNumbers || {},
+    opponentLiberos: Array.isArray(snapshot.opponentLiberos) ? snapshot.opponentLiberos : [],
+    opponentCaptains: Array.isArray(snapshot.opponentCaptains) ? snapshot.opponentCaptains.slice(0, 1) : [],
+    savedTeams: snapshot.savedTeams || {},
+    savedOpponentTeams: snapshot.savedOpponentTeams || snapshot.savedTeams || {},
+    savedMatches: {},
+    scoreOverrides: snapshot.scoreOverrides || {},
+    setResults: snapshot.setResults || {},
+    setStarts: snapshot.setStarts || {}
+  };
+  return compact;
+}
 async function loadStateFromIndexedDb() {
   try {
     const indexed = await readStateFromIndexedDb();
@@ -613,7 +648,8 @@ async function loadStateFromIndexedDb() {
       local = null;
     }
     const indexedTs = getSnapshotTimestamp(indexed);
-    const localTs = getSnapshotTimestamp(local);
+    const isCompactLocal = !!(local && local.__compactLocalSnapshot);
+    const localTs = isCompactLocal ? 0 : getSnapshotTimestamp(local);
     const parsed = localTs > indexedTs ? local : indexed;
     if (!parsed) return false;
     return applyStateSnapshot(parsed, { skipStorageSync: true });
@@ -634,7 +670,23 @@ function saveState(options = {}) {
     writeStateToIndexedDb(state);
     const shouldPersistLocal = persistLocal || typeof indexedDB === "undefined";
     if (shouldPersistLocal) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (localErr) {
+        const compact = buildCompactLocalStateSnapshot(state);
+        let compactSaved = false;
+        try {
+          if (compact) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+            compactSaved = true;
+          }
+        } catch (_) {
+          // ignore secondary local storage failure
+        }
+        if (!compactSaved) {
+          throw localErr;
+        }
+      }
     }
     const loading =
       typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
@@ -2551,8 +2603,17 @@ function saveMatchToStorage(name, data) {
   if (!name) return;
   try {
     localStorage.setItem(getMatchStorageKey(name), JSON.stringify(data));
+    return true;
   } catch (e) {
-    logError("Error saving match " + name, e);
+    const isQuota =
+      e &&
+      (e.name === "QuotaExceededError" ||
+        e.code === 22 ||
+        e.code === 1014);
+    if (!isQuota) {
+      logError("Error saving match " + name, e);
+    }
+    return false;
   }
 }
 function deleteMatchFromStorage(name) {
