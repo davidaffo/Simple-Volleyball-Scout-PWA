@@ -2,27 +2,37 @@ const STORAGE_KEY = "volleyScoutV1";
 const SKILLS = [
   { id: "serve", label: "Battuta", badgeClass: "badge-serve" },
   { id: "pass", label: "Ricezione", badgeClass: "badge-pass" },
+  { id: "freeball", label: "Freeball", badgeClass: "badge-freeball" },
+  { id: "second", label: "Alzata", badgeClass: "badge-second" },
   { id: "attack", label: "Attacco", badgeClass: "badge-attack" },
   { id: "defense", label: "Difesa", badgeClass: "badge-defense" },
-  { id: "block", label: "Muro", badgeClass: "badge-block" },
-  { id: "second", label: "Alzata", badgeClass: "badge-second" }
+  { id: "block", label: "Muro", badgeClass: "badge-block" }
 ];
 const SKILL_COLORS = {
   serve: { bg: "#1b5e20", text: "#d1fae5", soft: "rgba(27, 94, 32, 0.18)" },
   pass: { bg: "#f9a825", text: "#ffffff", soft: "rgba(249, 168, 37, 0.18)" },
+  freeball: { bg: "#0f766e", text: "#ccfbf1", soft: "rgba(15, 118, 110, 0.18)" },
+  second: { bg: "#00838f", text: "#ccfbf1", soft: "rgba(0, 131, 143, 0.18)" },
   attack: { bg: "#b71c1c", text: "#ffe4e6", soft: "rgba(183, 28, 28, 0.18)" },
   defense: { bg: "#546e7a", text: "#e2e8f0", soft: "rgba(84, 110, 122, 0.18)" },
-  block: { bg: "#4a148c", text: "#ede9fe", soft: "rgba(74, 20, 140, 0.18)" },
-  second: { bg: "#00838f", text: "#ccfbf1", soft: "rgba(0, 131, 143, 0.18)" }
+  block: { bg: "#4a148c", text: "#ede9fe", soft: "rgba(74, 20, 140, 0.18)" }
 };
 const THEME_TEXT = {
   dark: "#ffffff",
   light: "#0f172a"
 };
 const RESULT_CODES = ["#", "+", "!", "-", "=", "/"];
+const PASS_LIKE_POINT_RULE_DEFAULT = { for: [], against: ["="] };
+const PASS_LIKE_METRIC_DEFAULT = {
+  positive: ["#", "+"],
+  negative: ["/", "="],
+  activeCodes: RESULT_CODES,
+  enabled: true
+};
 const POINT_RULE_DEFAULTS = {
   serve: { for: ["#"], against: ["="] },
-  pass: { for: [], against: ["="] },
+  pass: PASS_LIKE_POINT_RULE_DEFAULT,
+  freeball: PASS_LIKE_POINT_RULE_DEFAULT,
   defense: { for: [], against: ["=", "/"] },
   attack: { for: ["#"], against: ["=", "/"] },
   block: { for: ["#"], against: ["/", "="] },
@@ -31,7 +41,8 @@ const POINT_RULE_DEFAULTS = {
 };
 const METRIC_DEFAULTS = {
   serve: { positive: ["#", "+", "!", "/"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
-  pass: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
+  pass: PASS_LIKE_METRIC_DEFAULT,
+  freeball: PASS_LIKE_METRIC_DEFAULT,
   defense: { positive: ["#", "+", "!"], negative: ["="], activeCodes: RESULT_CODES, enabled: true },
   attack: { positive: ["#"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
   block: { positive: ["#", "+"], negative: ["/", "="], activeCodes: RESULT_CODES, enabled: true },
@@ -139,6 +150,7 @@ let state = {
   opponentSkillConfig: {
     serve: true,
     pass: true,
+    freeball: true,
     attack: true,
     defense: true,
     block: true,

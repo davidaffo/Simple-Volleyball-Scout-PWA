@@ -3773,6 +3773,15 @@ function normalizeMetricConfig(skillId, cfg) {
   const enabled = cfg && typeof cfg.enabled === "boolean" ? cfg.enabled : def.enabled !== false;
   return { positive, neutral, negative, activeCodes, enabled };
 }
+function sameCodeList(a, b) {
+  const left = Array.isArray(a) ? a.slice().sort() : [];
+  const right = Array.isArray(b) ? b.slice().sort() : [];
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
 function normalizePointRule(skillId, cfg) {
   const def = POINT_RULE_DEFAULTS[skillId] || { for: [], against: [] };
   const uniq = list =>
@@ -3801,6 +3810,17 @@ function ensurePointRulesDefaults() {
   state.pointRules = state.pointRules || {};
   SKILLS.forEach(skill => {
     state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
+    if (skill.id === "pass" || skill.id === "freeball") {
+      const current = state.pointRules[skill.id];
+      if (
+        Array.isArray(current.against) &&
+        current.against.includes("/") &&
+        sameCodeList(current.for, []) &&
+        (sameCodeList(current.against, ["=", "/"]) || sameCodeList(current.against, ["/"]))
+      ) {
+        state.pointRules[skill.id] = normalizePointRule(skill.id, POINT_RULE_DEFAULTS.pass);
+      }
+    }
     if (
       (skill.id === "defense" || skill.id === "second") &&
       Array.isArray(state.pointRules[skill.id].against) &&
@@ -3822,6 +3842,17 @@ function ensureMetricsConfigDefaults() {
   state.metricsConfig = state.metricsConfig || {};
   SKILLS.forEach(skill => {
     state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
+    if (skill.id === "freeball") {
+      const current = state.metricsConfig[skill.id];
+      const legacyPositive = ["#", "+", "!"];
+      const legacyNegative = ["/", "="];
+      if (
+        sameCodeList(current.positive, legacyPositive) &&
+        sameCodeList(current.negative, legacyNegative)
+      ) {
+        state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, METRIC_DEFAULTS.pass);
+      }
+    }
   });
 }
 function ensureOpponentSkillConfigDefaults() {

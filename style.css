@@ -2906,6 +2906,10 @@ body[data-theme="light"] .skill-row {
   background: var(--skill-pass-bg, #f9a825);
   color: var(--skill-pass-text, #ffffff);
 }
+.skill-title.skill-freeball {
+  background: var(--skill-freeball-bg, #0f766e);
+  color: var(--skill-freeball-text, #ccfbf1);
+}
 .skill-title.skill-attack {
   background: var(--skill-attack-bg, #b71c1c);
   color: var(--skill-attack-text, #ffe4e6);
@@ -3141,6 +3145,10 @@ body[data-theme="light"] .event-btn.code-negative:hover {
   background: var(--skill-pass-bg, #f9a825);
   color: var(--skill-pass-text, #ffffff);
 }
+.badge-freeball {
+  background: var(--skill-freeball-bg, #0f766e);
+  color: var(--skill-freeball-text, #ccfbf1);
+}
 .badge-attack {
   background: var(--skill-attack-bg, #b71c1c);
   color: var(--skill-attack-text, #ffe4e6);
@@ -3352,6 +3360,7 @@ body[data-theme="light"] .team-manage-col select {
 }
 .metric-block.skill-serve { background: var(--skill-serve-soft, rgba(27, 94, 32, 0.18)); }
 .metric-block.skill-pass { background: var(--skill-pass-soft, rgba(249, 168, 37, 0.18)); color: #fff; }
+.metric-block.skill-freeball { background: var(--skill-freeball-soft, rgba(15, 118, 110, 0.18)); }
 .metric-block.skill-attack { background: var(--skill-attack-soft, rgba(183, 28, 28, 0.18)); }
 .metric-block.skill-defense { background: var(--skill-defense-soft, rgba(84, 110, 122, 0.18)); }
 .metric-block.skill-block { background: var(--skill-block-soft, rgba(74, 20, 140, 0.18)); }
@@ -3876,6 +3885,8 @@ body[data-theme="light"] .event-row.selected:hover {
 .agg-table td.skill-col.skill-serve { background: rgba(34, 197, 94, 0.22); }
 .agg-table th.skill-col.skill-pass,
 .agg-table td.skill-col.skill-pass { background: rgba(249, 168, 37, 0.22); }
+.agg-table th.skill-col.skill-freeball,
+.agg-table td.skill-col.skill-freeball { background: rgba(15, 118, 110, 0.22); }
 .agg-table th.skill-col.skill-attack,
 .agg-table td.skill-col.skill-attack { background: rgba(239, 68, 68, 0.22); }
 .agg-table th.skill-col.skill-defense,
@@ -3892,6 +3903,8 @@ body[data-theme="light"] .agg-table th.skill-col.skill-serve,
 body[data-theme="light"] .agg-table td.skill-col.skill-serve { background: #defce7 !important; color: #0f172a !important; }
 body[data-theme="light"] .agg-table th.skill-col.skill-pass,
 body[data-theme="light"] .agg-table td.skill-col.skill-pass { background: #fef3c7 !important; color: #0f172a !important; }
+body[data-theme="light"] .agg-table th.skill-col.skill-freeball,
+body[data-theme="light"] .agg-table td.skill-col.skill-freeball { background: #ccfbf1 !important; color: #0f172a !important; }
 body[data-theme="light"] .agg-table th.skill-col.skill-attack,
 body[data-theme="light"] .agg-table td.skill-col.skill-attack { background: #fee2e2 !important; color: #0f172a !important; }
 body[data-theme="light"] .agg-table th.skill-col.skill-defense,
@@ -7292,6 +7305,10 @@ body[data-theme="light"] .floating-actions__block {
 }
 .skill-col.skill-pass {
   background: var(--skill-pass-soft, rgba(249, 168, 37, 0.18));
+  color: #0f172a;
+}
+.skill-col.skill-freeball {
+  background: var(--skill-freeball-soft, rgba(15, 118, 110, 0.18));
   color: #0f172a;
 }
 .skill-col.skill-attack {

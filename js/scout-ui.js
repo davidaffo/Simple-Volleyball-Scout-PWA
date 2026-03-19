@@ -558,10 +558,11 @@ const elUseOpponentTeamToggle = document.getElementById("use-opponent-team-toggl
 const elOpponentTeamSettings = document.getElementById("opponent-team-settings");
 const elOpponentSkillServe = document.getElementById("opponent-skill-serve");
 const elOpponentSkillPass = document.getElementById("opponent-skill-pass");
+const elOpponentSkillFreeball = document.getElementById("opponent-skill-freeball");
+const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elOpponentSkillAttack = document.getElementById("opponent-skill-attack");
 const elOpponentSkillDefense = document.getElementById("opponent-skill-defense");
 const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
-const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
@@ -3013,6 +3014,11 @@ function getSetterFromLastSetEvent() {
 function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
+function getFreeballStartSkill(scope = "our") {
+  if (isSkillEnabledForScope("freeball", scope)) return "freeball";
+  if (isSkillEnabledForScope("second", scope)) return "second";
+  return null;
+}
 function getPredictedSkillIdSingle() {
   const enabledSkills = getEnabledSkills();
   const flowNext = skillId => {
@@ -3020,6 +3026,7 @@ function getPredictedSkillIdSingle() {
       case "serve":
         return "defense";
       case "pass":
+      case "freeball":
         return "second";
       case "second":
         return "attack";
@@ -3046,7 +3053,7 @@ function getPredictedSkillIdSingle() {
   if (state.skillFlowOverride) return resolveEnabledSkill(state.skillFlowOverride);
   if (!state.predictiveSkillFlow) return null;
   if (enabledSkills.length === 0) return null;
-  if (state.freeballPending) return resolveEnabledSkill("second");
+  if (state.freeballPending) return resolveEnabledSkill(getFreeballStartSkill("our"));
   const ownEvents = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId) return false;
     if (!ev.team) return true;
@@ -3242,7 +3249,7 @@ function getAutoFlowState() {
   }
   if (state.freeballPending && state.freeballPendingScope) {
     flowScope = state.freeballPendingScope;
-    nextSkill = "second";
+    nextSkill = getFreeballStartSkill(flowScope);
   }
   const override = flowScope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
   if (override) nextSkill = override;
@@ -3416,7 +3423,7 @@ function getPredictedSkillIdForScope(scope) {
     scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
   if (override) return resolveEnabledSkill(override);
   if (state.freeballPending && state.freeballPendingScope === scope) {
-    return resolveEnabledSkill("second");
+    return resolveEnabledSkill(getFreeballStartSkill(scope));
   }
   const events = state.events || [];
   const last = getLastFlowEvent(events);
@@ -7592,8 +7599,7 @@ function animateEventToLog() {
 }
 function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null, scope = "our" } = {}) {
   cancelPartialSkillFlowForScope(scope);
-  const desiredStartSkill =
-    startSkill || (isSkillEnabledForScope("second", scope) ? "second" : null);
+  const desiredStartSkill = startSkill || getFreeballStartSkill(scope);
   state.freeballPending = true;
   state.freeballPendingScope = scope;
   state.flowTeamScope = scope;
@@ -7935,12 +7941,13 @@ async function handleEventClick(
     // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
     event.attackBp = true;
   }
-  event.fromFreeball = wasFreeball;
-  if (!event.fromFreeball && skillId === "attack") {
+  event.fromFreeball = wasFreeball || skillId === "freeball";
+  if (!event.fromFreeball && (skillId === "second" || skillId === "attack")) {
     const prevEvent = state.events && state.events.length ? state.events[state.events.length - 1] : null;
     if (
       prevEvent &&
-      prevEvent.skillId === "second" &&
+      ((skillId === "second" && prevEvent.skillId === "freeball") ||
+        (skillId === "attack" && prevEvent.skillId === "second")) &&
       prevEvent.fromFreeball &&
       getTeamScopeFromEvent(prevEvent) === scope
     ) {
@@ -20876,6 +20883,8 @@ function buildDataVolleySkillCode(ev, teamPayload) {
   if (!type) {
     if (ev.skillId === "serve" || ev.skillId === "pass") {
       type = mapServeTypeToDvType(ev.serveType);
+    } else if (ev.skillId === "freeball") {
+      type = "O";
     } else if (ev.skillId === "attack" || ev.skillId === "second") {
       type = mapOurSetTypeToDvType(ev.setType, ev.skillId === "second" ? "H" : "H");
     } else if (ev.skillId === "block" || ev.skillId === "defense") {
@@ -21968,7 +21977,7 @@ function parseDataVolleyDvwToMatchState(text) {
       B: "block",
       D: "defense",
       E: "second",
-      F: "manual"
+      F: "freeball"
     };
     const skillId = skillMap[decoded.skillLetter] || "manual";
     const startZoneNum = decoded.zonePair && /^\d$/.test(decoded.zonePair.startZone) ? Number(decoded.zonePair.startZone) : null;
@@ -24883,10 +24892,11 @@ async function init() {
   const opponentSkillToggles = [
     { id: "serve", el: elOpponentSkillServe },
     { id: "pass", el: elOpponentSkillPass },
+    { id: "freeball", el: elOpponentSkillFreeball },
+    { id: "second", el: elOpponentSkillSecond },
     { id: "attack", el: elOpponentSkillAttack },
     { id: "defense", el: elOpponentSkillDefense },
-    { id: "block", el: elOpponentSkillBlock },
-    { id: "second", el: elOpponentSkillSecond }
+    { id: "block", el: elOpponentSkillBlock }
   ];
   const syncOpponentSkillToggles = () => {
     state.opponentSkillConfig = state.opponentSkillConfig || {};
