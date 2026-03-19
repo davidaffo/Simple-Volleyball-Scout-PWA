@@ -4313,6 +4313,8 @@ function applyBlockNumberToTarget(value) {
   if (!targetEvents.length) return;
   applyAttackFieldToEvents(targetEvents, ev => {
     ev.blockNumber = typeof value === "number" ? value : null;
+    ev.dv = normalizeDataVolleyEventMeta(ev.dv);
+    ev.dv.numPlayersNumeric = typeof value === "number" ? value : null;
   }, { shouldRecalc: false });
   closeBlockNumberModal();
 }
@@ -20904,6 +20906,133 @@ function getDvEvaluationCode(ev) {
   if (code === "opp-point" || code === "error" || code === "team-error") return "=";
   return "#";
 }
+function sanitizeDvZoneChar(value) {
+  const raw = sanitizeDvField(value).toUpperCase();
+  if (!raw) return "";
+  const char = raw.charAt(0);
+  return /[0-9A-Z]/.test(char) ? char : "";
+}
+function buildDataVolleyZoneTail(ev, skill) {
+  if (!ev || !skill) return "";
+  let startZone = "";
+  let endZone = "";
+  if (skill === "A") {
+    startZone = sanitizeDvZoneChar((ev.dv && ev.dv.startZone) || ev.attackStartZone || ev.originZone || ev.zone);
+    endZone = sanitizeDvZoneChar((ev.dv && ev.dv.endZone) || (ev.dv && ev.dv.endSubzone) || (ev.dv && ev.dv.endCone) || ev.attackEndZone);
+  } else if (skill === "E") {
+    startZone = sanitizeDvZoneChar(ev.dv && ev.dv.startZone);
+    endZone = sanitizeDvZoneChar((ev.dv && ev.dv.endZone) || (ev.dv && ev.dv.endSubzone) || (ev.dv && ev.dv.endCone));
+  } else if (skill === "S" || skill === "F") {
+    startZone = sanitizeDvZoneChar((ev.dv && ev.dv.startZone) || ev.originZone || ev.zone);
+    endZone = sanitizeDvZoneChar((ev.dv && ev.dv.endZone) || (ev.dv && ev.dv.endSubzone) || (ev.dv && ev.dv.endCone));
+  }
+  if (!startZone && !endZone) return "";
+  return `~${startZone || ""}${endZone || ""}`;
+}
+function parseDvwZoneMeta(zonePair) {
+  const rawStart = String((zonePair && zonePair.startZone) || "").toUpperCase();
+  const rawEnd = String((zonePair && zonePair.endZone) || "").toUpperCase();
+  const startZone = /^\d$/.test(rawStart) ? rawStart : "";
+  const endZone = /^\d$/.test(rawEnd) ? rawEnd : "";
+  const endSubzone = !endZone && /^[A-Z]$/.test(rawEnd) ? rawEnd : "";
+  return {
+    startZone,
+    endZone,
+    endSubzone,
+    endCone: ""
+  };
+}
+function parseDvwSuffixMeta(skillLetter, inlineCode = "", suffix = "") {
+  const skill = String(skillLetter || "").toUpperCase();
+  const inline = String(inlineCode || "").trim().toUpperCase();
+  const rawSuffix = String(suffix || "").trim().toUpperCase();
+  const cleanedSuffix = rawSuffix.replace(/^~+/, "");
+  const base = {
+    skillSubtype: "",
+    specialCode: "",
+    numPlayersNumeric: null
+  };
+  if (skill === "A") {
+    const match = cleanedSuffix.match(/^([A-Z])(\d*)(.*)$/);
+    if (match) {
+      return {
+        skillSubtype: match[1] || "",
+        numPlayersNumeric: match[2] !== "" ? parseInt(match[2], 10) : null,
+        specialCode: match[3] || ""
+      };
+    }
+    return {
+      skillSubtype: cleanedSuffix ? cleanedSuffix.charAt(0) : "",
+      specialCode: cleanedSuffix ? cleanedSuffix.slice(1) : "",
+      numPlayersNumeric: null
+    };
+  }
+  if (skill === "B") {
+    const match = cleanedSuffix.match(/^(\d*)(.*)$/);
+    if (match) {
+      return {
+        skillSubtype: "",
+        numPlayersNumeric: match[1] !== "" ? parseInt(match[1], 10) : null,
+        specialCode: match[2] || ""
+      };
+    }
+    return {
+      skillSubtype: "",
+      numPlayersNumeric: null,
+      specialCode: cleanedSuffix
+    };
+  }
+  if (skill === "E") {
+    return {
+      skillSubtype: inline || "",
+      specialCode: cleanedSuffix,
+      numPlayersNumeric: null
+    };
+  }
+  if (skill === "R") {
+    if (/^[WOLR]/.test(cleanedSuffix)) {
+      return {
+        skillSubtype: cleanedSuffix.charAt(0),
+        specialCode: cleanedSuffix.slice(1),
+        numPlayersNumeric: null
+      };
+    }
+    return Object.assign({}, base, {
+      specialCode: cleanedSuffix
+    });
+  }
+  if (skill === "S" || skill === "D" || skill === "F") {
+    return Object.assign({}, base, {
+      specialCode: cleanedSuffix
+    });
+  }
+  return Object.assign({}, base, {
+    skillSubtype: inline || (cleanedSuffix ? cleanedSuffix.charAt(0) : ""),
+    specialCode: inline ? cleanedSuffix : cleanedSuffix.slice(1)
+  });
+}
+function buildDataVolleyPostZoneTail(ev, skill) {
+  if (!ev) return "";
+  const meta = ev.dv && typeof ev.dv === "object" ? ev.dv : {};
+  if (skill === "A") {
+    const subtype = sanitizeDvField(meta.skillSubtype).toUpperCase();
+    const rawNum = Number.isFinite(meta.numPlayersNumeric) ? meta.numPlayersNumeric : null;
+    const num = rawNum !== null ? String(Math.max(0, Math.min(9, rawNum))) : "";
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    return `${subtype}${num}${special}`;
+  }
+  if (skill === "B") {
+    const rawNum = Number.isFinite(meta.numPlayersNumeric)
+      ? meta.numPlayersNumeric
+      : Number.isFinite(parseInt(ev.blockNumber, 10))
+        ? parseInt(ev.blockNumber, 10)
+        : null;
+    const num = rawNum !== null ? String(Math.max(0, Math.min(9, rawNum))) : "";
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    return `${num}${special}`;
+  }
+  return sanitizeDvField(meta.specialCode).toUpperCase();
+}
 function buildDataVolleySkillCode(ev, teamPayload) {
   if (!ev) return "";
   const scope = getTeamScopeFromEvent(ev);
@@ -20947,15 +21076,43 @@ function buildDataVolleySkillCode(ev, teamPayload) {
   const evaluation = getDvEvaluationCode(ev);
   let tail = "";
   if (skill === "E") {
-    const setCode = sanitizeDvField((ev.dv && ev.dv.setCode) || ev.base || "");
+    const setCode = sanitizeDvField((ev.dv && ev.dv.setCode) || ev.base || (ev.combination && ev.combination.code) || "");
     if (setCode) tail += setCode.toUpperCase();
+    if (ev.dv && ev.dv.skillSubtype) {
+      tail += sanitizeDvField(ev.dv.skillSubtype).toUpperCase();
+    }
   }
   if (skill === "A") {
-    const attackCode = sanitizeDvField((ev.dv && ev.dv.attackCode) || "");
+    const attackCode = sanitizeDvField(
+      (ev.dv && ev.dv.attackCode) ||
+      ev.attackType ||
+      (ev.combination && (ev.combination.code || ev.combination.attackCode)) ||
+      ""
+    );
     if (attackCode) tail += attackCode.toUpperCase();
   }
-  if (ev.dv && ev.dv.specialCode) tail += sanitizeDvField(ev.dv.specialCode).toUpperCase();
+  tail += buildDataVolleyZoneTail(ev, skill);
+  tail += buildDataVolleyPostZoneTail(ev, skill);
   return `${prefix}${playerNumber}${skill}${type}${evaluation}${tail}`;
+}
+function buildDataVolleyPointMarkerCode(ev, direction) {
+  if (!ev || !direction) return "";
+  const scoringScope = direction === "for" ? "our" : "opponent";
+  const eventScope = getTeamScopeFromEvent(ev);
+  const evalCode = getDvEvaluationCode(ev);
+  if (ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+    return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
+  }
+  if (eventScope === scoringScope && evalCode === "#") {
+    return `${scoringScope === "opponent" ? "*" : "a"}$$&H=`;
+  }
+  if (eventScope !== scoringScope && evalCode === "=") {
+    return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
+  }
+  if (eventScope === scoringScope && (evalCode === "+" || evalCode === "!")) {
+    return `${scoringScope === "opponent" ? "*" : "a"}$$&H=`;
+  }
+  return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
 }
 function buildDataVolleyScoutRows(events, ourTeam, opponentTeam, setNumbers) {
   const lines = [];
@@ -21054,10 +21211,10 @@ function buildDataVolleyScoutRows(events, ourTeam, opponentTeam, setNumbers) {
       const direction = getPointDirection(ev);
       if (direction) {
         const scoringScope = direction === "for" ? "our" : "opponent";
-        const eventScope = getTeamScopeFromEvent(ev);
-        if (ev.skillId === "manual" || scoringScope !== eventScope) {
+        const markerCode = buildDataVolleyPointMarkerCode(ev, direction);
+        if (markerCode) {
           lines.push(
-            buildDvRow(`${scoringScope === "opponent" ? "a" : "*"}$$&H#`, {
+            buildDvRow(markerCode, {
               setNum,
               time,
               ourRotation: context.ourRotation,
@@ -21568,6 +21725,37 @@ function getDvwSectionLines(sections, name) {
 function parseDvwRow(line) {
   return String(line || "").split(";").map(part => part.trim());
 }
+function parseDvwAttackCombinationDefinitions(lines) {
+  const map = new Map();
+  (lines || []).forEach(line => {
+    const row = parseDvwRow(line);
+    const code = sanitizeDvField(row[0]).toUpperCase();
+    if (!code) return;
+    const typeLetter = sanitizeDvField(row[3]).toUpperCase();
+    map.set(code, {
+      code,
+      zone: sanitizeDvField(row[1]),
+      side: sanitizeDvField(row[2]),
+      typeLetter,
+      setType: decodeDvwSetType(typeLetter) || "",
+      label: sanitizeDvField(row[4]) || code
+    });
+  });
+  return map;
+}
+function parseDvwSetterCallDefinitions(lines) {
+  const map = new Map();
+  (lines || []).forEach(line => {
+    const row = parseDvwRow(line);
+    const code = sanitizeDvField(row[0]).toUpperCase();
+    if (!code) return;
+    map.set(code, {
+      code,
+      label: sanitizeDvField(row[2] || row[1] || row[3]) || code
+    });
+  });
+  return map;
+}
 function formatDvwImportedName(lastName = "", firstName = "") {
   const raw = [String(lastName || "").trim(), String(firstName || "").trim()].filter(Boolean).join(" ");
   if (!raw) return "";
@@ -21728,6 +21916,145 @@ function parseDvwTailParts(tail) {
     raw
   };
 }
+function refineDvwTailBySkill(skillLetter, rawTail, parsedParts) {
+  const skill = String(skillLetter || "").toUpperCase();
+  const raw = String(rawTail || "").trim().toUpperCase();
+  const parsed = parsedParts || parseDvwTailParts(raw);
+  const fallback = {
+    zoneMeta: parseDvwZoneMeta(parsed.zonePair),
+    suffix: parsed.suffix
+  };
+  if (!raw) return fallback;
+  if (skill === "A") {
+    const match = raw.match(/^(?:[A-Z0-9]{2})?~(\d)(\d)?([A-D]?)(?:~)?(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: match[1] || "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "E") {
+    const noStartZone = raw.match(/^(?:[A-Z0-9]{2,3})?~~(\d)([A-D]?)(?:~~)?(.*)$/);
+    if (noStartZone) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: noStartZone[1] || "",
+          endSubzone: noStartZone[2] || "",
+          endCone: ""
+        },
+        suffix: String(noStartZone[3] || "").toUpperCase()
+      };
+    }
+    const simpleSuffix = raw.match(/^(?:[A-Z0-9]{2,3})?~~(.*)$/);
+    if (simpleSuffix) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(simpleSuffix[1] || "").toUpperCase()
+      };
+    }
+    const match = raw.match(/^(?:[A-Z0-9]{2})?([A-Z0-9]*)~(\d)([A-D]?)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "S" || skill === "R" || skill === "D" || skill === "F") {
+    const match = raw.match(/^~~~(\d)(\d)([A-D]?)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: match[1] || "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+    const singleZone = raw.match(/^~~~(\d)(.*)$/);
+    if (singleZone) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: singleZone[1] || "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(singleZone[2] || "").toUpperCase()
+      };
+    }
+    const endOnly = raw.match(/^~~~~(\d)([A-D]?)(.*)$/);
+    if (endOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: endOnly[1] || "",
+          endSubzone: endOnly[2] || "",
+          endCone: ""
+        },
+        suffix: String(endOnly[3] || "").toUpperCase()
+      };
+    }
+    const suffixOnly = raw.match(/^~{6,}(.*)$/);
+    if (suffixOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(suffixOnly[1] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "B") {
+    const match = raw.match(/^~~~~(\d)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: match[1] || "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(match[2] || "").toUpperCase()
+      };
+    }
+    const suffixOnly = raw.match(/^~{6,}(.*)$/);
+    if (suffixOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(suffixOnly[1] || "").toUpperCase()
+      };
+    }
+  }
+  return fallback;
+}
 function parseDvwSkillCode(code) {
   const raw = String(code || "").trim();
   const substitution = raw.match(/^([*a])c(\d{1,2}):(\d{1,2})$/i);
@@ -21746,11 +22073,23 @@ function parseDvwSkillCode(code) {
       teamScope: timeout[1] === "a" ? "opponent" : "our"
     };
   }
-  if (/^[*a]\$\$&/i.test(raw)) {
-    return { kind: "point-marker" };
+  const pointMarker = raw.match(/^([*a])\$\$&([A-Z])([#=!+\-/])?$/i);
+  if (pointMarker) {
+    return {
+      kind: "point-marker",
+      teamScope: pointMarker[1] === "a" ? "opponent" : "our",
+      pointType: String(pointMarker[2] || "").toUpperCase(),
+      evaluation: pointMarker[3] || ""
+    };
   }
-  if (/^[*a]p\d+:\d+/i.test(raw)) {
-    return { kind: "score" };
+  const score = raw.match(/^([*a])p(\d+):(\d+)$/i);
+  if (score) {
+    return {
+      kind: "score",
+      teamScope: score[1] === "a" ? "opponent" : "our",
+      scoreOur: parseInt(score[2], 10) || 0,
+      scoreOpp: parseInt(score[3], 10) || 0
+    };
   }
   if (/^[*a]z\d+/i.test(raw)) {
     return { kind: "rotation" };
@@ -21765,6 +22104,7 @@ function parseDvwSkillCode(code) {
   if (!skill) return { kind: "unknown" };
   const tail = skill[6] || "";
   const tailParts = parseDvwTailParts(tail);
+  const refinedTail = refineDvwTailBySkill(skill[3], tail, tailParts);
   return {
     kind: "skill",
     teamScope: skill[1] === "a" ? "opponent" : "our",
@@ -21776,7 +22116,8 @@ function parseDvwSkillCode(code) {
     advancedCode: tailParts.advancedCode,
     inlineCode: tailParts.inlineCode,
     zonePair: tailParts.zonePair,
-    suffix: tailParts.suffix
+    zoneMeta: refinedTail.zoneMeta,
+    suffix: refinedTail.suffix
   };
 }
 function parseDvwPlayersSection(lines, teamMeta, side = "our") {
@@ -21918,6 +22259,8 @@ function parseDataVolleyDvwToMatchState(text) {
     : { code: "OPP", name: "Avversaria", id: "OPP" };
   const homePayload = parseDvwPlayersSection(sections.get("3PLAYERS-H") || [], homeTeamMeta, "our");
   const awayPayload = parseDvwPlayersSection(sections.get("3PLAYERS-V") || [], awayTeamMeta, "opponent");
+  const attackCombinationDefs = parseDvwAttackCombinationDefinitions(dvwAttackCombinations);
+  const setterCallDefs = parseDvwSetterCallDefinitions(dvwSetterCalls);
   const setStarts = buildDvwSetStarts(homePayload, awayPayload, scoutRows);
   const setResults = {};
   setRows.forEach((row, idx) => {
@@ -21933,6 +22276,7 @@ function parseDataVolleyDvwToMatchState(text) {
     opponent: new Map((awayPayload.playersDetailed || []).map(player => [player.name, player.id]))
   };
   const lastSecondByScope = { our: null, opponent: null };
+  const setContexts = new Map();
   let lastHomeCourt = setStarts[1] ? cloneDvCourt(setStarts[1].our.court || []) : makeImportedCourtFromNames([]);
   let lastAwayCourt = setStarts[1] ? cloneDvCourt(setStarts[1].opponent.court || []) : makeImportedCourtFromNames([]);
   let lastHomeRotation = setStarts[1] ? setStarts[1].our.rotation || 1 : 1;
@@ -21960,7 +22304,68 @@ function parseDataVolleyDvwToMatchState(text) {
         isServing: /^[*]/.test(rawCode)
       };
     }
-    if (decoded.kind === "lineup" || decoded.kind === "rotation" || decoded.kind === "score" || decoded.kind === "set-end" || decoded.kind === "point-marker" || decoded.kind === "unknown") {
+    let setContext = setContexts.get(setNum);
+    if (!setContext) {
+      setContext = {
+        scoreOur: 0,
+        scoreOpp: 0,
+        pendingPointMarker: null,
+        lastEventIndex: null
+      };
+      setContexts.set(setNum, setContext);
+    }
+    if (decoded.kind === "point-marker") {
+      setContext.pendingPointMarker = decoded;
+      return;
+    }
+    if (decoded.kind === "score") {
+      const prevOur = setContext.scoreOur;
+      const prevOpp = setContext.scoreOpp;
+      setContext.scoreOur = decoded.scoreOur;
+      setContext.scoreOpp = decoded.scoreOpp;
+      const targetIndex = setContext.lastEventIndex;
+      if (targetIndex !== null && events[targetIndex]) {
+        const targetEvent = events[targetIndex];
+        const deltaOur = decoded.scoreOur - prevOur;
+        const deltaOpp = decoded.scoreOpp - prevOpp;
+        let direction = null;
+        if (deltaOur > deltaOpp && deltaOur > 0) {
+          direction = "for";
+        } else if (deltaOpp > deltaOur && deltaOpp > 0) {
+          direction = "against";
+        } else if (setContext.pendingPointMarker && setContext.pendingPointMarker.teamScope) {
+          direction = setContext.pendingPointMarker.teamScope === "our" ? "for" : "against";
+        } else if (decoded.teamScope) {
+          direction = decoded.teamScope === "our" ? "for" : "against";
+        }
+        targetEvent.homeScore = decoded.scoreOur;
+        targetEvent.visitorScore = decoded.scoreOpp;
+        if (direction) {
+          targetEvent.pointDirection = direction;
+          targetEvent.value = Math.max(deltaOur, deltaOpp, 1);
+          if (direction === "for" && targetEvent.team !== "our") {
+            targetEvent.dv.rallyEndReason = "opponent-point";
+          } else if (direction === "against" && targetEvent.team === "our") {
+            targetEvent.dv.rallyEndReason = "opponent-point";
+          }
+        }
+        if (setContext.pendingPointMarker) {
+          const marker = setContext.pendingPointMarker;
+          targetEvent.dv.rallyEndReason =
+            marker.pointType === "H"
+              ? marker.teamScope === getTeamScopeFromEvent(targetEvent)
+                ? "team-point-marker"
+                : "opponent-point-marker"
+              : targetEvent.dv.rallyEndReason || "";
+          if (!targetEvent.dv.specialCode && marker.evaluation) {
+            targetEvent.dv.specialCode = marker.evaluation;
+          }
+        }
+      }
+      setContext.pendingPointMarker = null;
+      return;
+    }
+    if (decoded.kind === "lineup" || decoded.kind === "rotation" || decoded.kind === "set-end" || decoded.kind === "unknown") {
       return;
     }
     if (decoded.kind === "timeout") {
@@ -22031,23 +22436,23 @@ function parseDataVolleyDvwToMatchState(text) {
       F: "freeball"
     };
     const skillId = skillMap[decoded.skillLetter] || "manual";
-    const startZoneNum = decoded.zonePair && /^\d$/.test(decoded.zonePair.startZone) ? Number(decoded.zonePair.startZone) : null;
-    const endZoneNum = decoded.zonePair && /^\d$/.test(decoded.zonePair.endZone) ? Number(decoded.zonePair.endZone) : null;
+    const zoneMeta = decoded.zoneMeta || parseDvwZoneMeta(decoded.zonePair);
+    const startZoneNum = zoneMeta.startZone ? Number(zoneMeta.startZone) : null;
+    const endZoneNum = zoneMeta.endZone ? Number(zoneMeta.endZone) : null;
     const suffix = String(decoded.suffix || "").trim().toUpperCase();
-    const skillSubtype = suffix ? suffix.charAt(0) : "";
-    const numPlayersMatch = suffix.match(/(\d)/);
+    const suffixMeta = parseDvwSuffixMeta(decoded.skillLetter, decoded.inlineCode, suffix);
     const dvMeta = {
       skillType: decoded.typeLetter,
       attackCode: decoded.skillLetter === "A" ? decoded.advancedCode : "",
       setCode: decoded.skillLetter === "E" ? decoded.advancedCode : "",
       setType: decodeDvwSetType(decoded.typeLetter) || "",
-      skillSubtype: decoded.inlineCode || skillSubtype,
-      specialCode: suffix,
-      startZone: decoded.zonePair ? decoded.zonePair.startZone : null,
-      endZone: decoded.zonePair ? decoded.zonePair.endZone : null,
-      endSubzone: "",
-      endCone: "",
-      numPlayersNumeric: numPlayersMatch ? Number(numPlayersMatch[1]) : null,
+      skillSubtype: suffixMeta.skillSubtype,
+      specialCode: suffixMeta.specialCode,
+      startZone: zoneMeta.startZone || "",
+      endZone: zoneMeta.endZone || "",
+      endSubzone: zoneMeta.endSubzone || "",
+      endCone: zoneMeta.endCone || "",
+      numPlayersNumeric: Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
       rallyEndReason: ""
     };
     const event = {
@@ -22093,7 +22498,7 @@ function parseDataVolleyDvwToMatchState(text) {
       attackStart: null,
       attackEnd: null,
       attackDirection: null,
-      blockNumber: null,
+      blockNumber: skillId === "block" && Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
       errorType: null,
       playerIn: null,
       playerOut: null,
@@ -22102,8 +22507,8 @@ function parseDataVolleyDvwToMatchState(text) {
       teamName: payload.name,
       teamCodeOfficial: payload.officialCode || "",
       teamIdOfficial: payload.officialId || "",
-      homeScore: 0,
-      visitorScore: 0,
+      homeScore: setContext.scoreOur,
+      visitorScore: setContext.scoreOpp,
       actionType: null,
       prevSet: null,
       nextSet: null,
@@ -22116,6 +22521,29 @@ function parseDataVolleyDvwToMatchState(text) {
       videoTime: 0,
       dv: normalizeDataVolleyEventMeta(dvMeta)
     };
+    if (skillId === "attack" && decoded.advancedCode) {
+      const combo = attackCombinationDefs.get(decoded.advancedCode);
+      if (combo) {
+        event.combination = {
+          code: combo.code,
+          label: combo.label,
+          setType: combo.setType || "",
+          set_type: combo.setType || ""
+        };
+        if (!event.setType && combo.setType) {
+          event.setType = combo.setType;
+        }
+      }
+    }
+    if (skillId === "second" && decoded.advancedCode) {
+      const setterCall = setterCallDefs.get(decoded.advancedCode);
+      if (setterCall) {
+        event.combination = {
+          code: setterCall.code,
+          label: setterCall.label
+        };
+      }
+    }
     if (skillId === "attack" && startZoneNum) {
       const start = buildDvwZonePoint(startZoneNum, "start", decoded.advancedCode);
       const end = endZoneNum ? buildDvwZonePoint(endZoneNum, "end", decoded.advancedCode) : null;
@@ -22142,6 +22570,7 @@ function parseDataVolleyDvwToMatchState(text) {
       event.relatedEvents = [lastSecondByScope[scope].eventId];
       event.setterIdx = lastSecondByScope[scope].playerIdx;
     }
+    setContext.lastEventIndex = events.length;
     events.push(event);
   });
   const playedSetNumbers = Array.from(new Set(events.map(ev => parseInt(ev.set, 10)).filter(Boolean))).sort((a, b) => a - b);

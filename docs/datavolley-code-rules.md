@@ -126,6 +126,111 @@ Ordine consigliato per rafforzare compatibilita `.dvw`:
 4. affinare `Block` con `type`, `special_code` e `numPlayersNumeric`
 5. rifinire la coda avanzata di `Attack` e `Dig`
 
+## Stato integrazione attuale nel codice
+
+Questa sezione descrive il comportamento effettivo dell'implementazione presente nell'app.
+
+### Import `.dvw`
+
+L'import attuale:
+
+- legge e preserva le sezioni:
+  - `3ATTACKCOMBINATION`
+  - `3SETTERCALL`
+  - `3WINNINGSYMBOLS`
+  - `3RESERVE`
+  - `3VIDEO`
+- crea automaticamente due squadre nel database locale:
+  - `home` come nostra squadra
+  - `away` come avversaria
+- ricostruisce roster, numeri maglia, capitane, liberi, lineup iniziali per set e rotazioni
+- importa le skill `S`, `R`, `A`, `B`, `D`, `E`, `F`
+- importa `F` come `freeball`, non come evento manuale
+
+Interpretazione avanzata gia attiva:
+
+- `3ATTACKCOMBINATION` viene parsata e mappata su `event.combination` per gli attacchi
+- se una combinazione attacco definisce un tipo alzata, quel valore viene riusato anche come `event.setType`
+- `3SETTERCALL` viene parsata e mappata su `event.combination` per le alzate
+- la coda del codice viene separata in:
+  - `advancedCode`
+  - `inlineCode`
+  - `zonePair`
+  - `suffix`
+- `$$` e `p` vengono letti come marker di punto e score:
+  - il parser aggiorna `homeScore` / `visitorScore` dell'evento di rally precedente
+  - se il delta score e chiaro, imposta anche `pointDirection`
+- per `block`, il parser valorizza anche `blockNumber` / `dv.numPlayersNumeric` se il suffisso contiene il numero di giocatori a muro
+
+Limiti noti lato import:
+
+- i marker `$$` vengono ancora interpretati in modo minimale
+- `special_code`, `end_subzone`, `end_cone` e alcune tail rare non sono ancora ricostruite 1:1
+- le traiettorie importate da DVW restano una ricostruzione geometrica dal codice, non coordinate native
+
+### Export `.dvw`
+
+L'export attuale:
+
+- genera un file principale in formato `.dvw`, non CSV
+- preserva in uscita le sezioni originali del match se presenti:
+  - `3ATTACKCOMBINATION`
+  - `3SETTERCALL`
+  - `3WINNINGSYMBOLS`
+  - `3RESERVE`
+  - `3VIDEO`
+- se il match non ha quelle sezioni, usa i default dell'app
+
+Regole attuali di costruzione codice:
+
+- `team + player + skill + type + evaluation` sono sempre generati dal nostro evento
+- per `A` l'export cerca il codice attacco in quest'ordine:
+  1. `ev.dv.attackCode`
+  2. `ev.attackType`
+  3. `ev.combination.code`
+- per `E` l'export cerca il codice alzata in quest'ordine:
+  1. `ev.dv.setCode`
+  2. `ev.base`
+  3. `ev.combination.code`
+- ordine coda attuale:
+  - `A`: `attackCode + zoneTail + skillSubtype + numPlayersNumeric + specialCode`
+  - `E`: `setCode + skillSubtype + zoneTail + specialCode`
+  - `B`: `zoneTail + numPlayersNumeric + specialCode`
+- se disponibili, le zone vengono esportate in coda come `~xy`
+- per `B`, l'export aggiunge anche `numPlayersNumeric` usando come fonte:
+  1. `ev.dv.numPlayersNumeric`
+  2. `ev.blockNumber`
+
+Limiti noti lato export:
+
+- i marker `$$` ora vengono generati usando:
+  - squadra che segna
+  - squadra dell'evento finale
+  - `evaluation_code` finale
+
+  Regola pratica attuale:
+  - skill vincente della squadra che segna: marker sull'altra squadra con `H=`
+  - errore della squadra che perde: marker sulla squadra che segna con `H#`
+  - eventi manuali: fallback sulla squadra che segna con `H#`
+
+  La logica e molto piu aderente ai `.dvw` reali, ma non e ancora una replica perfetta di tutti i casi ufficiali
+- in import, per `A` e `B` il suffisso post-zona viene gia separato in:
+  - `skillSubtype`
+  - `numPlayersNumeric`
+  - `specialCode`
+- in import/export, se il secondo carattere della zone tail e alfabetico (es. `~8B`, `~3D`):
+  - viene preservato in `dv.endSubzone`
+  - in export viene rimesso nella stessa posizione della zone tail
+- il parser della zone tail non e piu unico per tutte le skill:
+  - `A` usa una lettura tipo `attackCode ~ start end [subzone] [suffix]`
+  - `E` usa una lettura tipo `setCode+inline ~ end [subzone] [suffix]`
+  - `S/R/D/F` usano una lettura tipo `~~~ start end [subzone] [suffix]`
+  - `B` usa una lettura tipo `~~~~ end [rest]`
+- `endCone` resta per ora non popolato automaticamente: manca ancora una regola abbastanza solida dal corpus reale
+- nel CSV ufficiale di riferimento attuale `end_cone` risulta sempre vuota, quindi non c'e ancora un segnale pratico sufficiente per inferirla in modo affidabile
+- la semantica ufficiale completa di `winning symbols`, `special_code` e alcuni casi di block non e ancora chiusa
+- il codice esportato e gia utile e strutturato, ma non ancora garantito 1:1 con tutti i casi di DataVolley ufficiale
+
 ## Struttura generale
 
 Il manuale dice che i codici scout sono divisi in 4 macro parti:
