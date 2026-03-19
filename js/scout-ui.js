@@ -22241,14 +22241,18 @@ function parseDvwSkillCode(code) {
   if (/^\*\*\d+set/i.test(raw)) {
     return { kind: "set-end" };
   }
-  const skill = raw.match(/^([*a])(\d{1,2})([SRABDEF])([HMQTUNO])([#=!+\-/])(.*)$/i);
+  const skill = raw.match(/^(?:([*a]))?(\d{1,2})([SRABDEF])([HMQTUNO])([#=!+\-/])(.*)$/i);
   if (!skill) return { kind: "unknown" };
+  const inferredScope = skill[1]
+    ? (skill[1].toLowerCase() === "a" ? "opponent" : "our")
+    : inferDvwScopeFromNumberAndFlow(skill[2], skill[3]);
+  if (!inferredScope) return { kind: "unknown" };
   const tail = skill[6] || "";
   const tailParts = parseDvwTailParts(tail);
   const refinedTail = refineDvwTailBySkill(skill[3], tail, tailParts);
   return {
     kind: "skill",
-    teamScope: skill[1] === "a" ? "opponent" : "our",
+    teamScope: inferredScope,
     playerNumber: padDv(skill[2], 2),
     skillLetter: skill[3].toUpperCase(),
     typeLetter: skill[4].toUpperCase(),
@@ -22259,6 +22263,117 @@ function parseDvwSkillCode(code) {
     zonePair: tailParts.zonePair,
     zoneMeta: refinedTail.zoneMeta,
     suffix: refinedTail.suffix
+  };
+}
+function getDvwScopeMatchesByPlayerNumber(playerNumber) {
+  const normalizedNumber = padDv(playerNumber, 2);
+  if (!normalizedNumber) return [];
+  const matches = [];
+  const ourNumbers = getPlayerNumbersForScope("our") || {};
+  if (Object.values(ourNumbers).some(value => padDv(value, 2) === normalizedNumber)) {
+    matches.push("our");
+  }
+  if (state.useOpponentTeam) {
+    const oppNumbers = getPlayerNumbersForScope("opponent") || {};
+    if (Object.values(oppNumbers).some(value => padDv(value, 2) === normalizedNumber)) {
+      matches.push("opponent");
+    }
+  }
+  return matches;
+}
+function getDvwPrefixForScope(scope) {
+  return scope === "opponent" ? "a" : "*";
+}
+function inferDvwScopeFromNumberAndFlow(playerNumber = "", skillLetter = "") {
+  if (!state.useOpponentTeam) return "our";
+  const matches = getDvwScopeMatchesByPlayerNumber(playerNumber);
+  if (matches.length === 1) return matches[0];
+  const flowState = getAutoFlowState();
+  if (flowState && flowState.teamScope) {
+    return flowState.teamScope;
+  }
+  if (matches.length > 0) return matches[0];
+  return null;
+}
+function normalizeDvwScoutToken(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw) {
+    return {
+      raw,
+      normalized: "",
+      corrected: false,
+      parsed: { kind: "unknown" },
+      correctionReason: ""
+    };
+  }
+  const directParsed = parseDvwSkillCode(raw);
+  if (directParsed && directParsed.kind !== "unknown") {
+    const normalizedDirect =
+      directParsed.kind === "skill" && !/^[*a]/i.test(raw)
+        ? `${getDvwPrefixForScope(directParsed.teamScope)}${raw.toUpperCase().replace(/\s+/g, "")}`
+        : raw;
+    return {
+      raw,
+      normalized: normalizedDirect,
+      corrected: normalizedDirect !== raw,
+      parsed: directParsed,
+      correctionReason: normalizedDirect !== raw ? "implicit-team-prefix" : ""
+    };
+  }
+  const upperRaw = raw.toUpperCase().replace(/\s+/g, "");
+  const teamPrefix = upperRaw.startsWith("*") || upperRaw.startsWith("A") ? upperRaw.charAt(0) : "";
+  const body = teamPrefix ? upperRaw.slice(1) : upperRaw;
+  const evalIndex = body.search(/[#=!+\-/]/);
+  if (evalIndex < 0) {
+    return {
+      raw,
+      normalized: raw,
+      corrected: false,
+      parsed: directParsed,
+      correctionReason: ""
+    };
+  }
+  const mainHead = body.slice(0, evalIndex);
+  const evalSymbol = body.charAt(evalIndex);
+  const tail = body.slice(evalIndex + 1);
+  const skillSet = new Set(["S", "R", "A", "B", "D", "E", "F"]);
+  const typeSet = new Set(["H", "M", "Q", "T", "U", "N", "O"]);
+  const chars = mainHead.split("");
+  const skillIndices = [];
+  const typeIndices = [];
+  chars.forEach((ch, idx) => {
+    if (skillSet.has(ch)) skillIndices.push(idx);
+    if (typeSet.has(ch)) typeIndices.push(idx);
+  });
+  for (const skillIdx of skillIndices) {
+    for (const typeIdx of typeIndices) {
+      if (skillIdx === typeIdx) continue;
+      const playerDigits = chars
+        .filter((_, idx) => idx !== skillIdx && idx !== typeIdx)
+        .join("");
+      if (!/^\d{1,2}$/.test(playerDigits)) continue;
+      const inferredScope = teamPrefix
+        ? (teamPrefix === "A" ? "opponent" : "our")
+        : inferDvwScopeFromNumberAndFlow(playerDigits, chars[skillIdx]);
+      if (!inferredScope) continue;
+      const normalized = `${teamPrefix || getDvwPrefixForScope(inferredScope)}${padDv(playerDigits, 2)}${chars[skillIdx]}${chars[typeIdx]}${evalSymbol}${tail}`;
+      const parsed = parseDvwSkillCode(normalized);
+      if (!parsed || parsed.kind === "unknown") continue;
+      return {
+        raw,
+        normalized,
+        corrected: normalized !== raw,
+        parsed,
+        correctionReason: "main-code-order"
+      };
+    }
+  }
+  return {
+    raw,
+    normalized: raw,
+    corrected: false,
+    parsed: directParsed,
+    correctionReason: ""
   };
 }
 function setDvwScoutStatus(message, tone = "") {
@@ -22280,17 +22395,73 @@ function getDvwScoutSkillLabel(letter) {
   };
   return map[String(letter || "").toUpperCase()] || String(letter || "").toUpperCase();
 }
-function getDvwScoutTypeLabel(letter) {
-  const map = {
-    H: "Alta/High",
-    M: "Mezza/Medium",
+function getDvwScoutTypeLabel(letter, skillLetter = "") {
+  const type = String(letter || "").toUpperCase();
+  const skill = String(skillLetter || "").toUpperCase();
+  const genericMap = {
+    H: "High",
+    M: "Medium",
     Q: "Quick",
-    T: "Veloce",
+    T: "Tense",
     U: "Super",
     N: "Fast",
-    O: "Damp/Other"
+    O: "Other"
   };
-  return map[String(letter || "").toUpperCase()] || String(letter || "").toUpperCase();
+  const contextualMap = {
+    S: {
+      H: "Float",
+      M: "Jump Float",
+      Q: "Jump Serve"
+    },
+    R: {
+      H: "Su Float",
+      M: "Su Jump Float",
+      Q: "Su Jump Serve"
+    },
+    A: {
+      H: "Alta",
+      M: "Mezza",
+      Q: "Quick",
+      T: "Tesa",
+      U: "Super",
+      N: "Fast",
+      O: "Altro"
+    },
+    B: {
+      H: "Su Alta",
+      M: "Su Mezza",
+      Q: "Su Quick",
+      T: "Su Tesa",
+      U: "Su Super",
+      N: "Su Fast",
+      O: "Su Altro"
+    },
+    D: {
+      H: "Su Alta",
+      M: "Su Mezza",
+      Q: "Su Quick",
+      T: "Su Tesa",
+      U: "Su Super",
+      N: "Su Fast",
+      O: "Su Altro"
+    },
+    E: {
+      H: "Per Alta",
+      M: "Per Mezza",
+      Q: "Per Quick",
+      T: "Per Tesa",
+      U: "Per Super",
+      N: "Per Fast",
+      O: "Per Altro"
+    },
+    F: {
+      H: "Alta",
+      M: "Media",
+      Q: "Rapida",
+      O: "Altra"
+    }
+  };
+  return (contextualMap[skill] && contextualMap[skill][type]) || genericMap[type] || type;
 }
 function getDvwScoutEvalLabel(symbol) {
   const map = {
@@ -22303,53 +22474,122 @@ function getDvwScoutEvalLabel(symbol) {
   };
   return map[String(symbol || "")] || String(symbol || "");
 }
+function escapeDvwScoutHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+function renderDvwScoutBreakdownGroup(title, toneClass, entries = [], options = {}) {
+  const extraClass = options.placeholder ? " is-placeholder" : "";
+  const rows = entries.length
+    ? entries
+        .map(entry => {
+          const label = escapeDvwScoutHtml(entry.label);
+          const value = escapeDvwScoutHtml(entry.value);
+          const filledClass = entry.value ? " is-filled" : "";
+          return `<div class="scout-dvw-breakdown__item${filledClass}"><span class="scout-dvw-breakdown__key">${label}</span><span class="scout-dvw-breakdown__value">${value || "—"}</span></div>`;
+        })
+        .join("")
+    : `<div class="scout-dvw-breakdown__empty">—</div>`;
+  return `<section class="scout-dvw-breakdown__group ${toneClass}${extraClass}"><div class="scout-dvw-breakdown__group-title">${escapeDvwScoutHtml(title)}</div><div class="scout-dvw-breakdown__group-body">${rows}</div></section>`;
+}
+function renderDvwScoutBreakdownCommand(title, text) {
+  return `<section class="scout-dvw-breakdown__group scout-dvw-breakdown__group--command"><div class="scout-dvw-breakdown__group-title">${escapeDvwScoutHtml(title)}</div><div class="scout-dvw-breakdown__command-text">${escapeDvwScoutHtml(text)}</div></section>`;
+}
+function renderDvwScoutSuggestion(normalized) {
+  if (!normalized || !normalized.corrected || !normalized.normalized) return "";
+  return `<div class="scout-dvw-breakdown__suggestion"><span class="scout-dvw-breakdown__suggestion-label">Autocorrezione</span><code>${escapeDvwScoutHtml(normalized.normalized)}</code></div>`;
+}
 function buildDvwScoutBreakdown(rawInput) {
   const raw = String(rawInput || "").trim();
   if (!raw) {
-    return "Main: squadra · numero · skill · tipo · valutazione. Advanced: combinazione / zone. Extended: skill type / players / special.";
+    const main = renderDvwScoutBreakdownGroup(
+      "Main code",
+      "scout-dvw-breakdown__group--main",
+      [
+        { label: "Team", value: "" },
+        { label: "N", value: "" },
+        { label: "Skill", value: "" },
+        { label: "Type", value: "" },
+        { label: "Val", value: "" }
+      ],
+      { placeholder: true }
+    );
+    const advanced = renderDvwScoutBreakdownGroup(
+      "Advanced",
+      "scout-dvw-breakdown__group--advanced",
+      [
+        { label: "Cmb", value: "" },
+        { label: "Inline", value: "" },
+        { label: "Start", value: "" },
+        { label: "End", value: "" },
+        { label: "End+", value: "" }
+      ],
+      { placeholder: true }
+    );
+    const extended = renderDvwScoutBreakdownGroup(
+      "Extended",
+      "scout-dvw-breakdown__group--extended",
+      [
+        { label: "Skill type", value: "" },
+        { label: "Players", value: "" },
+        { label: "Special", value: "" }
+      ],
+      { placeholder: true }
+    );
+    return `<div class="scout-dvw-breakdown__grid">${main}${advanced}${extended}</div>`;
   }
-  const parsed = parseDvwSkillCode(raw);
+  const normalized = normalizeDvwScoutToken(raw);
+  const parsed = normalized.parsed;
   if (parsed && parsed.kind === "skill") {
     const suffixMeta = parseDvwSuffixMeta(parsed.skillLetter, parsed.inlineCode, parsed.suffix || "");
     const zoneMeta = parsed.zoneMeta || parseDvwZoneMeta(parsed.zonePair);
-    const mainParts = [
-      parsed.teamScope === "opponent" ? "Team V" : "Team H",
-      `N ${parsed.playerNumber}`,
-      getDvwScoutSkillLabel(parsed.skillLetter),
-      getDvwScoutTypeLabel(parsed.typeLetter),
-      `Val ${getDvwScoutEvalLabel(parsed.evaluation)}`
-    ];
-    const advancedParts = [];
-    if (parsed.advancedCode) advancedParts.push(`Cmb ${parsed.advancedCode}`);
-    if (parsed.inlineCode) advancedParts.push(`Inline ${parsed.inlineCode}`);
-    if (zoneMeta.startZone) advancedParts.push(`Start ${zoneMeta.startZone}`);
-    if (zoneMeta.endZone) advancedParts.push(`End ${zoneMeta.endZone}`);
-    if (zoneMeta.endSubzone) advancedParts.push(`End+ ${zoneMeta.endSubzone}`);
-    const extendedParts = [];
-    if (suffixMeta.skillSubtype) extendedParts.push(`SkillType ${suffixMeta.skillSubtype}`);
-    if (Number.isFinite(suffixMeta.numPlayersNumeric)) extendedParts.push(`Players ${suffixMeta.numPlayersNumeric}`);
-    if (suffixMeta.specialCode) extendedParts.push(`Special ${suffixMeta.specialCode}`);
-    return [
-      `Main: ${mainParts.join(" · ")}`,
-      `Advanced: ${advancedParts.length ? advancedParts.join(" · ") : "—"}`,
-      `Extended: ${extendedParts.length ? extendedParts.join(" · ") : "—"}`
-    ].join(" | ");
+    const suggestion = renderDvwScoutSuggestion(normalized);
+    const main = renderDvwScoutBreakdownGroup("Main code", "scout-dvw-breakdown__group--main", [
+      { label: "Team", value: parsed.teamScope === "opponent" ? "V" : "H" },
+      { label: "N", value: parsed.playerNumber },
+      { label: "Skill", value: getDvwScoutSkillLabel(parsed.skillLetter) },
+      { label: "Type", value: `${parsed.typeLetter} · ${getDvwScoutTypeLabel(parsed.typeLetter, parsed.skillLetter)}` },
+      { label: "Val", value: getDvwScoutEvalLabel(parsed.evaluation) }
+    ]);
+    const advanced = renderDvwScoutBreakdownGroup("Advanced", "scout-dvw-breakdown__group--advanced", [
+      { label: "Cmb", value: parsed.advancedCode || "" },
+      { label: "Inline", value: parsed.inlineCode || "" },
+      { label: "Start", value: zoneMeta.startZone || "" },
+      { label: "End", value: zoneMeta.endZone || "" },
+      { label: "End+", value: zoneMeta.endSubzone || "" }
+    ]);
+    const extended = renderDvwScoutBreakdownGroup("Extended", "scout-dvw-breakdown__group--extended", [
+      { label: "Skill type", value: suffixMeta.skillSubtype || "" },
+      { label: "Players", value: Number.isFinite(suffixMeta.numPlayersNumeric) ? String(suffixMeta.numPlayersNumeric) : "" },
+      { label: "Special", value: suffixMeta.specialCode || "" }
+    ]);
+    return `${suggestion}<div class="scout-dvw-breakdown__grid">${main}${advanced}${extended}</div>`;
   }
   if (parsed && parsed.kind === "timeout") {
-    return `Comando: Timeout ${parsed.teamScope === "opponent" ? "avversario" : "nostro"}.`;
+    return renderDvwScoutBreakdownCommand("Comando", `Timeout ${parsed.teamScope === "opponent" ? "avversario" : "nostro"}.`);
   }
   if (parsed && parsed.kind === "substitution") {
-    return `Comando: Cambio ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · entra ${parsed.playerInNumber} · esce ${parsed.playerOutNumber}.`;
+    return renderDvwScoutBreakdownCommand(
+      "Comando",
+      `Cambio ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · entra ${parsed.playerInNumber} · esce ${parsed.playerOutNumber}.`
+    );
   }
   if (parsed && parsed.kind === "point-marker") {
-    return `Comando: Point marker ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · tipo ${parsed.pointType || "—"} · val ${parsed.evaluation || "—"}.`;
+    return renderDvwScoutBreakdownCommand(
+      "Comando",
+      `Point marker ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · tipo ${parsed.pointType || "—"} · val ${parsed.evaluation || "—"}.`
+    );
   }
   if (parsed && parsed.kind === "score") {
-    return `Comando: punteggio ${parsed.scoreOur}-${parsed.scoreOpp}.`;
+    return renderDvwScoutBreakdownCommand("Comando", `Punteggio ${parsed.scoreOur}-${parsed.scoreOpp}.`);
   }
-  if (parsed && parsed.kind === "rotation") return "Comando: rotazione.";
-  if (parsed && parsed.kind === "lineup") return "Comando: lineup.";
-  if (parsed && parsed.kind === "set-end") return "Comando: fine set.";
+  if (parsed && parsed.kind === "rotation") return renderDvwScoutBreakdownCommand("Comando", "Rotazione.");
+  if (parsed && parsed.kind === "lineup") return renderDvwScoutBreakdownCommand("Comando", "Lineup.");
+  if (parsed && parsed.kind === "set-end") return renderDvwScoutBreakdownCommand("Comando", "Fine set.");
   const upper = raw.toUpperCase();
   let idx = 0;
   let team = "";
@@ -22378,15 +22618,26 @@ function buildDvwScoutBreakdown(rawInput) {
     idx += 1;
   }
   const tail = upper.slice(idx);
-  return [
-    `Main: ${team || "squadra…"} · ${player || "numero…"} · ${skill ? getDvwScoutSkillLabel(skill) : "skill…"} · ${type ? getDvwScoutTypeLabel(type) : "tipo…"} · ${evaluation ? `Val ${getDvwScoutEvalLabel(evaluation)}` : "valutazione…"}`,
-    `Tail: ${tail || "in attesa di advanced / extended code"}`
-  ].join(" | ");
+  const suggestion = renderDvwScoutSuggestion(normalized);
+  const main = renderDvwScoutBreakdownGroup("Main code", "scout-dvw-breakdown__group--main", [
+    { label: "Team", value: team.replace("Team ", "") || "" },
+    { label: "N", value: player || "" },
+    { label: "Skill", value: skill ? getDvwScoutSkillLabel(skill) : "" },
+    { label: "Type", value: type ? `${type} · ${getDvwScoutTypeLabel(type, skill)}` : "" },
+    { label: "Val", value: evaluation ? getDvwScoutEvalLabel(evaluation) : "" }
+  ]);
+  const advanced = renderDvwScoutBreakdownGroup(
+    "Advanced / Tail",
+    "scout-dvw-breakdown__group--advanced",
+    [{ label: "Tail", value: tail || "" }],
+    { placeholder: !tail }
+  );
+  return `${suggestion}<div class="scout-dvw-breakdown__grid">${main}${advanced}</div>`;
 }
 function renderDvwScoutBreakdown() {
   if (!elDvwScoutBreakdown) return;
   const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
-  elDvwScoutBreakdown.textContent = buildDvwScoutBreakdown(draft);
+  elDvwScoutBreakdown.innerHTML = buildDvwScoutBreakdown(draft);
 }
 function getDvwScoutChipSkillClass(parsed) {
   if (!parsed || parsed.kind !== "skill") return "";
@@ -22431,7 +22682,8 @@ function renderDvwScoutPending() {
     elDvwScoutPending.appendChild(chip);
   });
   if (draft) {
-    const parsed = parseDvwSkillCode(draft);
+    const normalized = normalizeDvwScoutToken(draft);
+    const parsed = normalized.parsed;
     const draftChip = document.createElement("div");
     draftChip.className = "scout-dvw-chip is-draft";
     const skillClass = getDvwScoutChipSkillClass(parsed);
@@ -22441,7 +22693,7 @@ function renderDvwScoutPending() {
     }
     const code = document.createElement("span");
     code.className = "scout-dvw-chip__code";
-    code.textContent = draft;
+    code.textContent = normalized.corrected && normalized.normalized ? normalized.normalized : draft;
     draftChip.appendChild(code);
     elDvwScoutPending.appendChild(draftChip);
   }
@@ -22450,7 +22702,8 @@ function queueCurrentDvwScoutToken() {
   if (!elDvwScoutInput) return false;
   const token = String(elDvwScoutInput.value || "").trim();
   if (!token) return false;
-  const parsed = parseDvwSkillCode(token);
+  const normalized = normalizeDvwScoutToken(token);
+  const parsed = normalized.parsed;
   if (!parsed || parsed.kind === "unknown") {
     setDvwScoutStatus(`Codice non riconosciuto: ${token}`, "error");
     renderDvwScoutPending();
@@ -22458,13 +22711,19 @@ function queueCurrentDvwScoutToken() {
   }
   dvwScoutPendingTokens.push({
     id: `dvw-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    text: token,
+    text: normalized.normalized || token,
+    rawText: token,
     closedAtMs: Date.now(),
-    parsed
+    parsed,
+    corrected: !!normalized.corrected
   });
   elDvwScoutInput.value = "";
   renderDvwScoutPending();
-  setDvwScoutStatus(`Token aggiunto: ${token}`);
+  if (normalized.corrected && normalized.normalized) {
+    setDvwScoutStatus(`Token autocorretto: ${token} → ${normalized.normalized}`, "success");
+  } else {
+    setDvwScoutStatus(`Token aggiunto: ${token}`);
+  }
   return true;
 }
 function updateLiveDvwMirror() {

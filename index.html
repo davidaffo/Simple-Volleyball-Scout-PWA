@@ -672,31 +672,6 @@
             </div>
           </div>
         </div>
-        <div class="scout-dvw-bar">
-          <div class="scout-dvw-bar__top">
-            <div class="scout-dvw-bar__title-row">
-              <label for="dvw-scout-input">Scout da codice DataVolley</label>
-              <button id="btn-dvw-scout-help" class="icon-button scout-dvw-help-btn" type="button" aria-label="Apri manuale codici scouting" title="Apri manuale codici scouting">?</button>
-            </div>
-            <div id="dvw-scout-last-code" class="scout-dvw-bar__last" aria-live="polite">Ultimo codice: —</div>
-          </div>
-          <div class="scout-dvw-bar__controls">
-            <input
-              id="dvw-scout-input"
-              type="text"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder='Esempio: *08SM#~~~15C oppure più token separati da spazio'
-            />
-            <button id="btn-dvw-scout-apply" class="secondary" type="button">Applica</button>
-            <button id="btn-dvw-scout-clear" class="secondary" type="button">Pulisci</button>
-          </div>
-          <div id="dvw-scout-breakdown" class="scout-dvw-bar__breakdown" aria-live="polite">
-            Main: squadra · numero · skill · tipo · valutazione. Advanced: combinazione / zone. Extended: skill type / players / special.
-          </div>
-          <div id="dvw-scout-pending" class="scout-dvw-bar__pending" aria-live="polite"></div>
-          <div id="dvw-scout-status" class="scout-dvw-bar__status" aria-live="polite">Pronto.</div>
-        </div>
       </div>
       <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">
         <button class="drawer-close secondary small" type="button" data-close-drawer="log">Chiudi</button>
@@ -737,6 +712,31 @@
             <span>Ultimo codice:</span>
             <strong id="undo-last-summary">—</strong>
           </div>
+        </div>
+        <div class="scout-dvw-bar">
+          <div class="scout-dvw-bar__top">
+            <div class="scout-dvw-bar__title-row">
+              <label for="dvw-scout-input">Scout da codice DataVolley</label>
+              <button id="btn-dvw-scout-help" class="icon-button scout-dvw-help-btn" type="button" aria-label="Apri manuale codici scouting" title="Apri manuale codici scouting">?</button>
+            </div>
+            <div id="dvw-scout-last-code" class="scout-dvw-bar__last" aria-live="polite">Ultimo codice: —</div>
+          </div>
+          <div class="scout-dvw-bar__controls">
+            <input
+              id="dvw-scout-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder='Esempio: *08SM#~~~15C oppure più token separati da spazio'
+            />
+            <button id="btn-dvw-scout-apply" class="secondary" type="button">Applica</button>
+            <button id="btn-dvw-scout-clear" class="secondary" type="button">Pulisci</button>
+          </div>
+          <div id="dvw-scout-breakdown" class="scout-dvw-bar__breakdown" aria-live="polite">
+            Main: squadra · numero · skill · tipo · valutazione. Advanced: combinazione / zone. Extended: skill type / players / special.
+          </div>
+          <div id="dvw-scout-pending" class="scout-dvw-bar__pending" aria-live="polite"></div>
+          <div id="dvw-scout-status" class="scout-dvw-bar__status" aria-live="polite">Pronto.</div>
         </div>
       </div>
     </div>

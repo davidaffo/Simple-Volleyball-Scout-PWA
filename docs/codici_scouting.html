@@ -171,6 +171,64 @@ col.c16 { width: 80px; }
 }
 .foot span { font-size: 10px; color: #888; }
 .foot .mono { font-family: 'IBM Plex Mono', monospace; }
+
+.ctx-wrap {
+  padding: 16px 18px 8px;
+  border-top: 1px solid #DDDDD0;
+  background: #FAFAF4;
+}
+.ctx-wrap h2 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.ctx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.ctx-card {
+  border: 1px solid #DDDDD0;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.ctx-card h3 {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 7px 9px;
+  border-bottom: 1px solid #EEEEE4;
+  background: #F7F7F1;
+}
+.ctx-card ul {
+  list-style: none;
+  padding: 8px 9px 9px;
+}
+.ctx-card li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8.5px;
+  line-height: 1.55;
+}
+.ctx-card li + li { margin-top: 2px; }
+.ctx-k {
+  min-width: 14px;
+  color: #2563EB;
+  font-weight: 700;
+}
+.ctx-v {
+  color: #18181A;
+}
+.ctx-note {
+  margin-top: 10px;
+  font-size: 9px;
+  color: #666;
+  line-height: 1.45;
+}
 </style>
 </head>
 <body>
@@ -500,6 +558,79 @@ col.c16 { width: 80px; }
 
 </tr>
 </table>
+
+<div class="ctx-wrap">
+  <h2>Significato contestuale del campo Type</h2>
+  <div class="ctx-grid">
+    <section class="ctx-card">
+      <h3>Serve</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">Floating serve</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">Jump float serve</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">Jump serve</span></li>
+      </ul>
+    </section>
+    <section class="ctx-card">
+      <h3>Reception</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">su floating serve</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">su jump float serve</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">su jump serve</span></li>
+      </ul>
+    </section>
+    <section class="ctx-card">
+      <h3>Attack</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">High ball</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">Half ball</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">Quick ball</span></li>
+        <li><span class="ctx-k">T</span><span class="ctx-v">Head / tense ball</span></li>
+        <li><span class="ctx-k">U</span><span class="ctx-v">Super ball</span></li>
+        <li><span class="ctx-k">N</span><span class="ctx-v">Fast ball</span></li>
+        <li><span class="ctx-k">O</span><span class="ctx-v">Other</span></li>
+      </ul>
+    </section>
+    <section class="ctx-card">
+      <h3>Block</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">block su high ball</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">block su half ball</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">block su quick attack</span></li>
+        <li><span class="ctx-k">T</span><span class="ctx-v">block su tense attack</span></li>
+        <li><span class="ctx-k">U</span><span class="ctx-v">block su super ball</span></li>
+        <li><span class="ctx-k">N</span><span class="ctx-v">block su fast ball</span></li>
+        <li><span class="ctx-k">O</span><span class="ctx-v">block su other type</span></li>
+      </ul>
+    </section>
+    <section class="ctx-card">
+      <h3>Set</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">alzata per high ball</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">alzata per half ball</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">alzata per quick</span></li>
+        <li><span class="ctx-k">T</span><span class="ctx-v">alzata per tense / head</span></li>
+        <li><span class="ctx-k">U</span><span class="ctx-v">alzata per super</span></li>
+        <li><span class="ctx-k">N</span><span class="ctx-v">alzata per fast</span></li>
+        <li><span class="ctx-k">O</span><span class="ctx-v">alzata per other</span></li>
+      </ul>
+    </section>
+    <section class="ctx-card">
+      <h3>Dig / Defence</h3>
+      <ul>
+        <li><span class="ctx-k">H</span><span class="ctx-v">difesa su high ball</span></li>
+        <li><span class="ctx-k">M</span><span class="ctx-v">difesa su half ball</span></li>
+        <li><span class="ctx-k">Q</span><span class="ctx-v">difesa su quick attack</span></li>
+        <li><span class="ctx-k">T</span><span class="ctx-v">difesa su tense attack</span></li>
+        <li><span class="ctx-k">U</span><span class="ctx-v">difesa su super ball</span></li>
+        <li><span class="ctx-k">N</span><span class="ctx-v">difesa su fast ball</span></li>
+        <li><span class="ctx-k">O</span><span class="ctx-v">difesa su other type</span></li>
+      </ul>
+    </section>
+  </div>
+  <div class="ctx-note">
+    Nota: nel manuale originale il significato del campo <strong>Type</strong> cambia con il fondamentale. In particolare per <strong>block</strong>, <strong>reception</strong> e <strong>defence</strong> segue il tipo della skill precedente; per <strong>set</strong> dipende dal tipo di attacco successivo.
+  </div>
+</div>
 
 <div class="foot">
   <span>Codici Scouting — Pallavolo</span>
