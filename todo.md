@@ -1,4 +1,5 @@
 # Major features
+Aggiungere un manuale
 Aggiungere condivisione dati via socket (pagina html statica come esportazione ma con dati dell'app host come se fosse un backend?)
 Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
