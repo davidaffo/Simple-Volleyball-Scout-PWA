@@ -22295,6 +22295,77 @@ function inferDvwScopeFromNumberAndFlow(playerNumber = "", skillLetter = "") {
   if (matches.length > 0) return matches[0];
   return null;
 }
+function inferServeEvalFromReceptionEval(receptionEval = "") {
+  const map = {
+    "=": "#",
+    "/": "/",
+    "-": "+",
+    "!": "!",
+    "+": "-",
+    "#": "-"
+  };
+  return map[String(receptionEval || "")] || "";
+}
+function buildDvwDirectionTail(startZone = "", endZone = "", endSubzone = "") {
+  const start = String(startZone || "").toUpperCase();
+  const end = String(endZone || "").toUpperCase();
+  const sub = String(endSubzone || "").toUpperCase();
+  if (!start && !end && !sub) return "";
+  return `~~~${start}${end}${sub}`;
+}
+function expandDvwServeReceptionCompound(rawInput) {
+  const raw = String(rawInput || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!raw || !raw.includes(".")) return null;
+  const parts = raw.split(".");
+  if (parts.length !== 2) return null;
+  const [left, right] = parts;
+  const leftMatch = left.match(/^(?:([*A]))?(\d{1,2})S([HMQTUNO]?)([#=!+\-/]?)(\d{0,2})([A-D]?)$/);
+  if (!leftMatch) return null;
+  const rightMatch = right.match(/^(\d{1,2})([HMQTUNO]?)([#=!+\-/])(\d{0,2})([A-D]?)$/);
+  if (!rightMatch) return null;
+  const serveScope = leftMatch[1]
+    ? (leftMatch[1] === "A" ? "opponent" : "our")
+    : inferDvwScopeFromNumberAndFlow(leftMatch[2], "S");
+  if (!serveScope) return null;
+  const receiveScope = getOppositeScope(serveScope);
+  if (receiveScope === "opponent" && !state.useOpponentTeam) return null;
+  const serveNumber = padDv(leftMatch[2], 2);
+  const receiveNumber = padDv(rightMatch[1], 2);
+  const serveType = String(leftMatch[3] || "").toUpperCase() || "H";
+  const receiveType = String(rightMatch[2] || "").toUpperCase() || serveType;
+  const receiveEval = String(rightMatch[3] || "").toUpperCase();
+  const serveEval = String(leftMatch[4] || "").toUpperCase() || inferServeEvalFromReceptionEval(receiveEval);
+  if (!serveEval) return null;
+  const leftDigits = String(leftMatch[5] || "");
+  const rightDigits = String(rightMatch[4] || "");
+  let startZone = "";
+  let endZone = "";
+  if (leftDigits.length >= 1) startZone = leftDigits.charAt(0);
+  if (rightDigits.length >= 1) {
+    endZone = rightDigits.length === 2 && !startZone ? rightDigits.charAt(1) : rightDigits.charAt(0);
+    if (!startZone && rightDigits.length === 2) startZone = rightDigits.charAt(0);
+  } else if (leftDigits.length >= 2) {
+    endZone = leftDigits.charAt(1);
+  }
+  const sharedSubzone = String(rightMatch[5] || "").toUpperCase() || String(leftMatch[6] || "").toUpperCase();
+  const sharedTail = buildDvwDirectionTail(startZone, endZone, sharedSubzone);
+  const serveCode = `${getDvwPrefixForScope(serveScope)}${serveNumber}S${serveType}${serveEval}${sharedTail}`;
+  const receiveCode = `${getDvwPrefixForScope(receiveScope)}${receiveNumber}R${receiveType}${receiveEval}${sharedTail}`;
+  return [serveCode, receiveCode];
+}
+function expandDvwCompoundToken(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw.includes(".")) return null;
+  const serveReceive = expandDvwServeReceptionCompound(raw);
+  if (serveReceive && serveReceive.length) return serveReceive;
+  const parts = raw.split(".").map(part => part.trim()).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const normalizedParts = parts.map(part => normalizeDvwScoutToken(part));
+  if (normalizedParts.every(item => item.parsed && item.parsed.kind !== "unknown")) {
+    return normalizedParts.map(item => item.normalized || item.raw).filter(Boolean);
+  }
+  return null;
+}
 function normalizeDvwScoutToken(rawInput) {
   const raw = String(rawInput || "").trim();
   if (!raw) {
@@ -22542,6 +22613,32 @@ function buildDvwScoutBreakdown(rawInput) {
     );
     return `<div class="scout-dvw-breakdown__grid">${main}${advanced}${extended}</div>`;
   }
+  const compound = expandDvwCompoundToken(raw);
+  if (compound && compound.length > 1) {
+    const items = compound
+      .map(item => normalizeDvwScoutToken(item))
+      .filter(item => item.parsed && item.parsed.kind === "skill");
+    const suggestion = `<div class="scout-dvw-breakdown__suggestion"><span class="scout-dvw-breakdown__suggestion-label">Compound</span><code>${escapeDvwScoutHtml(compound.join(" · "))}</code></div>`;
+    const groups = items.map((item, idx) => {
+      const parsed = item.parsed;
+      const suffixMeta = parseDvwSuffixMeta(parsed.skillLetter, parsed.inlineCode, parsed.suffix || "");
+      const zoneMeta = parsed.zoneMeta || parseDvwZoneMeta(parsed.zonePair);
+      return renderDvwScoutBreakdownGroup(
+        idx === 0 ? "Skill 1" : `Skill ${idx + 1}`,
+        idx === 0 ? "scout-dvw-breakdown__group--main" : "scout-dvw-breakdown__group--advanced",
+        [
+          { label: "Team", value: parsed.teamScope === "opponent" ? "V" : "H" },
+          { label: "N", value: parsed.playerNumber },
+          { label: "Skill", value: getDvwScoutSkillLabel(parsed.skillLetter) },
+          { label: "Type", value: `${parsed.typeLetter} · ${getDvwScoutTypeLabel(parsed.typeLetter, parsed.skillLetter)}` },
+          { label: "Val", value: getDvwScoutEvalLabel(parsed.evaluation) },
+          { label: "Dir", value: zoneMeta.startZone || zoneMeta.endZone ? `${zoneMeta.startZone || "·"}${zoneMeta.endZone || "·"}${zoneMeta.endSubzone || ""}` : "" },
+          { label: "Ext", value: [suffixMeta.skillSubtype, Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : "", suffixMeta.specialCode].filter(Boolean).join(" ") }
+        ]
+      );
+    });
+    return `${suggestion}<div class="scout-dvw-breakdown__grid">${groups.join("")}</div>`;
+  }
   const normalized = normalizeDvwScoutToken(raw);
   const parsed = normalized.parsed;
   if (parsed && parsed.kind === "skill") {
@@ -22682,45 +22779,60 @@ function renderDvwScoutPending() {
     elDvwScoutPending.appendChild(chip);
   });
   if (draft) {
-    const normalized = normalizeDvwScoutToken(draft);
-    const parsed = normalized.parsed;
-    const draftChip = document.createElement("div");
-    draftChip.className = "scout-dvw-chip is-draft";
-    const skillClass = getDvwScoutChipSkillClass(parsed);
-    if (skillClass) draftChip.classList.add(skillClass);
-    if (!parsed || parsed.kind === "unknown") {
-      draftChip.classList.add("is-invalid");
-    }
-    const code = document.createElement("span");
-    code.className = "scout-dvw-chip__code";
-    code.textContent = normalized.corrected && normalized.normalized ? normalized.normalized : draft;
-    draftChip.appendChild(code);
-    elDvwScoutPending.appendChild(draftChip);
+    const expanded = expandDvwCompoundToken(draft);
+    const previewItems = expanded && expanded.length
+      ? expanded.map(item => normalizeDvwScoutToken(item))
+      : [normalizeDvwScoutToken(draft)];
+    previewItems.forEach((normalized, idx) => {
+      const parsed = normalized.parsed;
+      const draftChip = document.createElement("div");
+      draftChip.className = "scout-dvw-chip is-draft";
+      const skillClass = getDvwScoutChipSkillClass(parsed);
+      if (skillClass) draftChip.classList.add(skillClass);
+      if (!parsed || parsed.kind === "unknown") {
+        draftChip.classList.add("is-invalid");
+      }
+      const code = document.createElement("span");
+      code.className = "scout-dvw-chip__code";
+      code.textContent = normalized.corrected && normalized.normalized ? normalized.normalized : (normalized.normalized || draft);
+      draftChip.appendChild(code);
+      if (expanded && idx === 0) {
+        draftChip.title = "Compound code espanso";
+      }
+      elDvwScoutPending.appendChild(draftChip);
+    });
   }
 }
 function queueCurrentDvwScoutToken() {
   if (!elDvwScoutInput) return false;
   const token = String(elDvwScoutInput.value || "").trim();
   if (!token) return false;
-  const normalized = normalizeDvwScoutToken(token);
-  const parsed = normalized.parsed;
-  if (!parsed || parsed.kind === "unknown") {
+  const expanded = expandDvwCompoundToken(token);
+  const entries = expanded && expanded.length
+    ? expanded.map(item => normalizeDvwScoutToken(item))
+    : [normalizeDvwScoutToken(token)];
+  if (entries.some(item => !item.parsed || item.parsed.kind === "unknown")) {
     setDvwScoutStatus(`Codice non riconosciuto: ${token}`, "error");
     renderDvwScoutPending();
     return false;
   }
-  dvwScoutPendingTokens.push({
-    id: `dvw-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    text: normalized.normalized || token,
-    rawText: token,
-    closedAtMs: Date.now(),
-    parsed,
-    corrected: !!normalized.corrected
+  const closedAtMs = Date.now();
+  entries.forEach(normalized => {
+    dvwScoutPendingTokens.push({
+      id: `dvw-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: normalized.normalized || token,
+      rawText: token,
+      closedAtMs,
+      parsed: normalized.parsed,
+      corrected: !!normalized.corrected || !!expanded
+    });
   });
   elDvwScoutInput.value = "";
   renderDvwScoutPending();
-  if (normalized.corrected && normalized.normalized) {
-    setDvwScoutStatus(`Token autocorretto: ${token} → ${normalized.normalized}`, "success");
+  if (expanded && expanded.length > 1) {
+    setDvwScoutStatus(`Compound espanso: ${expanded.join(" · ")}`, "success");
+  } else if (entries[0].corrected && entries[0].normalized) {
+    setDvwScoutStatus(`Token autocorretto: ${token} → ${entries[0].normalized}`, "success");
   } else {
     setDvwScoutStatus(`Token aggiunto: ${token}`);
   }
