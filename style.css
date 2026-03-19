@@ -7753,6 +7753,23 @@ body.force-mobile .attack-trajectory-stage {
   display: grid;
   gap: 0.2rem;
 }
+.scout-live .scout-col-left .rotation-toggles br {
+  display: none;
+}
+.scout-live .scout-col-left .auto-rotate-toggle {
+  margin-top: 0;
+  line-height: 1.12;
+}
+.scout-live .scout-col-left .team-panel {
+  gap: 0.2rem;
+}
+.scout-live .scout-col-left .court-actions-bar.team-panel {
+  gap: 0.35rem;
+  padding: 0.42rem 0.55rem;
+}
+.scout-live .scout-col-left .team-timeout-block {
+  gap: 0.22rem;
+}
 .scout-live .sl-toolbar {
   display: grid;
   grid-template-columns: minmax(170px, 210px) minmax(0, 1fr);
