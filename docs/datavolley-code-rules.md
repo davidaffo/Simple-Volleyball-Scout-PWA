@@ -4,11 +4,127 @@ Riferimenti usati:
 - [resources/DataVolleyMedia_handbook.pdf](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/DataVolleyMedia_handbook.pdf)
 - [resources/Example file.csv](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/Example%20file.csv)
 - [resources/data volley example file.dvw](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources/data%20volley%20example%20file.dvw)
+- corpus reale `.dvw` aggiuntivo in [resources](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources)
 
 Questo file raccoglie le regole operative del codice DataVolley per la modalita di inserimento scout via codici.
 Qui dentro distinguo:
 - regole esplicitamente confermate dal manuale
 - regole desunte dagli esempi del manuale e dal CSV ufficiale allegato
+- evidenze statistiche tratte dal corpus reale dei file `.dvw`
+
+## Corpus reale `.dvw`
+
+Panoramica attuale del corpus:
+
+- file `.dvw` analizzati: `23`
+- cartella: [resources](/home/davidaffo/Coding/Simple-Volleyball-Scout-PWA/resources)
+
+Sezioni presenti in tutti i file del corpus:
+
+- `[3DATAVOLLEYSCOUT]`
+- `[3MATCH]`
+- `[3TEAMS]`
+- `[3MORE]`
+- `[3COMMENTS]`
+- `[3SET]`
+- `[3PLAYERS-H]`
+- `[3PLAYERS-V]`
+- `[3ATTACKCOMBINATION]`
+- `[3SETTERCALL]`
+- `[3WINNINGSYMBOLS]`
+- `[3RESERVE]`
+- `[3VIDEO]`
+- `[3SCOUT]`
+
+Conclusione strutturale:
+
+- il parser `.dvw` puo considerare questa sequenza sezioni come baseline reale robusta
+- `3ATTACKCOMBINATION`, `3SETTERCALL`, `3WINNINGSYMBOLS`, `3RESERVE` e `3VIDEO` non sono opzionali nel corpus reale attuale, quindi vanno preservate anche in export
+
+### Evidenze dal corpus scout
+
+Le combinazioni `skill/type/evaluation` piu frequenti osservate nel corpus reale sono:
+
+| Skill | Type | Eval | Occorrenze |
+| --- | --- | --- | ---: |
+| `E` | `T` | `+` | 1746 |
+| `E` | `H` | `#` | 1497 |
+| `D` | `H` | `#` | 1179 |
+| `A` | `H` | `-` | 1011 |
+| `A` | `T` | `-` | 954 |
+| `S` | `M` | `-` | 938 |
+| `A` | `T` | `#` | 859 |
+| `D` | `H` | `+` | 825 |
+| `E` | `Q` | `#` | 609 |
+| `E` | `T` | `#` | 600 |
+| `S` | `H` | `-` | 598 |
+| `R` | `M` | `+` | 590 |
+| `E` | `H` | `+` | 513 |
+| `A` | `H` | `#` | 457 |
+| `S` | `M` | `+` | 432 |
+| `R` | `M` | `-` | 428 |
+| `E` | `M` | `+` | 408 |
+| `B` | `T` | `=` | 406 |
+| `S` | `M` | `!` | 374 |
+| `B` | `T` | `+` | 371 |
+
+Altre combinazioni molto rilevanti:
+
+- `F O #` = `289`
+- `F O +` = `178`
+- `B H +` = `235`
+- `B H =` = `214`
+- `B Q +` = `129`
+- `A O -` = `200`
+- `A O #` = `180`
+- `E O #` = `128`
+- `D Q +` = `117`
+
+### Implicazioni pratiche per parser e export
+
+1. `Set` non e un caso secondario.
+   Le alzate (`E`) sono tra i codici piu frequenti del corpus, quindi:
+   - il parser deve gestire bene `E H`, `E T`, `E Q`, `E M`, `E O`
+   - l'export non puo limitarsi a una mappatura approssimativa del `setType`
+   - `3SETTERCALL` e `set_code` meritano priorita alta
+
+2. `Free ball` e reale e ricorrente.
+   Nel corpus `F O #` e `F O +` compaiono spesso, quindi:
+   - `F` va trattata come skill di primo livello
+   - import/export devono conservarla senza degradarla a `manual` o `other`
+
+3. `Block` e molto piu ricco del solo punto muro.
+   Si vedono spesso `B T =`, `B T +`, `B H +`, `B H =`, `B Q +`.
+   Quindi:
+   - il `type` del muro e importante
+   - `numPlayersNumeric` e i codici associati al muro vanno mantenuti
+
+4. I marker di punto sono fondamentali.
+   Nel corpus compaiono molto spesso:
+   - `*$$`
+   - `a$$`
+   - `*p`
+   - `ap`
+
+   Questo conferma che:
+   - il parser deve trattare le righe punto come parte centrale del rally model
+   - l'export deve generarle in modo coerente, non come semplice appendice
+
+5. `Other` non e un caso anomalo.
+   Combinazioni come `A O -`, `A O #`, `E O #`, `F O #`, `F O +` compaiono davvero nei dati ufficiali.
+   Quindi:
+   - il modello interno deve tollerare bene `O`
+   - non bisogna assumere che tutti i colpi siano riconducibili a `H/M/Q/T/U/N`
+
+### Priorita operative derivate dal corpus
+
+Ordine consigliato per rafforzare compatibilita `.dvw`:
+
+1. consolidare parsing/export di `Set`, `SetterCall` e `set_code`
+2. consolidare parsing/export di `Free ball`
+3. migliorare parsing/export dei marker punto `$$` e `p`
+4. affinare `Block` con `type`, `special_code` e `numPlayersNumeric`
+5. rifinire la coda avanzata di `Attack` e `Dig`
 
 ## Struttura generale
 
