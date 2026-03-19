@@ -13,6 +13,7 @@ crea stampa tipo foglio gara
 # Features teoricamente implementate
 
 # Bug funzionalità
+Manca il modifica squadra per la squadra avversaria e il tasto non è vicinno al testo ma lontano.
 Colonna sinistra scout live ha troppe newlines bianche che occupano spazio inutile
 Quando il centrale sbaglia battuta, il libero non entra
 
