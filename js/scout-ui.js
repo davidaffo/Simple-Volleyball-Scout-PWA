@@ -25478,6 +25478,14 @@ async function init() {
       elBtnOpenLiveTeamEditor.addEventListener("click", () => openTeamManagerModal({ scope: "our", liveEdit: true }));
     }
   }
+  {
+    const elBtnOpenLiveOpponentTeamEditor = document.getElementById("btn-open-live-opponent-team-editor");
+    if (elBtnOpenLiveOpponentTeamEditor) {
+      elBtnOpenLiveOpponentTeamEditor.addEventListener("click", () =>
+        openTeamManagerModal({ scope: "opponent", liveEdit: true })
+      );
+    }
+  }
   const elBtnNewTeam = document.getElementById("btn-new-team");
   if (elBtnNewTeam) {
     elBtnNewTeam.addEventListener("click", () => {

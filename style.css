@@ -6887,8 +6887,13 @@ body[data-theme="light"] .error-choice-btn.danger {
 .panel-title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
+}
+.panel-title-row .panel-title {
+  width: auto;
+  margin: 0;
+  flex: 0 0 auto;
 }
 .team-panel-edit-btn {
   min-width: 2rem;
