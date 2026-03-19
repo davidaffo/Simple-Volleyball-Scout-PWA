@@ -4814,7 +4814,9 @@ const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
 const elDvwScoutInput = document.getElementById("dvw-scout-input");
 const elBtnDvwScoutApply = document.getElementById("btn-dvw-scout-apply");
 const elBtnDvwScoutClear = document.getElementById("btn-dvw-scout-clear");
+const elBtnDvwScoutHelp = document.getElementById("btn-dvw-scout-help");
 const elDvwScoutPending = document.getElementById("dvw-scout-pending");
+const elDvwScoutBreakdown = document.getElementById("dvw-scout-breakdown");
 const elDvwScoutStatus = document.getElementById("dvw-scout-status");
 const elDvwScoutLastCode = document.getElementById("dvw-scout-last-code");
 const elTimeoutCount = document.getElementById("timeout-count");
@@ -22266,6 +22268,126 @@ function setDvwScoutStatus(message, tone = "") {
   if (tone === "error") elDvwScoutStatus.classList.add("is-error");
   if (tone === "success") elDvwScoutStatus.classList.add("is-success");
 }
+function getDvwScoutSkillLabel(letter) {
+  const map = {
+    S: "Battuta",
+    R: "Ricezione",
+    A: "Attacco",
+    B: "Muro",
+    D: "Difesa",
+    E: "Alzata",
+    F: "Freeball"
+  };
+  return map[String(letter || "").toUpperCase()] || String(letter || "").toUpperCase();
+}
+function getDvwScoutTypeLabel(letter) {
+  const map = {
+    H: "Alta/High",
+    M: "Mezza/Medium",
+    Q: "Quick",
+    T: "Veloce",
+    U: "Super",
+    N: "Fast",
+    O: "Damp/Other"
+  };
+  return map[String(letter || "").toUpperCase()] || String(letter || "").toUpperCase();
+}
+function getDvwScoutEvalLabel(symbol) {
+  const map = {
+    "#": "#",
+    "+": "+",
+    "!": "!",
+    "-": "-",
+    "/": "/",
+    "=": "="
+  };
+  return map[String(symbol || "")] || String(symbol || "");
+}
+function buildDvwScoutBreakdown(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw) {
+    return "Main: squadra · numero · skill · tipo · valutazione. Advanced: combinazione / zone. Extended: skill type / players / special.";
+  }
+  const parsed = parseDvwSkillCode(raw);
+  if (parsed && parsed.kind === "skill") {
+    const suffixMeta = parseDvwSuffixMeta(parsed.skillLetter, parsed.inlineCode, parsed.suffix || "");
+    const zoneMeta = parsed.zoneMeta || parseDvwZoneMeta(parsed.zonePair);
+    const mainParts = [
+      parsed.teamScope === "opponent" ? "Team V" : "Team H",
+      `N ${parsed.playerNumber}`,
+      getDvwScoutSkillLabel(parsed.skillLetter),
+      getDvwScoutTypeLabel(parsed.typeLetter),
+      `Val ${getDvwScoutEvalLabel(parsed.evaluation)}`
+    ];
+    const advancedParts = [];
+    if (parsed.advancedCode) advancedParts.push(`Cmb ${parsed.advancedCode}`);
+    if (parsed.inlineCode) advancedParts.push(`Inline ${parsed.inlineCode}`);
+    if (zoneMeta.startZone) advancedParts.push(`Start ${zoneMeta.startZone}`);
+    if (zoneMeta.endZone) advancedParts.push(`End ${zoneMeta.endZone}`);
+    if (zoneMeta.endSubzone) advancedParts.push(`End+ ${zoneMeta.endSubzone}`);
+    const extendedParts = [];
+    if (suffixMeta.skillSubtype) extendedParts.push(`SkillType ${suffixMeta.skillSubtype}`);
+    if (Number.isFinite(suffixMeta.numPlayersNumeric)) extendedParts.push(`Players ${suffixMeta.numPlayersNumeric}`);
+    if (suffixMeta.specialCode) extendedParts.push(`Special ${suffixMeta.specialCode}`);
+    return [
+      `Main: ${mainParts.join(" · ")}`,
+      `Advanced: ${advancedParts.length ? advancedParts.join(" · ") : "—"}`,
+      `Extended: ${extendedParts.length ? extendedParts.join(" · ") : "—"}`
+    ].join(" | ");
+  }
+  if (parsed && parsed.kind === "timeout") {
+    return `Comando: Timeout ${parsed.teamScope === "opponent" ? "avversario" : "nostro"}.`;
+  }
+  if (parsed && parsed.kind === "substitution") {
+    return `Comando: Cambio ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · entra ${parsed.playerInNumber} · esce ${parsed.playerOutNumber}.`;
+  }
+  if (parsed && parsed.kind === "point-marker") {
+    return `Comando: Point marker ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · tipo ${parsed.pointType || "—"} · val ${parsed.evaluation || "—"}.`;
+  }
+  if (parsed && parsed.kind === "score") {
+    return `Comando: punteggio ${parsed.scoreOur}-${parsed.scoreOpp}.`;
+  }
+  if (parsed && parsed.kind === "rotation") return "Comando: rotazione.";
+  if (parsed && parsed.kind === "lineup") return "Comando: lineup.";
+  if (parsed && parsed.kind === "set-end") return "Comando: fine set.";
+  const upper = raw.toUpperCase();
+  let idx = 0;
+  let team = "";
+  let player = "";
+  let skill = "";
+  let type = "";
+  let evaluation = "";
+  if (upper[idx] === "*" || upper[idx] === "A") {
+    team = upper[idx] === "*" ? "Team H" : "Team V";
+    idx += 1;
+  }
+  while (idx < upper.length && /\d/.test(upper[idx]) && player.length < 2) {
+    player += upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[SRABDEF]/.test(upper[idx])) {
+    skill = upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[HMQTUNO]/.test(upper[idx])) {
+    type = upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[#=!+\-/]/.test(upper[idx])) {
+    evaluation = upper[idx];
+    idx += 1;
+  }
+  const tail = upper.slice(idx);
+  return [
+    `Main: ${team || "squadra…"} · ${player || "numero…"} · ${skill ? getDvwScoutSkillLabel(skill) : "skill…"} · ${type ? getDvwScoutTypeLabel(type) : "tipo…"} · ${evaluation ? `Val ${getDvwScoutEvalLabel(evaluation)}` : "valutazione…"}`,
+    `Tail: ${tail || "in attesa di advanced / extended code"}`
+  ].join(" | ");
+}
+function renderDvwScoutBreakdown() {
+  if (!elDvwScoutBreakdown) return;
+  const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
+  elDvwScoutBreakdown.textContent = buildDvwScoutBreakdown(draft);
+}
 function getDvwScoutChipSkillClass(parsed) {
   if (!parsed || parsed.kind !== "skill") return "";
   const skillMap = {
@@ -22284,6 +22406,7 @@ function renderDvwScoutPending() {
   if (!elDvwScoutPending) return;
   elDvwScoutPending.innerHTML = "";
   const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
+  renderDvwScoutBreakdown();
   dvwScoutPendingTokens.forEach(entry => {
     const chip = document.createElement("div");
     chip.className = "scout-dvw-chip";
@@ -22355,6 +22478,10 @@ function updateLiveDvwMirror() {
   const teamPayload = getDataVolleyTeamPayload(getTeamScopeFromEvent(last));
   const code = buildDataVolleySkillCode(last, teamPayload);
   elDvwScoutLastCode.textContent = code ? `Ultimo codice: ${code}` : "Ultimo codice: —";
+}
+function openDvwScoutHelp() {
+  const helpUrl = new URL("docs/codici_scouting.html", window.location.href).toString();
+  window.open(helpUrl, "_blank", "noopener");
 }
 function getPlayerIdxByDvNumber(scope, dvNumber) {
   const normalizedNumber = padDv(dvNumber, 2);
@@ -26334,6 +26461,11 @@ async function init() {
       }
       renderDvwScoutPending();
       setDvwScoutStatus("Pronto.");
+    });
+  }
+  if (elBtnDvwScoutHelp) {
+    elBtnDvwScoutHelp.addEventListener("click", () => {
+      openDvwScoutHelp();
     });
   }
   if (elDvwScoutInput) {

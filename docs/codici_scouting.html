@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codici Scouting — Pallavolo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  background: #F0F0E8;
+  padding: 24px 16px;
+  color: #18181A;
+}
+
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #DDDDD0;
+  box-shadow: 0 2px 20px rgba(0,0,0,.1);
+  overflow: hidden;
+}
+
+.title-bar {
+  padding: 12px 18px;
+  border-bottom: 1px solid #DDDDD0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.title-bar h1 { font-size: 16px; font-weight: 600; }
+.title-bar small { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #888; }
+
+/* ── TABLE ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Column widths */
+/* Main: *, PlayNumb, Skill, Type, eval+, spacer */
+col.c1  { width: 26px; }
+col.c2  { width: 44px; }
+col.c3  { width: 52px; }
+col.c4  { width: 76px; }
+col.c5  { width: 22px; }
+col.c6  { width: 14px; }
+/* Adv: Cmb, TArgAttk, StartZone, EndZone, EndZone+, spacer */
+col.c7  { width: 54px; }
+col.c8  { width: 88px; }
+col.c9  { width: 52px; }
+col.c10 { width: 68px; }
+col.c11 { width: 68px; }
+col.c12 { width: 14px; }
+/* Ext: SkillType, Players, Special — equal remaining space */
+col.c13 { width: auto; }
+col.c14 { width: auto; }
+col.c15 { width: auto; }
+/* Custom */
+col.c16 { width: 80px; }
+
+/* ZONE BAND */
+.band {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 5px 4px;
+  border-right: 1px solid #DDDDD0;
+  border-bottom: 1px solid #DDDDD0;
+  white-space: nowrap;
+}
+.band:last-child { border-right: none; }
+.bm { background: #FEFCE8; color: #6B5E00; }
+.ba { background: #EFF6FF; color: #1D4ED8; }
+.be { background: #FFF1F2; color: #BE123C; }
+.bc { background: #F0FDF4; color: #15803D; }
+
+/* NUM and LABEL rows */
+.nr, .lr {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  font-weight: 500;
+  text-align: center;
+  padding: 3px 2px;
+  border-right: 1px solid #EEEEE4;
+  border-bottom: 1px solid #EEEEE4;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.nr:last-child, .lr:last-child { border-right: none; }
+.nm { background: #FEFCE8; color: #8A7A00; }
+.na { background: #EFF6FF; color: #2563EB; }
+.ne { background: #FFF1F2; color: #DC2626; }
+.nc { background: #F0FDF4; color: #16A34A; }
+.lr { color: #666; line-height: 1.3; }
+.lm { background: #FEFCE8; }
+.la { background: #EFF6FF; }
+.le { background: #FFF1F2; }
+.lc { background: #F0FDF4; }
+/* bottom border on label row stronger */
+.lr { border-bottom: 2px solid #CCCCBC; }
+
+/* DATA cells */
+.d {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8.5px;
+  line-height: 1.6;
+  vertical-align: top;
+  padding: 9px 6px;
+  border-right: 1px solid #EEEEE4;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.d:last-child { border-right: none; }
+.dm { background: #FEFCE8; }
+.da { background: #EFF6FF; }
+.de { }
+.dc { background: #F0FDF4; }
+
+/* entries */
+.e  { display: flex; gap: 4px; line-height: 1.6; }
+.k  { font-weight: 600; color: #DC2626; min-width: 14px; flex-shrink: 0; }
+.kb { font-weight: 600; color: #2563EB; min-width: 14px; flex-shrink: 0; }
+.v  { color: #18181A; }
+.vm { color: #888; }
+
+/* skill block */
+.sb { margin-bottom: 10px; }
+.sb:last-child { margin-bottom: 0; }
+.sn {
+  font-style: italic; font-weight: 600; font-size: 8.5px;
+  border-bottom: 1px solid #EAEAE0; padding-bottom: 2px; margin-bottom: 3px;
+}
+.sl {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 7px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em;
+  text-decoration: underline; color: #888;
+  margin: 3px 0 2px;
+}
+
+/* zone tag (italic red header) */
+.zt { font-style: italic; font-weight: 600; font-size: 8px; color: #DC2626; display: block; margin-bottom: 2px; }
+
+/* mini header inside adv */
+.mh {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 7px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: #2563EB; border-bottom: 1px solid #BFDBFE;
+  padding-bottom: 1px; margin: 7px 0 3px;
+}
+.mh:first-child { margin-top: 0; }
+
+/* footer */
+.foot {
+  border-top: 1px solid #DDDDD0;
+  padding: 7px 18px;
+  display: flex; justify-content: space-between;
+  background: #FAFAF4;
+}
+.foot span { font-size: 10px; color: #888; }
+.foot .mono { font-family: 'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="title-bar">
+  <h1>Codici di Scouting</h1>
+  <small>Pallavolo · Manuale di riferimento</small>
+</div>
+
+<table>
+<colgroup>
+  <col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"><col class="c6">
+  <col class="c7"><col class="c8"><col class="c9"><col class="c10"><col class="c11"><col class="c12">
+  <col class="c13"><col class="c14"><col class="c15">
+  <col class="c16">
+</colgroup>
+
+<!-- ZONE BAND -->
+<tr>
+  <td class="band bm" colspan="6">Main code</td>
+  <td class="band ba" colspan="6">Advanced code</td>
+  <td class="band be" colspan="3">Extended code</td>
+  <td class="band bc">Custom</td>
+</tr>
+
+<!-- COL NUMBERS ROW 1 -->
+<tr>
+  <td class="nr nm">1</td><td class="nr nm">2–3</td><td class="nr nm">4</td><td class="nr nm">5</td><td class="nr nm">6</td><td class="nr nm"></td>
+  <td class="nr na">7–8</td><td class="nr na">9</td><td class="nr na">10</td><td class="nr na">11</td><td class="nr na">12</td><td class="nr na"></td>
+  <td class="nr ne">13</td><td class="nr ne">14</td><td class="nr ne">15</td>
+  <td class="nr nc">16–20</td>
+</tr>
+
+<!-- COL NUMBERS ROW 2 -->
+<tr>
+  <td class="nr nm">1</td><td class="nr nm">2–3</td><td class="nr nm">4</td><td class="nr nm">5</td><td class="nr nm">6</td><td class="nr nm"></td>
+  <td class="nr na">1–2</td><td class="nr na">3</td><td class="nr na">4</td><td class="nr na">5</td><td class="nr na">6</td><td class="nr na"></td>
+  <td class="nr ne">1</td><td class="nr ne">2</td><td class="nr ne">3</td>
+  <td class="nr nc">1–5</td>
+</tr>
+
+<!-- FIELD LABELS -->
+<tr>
+  <td class="lr lm">*</td>
+  <td class="lr lm">Play<br>Numb</td>
+  <td class="lr lm">Skill</td>
+  <td class="lr lm">Type</td>
+  <td class="lr lm">+</td>
+  <td class="lr lm"></td>
+  <td class="lr la">Cmb</td>
+  <td class="lr la">Targ<br>Attk</td>
+  <td class="lr la">Start<br>zone</td>
+  <td class="lr la">End<br>zone</td>
+  <td class="lr la">End<br>zone+</td>
+  <td class="lr la"></td>
+  <td class="lr le">Skill type</td>
+  <td class="lr le">Players</td>
+  <td class="lr le">Special</td>
+  <td class="lr lc"></td>
+</tr>
+
+<!-- DATA ROW -->
+<tr>
+
+  <!-- * -->
+  <td class="d dm"><span class="vm">* H</span><br><span class="vm">a V</span></td>
+
+  <!-- Play Numb -->
+  <td class="d dm"><span class="vm">00..99</span><br><span class="vm">$$ Tm</span></td>
+
+  <!-- Skill -->
+  <td class="d dm">
+    <div class="e"><span class="k">S</span><span class="v">Ser</span></div>
+    <div class="e"><span class="k">R</span><span class="v">Rec</span></div>
+    <div class="e"><span class="k">A</span><span class="v">Attk</span></div>
+    <div class="e"><span class="k">B</span><span class="v">Blk</span></div>
+    <div class="e"><span class="k">D</span><span class="v">Dig</span></div>
+    <div class="e"><span class="k">E</span><span class="v">Set</span></div>
+    <div class="e"><span class="k">F</span><span class="v">Fr B</span></div>
+  </td>
+
+  <!-- Type -->
+  <td class="d dm">
+    <div class="e"><span class="k">H</span><span class="v">High</span></div>
+    <div class="e"><span class="k">M</span><span class="v">Medium</span></div>
+    <div class="e"><span class="kb">Q</span><span class="v">Quick</span></div>
+    <div class="e"><span class="k">T</span><span class="v">Tense</span></div>
+    <div class="e"><span class="kb">U</span><span class="v">Super</span></div>
+    <div class="e"><span class="k">N</span><span class="v">Fast</span></div>
+    <div class="e"><span class="k">O</span><span class="v">Other</span></div>
+  </td>
+
+  <!-- eval+ -->
+  <td class="d dm">
+    <div class="e"><span class="kb">#</span></div>
+    <div class="e"><span class="kb">+</span></div>
+    <div class="e"><span class="kb">!</span></div>
+    <div class="e"><span class="kb">/</span></div>
+    <div class="e"><span class="kb">-</span></div>
+    <div class="e"><span class="kb">=</span></div>
+  </td>
+
+  <!-- spacer main -->
+  <td class="d dm"></td>
+
+  <!-- ADV: Cmb -->
+  <td class="d da">
+    <span class="zt">Attk</span>
+    <div class="e"><span class="v">W.</span></div>
+    <div class="e"><span class="v">Y.</span></div>
+    <div class="e"><span class="v">G.</span></div>
+    <div class="e"><span class="v">P.</span></div>
+    <div class="e"><span class="v">..</span></div>
+  </td>
+
+  <!-- ADV: Targ Attk -->
+  <td class="d da">
+    <div class="mh">Setter Calls</div>
+    <div class="e"><span class="kb">Set</span></div>
+    <div class="e"><span class="kb">K.</span></div>
+    <div class="mh">Targ Attk</div>
+    <div class="e"><span class="v">Front</span></div>
+    <div class="e"><span class="v">Center</span></div>
+    <div class="e"><span class="v">Back</span></div>
+    <div class="e"><span class="v">Pipe</span></div>
+    <div class="e"><span class="v">Setter</span></div>
+    <div class="mh">Cone</div>
+    <div class="e"><span class="kb">Attk</span></div>
+    <div class="e"><span class="v">1..8</span></div>
+  </td>
+
+  <!-- ADV: Start zone -->
+  <td class="d da">
+    <span class="zt">Attk</span>
+    <div class="e"><span class="v">1..9</span></div>
+    <div style="height:6px"></div>
+    <span class="zt">Srv</span>
+    <div class="e"><span class="v">561</span></div>
+    <div class="e"><span class="v">79</span></div>
+  </td>
+
+  <!-- ADV: End zone -->
+  <td class="d da">
+    <span class="zt">Esec zone</span>
+    <div class="e"><span class="k">Rec</span></div>
+    <div class="e"><span class="k">Set</span></div>
+    <div class="e"><span class="k">Dig</span></div>
+    <div class="e"><span class="k">Blk</span></div>
+    <div class="e"><span class="k">Fr B</span></div>
+    <div class="e"><span class="v">1..9</span></div>
+  </td>
+
+  <!-- ADV: End zone+ -->
+  <td class="d da">
+    <span class="zt">Esec zone+</span>
+    <div class="e"><span class="k">Rec</span></div>
+    <div class="e"><span class="k">Dig</span></div>
+    <div class="e"><span class="k">Blk</span></div>
+    <div class="e"><span class="k">Fr B</span></div>
+    <div class="e"><span class="v">A</span></div>
+    <div class="e"><span class="v">B</span></div>
+    <div class="e"><span class="v">C</span></div>
+    <div class="e"><span class="v">D</span></div>
+  </td>
+
+  <!-- spacer adv -->
+  <td class="d da"></td>
+
+  <!-- EXT col 13: Skill type -->
+  <td class="d de">
+    <div class="sb">
+      <div class="sn">Attk</div>
+      <div class="e"><span class="k">H</span><span class="v">Hard Spike</span></div>
+      <div class="e"><span class="k">P</span><span class="v">Soft Spike</span></div>
+      <div class="e"><span class="k">T</span><span class="v">Tip</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Blk</div>
+      <div class="e"><span class="k">A</span><span class="v">Assist</span></div>
+      <div class="e"><span class="k">T</span><span class="v">Attempt</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Rec</div>
+      <div class="e"><span class="k">L</span><span class="v">on Left</span></div>
+      <div class="e"><span class="k">R</span><span class="v">on Right</span></div>
+      <div class="e"><span class="k">W</span><span class="v">low</span></div>
+      <div class="e"><span class="k">O</span><span class="v">Overhead</span></div>
+      <div class="e"><span class="k">M</span><span class="v">Middleline</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Set</div>
+      <div class="e"><span class="k">1</span><span class="v">1 Hand</span></div>
+      <div class="e"><span class="k">2</span><span class="v">2 Hands</span></div>
+      <div class="e"><span class="k">3</span><span class="v">Bump</span></div>
+      <div class="e"><span class="k">4</span><span class="v">Other</span></div>
+      <div class="e"><span class="k">5</span><span class="v">Underhand</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Dig</div>
+      <div class="e"><span class="k">S</span><span class="v">on Spike</span></div>
+      <div class="e"><span class="k">C</span><span class="v">spike Cover</span></div>
+      <div class="e"><span class="k">B</span><span class="v">after Block</span></div>
+      <div class="e"><span class="k">E</span><span class="v">Emergency</span></div>
+    </div>
+  </td>
+
+  <!-- EXT col 14: Players -->
+  <td class="d de">
+    <div class="sb">
+      <div class="sn">Attk</div>
+      <div class="e"><span class="k">0</span><span class="v">no block</span></div>
+      <div class="e"><span class="k">1</span><span class="v">1 player blk</span></div>
+      <div class="e"><span class="k">2</span><span class="v">2 players blk</span></div>
+      <div class="e"><span class="k">3</span><span class="v">3 players blk</span></div>
+      <div class="e"><span class="k">4</span><span class="v">hole block</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Blk</div>
+      <div class="e"><span class="k">0</span><span class="v">no block</span></div>
+      <div class="e"><span class="k">1</span><span class="v">1 player blk</span></div>
+      <div class="e"><span class="k">2</span><span class="v">2 players blk</span></div>
+      <div class="e"><span class="k">3</span><span class="v">3 players blk</span></div>
+      <div class="e"><span class="k">4</span><span class="v">hole block</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Rec</div>
+      <div class="e"><span class="k">1</span><span class="v">II plys – Lft</span></div>
+      <div class="e"><span class="k">2</span><span class="v">II plys – Rgt</span></div>
+      <div class="e"><span class="k">3</span><span class="v">III plys – Lft</span></div>
+      <div class="e"><span class="k">4</span><span class="v">III plys – Cnt</span></div>
+      <div class="e"><span class="k">5</span><span class="v">III plys – Rgt</span></div>
+      <div class="e"><span class="k">6</span><span class="v">IV plys – Lft</span></div>
+      <div class="e"><span class="k">7</span><span class="v">IV plys – LftC</span></div>
+      <div class="e"><span class="k">8</span><span class="v">IV plys – RgtC</span></div>
+      <div class="e"><span class="k">9</span><span class="v">IV plys – Rgt</span></div>
+    </div>
+  </td>
+
+  <!-- EXT col 15: Special -->
+  <td class="d de">
+    <div class="sb">
+      <div class="sn">Attk</div>
+      <div class="sl">Points</div>
+      <div class="e"><span class="k">S</span><span class="v">Block Out Side</span></div>
+      <div class="e"><span class="k">O</span><span class="v">Block Out Long</span></div>
+      <div class="e"><span class="k">F</span><span class="v">Block on floor</span></div>
+      <div class="e"><span class="k">X</span><span class="v">Direct on floor</span></div>
+      <div class="e"><span class="k">N</span><span class="v">Let</span></div>
+      <div class="e"><span class="k">C</span><span class="v">block Control</span></div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">S</span><span class="v">Attack out side</span></div>
+      <div class="e"><span class="k">O</span><span class="v">Attack out long</span></div>
+      <div class="e"><span class="k">N</span><span class="v">Attack in Net</span></div>
+      <div class="e"><span class="k">I</span><span class="v">Net contact</span></div>
+      <div class="e"><span class="k">A</span><span class="v">Antenna</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Blk</div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">S</span><span class="v">Ball out side</span></div>
+      <div class="e"><span class="k">O</span><span class="v">Ball out long</span></div>
+      <div class="e"><span class="k">F</span><span class="v">Ball on floor</span></div>
+      <div class="e"><span class="k">X</span><span class="v">between hands</span></div>
+      <div class="e"><span class="k">N</span><span class="v">hands – Net</span></div>
+      <div class="e"><span class="k">I</span><span class="v">Net contact</span></div>
+      <div class="e"><span class="k">A</span><span class="v">Antenna</span></div>
+      <div class="e"><span class="k">P</span><span class="v">No jump</span></div>
+      <div class="e"><span class="k">T</span><span class="v">Position error</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Rec</div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">U</span><span class="v">Unplayable</span></div>
+      <div class="e"><span class="k">X</span><span class="v">body error</span></div>
+      <div class="e"><span class="k">P</span><span class="v">position error</span></div>
+      <div class="e"><span class="k">E</span><span class="v">Lack of effort</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Srv</div>
+      <div class="sl">Points</div>
+      <div class="e"><span class="k">N</span><span class="v">Let</span></div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">O</span><span class="v">Ball out long</span></div>
+      <div class="e"><span class="k">L</span><span class="v">Ball out left</span></div>
+      <div class="e"><span class="k">R</span><span class="v">Ball out right</span></div>
+      <div class="e"><span class="k">N</span><span class="v">Ball in Net</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Set</div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">U</span><span class="v">Unhittable</span></div>
+      <div class="e"><span class="k">I</span><span class="v">Net touch</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Dig</div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">U</span><span class="v">Unplayable</span></div>
+      <div class="e"><span class="k">X</span><span class="v">body error</span></div>
+      <div class="e"><span class="k">P</span><span class="v">position error</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+      <div class="e"><span class="k">F</span><span class="v">Ball on floor</span></div>
+      <div class="e"><span class="k">O</span><span class="v">Ball out</span></div>
+      <div class="e"><span class="k">E</span><span class="v">Lack of effort</span></div>
+    </div>
+    <div class="sb">
+      <div class="sn">Fr B</div>
+      <div class="sl">Errors</div>
+      <div class="e"><span class="k">U</span><span class="v">Unplayable</span></div>
+      <div class="e"><span class="k">X</span><span class="v">body error</span></div>
+      <div class="e"><span class="k">P</span><span class="v">position error</span></div>
+      <div class="e"><span class="k">Z</span><span class="v">Referee call</span></div>
+    </div>
+  </td>
+
+  <!-- CUSTOM -->
+  <td class="d dc">
+    <div style="font-family:'IBM Plex Mono',monospace; color:#15803D; letter-spacing:.1em; margin-bottom:6px;">~~~~~~</div>
+    <div style="font-family:'IBM Plex Sans',sans-serif; font-size:8px; font-weight:600; color:#15803D; margin-bottom:14px;">Custom</div>
+    <div style="font-family:'IBM Plex Mono',monospace; font-size:8px; color:#888;">Free<br>Chars</div>
+  </td>
+
+</tr>
+</table>
+
+<div class="foot">
+  <span>Codici Scouting — Pallavolo</span>
+  <span class="mono">27 / 71</span>
+</div>
+
+</div>
+</body>
+</html>
