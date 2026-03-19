@@ -8058,23 +8058,24 @@ async function handleEventClick(
 }
 function computeMetrics(counts, skillId) {
   ensureMetricsConfigDefaults();
+  const safeCounts = normalizeCounts(counts);
   const cfg = state.metricsConfig && state.metricsConfig[skillId];
-  const total = RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const total = RESULT_CODES.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   if (!total) {
     return { total: 0, pos: null, eff: null, prf: null, positiveCount: 0, negativeCount: 0 };
   }
   const positiveCodes = Array.from(new Set([...(cfg && cfg.positive ? cfg.positive : []), "#", "+"]));
   const negativeCodes = (cfg && cfg.negative) || ["-"];
-  const positiveCount = positiveCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const positiveCount = positiveCodes.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   const negativeCount = negativeCodes.reduce(
-    (sum, code) => sum + (counts[code] || 0),
+    (sum, code) => sum + (safeCounts[code] || 0),
     0
   );
   const pos = (positiveCount / total) * 100;
   const cfgPositivesOnly = (cfg && cfg.positive) || [];
-  const effPosCount = cfgPositivesOnly.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const effPosCount = cfgPositivesOnly.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   const eff = ((effPosCount - negativeCount) / total) * 100;
-  const prf = ((counts["#"] || 0) / total) * 100;
+  const prf = ((safeCounts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
 }
 const SKILL_CHART_METRICS = [
@@ -9200,6 +9201,7 @@ function getSkillIdFromHeader(th) {
   if (!th || !th.classList) return null;
   if (th.classList.contains("skill-serve")) return "serve";
   if (th.classList.contains("skill-pass")) return "pass";
+  if (th.classList.contains("skill-freeball")) return "freeball";
   if (th.classList.contains("skill-attack")) return "attack";
   if (th.classList.contains("skill-block")) return "block";
   if (th.classList.contains("skill-defense")) return "defense";
@@ -9348,6 +9350,7 @@ function renderAggSummaryHeader(thead, setNumbers, options = {}) {
   addCell(rowTop, "Punti", { colspan: includeOpponentErrors ? 5 : 4 });
   addCell(rowTop, "Battuta", { colspan: 5, className: "skill-col skill-serve" });
   addCell(rowTop, "Ricezione", { colspan: 6, className: "skill-col skill-pass" });
+  addCell(rowTop, "Freeball", { colspan: 5, className: "skill-col skill-freeball" });
   addCell(rowTop, "Attacco", { colspan: 6, className: "skill-col skill-attack" });
   addCell(rowTop, "Muro", { colspan: 2, className: "skill-col skill-block" });
   addCell(rowTop, "Difesa", { colspan: 3, className: "skill-col skill-defense" });
@@ -9372,6 +9375,12 @@ function renderAggSummaryHeader(thead, setNumbers, options = {}) {
   addCell(rowBottom, "Pos", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Prf", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Eff", { className: "skill-col skill-pass" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Pos", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Prf", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-freeball" });
 
   addCell(rowBottom, "Tot", { className: "skill-col skill-attack" });
   addCell(rowBottom, "Err", { className: "skill-col skill-attack" });
@@ -9659,7 +9668,7 @@ function renderAggPlayerDetailTable(summaryAll) {
     renderServeTrajectoryAnalysis();
     return;
   }
-  const skillOrder = ["serve", "pass", "attack", "block", "defense"];
+  const skillOrder = ["serve", "pass", "freeball", "attack", "block", "defense"];
   skillOrder.forEach(skillId => {
     const counts = getAggSkillCounts(skillId, playerIdx);
     const metrics = computeMetrics(counts, skillId);
@@ -9881,7 +9890,7 @@ function renderPlayerAnalysisTable() {
   if (idx === null || !players || !players[idx]) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 26;
+    td.colSpan = 32;
     td.textContent = "Seleziona una giocatrice per vedere il tabellino.";
     tr.appendChild(td);
     elPlayerAnalysisBody.appendChild(tr);
@@ -9894,11 +9903,13 @@ function renderPlayerAnalysisTable() {
     const name = players[playerIdx];
     const serveCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].serve);
     const passCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].pass);
+    const freeballCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].freeball);
     const attackCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].attack);
     const blockCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].block);
     const defenseCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].defense);
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
+    const freeballMetrics = computeMetrics(freeballCounts, "freeball");
     const attackMetrics = computeMetrics(attackCounts, "attack");
     const defenseMetrics = computeMetrics(defenseCounts, "defense");
     const points = playerPoints[playerIdx] || { for: 0, against: 0 };
@@ -9951,6 +9962,16 @@ function renderPlayerAnalysisTable() {
           ]
         },
         {
+          title: "Freeball",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(freeballCounts)), value: totalFromCounts(freeballCounts), better: "neutral" },
+            { label: "Err", text: String(freeballMetrics.negativeCount || 0), value: freeballMetrics.negativeCount || 0, better: "lower" },
+            { label: "Pos", text: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos), value: freeballMetrics.pos, better: "higher" },
+            { label: "Prf", text: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf), value: freeballMetrics.prf, better: "higher" },
+            { label: "Eff", text: freeballMetrics.eff === null ? "-" : formatPercent(freeballMetrics.eff), value: freeballMetrics.eff, better: "higher" }
+          ]
+        },
+        {
           title: "Attacco",
           entries: [
             { label: "Tot", text: String(attackTotal), value: attackTotal, better: "neutral" },
@@ -9996,9 +10017,10 @@ function renderPlayerAnalysisTable() {
       .concat(flattenedEntries.slice(0, 4).map(entry => ({ text: entry.text })))
       .concat(flattenedEntries.slice(4, 9).map(entry => ({ text: entry.text, className: "skill-col skill-serve" })))
       .concat(flattenedEntries.slice(9, 15).map(entry => ({ text: entry.text, className: "skill-col skill-pass" })))
-      .concat(flattenedEntries.slice(15, 21).map(entry => ({ text: entry.text, className: "skill-col skill-attack" })))
-      .concat(flattenedEntries.slice(21, 23).map(entry => ({ text: entry.text, className: "skill-col skill-block" })))
-      .concat(flattenedEntries.slice(23).map(entry => ({ text: entry.text, className: "skill-col skill-defense" })));
+      .concat(flattenedEntries.slice(15, 20).map(entry => ({ text: entry.text, className: "skill-col skill-freeball" })))
+      .concat(flattenedEntries.slice(20, 26).map(entry => ({ text: entry.text, className: "skill-col skill-attack" })))
+      .concat(flattenedEntries.slice(26, 28).map(entry => ({ text: entry.text, className: "skill-col skill-block" })))
+      .concat(flattenedEntries.slice(28).map(entry => ({ text: entry.text, className: "skill-col skill-defense" })));
     cells.forEach(cell => {
       const td = document.createElement("td");
       td.textContent = cell.text;
@@ -10103,6 +10125,7 @@ function renderPlayerAnalysisTable() {
         Punti: "skill-points",
         Battuta: "skill-serve",
         Ricezione: "skill-pass",
+        Freeball: "skill-freeball",
         Attacco: "skill-attack",
         Muro: "skill-block",
         Difesa: "skill-defense"
@@ -10290,12 +10313,16 @@ function emptyCounts() {
   return { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
 }
 function totalFromCounts(counts) {
-  return RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const safeCounts = normalizeCounts(counts);
+  return RESULT_CODES.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
 }
 function mergeCounts(target, source) {
+  const safeTarget = target || emptyCounts();
+  const safeSource = normalizeCounts(source);
   RESULT_CODES.forEach(code => {
-    target[code] = (target[code] || 0) + (source[code] || 0);
+    safeTarget[code] = (safeTarget[code] || 0) + (safeSource[code] || 0);
   });
+  return safeTarget;
 }
 function getCurrentZoneForPlayer(playerIdx, forSkillId = null, scope = "our") {
   const players = getPlayersForScope(scope);
@@ -19150,7 +19177,7 @@ function renderAggregatedTable() {
   const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
   const includeOpponentErrorsCol = !state.useOpponentTeam;
-  const summaryColCount = 27 + (includeOpponentErrorsCol ? 1 : 0) + playedSets.length;
+  const summaryColCount = 32 + (includeOpponentErrorsCol ? 1 : 0) + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
     analysisTeamFilterState.teams.size === 0 &&
@@ -19182,6 +19209,7 @@ function renderAggregatedTable() {
     const totalsBySkill = {
       serve: emptyCounts(),
       pass: emptyCounts(),
+      freeball: emptyCounts(),
       attack: emptyCounts(),
       block: emptyCounts(),
       defense: emptyCounts()
@@ -19461,17 +19489,20 @@ function renderAggregatedTable() {
     sortedEntries.forEach(({ name, idx }) => {
       const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
       const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
+      const freeballCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].freeball);
       const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
       const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
       const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
 
       const serveMetrics = computeMetrics(serveCounts, "serve");
       const passMetrics = computeMetrics(passCounts, "pass");
+      const freeballMetrics = computeMetrics(freeballCounts, "freeball");
       const attackMetrics = computeMetrics(attackCounts, "attack");
       const defenseMetrics = computeMetrics(defenseCounts, "defense");
 
       mergeCounts(totalsBySkill.serve, serveCounts);
       mergeCounts(totalsBySkill.pass, passCounts);
+      mergeCounts(totalsBySkill.freeball, freeballCounts);
       mergeCounts(totalsBySkill.attack, attackCounts);
       mergeCounts(totalsBySkill.block, blockCounts);
       mergeCounts(totalsBySkill.defense, defenseCounts);
@@ -19528,6 +19559,12 @@ function renderAggregatedTable() {
         { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
         { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
 
+        { text: totalFromCounts(freeballCounts), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+        { text: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.eff === null ? "-" : formatPercent(freeballMetrics.eff), className: "skill-col skill-freeball" },
+
         { text: attackTotal, className: "skill-col skill-attack" },
         { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
         { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
@@ -19570,6 +19607,7 @@ function renderAggregatedTable() {
     const teamOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(summaryEvents) : 0;
     const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const freeballTotalsMetrics = computeMetrics(totalsBySkill.freeball, "freeball");
     const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
     const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
     const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
@@ -19602,6 +19640,12 @@ function renderAggregatedTable() {
       { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
       { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
 
+      { text: totalFromCounts(totalsBySkill.freeball), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.pos === null ? "-" : formatPercent(freeballTotalsMetrics.pos), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.prf === null ? "-" : formatPercent(freeballTotalsMetrics.prf), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.eff === null ? "-" : formatPercent(freeballTotalsMetrics.eff), className: "skill-col skill-freeball" },
+
       { text: teamAttackTotal, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
@@ -19629,6 +19673,7 @@ function renderAggregatedTable() {
       const setOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(setEvents) : 0;
       const setServeMetrics = computeMetrics(setTotals.totalsBySkill.serve, "serve");
       const setPassMetrics = computeMetrics(setTotals.totalsBySkill.pass, "pass");
+      const setFreeballMetrics = computeMetrics(setTotals.totalsBySkill.freeball, "freeball");
       const setAttackMetrics = computeMetrics(setTotals.totalsBySkill.attack, "attack");
       const setDefenseMetrics = computeMetrics(setTotals.totalsBySkill.defense, "defense");
       const setAttackTotal = totalFromCounts(setTotals.totalsBySkill.attack);
@@ -19664,6 +19709,12 @@ function renderAggregatedTable() {
         { text: setPassMetrics.pos === null ? "-" : formatPercent(setPassMetrics.pos), className: "skill-col skill-pass" },
         { text: setPassMetrics.prf === null ? "-" : formatPercent(setPassMetrics.prf), className: "skill-col skill-pass" },
         { text: setPassMetrics.eff === null ? "-" : formatPercent(setPassMetrics.eff), className: "skill-col skill-pass" },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.freeball), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.pos === null ? "-" : formatPercent(setFreeballMetrics.pos), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.prf === null ? "-" : formatPercent(setFreeballMetrics.prf), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.eff === null ? "-" : formatPercent(setFreeballMetrics.eff), className: "skill-col skill-freeball" },
 
         { text: setAttackTotal, className: "skill-col skill-attack" },
         { text: setTotals.totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
@@ -22349,16 +22400,21 @@ function buildAggregatedDataForPdf() {
       };
     return Object.assign(emptyCounts(), base);
   };
-  const totalFromCounts = counts =>
-    (counts["#"] || 0) +
-    (counts["+"] || 0) +
-    (counts["!"] || 0) +
-    (counts["-"] || 0) +
-    (counts["="] || 0) +
-    (counts["/"] || 0);
+  const totalFromCounts = counts => {
+    const safeCounts = Object.assign(emptyCounts(), counts || {});
+    return (
+      (safeCounts["#"] || 0) +
+      (safeCounts["+"] || 0) +
+      (safeCounts["!"] || 0) +
+      (safeCounts["-"] || 0) +
+      (safeCounts["="] || 0) +
+      (safeCounts["/"] || 0)
+    );
+  };
   const totalsBySkill = {
     serve: emptyCounts(),
     pass: emptyCounts(),
+    freeball: emptyCounts(),
     attack: emptyCounts(),
     defense: emptyCounts(),
     block: emptyCounts(),
@@ -22372,6 +22428,7 @@ function buildAggregatedDataForPdf() {
   const rows = getSortedPlayerEntries().map(({ name, idx }) => {
     const serveCounts = getCounts(idx, "serve");
     const passCounts = getCounts(idx, "pass");
+    const freeballCounts = getCounts(idx, "freeball");
     const attackCounts = getCounts(idx, "attack");
     const defenseCounts = getCounts(idx, "defense");
     const blockCounts = getCounts(idx, "block");
@@ -22379,6 +22436,7 @@ function buildAggregatedDataForPdf() {
 
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
+    const freeballMetrics = computeMetrics(freeballCounts, "freeball");
     const attackMetrics = computeMetrics(attackCounts, "attack");
     const defenseMetrics = computeMetrics(defenseCounts, "defense");
     const blockMetrics = computeMetrics(blockCounts, "block");
@@ -22386,6 +22444,7 @@ function buildAggregatedDataForPdf() {
 
     addCounts(totalsBySkill.serve, serveCounts);
     addCounts(totalsBySkill.pass, passCounts);
+    addCounts(totalsBySkill.freeball, freeballCounts);
     addCounts(totalsBySkill.attack, attackCounts);
     addCounts(totalsBySkill.defense, defenseCounts);
     addCounts(totalsBySkill.block, blockCounts);
@@ -22404,6 +22463,12 @@ function buildAggregatedDataForPdf() {
         neg: passMetrics.negativeCount || 0,
         pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
         prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      freeball: {
+        tot: totalFromCounts(freeballCounts),
+        neg: freeballMetrics.negativeCount || 0,
+        pos: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos),
+        prf: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf)
       },
       attack: {
         tot: totalFromCounts(attackCounts),
@@ -22433,6 +22498,7 @@ function buildAggregatedDataForPdf() {
   const totals = (() => {
     const serveMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const freeballMetrics = computeMetrics(totalsBySkill.freeball, "freeball");
     const attackMetrics = computeMetrics(totalsBySkill.attack, "attack");
     const defenseMetrics = computeMetrics(totalsBySkill.defense, "defense");
     const blockMetrics = computeMetrics(totalsBySkill.block, "block");
@@ -22450,6 +22516,12 @@ function buildAggregatedDataForPdf() {
         neg: passMetrics.negativeCount || 0,
         pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
         prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      freeball: {
+        tot: totalFromCounts(totalsBySkill.freeball),
+        neg: freeballMetrics.negativeCount || 0,
+        pos: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos),
+        prf: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf)
       },
       attack: {
         tot: totalFromCounts(totalsBySkill.attack),
@@ -22489,6 +22561,7 @@ function formatAggRow(row) {
     16, // nome
     4, 4, 4, 4, // serve
     4, 4, 4, 4, // pass
+    4, 4, 4, 4, // freeball
     4, 4, 4, 4, // attack
     4, 4, 4, 4, // defense
     4, 4, 4, 4, // block
@@ -22504,6 +22577,10 @@ function formatAggRow(row) {
     row.pass.neg,
     row.pass.pos,
     row.pass.prf,
+    row.freeball.tot,
+    row.freeball.neg,
+    row.freeball.pos,
+    row.freeball.prf,
     row.attack.tot,
     row.attack.neg,
     row.attack.pos,
@@ -22565,6 +22642,7 @@ function buildAnalysisPdfLines() {
       name: "Atleta",
       serve: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       pass: { tot: "Tot", neg: "Neg", pos: "Pos", prf: "Prf" },
+      freeball: { tot: "Tot", neg: "Neg", pos: "Pos", prf: "Prf" },
       attack: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       defense: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       block: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },

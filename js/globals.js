@@ -11,7 +11,7 @@ const SKILLS = [
 const SKILL_COLORS = {
   serve: { bg: "#1b5e20", text: "#d1fae5", soft: "rgba(27, 94, 32, 0.18)" },
   pass: { bg: "#f9a825", text: "#ffffff", soft: "rgba(249, 168, 37, 0.18)" },
-  freeball: { bg: "#0f766e", text: "#ccfbf1", soft: "rgba(15, 118, 110, 0.18)" },
+  freeball: { bg: "#c026d3", text: "#fdf4ff", soft: "rgba(192, 38, 211, 0.18)" },
   second: { bg: "#00838f", text: "#ccfbf1", soft: "rgba(0, 131, 143, 0.18)" },
   attack: { bg: "#b71c1c", text: "#ffe4e6", soft: "rgba(183, 28, 28, 0.18)" },
   defense: { bg: "#546e7a", text: "#e2e8f0", soft: "rgba(84, 110, 122, 0.18)" },

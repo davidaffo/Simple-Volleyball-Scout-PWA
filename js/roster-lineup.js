@@ -604,6 +604,11 @@ function getSnapshotTimestamp(snapshot) {
 }
 function buildCompactLocalStateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return null;
+  const selectedMatch = snapshot.selectedMatch || "";
+  const currentMatchPayload =
+    selectedMatch && typeof getCurrentMatchPayload === "function"
+      ? getCurrentMatchPayload(selectedMatch)
+      : null;
   const compact = {
     __compactLocalSnapshot: true,
     lastSavedAt: Number(snapshot.lastSavedAt || Date.now()) || Date.now(),
@@ -628,9 +633,33 @@ function buildCompactLocalStateSnapshot(snapshot) {
     opponentPlayerNumbers: snapshot.opponentPlayerNumbers || {},
     opponentLiberos: Array.isArray(snapshot.opponentLiberos) ? snapshot.opponentLiberos : [],
     opponentCaptains: Array.isArray(snapshot.opponentCaptains) ? snapshot.opponentCaptains.slice(0, 1) : [],
+    events: Array.isArray(snapshot.events) ? snapshot.events : [],
+    stats: snapshot.stats || {},
+    opponentStats: snapshot.opponentStats || {},
+    court: Array.isArray(snapshot.court) ? snapshot.court : [],
+    opponentCourt: Array.isArray(snapshot.opponentCourt) ? snapshot.opponentCourt : [],
+    autoRoleBaseCourt: Array.isArray(snapshot.autoRoleBaseCourt) ? snapshot.autoRoleBaseCourt : [],
+    opponentAutoRoleBaseCourt: Array.isArray(snapshot.opponentAutoRoleBaseCourt) ? snapshot.opponentAutoRoleBaseCourt : [],
+    isServing: !!snapshot.isServing,
+    autoRotate: snapshot.autoRotate !== false,
+    autoRotatePending: !!snapshot.autoRotatePending,
+    opponentAutoRotatePending: !!snapshot.opponentAutoRotatePending,
+    predictiveSkillFlow: snapshot.predictiveSkillFlow !== false,
+    skillFlowOverride: snapshot.skillFlowOverride || null,
+    opponentSkillFlowOverride: snapshot.opponentSkillFlowOverride || null,
+    flowTeamScope: snapshot.flowTeamScope || "our",
+    forceSkillActive: !!snapshot.forceSkillActive,
+    forceSkillScope: snapshot.forceSkillScope || null,
+    freeballPending: !!snapshot.freeballPending,
+    freeballPendingScope: snapshot.freeballPendingScope || "our",
+    metricsConfig: snapshot.metricsConfig || {},
+    pointRules: snapshot.pointRules || {},
     savedTeams: snapshot.savedTeams || {},
     savedOpponentTeams: snapshot.savedOpponentTeams || snapshot.savedTeams || {},
-    savedMatches: {},
+    savedMatches:
+      currentMatchPayload && selectedMatch
+        ? { [selectedMatch]: currentMatchPayload }
+        : {},
     scoreOverrides: snapshot.scoreOverrides || {},
     setResults: snapshot.setResults || {},
     setStarts: snapshot.setStarts || {}
@@ -648,8 +677,7 @@ async function loadStateFromIndexedDb() {
       local = null;
     }
     const indexedTs = getSnapshotTimestamp(indexed);
-    const isCompactLocal = !!(local && local.__compactLocalSnapshot);
-    const localTs = isCompactLocal ? 0 : getSnapshotTimestamp(local);
+    const localTs = getSnapshotTimestamp(local);
     const parsed = localTs > indexedTs ? local : indexed;
     if (!parsed) return false;
     return applyStateSnapshot(parsed, { skipStorageSync: true });
