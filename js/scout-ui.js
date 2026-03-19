@@ -14503,6 +14503,11 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     if (eventObj.skillId === "serve") {
       const direction = getPointDirection(eventObj);
       const opponentKeepsServe = direction !== "against";
+      if (!opponentKeepsServe && ourWasReceiving && typeof rotateCourt === "function") {
+        rotateCourt("ccw");
+        eventObj.autoRotationDirection = "ccw";
+        eventObj.autoRotationScope = "our";
+      }
       state.isServing = !opponentKeepsServe;
       state.opponentAutoRotatePending = !opponentKeepsServe;
       state.autoRotatePending = opponentKeepsServe;
@@ -14566,6 +14571,11 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
   if (eventObj.skillId === "serve") {
     const direction = getPointDirection(eventObj);
     const keepServe = direction !== "against";
+    if (!keepServe && opponentWasReceiving && typeof rotateOpponentCourt === "function") {
+      rotateOpponentCourt("ccw");
+      eventObj.autoRotationDirection = "ccw";
+      eventObj.autoRotationScope = "opponent";
+    }
     state.isServing = keepServe;
     state.autoRotatePending = !keepServe;
     state.opponentAutoRotatePending = keepServe;
