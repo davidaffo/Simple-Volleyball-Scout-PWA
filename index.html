@@ -573,7 +573,7 @@
               </div>
             </div>
           </div>
-          <div id="next-set-inline" class="next-set-inline hidden" aria-hidden="true">
+        <div id="next-set-inline" class="next-set-inline hidden" aria-hidden="true">
             <div class="next-set-inline__card">
               <div class="next-set-inline__head">
                 <h3 id="next-set-title">Preparazione set</h3>
@@ -671,6 +671,25 @@
               </div>
             </div>
           </div>
+        </div>
+        <div class="scout-dvw-bar">
+          <div class="scout-dvw-bar__top">
+            <label for="dvw-scout-input">Scout da codice DataVolley</label>
+            <div id="dvw-scout-last-code" class="scout-dvw-bar__last" aria-live="polite">Ultimo codice: —</div>
+          </div>
+          <div class="scout-dvw-bar__controls">
+            <input
+              id="dvw-scout-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder='Esempio: *08SM#~~~15C oppure più token separati da spazio'
+            />
+            <button id="btn-dvw-scout-apply" class="secondary" type="button">Applica</button>
+            <button id="btn-dvw-scout-clear" class="secondary" type="button">Pulisci</button>
+          </div>
+          <div id="dvw-scout-pending" class="scout-dvw-bar__pending" aria-live="polite"></div>
+          <div id="dvw-scout-status" class="scout-dvw-bar__status" aria-live="polite">Pronto.</div>
         </div>
       </div>
       <div class="section log-section scout-col-right" data-log-section data-scout-panel="log">

@@ -4811,6 +4811,12 @@ const elSkillDurationClose = document.getElementById("skill-duration-close");
 const elSkillDurationApply = document.getElementById("skill-duration-apply");
 const elBtnTimeout = document.getElementById("btn-timeout");
 const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
+const elDvwScoutInput = document.getElementById("dvw-scout-input");
+const elBtnDvwScoutApply = document.getElementById("btn-dvw-scout-apply");
+const elBtnDvwScoutClear = document.getElementById("btn-dvw-scout-clear");
+const elDvwScoutPending = document.getElementById("dvw-scout-pending");
+const elDvwScoutStatus = document.getElementById("dvw-scout-status");
+const elDvwScoutLastCode = document.getElementById("dvw-scout-last-code");
 const elTimeoutCount = document.getElementById("timeout-count");
 const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
@@ -4832,6 +4838,7 @@ const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
 const TAB_ORDER = ["match", "info", "scout", "aggregated", "video"];
+let dvwScoutPendingTokens = [];
 function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -11101,6 +11108,7 @@ function renderEventsLog(options = {}) {
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
     if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
     lastLogRenderedKey = null;
+    updateLiveDvwMirror();
     return;
   }
   const recent = state.events.slice(-40).sort((a, b) => {
@@ -11226,6 +11234,7 @@ function renderEventsLog(options = {}) {
   }
   updateTeamCounters();
   renderLogServeTrajectories();
+  updateLiveDvwMirror();
 }
 function getTimeoutCountForSet(setNum) {
   const set = Number(setNum) || 1;
@@ -22250,6 +22259,293 @@ function parseDvwSkillCode(code) {
     suffix: refinedTail.suffix
   };
 }
+function setDvwScoutStatus(message, tone = "") {
+  if (!elDvwScoutStatus) return;
+  elDvwScoutStatus.textContent = message || "";
+  elDvwScoutStatus.classList.remove("is-error", "is-success");
+  if (tone === "error") elDvwScoutStatus.classList.add("is-error");
+  if (tone === "success") elDvwScoutStatus.classList.add("is-success");
+}
+function getDvwScoutChipSkillClass(parsed) {
+  if (!parsed || parsed.kind !== "skill") return "";
+  const skillMap = {
+    S: "serve",
+    R: "pass",
+    E: "second",
+    A: "attack",
+    D: "defense",
+    B: "block",
+    F: "freeball"
+  };
+  const skillId = skillMap[String(parsed.skillLetter || "").toUpperCase()] || "";
+  return skillId ? `is-skill-${skillId}` : "";
+}
+function renderDvwScoutPending() {
+  if (!elDvwScoutPending) return;
+  elDvwScoutPending.innerHTML = "";
+  const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
+  dvwScoutPendingTokens.forEach(entry => {
+    const chip = document.createElement("div");
+    chip.className = "scout-dvw-chip";
+    const skillClass = getDvwScoutChipSkillClass(entry.parsed);
+    if (skillClass) chip.classList.add(skillClass);
+    const code = document.createElement("span");
+    code.className = "scout-dvw-chip__code";
+    code.textContent = entry.text;
+    chip.appendChild(code);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "scout-dvw-chip__remove";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Rimuovi token";
+    removeBtn.addEventListener("click", () => {
+      dvwScoutPendingTokens = dvwScoutPendingTokens.filter(item => item.id !== entry.id);
+      renderDvwScoutPending();
+      setDvwScoutStatus("Token rimosso.");
+      if (elDvwScoutInput) elDvwScoutInput.focus();
+    });
+    chip.appendChild(removeBtn);
+    elDvwScoutPending.appendChild(chip);
+  });
+  if (draft) {
+    const parsed = parseDvwSkillCode(draft);
+    const draftChip = document.createElement("div");
+    draftChip.className = "scout-dvw-chip is-draft";
+    const skillClass = getDvwScoutChipSkillClass(parsed);
+    if (skillClass) draftChip.classList.add(skillClass);
+    if (!parsed || parsed.kind === "unknown") {
+      draftChip.classList.add("is-invalid");
+    }
+    const code = document.createElement("span");
+    code.className = "scout-dvw-chip__code";
+    code.textContent = draft;
+    draftChip.appendChild(code);
+    elDvwScoutPending.appendChild(draftChip);
+  }
+}
+function queueCurrentDvwScoutToken() {
+  if (!elDvwScoutInput) return false;
+  const token = String(elDvwScoutInput.value || "").trim();
+  if (!token) return false;
+  const parsed = parseDvwSkillCode(token);
+  if (!parsed || parsed.kind === "unknown") {
+    setDvwScoutStatus(`Codice non riconosciuto: ${token}`, "error");
+    renderDvwScoutPending();
+    return false;
+  }
+  dvwScoutPendingTokens.push({
+    id: `dvw-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    text: token,
+    closedAtMs: Date.now(),
+    parsed
+  });
+  elDvwScoutInput.value = "";
+  renderDvwScoutPending();
+  setDvwScoutStatus(`Token aggiunto: ${token}`);
+  return true;
+}
+function updateLiveDvwMirror() {
+  if (!elDvwScoutLastCode) return;
+  const events = Array.isArray(state.events) ? state.events : [];
+  const last = [...events].reverse().find(ev => ev && ev.skillId !== "manual" && !ev.actionType);
+  if (!last) {
+    elDvwScoutLastCode.textContent = "Ultimo codice: —";
+    return;
+  }
+  const teamPayload = getDataVolleyTeamPayload(getTeamScopeFromEvent(last));
+  const code = buildDataVolleySkillCode(last, teamPayload);
+  elDvwScoutLastCode.textContent = code ? `Ultimo codice: ${code}` : "Ultimo codice: —";
+}
+function getPlayerIdxByDvNumber(scope, dvNumber) {
+  const normalizedNumber = padDv(dvNumber, 2);
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope) || {};
+  return players.findIndex(name => padDv(numbers[name], 2) === normalizedNumber);
+}
+function syncLiveEventWithDecodedDvw(event, decoded, rawCode) {
+  if (!event || !decoded || decoded.kind !== "skill") return;
+  const zoneMeta = decoded.zoneMeta || parseDvwZoneMeta(decoded.zonePair);
+  const suffixMeta = parseDvwSuffixMeta(decoded.skillLetter, decoded.inlineCode, decoded.suffix || "");
+  const scope = getTeamScopeFromEvent(event);
+  const startZoneNum = zoneMeta.startZone ? Number(zoneMeta.startZone) : null;
+  const endZoneNum = zoneMeta.endZone ? Number(zoneMeta.endZone) : null;
+  event.dv = normalizeDataVolleyEventMeta(
+    Object.assign({}, event.dv || {}, {
+      skillType: decoded.typeLetter,
+      attackCode: decoded.skillLetter === "A" ? decoded.advancedCode : event.dv && event.dv.attackCode,
+      setCode: decoded.skillLetter === "E" ? decoded.advancedCode : event.dv && event.dv.setCode,
+      setType:
+        decoded.skillLetter === "A" || decoded.skillLetter === "E"
+          ? decodeDvwSetType(decoded.typeLetter) || ""
+          : event.dv && event.dv.setType,
+      skillSubtype: suffixMeta.skillSubtype,
+      specialCode: suffixMeta.specialCode,
+      startZone: zoneMeta.startZone || "",
+      endZone: zoneMeta.endZone || "",
+      endSubzone: zoneMeta.endSubzone || "",
+      endCone: zoneMeta.endCone || "",
+      numPlayersNumeric: Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
+      rawCode: rawCode || "",
+      rawCodeSignature: ""
+    })
+  );
+  if (decoded.skillLetter === "S") {
+    event.serveType = decodeDvwServeType(decoded.typeLetter) || event.serveType || "JF";
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "R" || decoded.skillLetter === "D" || decoded.skillLetter === "F") {
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "A") {
+    if (decoded.advancedCode) {
+      event.attackType = decoded.advancedCode;
+    }
+    const decodedSetType = decodeDvwSetType(decoded.typeLetter);
+    if (decodedSetType) event.setType = decodedSetType;
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+      event.attackStartZone = startZoneNum;
+    }
+    if (endZoneNum) {
+      event.attackEndZone = endZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "E") {
+    if (decoded.advancedCode) {
+      event.base = decoded.advancedCode;
+    }
+    const decodedSetType = decodeDvwSetType(decoded.typeLetter);
+    if (decodedSetType) event.setType = decodedSetType;
+  }
+  if (decoded.skillLetter === "B" && Number.isFinite(suffixMeta.numPlayersNumeric)) {
+    event.blockNumber = suffixMeta.numPlayersNumeric;
+  }
+  event.dv.rawCodeSignature = computeDataVolleyEventSignature(event, getDataVolleyTeamPayload(scope));
+}
+function findLiveEventFromDvwApply(startIndex, skillId, code, playerName, scope = "our") {
+  const appended = (state.events || []).slice(startIndex);
+  for (let idx = appended.length - 1; idx >= 0; idx -= 1) {
+    const ev = appended[idx];
+    if (!ev || ev.skillId !== skillId || ev.code !== code) continue;
+    if (getTeamScopeFromEvent(ev) !== scope) continue;
+    if ((ev.playerName || "") !== (playerName || "")) continue;
+    return ev;
+  }
+  return null;
+}
+async function applyDvwScoutToken(rawToken, options = {}) {
+  const token = String(rawToken || "").trim();
+  const closedAtMs = Number(options.closedAtMs);
+  if (!token) return { ok: true, message: "" };
+  const decoded = parseDvwSkillCode(token);
+  if (!decoded || decoded.kind === "unknown") {
+    return { ok: false, message: `Codice non riconosciuto: ${token}` };
+  }
+  if (decoded.kind === "timeout") {
+    const prevLen = Array.isArray(state.events) ? state.events.length : 0;
+    if (decoded.teamScope === "opponent") {
+      if (!state.useOpponentTeam) {
+        return { ok: false, message: `Timeout avversario non disponibile senza doppia squadra: ${token}` };
+      }
+      recordOpponentTimeoutEvent();
+    } else {
+      recordTimeoutEvent();
+    }
+    const timeoutEvent = (state.events || []).slice(prevLen).find(ev => ev && ev.actionType === "timeout");
+    if (timeoutEvent && Number.isFinite(closedAtMs)) {
+      timeoutEvent.t = new Date(closedAtMs).toISOString();
+      saveState({ persistLocal: true });
+      renderEventsLog({ suppressScroll: true });
+    }
+    return { ok: true, message: token };
+  }
+  if (decoded.kind !== "skill") {
+    return { ok: false, message: `Tipo codice non ancora supportato in scout live: ${token}` };
+  }
+  const skillMap = {
+    S: "serve",
+    R: "pass",
+    A: "attack",
+    B: "block",
+    D: "defense",
+    E: "second",
+    F: "freeball"
+  };
+  const scope = decoded.teamScope === "opponent" ? "opponent" : "our";
+  if (scope === "opponent" && !state.useOpponentTeam) {
+    return { ok: false, message: `Codice avversario disponibile solo in doppia squadra: ${token}` };
+  }
+  const skillId = skillMap[decoded.skillLetter];
+  if (!skillId) {
+    return { ok: false, message: `Skill non supportata: ${token}` };
+  }
+  const playerIdx = getPlayerIdxByDvNumber(scope, decoded.playerNumber);
+  if (playerIdx < 0) {
+    return { ok: false, message: `Giocatrice ${decoded.playerNumber} non trovata in ${scope === "opponent" ? "squadra avversaria" : "squadra nostra"}` };
+  }
+  const players = getPlayersForScope(scope);
+  const playerName = players[playerIdx];
+  const setTypeChoice = skillId === "attack" || skillId === "second" ? decodeDvwSetType(decoded.typeLetter) : null;
+  const serveMeta = skillId === "serve" ? { serveType: decodeDvwServeType(decoded.typeLetter) || "JF" } : null;
+  const prevLen = Array.isArray(state.events) ? state.events.length : 0;
+  const ok = await handleEventClick(String(playerIdx), skillId, decoded.evaluation, playerName, null, {
+    setTypeChoice,
+    serveMeta,
+    attackMeta: null,
+    scope
+  });
+  if (!ok) {
+    return { ok: false, message: `Codice rifiutato dal flusso corrente: ${token}` };
+  }
+  const targetEvent = findLiveEventFromDvwApply(prevLen, skillId, decoded.evaluation, playerName, scope);
+  if (targetEvent) {
+    if (Number.isFinite(closedAtMs)) {
+      targetEvent.t = new Date(closedAtMs).toISOString();
+    }
+    syncLiveEventWithDecodedDvw(targetEvent, decoded, token);
+    saveState({ persistLocal: true });
+    renderEventsLog({ suppressScroll: true });
+    renderVideoAnalysis();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+  }
+  return { ok: true, message: token };
+}
+async function applyDvwScoutInput() {
+  if (!elDvwScoutInput) return;
+  if (elDvwScoutInput.value && elDvwScoutInput.value.trim()) {
+    const queued = queueCurrentDvwScoutToken();
+    if (!queued) return;
+  }
+  if (!dvwScoutPendingTokens.length) {
+    setDvwScoutStatus("Inserisci almeno un codice.", "error");
+    return;
+  }
+  let applied = 0;
+  for (const token of dvwScoutPendingTokens) {
+    const result = await applyDvwScoutToken(token.text, { closedAtMs: token.closedAtMs });
+    if (!result.ok) {
+      setDvwScoutStatus(result.message, "error");
+      elDvwScoutInput.focus();
+      return;
+    }
+    applied += 1;
+  }
+  dvwScoutPendingTokens = [];
+  renderDvwScoutPending();
+  updateLiveDvwMirror();
+  setDvwScoutStatus(`${applied} codice/i applicati correttamente.`, "success");
+}
 function parseDvwPlayersSection(lines, teamMeta, side = "our") {
   const playersDetailed = [];
   const players = [];
@@ -26024,6 +26320,41 @@ async function init() {
     elBtnForceRefreshApp.addEventListener("click", forceRefreshAppAssets);
   }
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
+  if (elBtnDvwScoutApply) {
+    elBtnDvwScoutApply.addEventListener("click", () => {
+      applyDvwScoutInput();
+    });
+  }
+  if (elBtnDvwScoutClear) {
+    elBtnDvwScoutClear.addEventListener("click", () => {
+      dvwScoutPendingTokens = [];
+      if (elDvwScoutInput) {
+        elDvwScoutInput.value = "";
+        elDvwScoutInput.focus();
+      }
+      renderDvwScoutPending();
+      setDvwScoutStatus("Pronto.");
+    });
+  }
+  if (elDvwScoutInput) {
+    elDvwScoutInput.addEventListener("input", () => {
+      renderDvwScoutPending();
+    });
+    elDvwScoutInput.addEventListener("keydown", e => {
+      e.stopPropagation();
+      if (e.key === " " || e.key === "Tab") {
+        const hasToken = String(elDvwScoutInput.value || "").trim();
+        if (hasToken) {
+          e.preventDefault();
+          queueCurrentDvwScoutToken();
+        }
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      applyDvwScoutInput();
+    });
+  }
   // pulsanti lineup mobile rimossi
   const elMobileMenuBtn = document.getElementById("btn-open-menu-mobile");
   const elMobileLogBtn = document.getElementById("btn-open-log-mobile");
