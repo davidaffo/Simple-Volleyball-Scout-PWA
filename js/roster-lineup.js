@@ -119,6 +119,7 @@ const elBtnExportHtml = document.getElementById("btn-export-html");
 const elBtnResetMatch = document.getElementById("btn-reset-match");
 const elBtnResetApp = document.getElementById("btn-reset-app");
 const elBtnExportMatch = document.getElementById("btn-export-match");
+const elBtnExportDvw = document.getElementById("btn-export-dvw");
 const elBtnImportMatch = document.getElementById("btn-import-match");
 const elMatchFileInput = document.getElementById("match-file-input");
 const elSavedMatchesSelect = document.getElementById("saved-matches");
@@ -601,6 +602,70 @@ function getSnapshotTimestamp(snapshot) {
   const ts = Number(snapshot.lastSavedAt || 0);
   return Number.isFinite(ts) ? ts : 0;
 }
+function buildCompactLocalStateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const selectedMatch = snapshot.selectedMatch || "";
+  const currentMatchPayload =
+    selectedMatch && typeof getCurrentMatchPayload === "function"
+      ? getCurrentMatchPayload(selectedMatch)
+      : null;
+  const compact = {
+    __compactLocalSnapshot: true,
+    lastSavedAt: Number(snapshot.lastSavedAt || Date.now()) || Date.now(),
+    theme: snapshot.theme || "dark",
+    match: snapshot.match || {},
+    selectedMatch: snapshot.selectedMatch || "",
+    selectedTeam: snapshot.selectedTeam || "",
+    selectedOpponentTeam: snapshot.selectedOpponentTeam || "",
+    currentSet: snapshot.currentSet || 1,
+    rotation: snapshot.rotation || 1,
+    opponentRotation: snapshot.opponentRotation || 1,
+    courtSideSwapped: !!snapshot.courtSideSwapped,
+    useOpponentTeam: !!snapshot.useOpponentTeam,
+    matchFinished: !!snapshot.matchFinished,
+    uiTopBarHidden: !!snapshot.uiTopBarHidden,
+    video: snapshot.video || { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "", lastPlaybackSeconds: 0 },
+    players: Array.isArray(snapshot.players) ? snapshot.players : [],
+    playerNumbers: snapshot.playerNumbers || {},
+    liberos: Array.isArray(snapshot.liberos) ? snapshot.liberos : [],
+    captains: Array.isArray(snapshot.captains) ? snapshot.captains.slice(0, 1) : [],
+    opponentPlayers: Array.isArray(snapshot.opponentPlayers) ? snapshot.opponentPlayers : [],
+    opponentPlayerNumbers: snapshot.opponentPlayerNumbers || {},
+    opponentLiberos: Array.isArray(snapshot.opponentLiberos) ? snapshot.opponentLiberos : [],
+    opponentCaptains: Array.isArray(snapshot.opponentCaptains) ? snapshot.opponentCaptains.slice(0, 1) : [],
+    events: Array.isArray(snapshot.events) ? snapshot.events : [],
+    stats: snapshot.stats || {},
+    opponentStats: snapshot.opponentStats || {},
+    court: Array.isArray(snapshot.court) ? snapshot.court : [],
+    opponentCourt: Array.isArray(snapshot.opponentCourt) ? snapshot.opponentCourt : [],
+    autoRoleBaseCourt: Array.isArray(snapshot.autoRoleBaseCourt) ? snapshot.autoRoleBaseCourt : [],
+    opponentAutoRoleBaseCourt: Array.isArray(snapshot.opponentAutoRoleBaseCourt) ? snapshot.opponentAutoRoleBaseCourt : [],
+    isServing: !!snapshot.isServing,
+    autoRotate: snapshot.autoRotate !== false,
+    autoRotatePending: !!snapshot.autoRotatePending,
+    opponentAutoRotatePending: !!snapshot.opponentAutoRotatePending,
+    predictiveSkillFlow: snapshot.predictiveSkillFlow !== false,
+    skillFlowOverride: snapshot.skillFlowOverride || null,
+    opponentSkillFlowOverride: snapshot.opponentSkillFlowOverride || null,
+    flowTeamScope: snapshot.flowTeamScope || "our",
+    forceSkillActive: !!snapshot.forceSkillActive,
+    forceSkillScope: snapshot.forceSkillScope || null,
+    freeballPending: !!snapshot.freeballPending,
+    freeballPendingScope: snapshot.freeballPendingScope || "our",
+    metricsConfig: snapshot.metricsConfig || {},
+    pointRules: snapshot.pointRules || {},
+    savedTeams: snapshot.savedTeams || {},
+    savedOpponentTeams: snapshot.savedOpponentTeams || snapshot.savedTeams || {},
+    savedMatches:
+      currentMatchPayload && selectedMatch
+        ? { [selectedMatch]: currentMatchPayload }
+        : {},
+    scoreOverrides: snapshot.scoreOverrides || {},
+    setResults: snapshot.setResults || {},
+    setStarts: snapshot.setStarts || {}
+  };
+  return compact;
+}
 async function loadStateFromIndexedDb() {
   try {
     const indexed = await readStateFromIndexedDb();
@@ -633,7 +698,23 @@ function saveState(options = {}) {
     writeStateToIndexedDb(state);
     const shouldPersistLocal = persistLocal || typeof indexedDB === "undefined";
     if (shouldPersistLocal) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (localErr) {
+        const compact = buildCompactLocalStateSnapshot(state);
+        let compactSaved = false;
+        try {
+          if (compact) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+            compactSaved = true;
+          }
+        } catch (_) {
+          // ignore secondary local storage failure
+        }
+        if (!compactSaved) {
+          throw localErr;
+        }
+      }
     }
     const loading =
       typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
@@ -2259,6 +2340,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
   if (!raw) return null;
   const name = raw.name || fallbackName || "";
   const staff = raw.staff || Object.assign({}, DEFAULT_STAFF);
+  const officialCode = typeof raw.officialCode === "string" ? raw.officialCode.trim() : "";
+  const officialId = typeof raw.officialId === "string" ? raw.officialId.trim() : "";
   const makeId = () => generatePlayerId();
   const rawDefaultLineup = Array.isArray(raw.defaultLineup) ? normalizePlayers(raw.defaultLineup) : [];
   const rawDefaultRotation = parseInt(raw.defaultRotation, 10);
@@ -2278,6 +2361,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
           name: p.name || buildFullName(p.lastName, p.firstName),
           firstName: p.firstName || parts.firstName || "",
           lastName: p.lastName || parts.lastName || "",
+          codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
           number: p.number || "",
           role: p.role === "L" ? "L" : "",
           isCaptain: !!p.isCaptain,
@@ -2297,6 +2381,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
       version: 2,
       name,
       staff,
+      officialCode,
+      officialId,
       playersDetailed,
       liberos,
       numbers,
@@ -2314,6 +2400,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     id: makeId(),
     name: n,
     ...splitNameParts(n),
+    codeOfficial: "",
     number: numbers[n] || "",
     role: liberos.includes(n) ? "L" : "",
     isCaptain: false,
@@ -2326,6 +2413,8 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     version: 2,
     name,
     staff,
+    officialCode,
+    officialId,
     playersDetailed,
     liberos,
     numbers,
@@ -2351,6 +2440,7 @@ function compactTeamPayload(data, fallbackName = "") {
             id: p.id || generatePlayerId(),
             firstName: p.firstName || parts.firstName || "",
             lastName: p.lastName || parts.lastName || "",
+            codeOfficial: p.codeOfficial || "",
             number: p.number || "",
             role: p.role === "L" ? "L" : "",
             isCaptain: !!p.isCaptain,
@@ -2362,6 +2452,8 @@ function compactTeamPayload(data, fallbackName = "") {
     version: 3,
     name: normalized.name || fallbackName,
     staff: normalized.staff || Object.assign({}, DEFAULT_STAFF),
+    officialCode: normalized.officialCode || "",
+    officialId: normalized.officialId || "",
     playersDetailed,
     defaultLineup: Array.isArray(normalized.defaultLineup) ? normalized.defaultLineup.slice(0, 6) : [],
     defaultRotation: normalized.defaultRotation || 1,
@@ -2539,8 +2631,17 @@ function saveMatchToStorage(name, data) {
   if (!name) return;
   try {
     localStorage.setItem(getMatchStorageKey(name), JSON.stringify(data));
+    return true;
   } catch (e) {
-    logError("Error saving match " + name, e);
+    const isQuota =
+      e &&
+      (e.name === "QuotaExceededError" ||
+        e.code === 22 ||
+        e.code === 1014);
+    if (!isQuota) {
+      logError("Error saving match " + name, e);
+    }
+    return false;
   }
 }
 function deleteMatchFromStorage(name) {
@@ -2749,6 +2850,7 @@ function getCurrentTeamPayload(name = "") {
           const isLib = (state.liberos || []).includes(p.name) || p.role === "L";
           return Object.assign({}, p, {
             id: isValidPlayerId(p.id) ? p.id : generatePlayerId(),
+            codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial : "",
             number: currentNumber,
             role: isLib ? "L" : "",
             isCaptain: captainSet.has(p.name) || !!p.isCaptain,
@@ -2758,6 +2860,7 @@ function getCurrentTeamPayload(name = "") {
       : (state.players || []).map(pName => ({
           id: generatePlayerId(),
           name: pName,
+          codeOfficial: "",
           number: (state.playerNumbers && state.playerNumbers[pName]) || "",
           role: (state.liberos || []).includes(pName) ? "L" : "",
           isCaptain: captainSet.has(pName),
@@ -2779,6 +2882,8 @@ function getCurrentTeamPayload(name = "") {
     version: 2,
     name: safeName,
     staff,
+    officialCode: existing?.officialCode || "",
+    officialId: existing?.officialId || "",
     playersDetailed,
     players,
     liberos,
@@ -2812,6 +2917,7 @@ function getCurrentOpponentPayload(name = "") {
       id: prev && isValidPlayerId(prev.id) ? prev.id : generatePlayerId(),
       name: p,
       ...splitNameParts(p),
+      codeOfficial: prev && typeof prev.codeOfficial === "string" ? prev.codeOfficial : "",
       number: currentNumber,
       role: liberos.includes(p) ? "L" : "",
       isCaptain: captains.includes(p),
@@ -2823,6 +2929,8 @@ function getCurrentOpponentPayload(name = "") {
     version: 2,
     name: safeName,
     staff: DEFAULT_STAFF,
+    officialCode: existing?.officialCode || "",
+    officialId: existing?.officialId || "",
     playersDetailed,
     players,
     liberos,
@@ -3693,6 +3801,15 @@ function normalizeMetricConfig(skillId, cfg) {
   const enabled = cfg && typeof cfg.enabled === "boolean" ? cfg.enabled : def.enabled !== false;
   return { positive, neutral, negative, activeCodes, enabled };
 }
+function sameCodeList(a, b) {
+  const left = Array.isArray(a) ? a.slice().sort() : [];
+  const right = Array.isArray(b) ? b.slice().sort() : [];
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
 function normalizePointRule(skillId, cfg) {
   const def = POINT_RULE_DEFAULTS[skillId] || { for: [], against: [] };
   const uniq = list =>
@@ -3721,6 +3838,17 @@ function ensurePointRulesDefaults() {
   state.pointRules = state.pointRules || {};
   SKILLS.forEach(skill => {
     state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
+    if (skill.id === "pass" || skill.id === "freeball") {
+      const current = state.pointRules[skill.id];
+      if (
+        Array.isArray(current.against) &&
+        current.against.includes("/") &&
+        sameCodeList(current.for, []) &&
+        (sameCodeList(current.against, ["=", "/"]) || sameCodeList(current.against, ["/"]))
+      ) {
+        state.pointRules[skill.id] = normalizePointRule(skill.id, POINT_RULE_DEFAULTS.pass);
+      }
+    }
     if (
       (skill.id === "defense" || skill.id === "second") &&
       Array.isArray(state.pointRules[skill.id].against) &&
@@ -3742,6 +3870,17 @@ function ensureMetricsConfigDefaults() {
   state.metricsConfig = state.metricsConfig || {};
   SKILLS.forEach(skill => {
     state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, state.metricsConfig[skill.id]);
+    if (skill.id === "freeball") {
+      const current = state.metricsConfig[skill.id];
+      const legacyPositive = ["#", "+", "!"];
+      const legacyNegative = ["/", "="];
+      if (
+        sameCodeList(current.positive, legacyPositive) &&
+        sameCodeList(current.negative, legacyNegative)
+      ) {
+        state.metricsConfig[skill.id] = normalizeMetricConfig(skill.id, METRIC_DEFAULTS.pass);
+      }
+    }
   });
 }
 function ensureOpponentSkillConfigDefaults() {
@@ -4049,6 +4188,8 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
       state.match.opponent ||
       (isOpponent ? "Avversaria" : "Squadra"),
     staff: (normalized && normalized.staff) || Object.assign({}, DEFAULT_STAFF),
+    officialCode: (normalized && normalized.officialCode) || "",
+    officialId: (normalized && normalized.officialId) || "",
     players: playersDetailed,
     defaultLineup,
     defaultRotation: (normalized && normalized.defaultRotation) || 1,
@@ -4760,6 +4901,7 @@ function collectTeamManagerPayload() {
         name: buildFullName(p.lastName, p.firstName) || p.name.trim(),
         firstName: p.firstName || splitNameParts(p.name).firstName || "",
         lastName: p.lastName || splitNameParts(p.name).lastName || "",
+        codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
         number: p.number || "",
         role: p.role === "L" ? "L" : "",
         isCaptain: !!p.isCaptain,
@@ -4792,6 +4934,8 @@ function collectTeamManagerPayload() {
     version: 3,
     name,
     staff,
+    officialCode: typeof teamManagerState.officialCode === "string" ? teamManagerState.officialCode.trim() : "",
+    officialId: typeof teamManagerState.officialId === "string" ? teamManagerState.officialId.trim() : "",
     playersDetailed,
     players,
     liberos,

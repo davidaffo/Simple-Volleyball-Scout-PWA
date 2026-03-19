@@ -6,18 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v323-39ec429";
+    window.__APP_CACHE_VERSION__ = "v331-93f2685";
     if (location.protocol === "file:") {
       document.documentElement.dataset.fileOrigin = "true";
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=v323-39ec429" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v323-39ec429" />
+  <link rel="stylesheet" href="style.css?v=v331-93f2685" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png?v=v331-93f2685" />
   <script>
     if (location.protocol !== "file:") {
       const manifest = document.createElement("link");
       manifest.rel = "manifest";
-      manifest.href = "manifest.json?v=v323-39ec429";
+      manifest.href = "manifest.json?v=v331-93f2685";
       document.head.appendChild(manifest);
     }
   </script>
@@ -146,6 +146,14 @@
                         Ricezione
                       </label>
                       <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-freeball" />
+                        Freeball
+                      </label>
+                      <label class="auto-rotate-toggle">
+                        <input type="checkbox" id="opponent-skill-second" />
+                        Alzata
+                      </label>
+                      <label class="auto-rotate-toggle">
                         <input type="checkbox" id="opponent-skill-attack" />
                         Attacco
                       </label>
@@ -156,10 +164,6 @@
                       <label class="auto-rotate-toggle">
                         <input type="checkbox" id="opponent-skill-block" />
                         Muro
-                      </label>
-                      <label class="auto-rotate-toggle">
-                        <input type="checkbox" id="opponent-skill-second" />
-                        Alzata
                       </label>
                     </div>
                     <button id="btn-open-opponent-team-manager" class="secondary">Gestione squadra</button>
@@ -187,8 +191,9 @@
               <div class="controls-row match-actions-row">
                 <button id="btn-reset-match" class="danger">Reset match</button>
                 <button id="btn-export-match" class="secondary">Esporta match</button>
+                <button id="btn-export-dvw" class="secondary">Esporta DataVolley</button>
                 <button id="btn-import-match" class="secondary">Importa match</button>
-                <input id="match-file-input" type="file" accept="application/json,text/plain" hidden />
+                <input id="match-file-input" type="file" accept=".json,.dvw,application/json,text/plain" hidden />
               </div>
               <div class="controls-row match-actions-row">
                 <button id="btn-export-db" class="secondary">Esporta database completo</button>
@@ -484,10 +489,10 @@
                     <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons-opp">
                       <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
                       <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
                       <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
                       <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
                       <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
-                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
                     </div>
                   </div>
                 </div>
@@ -558,17 +563,17 @@
                     <div class="skill-flow-grid skill-flow-inline" id="skill-flow-buttons">
                       <button type="button" class="skill-flow-btn badge badge-serve" data-force-skill="serve">Ba</button>
                       <button type="button" class="skill-flow-btn badge badge-pass" data-force-skill="pass">Ri</button>
+                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
                       <button type="button" class="skill-flow-btn badge badge-attack" data-force-skill="attack">At</button>
                       <button type="button" class="skill-flow-btn badge badge-block" data-force-skill="block">Mu</button>
                       <button type="button" class="skill-flow-btn badge badge-defense" data-force-skill="defense">Di</button>
-                      <button type="button" class="skill-flow-btn badge badge-second" data-force-skill="second">Al</button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div id="next-set-inline" class="next-set-inline hidden" aria-hidden="true">
+        <div id="next-set-inline" class="next-set-inline hidden" aria-hidden="true">
             <div class="next-set-inline__card">
               <div class="next-set-inline__head">
                 <h3 id="next-set-title">Preparazione set</h3>
@@ -708,6 +713,31 @@
             <strong id="undo-last-summary">—</strong>
           </div>
         </div>
+        <div class="scout-dvw-bar">
+          <div class="scout-dvw-bar__top">
+            <div class="scout-dvw-bar__title-row">
+              <label for="dvw-scout-input">Scout da codice DataVolley</label>
+              <button id="btn-dvw-scout-help" class="icon-button scout-dvw-help-btn" type="button" aria-label="Apri manuale codici scouting" title="Apri manuale codici scouting">?</button>
+            </div>
+            <div id="dvw-scout-last-code" class="scout-dvw-bar__last" aria-live="polite">Ultimo codice: —</div>
+          </div>
+          <div class="scout-dvw-bar__controls">
+            <input
+              id="dvw-scout-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder='Esempio: *08SM#~~~15C oppure più token separati da spazio'
+            />
+            <button id="btn-dvw-scout-apply" class="secondary" type="button">Applica</button>
+            <button id="btn-dvw-scout-clear" class="secondary" type="button">Pulisci</button>
+          </div>
+          <div id="dvw-scout-breakdown" class="scout-dvw-bar__breakdown" aria-live="polite">
+            Main: squadra · numero · skill · tipo · valutazione. Advanced: combinazione / zone. Extended: skill type / players / special.
+          </div>
+          <div id="dvw-scout-pending" class="scout-dvw-bar__pending" aria-live="polite"></div>
+          <div id="dvw-scout-status" class="scout-dvw-bar__status" aria-live="polite">Pronto.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -760,6 +790,7 @@
                 <th colspan="4">Punti</th>
                 <th colspan="5" class="skill-col skill-serve">Battuta</th>
                 <th colspan="5" class="skill-col skill-pass">Ricezione</th>
+                <th colspan="5" class="skill-col skill-freeball">Freeball</th>
                 <th colspan="6" class="skill-col skill-attack">Attacco</th>
                 <th colspan="2" class="skill-col skill-block">Muro</th>
                 <th colspan="3" class="skill-col skill-defense">Difesa</th>
@@ -782,6 +813,12 @@
                 <th class="skill-col skill-pass">Prf</th>
                 <th class="skill-col skill-pass">Eff</th>
 
+                <th class="skill-col skill-freeball">Tot</th>
+                <th class="skill-col skill-freeball">Err</th>
+                <th class="skill-col skill-freeball">Pos</th>
+                <th class="skill-col skill-freeball">Prf</th>
+                <th class="skill-col skill-freeball">Eff</th>
+
                 <th class="skill-col skill-attack">Tot</th>
                 <th class="skill-col skill-attack">Err</th>
                 <th class="skill-col skill-attack">Mur</th>
@@ -799,7 +836,7 @@
             </thead>
             <tbody id="agg-table-body">
               <tr>
-                <td colspan="26">Registra alcuni eventi per vedere le statistiche aggregate.</td>
+                <td colspan="31">Registra alcuni eventi per vedere le statistiche aggregate.</td>
               </tr>
             </tbody>
           </table>
@@ -1139,6 +1176,7 @@
                   <th colspan="4">Punti</th>
                   <th colspan="5" class="skill-col skill-serve">Battuta</th>
                   <th colspan="6" class="skill-col skill-pass">Ricezione</th>
+                  <th colspan="5" class="skill-col skill-freeball">Freeball</th>
                   <th colspan="6" class="skill-col skill-attack">Attacco</th>
                   <th colspan="2" class="skill-col skill-block">Muro</th>
                   <th colspan="3" class="skill-col skill-defense">Difesa</th>
@@ -1162,6 +1200,12 @@
                   <th class="skill-col skill-pass">Prf</th>
                   <th class="skill-col skill-pass">Eff</th>
 
+                  <th class="skill-col skill-freeball">Tot</th>
+                  <th class="skill-col skill-freeball">Err</th>
+                  <th class="skill-col skill-freeball">Pos</th>
+                  <th class="skill-col skill-freeball">Prf</th>
+                  <th class="skill-col skill-freeball">Eff</th>
+
                   <th class="skill-col skill-attack">Tot</th>
                   <th class="skill-col skill-attack">Err</th>
                   <th class="skill-col skill-attack">Mur</th>
@@ -1179,7 +1223,7 @@
               </thead>
               <tbody id="player-analysis-body">
                 <tr>
-                  <td colspan="27">Seleziona una giocatrice per vedere il tabellino.</td>
+                  <td colspan="32">Seleziona una giocatrice per vedere il tabellino.</td>
                 </tr>
               </tbody>
             </table>
@@ -2180,15 +2224,15 @@
       </a>
     </div>
   </footer>
-  <script src="js/app-version.js?v=v323-39ec429"></script>
-  <script src="js/globals.js?v=v323-39ec429"></script>
-  <script src="js/shared/team-ui.js?v=v323-39ec429"></script>
-  <script src="js/shared/lineup-core.js?v=v323-39ec429"></script>
-  <script src="js/shared/auto-role.js?v=v323-39ec429"></script>
-  <script src="js/shared/roster-manager.js?v=v323-39ec429"></script>
-  <script src="js/match-settings.js?v=v323-39ec429"></script>
-  <script src="js/opponent-settings.js?v=v323-39ec429"></script>
-  <script src="js/roster-lineup.js?v=v323-39ec429"></script>
-  <script src="js/scout-ui.js?v=v323-39ec429"></script>
+  <script src="js/app-version.js?v=v331-93f2685"></script>
+  <script src="js/globals.js?v=v331-93f2685"></script>
+  <script src="js/shared/team-ui.js?v=v331-93f2685"></script>
+  <script src="js/shared/lineup-core.js?v=v331-93f2685"></script>
+  <script src="js/shared/auto-role.js?v=v331-93f2685"></script>
+  <script src="js/shared/roster-manager.js?v=v331-93f2685"></script>
+  <script src="js/match-settings.js?v=v331-93f2685"></script>
+  <script src="js/opponent-settings.js?v=v331-93f2685"></script>
+  <script src="js/roster-lineup.js?v=v331-93f2685"></script>
+  <script src="js/scout-ui.js?v=v331-93f2685"></script>
 </body>
 </html>

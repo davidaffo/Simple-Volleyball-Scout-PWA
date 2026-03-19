@@ -72,6 +72,10 @@ const rosterIdMapsCache = {
   our: { teamName: null, playersKey: null, map: null },
   opponent: { teamName: null, playersKey: null, map: null }
 };
+function sanitizeOfficialString(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || "";
+}
 function normalizePlayerKey(name) {
   return String(name || "").trim().toLowerCase();
 }
@@ -93,21 +97,97 @@ function getRosterIdMapsForScope(scope) {
   const detailed = Array.isArray(roster.playersDetailed) ? roster.playersDetailed : [];
   const nameToId = new Map();
   const idToName = new Map();
+  const nameToPlayer = new Map();
   detailed.forEach(player => {
     const id = player && (player.id || player.playerId);
     const name = player && player.name;
     if (!id || !name) return;
     nameToId.set(normalizePlayerKey(name), id);
     idToName.set(id, name);
+    nameToPlayer.set(normalizePlayerKey(name), player);
   });
   const idToIndex = new Map();
   players.forEach((name, idx) => {
     const id = nameToId.get(normalizePlayerKey(name));
     if (id) idToIndex.set(id, idx);
   });
-  const map = { nameToId, idToName, idToIndex };
+  const map = {
+    nameToId,
+    idToName,
+    idToIndex,
+    nameToPlayer,
+    teamOfficialCode: sanitizeOfficialString(roster.officialCode),
+    teamOfficialId: sanitizeOfficialString(roster.officialId)
+  };
   rosterIdMapsCache[scope] = { teamName, playersKey, map };
   return map;
+}
+function getTeamOfficialMetaForScope(scope) {
+  const maps = getRosterIdMapsForScope(scope);
+  return {
+    teamCodeOfficial: maps ? maps.teamOfficialCode || "" : "",
+    teamIdOfficial: maps ? maps.teamOfficialId || "" : ""
+  };
+}
+function getPlayerOfficialCodeForScope(scope, playerIdx, playerName) {
+  const maps = getRosterIdMapsForScope(scope);
+  if (!maps || !maps.nameToPlayer) return "";
+  const players = getPlayersForScope(scope);
+  const name = playerName || (typeof playerIdx === "number" ? players[playerIdx] : "");
+  if (!name) return "";
+  const player = maps.nameToPlayer.get(normalizePlayerKey(name));
+  return player ? sanitizeOfficialString(player.codeOfficial) : "";
+}
+function normalizeDataVolleyEventMeta(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const numPlayersNumeric = Number(src.numPlayersNumeric);
+  return {
+    skillType: sanitizeOfficialString(src.skillType),
+    attackCode: sanitizeOfficialString(src.attackCode),
+    setCode: sanitizeOfficialString(src.setCode),
+    setType: sanitizeOfficialString(src.setType),
+    skillSubtype: sanitizeOfficialString(src.skillSubtype),
+    specialCode: sanitizeOfficialString(src.specialCode),
+    startZone: sanitizeOfficialString(src.startZone),
+    endZone: sanitizeOfficialString(src.endZone),
+    endSubzone: sanitizeOfficialString(src.endSubzone),
+    endCone: sanitizeOfficialString(src.endCone),
+    numPlayersNumeric: Number.isFinite(numPlayersNumeric) ? numPlayersNumeric : null,
+    rallyEndReason: sanitizeOfficialString(src.rallyEndReason),
+    rawCode: typeof src.rawCode === "string" ? src.rawCode.trim() : "",
+    rawCodeSignature: typeof src.rawCodeSignature === "string" ? src.rawCodeSignature : ""
+  };
+}
+function ensureEventDataVolleyFields(ev) {
+  if (!ev || typeof ev !== "object") return;
+  const scope = getTeamScopeFromEvent(ev);
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope);
+  const name =
+    (typeof ev.playerName === "string" && ev.playerName) ||
+    (typeof ev.playerIdx === "number" && players[ev.playerIdx]) ||
+    "";
+  if (ev.playerNumberAtEvent === undefined || ev.playerNumberAtEvent === null || ev.playerNumberAtEvent === "") {
+    ev.playerNumberAtEvent = name && numbers[name] !== undefined && numbers[name] !== null ? String(numbers[name]) : "";
+  }
+  if (ev.teamCodeOfficial === undefined || ev.teamCodeOfficial === null) {
+    ev.teamCodeOfficial = "";
+  }
+  if (ev.teamIdOfficial === undefined || ev.teamIdOfficial === null) {
+    ev.teamIdOfficial = "";
+  }
+  if (!ev.teamCodeOfficial || !ev.teamIdOfficial) {
+    const teamMeta = getTeamOfficialMetaForScope(scope);
+    if (!ev.teamCodeOfficial) ev.teamCodeOfficial = teamMeta.teamCodeOfficial || "";
+    if (!ev.teamIdOfficial) ev.teamIdOfficial = teamMeta.teamIdOfficial || "";
+  }
+  if (ev.playerCodeOfficial === undefined || ev.playerCodeOfficial === null) {
+    ev.playerCodeOfficial = "";
+  }
+  if (!ev.playerCodeOfficial) {
+    ev.playerCodeOfficial = getPlayerOfficialCodeForScope(scope, ev.playerIdx, name);
+  }
+  ev.dv = normalizeDataVolleyEventMeta(ev.dv);
 }
 function getPlayerIdForScope(scope, playerIdx, playerName) {
   const maps = getRosterIdMapsForScope(scope);
@@ -480,10 +560,11 @@ const elUseOpponentTeamToggle = document.getElementById("use-opponent-team-toggl
 const elOpponentTeamSettings = document.getElementById("opponent-team-settings");
 const elOpponentSkillServe = document.getElementById("opponent-skill-serve");
 const elOpponentSkillPass = document.getElementById("opponent-skill-pass");
+const elOpponentSkillFreeball = document.getElementById("opponent-skill-freeball");
+const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elOpponentSkillAttack = document.getElementById("opponent-skill-attack");
 const elOpponentSkillDefense = document.getElementById("opponent-skill-defense");
 const elOpponentSkillBlock = document.getElementById("opponent-skill-block");
-const elOpponentSkillSecond = document.getElementById("opponent-skill-second");
 const elAnalysisFilterTeams = document.getElementById("analysis-filter-teams");
 const elAnalysisFilterSets = document.getElementById("analysis-filter-sets");
 const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches");
@@ -2935,6 +3016,11 @@ function getSetterFromLastSetEvent() {
 function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
+function getFreeballStartSkill(scope = "our") {
+  if (isSkillEnabledForScope("freeball", scope)) return "freeball";
+  if (isSkillEnabledForScope("second", scope)) return "second";
+  return null;
+}
 function getPredictedSkillIdSingle() {
   const enabledSkills = getEnabledSkills();
   const flowNext = skillId => {
@@ -2942,6 +3028,7 @@ function getPredictedSkillIdSingle() {
       case "serve":
         return "defense";
       case "pass":
+      case "freeball":
         return "second";
       case "second":
         return "attack";
@@ -2968,7 +3055,7 @@ function getPredictedSkillIdSingle() {
   if (state.skillFlowOverride) return resolveEnabledSkill(state.skillFlowOverride);
   if (!state.predictiveSkillFlow) return null;
   if (enabledSkills.length === 0) return null;
-  if (state.freeballPending) return resolveEnabledSkill("second");
+  if (state.freeballPending) return resolveEnabledSkill(getFreeballStartSkill("our"));
   const ownEvents = (state.events || []).filter(ev => {
     if (!ev || !ev.skillId) return false;
     if (!ev.team) return true;
@@ -3164,7 +3251,7 @@ function getAutoFlowState() {
   }
   if (state.freeballPending && state.freeballPendingScope) {
     flowScope = state.freeballPendingScope;
-    nextSkill = "second";
+    nextSkill = getFreeballStartSkill(flowScope);
   }
   const override = flowScope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
   if (override) nextSkill = override;
@@ -3338,7 +3425,7 @@ function getPredictedSkillIdForScope(scope) {
     scope === "opponent" ? state.opponentSkillFlowOverride : state.skillFlowOverride;
   if (override) return resolveEnabledSkill(override);
   if (state.freeballPending && state.freeballPendingScope === scope) {
-    return resolveEnabledSkill("second");
+    return resolveEnabledSkill(getFreeballStartSkill(scope));
   }
   const events = state.events || [];
   const last = getLastFlowEvent(events);
@@ -4228,6 +4315,8 @@ function applyBlockNumberToTarget(value) {
   if (!targetEvents.length) return;
   applyAttackFieldToEvents(targetEvents, ev => {
     ev.blockNumber = typeof value === "number" ? value : null;
+    ev.dv = normalizeDataVolleyEventMeta(ev.dv);
+    ev.dv.numPlayersNumeric = typeof value === "number" ? value : null;
   }, { shouldRecalc: false });
   closeBlockNumberModal();
 }
@@ -4722,6 +4811,14 @@ const elSkillDurationClose = document.getElementById("skill-duration-close");
 const elSkillDurationApply = document.getElementById("skill-duration-apply");
 const elBtnTimeout = document.getElementById("btn-timeout");
 const elBtnTimeoutOpp = document.getElementById("btn-timeout-opp");
+const elDvwScoutInput = document.getElementById("dvw-scout-input");
+const elBtnDvwScoutApply = document.getElementById("btn-dvw-scout-apply");
+const elBtnDvwScoutClear = document.getElementById("btn-dvw-scout-clear");
+const elBtnDvwScoutHelp = document.getElementById("btn-dvw-scout-help");
+const elDvwScoutPending = document.getElementById("dvw-scout-pending");
+const elDvwScoutBreakdown = document.getElementById("dvw-scout-breakdown");
+const elDvwScoutStatus = document.getElementById("dvw-scout-status");
+const elDvwScoutLastCode = document.getElementById("dvw-scout-last-code");
 const elTimeoutCount = document.getElementById("timeout-count");
 const elTimeoutOppCount = document.getElementById("timeout-opp-count");
 const elSubstitutionRemaining = document.getElementById("substitution-remaining");
@@ -4743,6 +4840,7 @@ const LOCAL_VIDEO_REQUEST = "/__local-video__";
 const LOCAL_VIDEO_DB = "volley-video-db";
 const LOCAL_VIDEO_STORE = "videos";
 const TAB_ORDER = ["match", "info", "scout", "aggregated", "video"];
+let dvwScoutPendingTokens = [];
 function buildReceiveDisplayMapping(court, rotation, scope = "our") {
   if (typeof buildAutoRolePermutation === "function") {
     const perm =
@@ -5194,6 +5292,20 @@ function buildBaseEventPayload(base) {
     videoSeconds = 0;
   }
   const teamScope = (base && (base.teamScope || base.team)) || "our";
+  const teamMeta = getTeamOfficialMetaForScope(teamScope);
+  const playerNumberAtEvent =
+    typeof base.playerNumberAtEvent === "string"
+      ? base.playerNumberAtEvent
+      : (() => {
+          const playerName =
+            base.playerName ||
+            (typeof base.playerIdx === "number" ? getPlayersForScope(teamScope)[base.playerIdx] : "") ||
+            "";
+          const numbers = getPlayerNumbersForScope(teamScope);
+          return playerName && numbers[playerName] !== undefined && numbers[playerName] !== null
+            ? String(numbers[playerName])
+            : "";
+        })();
   const rotationValue = teamScope === "opponent" ? state.opponentRotation : state.rotation;
   const rotation = Math.min(6, Math.max(1, parseInt(rotationValue, 10) || 1));
   const scoreSnapshot = computePointsSummary(state.currentSet || 1);
@@ -5214,6 +5326,8 @@ function buildBaseEventPayload(base) {
     courtSideSwapped: !!state.courtSideSwapped,
     playerIdx: base.playerIdx,
     playerId: base.playerId || null,
+    playerCodeOfficial: sanitizeOfficialString(base.playerCodeOfficial) || getPlayerOfficialCodeForScope(teamScope, base.playerIdx, base.playerName),
+    playerNumberAtEvent,
     playerName:
       base.playerName ||
       (typeof base.playerIdx === "number"
@@ -5257,6 +5371,8 @@ function buildBaseEventPayload(base) {
     relatedEvents: base.relatedEvents || [],
     team: teamScope === "opponent" ? "opponent" : "our",
     teamName: getTeamNameForScope(teamScope),
+    teamCodeOfficial: sanitizeOfficialString(base.teamCodeOfficial) || teamMeta.teamCodeOfficial || "",
+    teamIdOfficial: sanitizeOfficialString(base.teamIdOfficial) || teamMeta.teamIdOfficial || "",
     homeScore: scoreSnapshot.totalFor || 0,
     visitorScore: scoreSnapshot.totalAgainst || 0,
     actionType: base.actionType || null,
@@ -5268,7 +5384,8 @@ function buildBaseEventPayload(base) {
     nextClock: base.nextClock || null,
     prevVideoClock: base.prevVideoClock || null,
     nextVideoClock: base.nextVideoClock || null,
-    videoTime: videoSeconds
+    videoTime: videoSeconds,
+    dv: normalizeDataVolleyEventMeta(base.dv)
   };
 }
 function setSkillModalCancelVisibility(visible) {
@@ -7495,8 +7612,7 @@ function animateEventToLog() {
 }
 function triggerFreeballFlow({ persist = true, rerender = true, startSkill = null, scope = "our" } = {}) {
   cancelPartialSkillFlowForScope(scope);
-  const desiredStartSkill =
-    startSkill || (isSkillEnabledForScope("second", scope) ? "second" : null);
+  const desiredStartSkill = startSkill || getFreeballStartSkill(scope);
   state.freeballPending = true;
   state.freeballPendingScope = scope;
   state.flowTeamScope = scope;
@@ -7838,12 +7954,13 @@ async function handleEventClick(
     // di default consideriamo l'attacco BP, poi correggiamo se deriva da ricezione
     event.attackBp = true;
   }
-  event.fromFreeball = wasFreeball;
-  if (!event.fromFreeball && skillId === "attack") {
+  event.fromFreeball = wasFreeball || skillId === "freeball";
+  if (!event.fromFreeball && (skillId === "second" || skillId === "attack")) {
     const prevEvent = state.events && state.events.length ? state.events[state.events.length - 1] : null;
     if (
       prevEvent &&
-      prevEvent.skillId === "second" &&
+      ((skillId === "second" && prevEvent.skillId === "freeball") ||
+        (skillId === "attack" && prevEvent.skillId === "second")) &&
       prevEvent.fromFreeball &&
       getTeamScopeFromEvent(prevEvent) === scope
     ) {
@@ -7954,23 +8071,24 @@ async function handleEventClick(
 }
 function computeMetrics(counts, skillId) {
   ensureMetricsConfigDefaults();
+  const safeCounts = normalizeCounts(counts);
   const cfg = state.metricsConfig && state.metricsConfig[skillId];
-  const total = RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const total = RESULT_CODES.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   if (!total) {
     return { total: 0, pos: null, eff: null, prf: null, positiveCount: 0, negativeCount: 0 };
   }
   const positiveCodes = Array.from(new Set([...(cfg && cfg.positive ? cfg.positive : []), "#", "+"]));
   const negativeCodes = (cfg && cfg.negative) || ["-"];
-  const positiveCount = positiveCodes.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const positiveCount = positiveCodes.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   const negativeCount = negativeCodes.reduce(
-    (sum, code) => sum + (counts[code] || 0),
+    (sum, code) => sum + (safeCounts[code] || 0),
     0
   );
   const pos = (positiveCount / total) * 100;
   const cfgPositivesOnly = (cfg && cfg.positive) || [];
-  const effPosCount = cfgPositivesOnly.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const effPosCount = cfgPositivesOnly.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
   const eff = ((effPosCount - negativeCount) / total) * 100;
-  const prf = ((counts["#"] || 0) / total) * 100;
+  const prf = ((safeCounts["#"] || 0) / total) * 100;
   return { total, pos, eff, prf, positiveCount, negativeCount };
 }
 const SKILL_CHART_METRICS = [
@@ -9096,6 +9214,7 @@ function getSkillIdFromHeader(th) {
   if (!th || !th.classList) return null;
   if (th.classList.contains("skill-serve")) return "serve";
   if (th.classList.contains("skill-pass")) return "pass";
+  if (th.classList.contains("skill-freeball")) return "freeball";
   if (th.classList.contains("skill-attack")) return "attack";
   if (th.classList.contains("skill-block")) return "block";
   if (th.classList.contains("skill-defense")) return "defense";
@@ -9244,6 +9363,7 @@ function renderAggSummaryHeader(thead, setNumbers, options = {}) {
   addCell(rowTop, "Punti", { colspan: includeOpponentErrors ? 5 : 4 });
   addCell(rowTop, "Battuta", { colspan: 5, className: "skill-col skill-serve" });
   addCell(rowTop, "Ricezione", { colspan: 6, className: "skill-col skill-pass" });
+  addCell(rowTop, "Freeball", { colspan: 5, className: "skill-col skill-freeball" });
   addCell(rowTop, "Attacco", { colspan: 6, className: "skill-col skill-attack" });
   addCell(rowTop, "Muro", { colspan: 2, className: "skill-col skill-block" });
   addCell(rowTop, "Difesa", { colspan: 3, className: "skill-col skill-defense" });
@@ -9268,6 +9388,12 @@ function renderAggSummaryHeader(thead, setNumbers, options = {}) {
   addCell(rowBottom, "Pos", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Prf", { className: "skill-col skill-pass" });
   addCell(rowBottom, "Eff", { className: "skill-col skill-pass" });
+
+  addCell(rowBottom, "Tot", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Err", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Pos", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Prf", { className: "skill-col skill-freeball" });
+  addCell(rowBottom, "Eff", { className: "skill-col skill-freeball" });
 
   addCell(rowBottom, "Tot", { className: "skill-col skill-attack" });
   addCell(rowBottom, "Err", { className: "skill-col skill-attack" });
@@ -9555,7 +9681,7 @@ function renderAggPlayerDetailTable(summaryAll) {
     renderServeTrajectoryAnalysis();
     return;
   }
-  const skillOrder = ["serve", "pass", "attack", "block", "defense"];
+  const skillOrder = ["serve", "pass", "freeball", "attack", "block", "defense"];
   skillOrder.forEach(skillId => {
     const counts = getAggSkillCounts(skillId, playerIdx);
     const metrics = computeMetrics(counts, skillId);
@@ -9777,7 +9903,7 @@ function renderPlayerAnalysisTable() {
   if (idx === null || !players || !players[idx]) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 26;
+    td.colSpan = 32;
     td.textContent = "Seleziona una giocatrice per vedere il tabellino.";
     tr.appendChild(td);
     elPlayerAnalysisBody.appendChild(tr);
@@ -9790,11 +9916,13 @@ function renderPlayerAnalysisTable() {
     const name = players[playerIdx];
     const serveCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].serve);
     const passCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].pass);
+    const freeballCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].freeball);
     const attackCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].attack);
     const blockCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].block);
     const defenseCounts = normalizeCounts(statsByPlayer[playerIdx] && statsByPlayer[playerIdx].defense);
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
+    const freeballMetrics = computeMetrics(freeballCounts, "freeball");
     const attackMetrics = computeMetrics(attackCounts, "attack");
     const defenseMetrics = computeMetrics(defenseCounts, "defense");
     const points = playerPoints[playerIdx] || { for: 0, against: 0 };
@@ -9847,6 +9975,16 @@ function renderPlayerAnalysisTable() {
           ]
         },
         {
+          title: "Freeball",
+          entries: [
+            { label: "Tot", text: String(totalFromCounts(freeballCounts)), value: totalFromCounts(freeballCounts), better: "neutral" },
+            { label: "Err", text: String(freeballMetrics.negativeCount || 0), value: freeballMetrics.negativeCount || 0, better: "lower" },
+            { label: "Pos", text: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos), value: freeballMetrics.pos, better: "higher" },
+            { label: "Prf", text: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf), value: freeballMetrics.prf, better: "higher" },
+            { label: "Eff", text: freeballMetrics.eff === null ? "-" : formatPercent(freeballMetrics.eff), value: freeballMetrics.eff, better: "higher" }
+          ]
+        },
+        {
           title: "Attacco",
           entries: [
             { label: "Tot", text: String(attackTotal), value: attackTotal, better: "neutral" },
@@ -9892,9 +10030,10 @@ function renderPlayerAnalysisTable() {
       .concat(flattenedEntries.slice(0, 4).map(entry => ({ text: entry.text })))
       .concat(flattenedEntries.slice(4, 9).map(entry => ({ text: entry.text, className: "skill-col skill-serve" })))
       .concat(flattenedEntries.slice(9, 15).map(entry => ({ text: entry.text, className: "skill-col skill-pass" })))
-      .concat(flattenedEntries.slice(15, 21).map(entry => ({ text: entry.text, className: "skill-col skill-attack" })))
-      .concat(flattenedEntries.slice(21, 23).map(entry => ({ text: entry.text, className: "skill-col skill-block" })))
-      .concat(flattenedEntries.slice(23).map(entry => ({ text: entry.text, className: "skill-col skill-defense" })));
+      .concat(flattenedEntries.slice(15, 20).map(entry => ({ text: entry.text, className: "skill-col skill-freeball" })))
+      .concat(flattenedEntries.slice(20, 26).map(entry => ({ text: entry.text, className: "skill-col skill-attack" })))
+      .concat(flattenedEntries.slice(26, 28).map(entry => ({ text: entry.text, className: "skill-col skill-block" })))
+      .concat(flattenedEntries.slice(28).map(entry => ({ text: entry.text, className: "skill-col skill-defense" })));
     cells.forEach(cell => {
       const td = document.createElement("td");
       td.textContent = cell.text;
@@ -9999,6 +10138,7 @@ function renderPlayerAnalysisTable() {
         Punti: "skill-points",
         Battuta: "skill-serve",
         Ricezione: "skill-pass",
+        Freeball: "skill-freeball",
         Attacco: "skill-attack",
         Muro: "skill-block",
         Difesa: "skill-defense"
@@ -10186,12 +10326,16 @@ function emptyCounts() {
   return { "#": 0, "+": 0, "!": 0, "-": 0, "=": 0, "/": 0 };
 }
 function totalFromCounts(counts) {
-  return RESULT_CODES.reduce((sum, code) => sum + (counts[code] || 0), 0);
+  const safeCounts = normalizeCounts(counts);
+  return RESULT_CODES.reduce((sum, code) => sum + (safeCounts[code] || 0), 0);
 }
 function mergeCounts(target, source) {
+  const safeTarget = target || emptyCounts();
+  const safeSource = normalizeCounts(source);
   RESULT_CODES.forEach(code => {
-    target[code] = (target[code] || 0) + (source[code] || 0);
+    safeTarget[code] = (safeTarget[code] || 0) + (safeSource[code] || 0);
   });
+  return safeTarget;
 }
 function getCurrentZoneForPlayer(playerIdx, forSkillId = null, scope = "our") {
   const players = getPlayersForScope(scope);
@@ -10966,6 +11110,7 @@ function renderEventsLog(options = {}) {
     if (elEventsLogSummary) elEventsLogSummary.textContent = summaryText;
     if (elUndoLastSummary) elUndoLastSummary.textContent = "—";
     lastLogRenderedKey = null;
+    updateLiveDvwMirror();
     return;
   }
   const recent = state.events.slice(-40).sort((a, b) => {
@@ -11091,6 +11236,7 @@ function renderEventsLog(options = {}) {
   }
   updateTeamCounters();
   renderLogServeTrajectories();
+  updateLiveDvwMirror();
 }
 function getTimeoutCountForSet(setNum) {
   const set = Number(setNum) || 1;
@@ -12020,11 +12166,15 @@ function syncEventPlayerLink(ev) {
   if (!ev) return;
   const scope = getTeamScopeFromEvent(ev);
   const players = getPlayersForScope(scope);
-  if (!Array.isArray(players) || players.length === 0) return;
+  if (!Array.isArray(players) || players.length === 0) {
+    ensureEventDataVolleyFields(ev);
+    return;
+  }
   const idxById = getPlayerIndexForId(scope, ev.playerId);
   if (typeof idxById === "number" && players[idxById]) {
     ev.playerIdx = idxById;
     ev.playerName = players[idxById];
+    ensureEventDataVolleyFields(ev);
     return;
   }
   const rawName = ev.playerName != null ? String(ev.playerName).trim() : "";
@@ -12045,6 +12195,7 @@ function syncEventPlayerLink(ev) {
           ev.playerId = maps.nameToId.get(normalizePlayerKey(ev.playerName)) || null;
         }
       }
+      ensureEventDataVolleyFields(ev);
       return;
     }
   }
@@ -12057,6 +12208,7 @@ function syncEventPlayerLink(ev) {
       }
     }
   }
+  ensureEventDataVolleyFields(ev);
 }
 function syncEventPlayerLinks(events) {
   (events || []).forEach(syncEventPlayerLink);
@@ -19040,7 +19192,7 @@ function renderAggregatedTable() {
   const analysisEvents = getAnalysisEvents();
   const playedSets = getSummarySetNumbers();
   const includeOpponentErrorsCol = !state.useOpponentTeam;
-  const summaryColCount = 27 + (includeOpponentErrorsCol ? 1 : 0) + playedSets.length;
+  const summaryColCount = 32 + (includeOpponentErrorsCol ? 1 : 0) + playedSets.length;
   const showBothTeams =
     state.useOpponentTeam &&
     analysisTeamFilterState.teams.size === 0 &&
@@ -19072,6 +19224,7 @@ function renderAggregatedTable() {
     const totalsBySkill = {
       serve: emptyCounts(),
       pass: emptyCounts(),
+      freeball: emptyCounts(),
       attack: emptyCounts(),
       block: emptyCounts(),
       defense: emptyCounts()
@@ -19351,17 +19504,20 @@ function renderAggregatedTable() {
     sortedEntries.forEach(({ name, idx }) => {
       const serveCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].serve);
       const passCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].pass);
+      const freeballCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].freeball);
       const attackCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].attack);
       const blockCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].block);
       const defenseCounts = normalizeCounts(statsByPlayer[idx] && statsByPlayer[idx].defense);
 
       const serveMetrics = computeMetrics(serveCounts, "serve");
       const passMetrics = computeMetrics(passCounts, "pass");
+      const freeballMetrics = computeMetrics(freeballCounts, "freeball");
       const attackMetrics = computeMetrics(attackCounts, "attack");
       const defenseMetrics = computeMetrics(defenseCounts, "defense");
 
       mergeCounts(totalsBySkill.serve, serveCounts);
       mergeCounts(totalsBySkill.pass, passCounts);
+      mergeCounts(totalsBySkill.freeball, freeballCounts);
       mergeCounts(totalsBySkill.attack, attackCounts);
       mergeCounts(totalsBySkill.block, blockCounts);
       mergeCounts(totalsBySkill.defense, defenseCounts);
@@ -19418,6 +19574,12 @@ function renderAggregatedTable() {
         { text: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf), className: "skill-col skill-pass" },
         { text: passMetrics.eff === null ? "-" : formatPercent(passMetrics.eff), className: "skill-col skill-pass" },
 
+        { text: totalFromCounts(freeballCounts), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+        { text: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf), className: "skill-col skill-freeball" },
+        { text: freeballMetrics.eff === null ? "-" : formatPercent(freeballMetrics.eff), className: "skill-col skill-freeball" },
+
         { text: attackTotal, className: "skill-col skill-attack" },
         { text: attackCounts["="] || 0, className: "skill-col skill-attack" },
         { text: attackCounts["/"] || 0, className: "skill-col skill-attack" },
@@ -19460,6 +19622,7 @@ function renderAggregatedTable() {
     const teamOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(summaryEvents) : 0;
     const serveTotalsMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passTotalsMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const freeballTotalsMetrics = computeMetrics(totalsBySkill.freeball, "freeball");
     const attackTotalsMetrics = computeMetrics(totalsBySkill.attack, "attack");
     const blockTotalsMetrics = computeMetrics(totalsBySkill.block, "block");
     const defenseTotalsMetrics = computeMetrics(totalsBySkill.defense, "defense");
@@ -19492,6 +19655,12 @@ function renderAggregatedTable() {
       { text: passTotalsMetrics.prf === null ? "-" : formatPercent(passTotalsMetrics.prf), className: "skill-col skill-pass" },
       { text: passTotalsMetrics.eff === null ? "-" : formatPercent(passTotalsMetrics.eff), className: "skill-col skill-pass" },
 
+      { text: totalFromCounts(totalsBySkill.freeball), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.pos === null ? "-" : formatPercent(freeballTotalsMetrics.pos), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.prf === null ? "-" : formatPercent(freeballTotalsMetrics.prf), className: "skill-col skill-freeball" },
+      { text: freeballTotalsMetrics.eff === null ? "-" : formatPercent(freeballTotalsMetrics.eff), className: "skill-col skill-freeball" },
+
       { text: teamAttackTotal, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
       { text: totalsBySkill.attack["/"] || 0, className: "skill-col skill-attack" },
@@ -19519,6 +19688,7 @@ function renderAggregatedTable() {
       const setOpponentErrors = includeOpponentErrorsCol ? computeOpponentErrorsTotal(setEvents) : 0;
       const setServeMetrics = computeMetrics(setTotals.totalsBySkill.serve, "serve");
       const setPassMetrics = computeMetrics(setTotals.totalsBySkill.pass, "pass");
+      const setFreeballMetrics = computeMetrics(setTotals.totalsBySkill.freeball, "freeball");
       const setAttackMetrics = computeMetrics(setTotals.totalsBySkill.attack, "attack");
       const setDefenseMetrics = computeMetrics(setTotals.totalsBySkill.defense, "defense");
       const setAttackTotal = totalFromCounts(setTotals.totalsBySkill.attack);
@@ -19554,6 +19724,12 @@ function renderAggregatedTable() {
         { text: setPassMetrics.pos === null ? "-" : formatPercent(setPassMetrics.pos), className: "skill-col skill-pass" },
         { text: setPassMetrics.prf === null ? "-" : formatPercent(setPassMetrics.prf), className: "skill-col skill-pass" },
         { text: setPassMetrics.eff === null ? "-" : formatPercent(setPassMetrics.eff), className: "skill-col skill-pass" },
+
+        { text: totalFromCounts(setTotals.totalsBySkill.freeball), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.negativeCount || 0, className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.pos === null ? "-" : formatPercent(setFreeballMetrics.pos), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.prf === null ? "-" : formatPercent(setFreeballMetrics.prf), className: "skill-col skill-freeball" },
+        { text: setFreeballMetrics.eff === null ? "-" : formatPercent(setFreeballMetrics.eff), className: "skill-col skill-freeball" },
 
         { text: setAttackTotal, className: "skill-col skill-attack" },
         { text: setTotals.totalsBySkill.attack["="] || 0, className: "skill-col skill-attack" },
@@ -20463,6 +20639,984 @@ async function exportMatchToFile() {
   const blob = new Blob([json], { type: "application/json" });
   downloadBlob(blob, "match_" + opponentSlug + ".json");
 }
+function padDv(value, size = 2) {
+  const num = parseInt(value, 10);
+  if (!Number.isFinite(num)) return String(value || "").padStart(size, "0").slice(-size);
+  return String(Math.max(0, num)).padStart(size, "0").slice(-size);
+}
+const DEFAULT_DVW_ATTACK_COMBINATIONS = [
+  "V5;4;R;H;High set in 4;;255;4912;F;;",
+  "V6;2;L;H;High set in 2;;255;4988;B;;",
+  "V8;9;C;H;High set in 1;;255;4186;B;1;",
+  "VV;7;R;H;Emerg 4 high;;0;3627;F;;",
+  "X1;3;R;Q;Quick;;16711680;4956;C;;",
+  "X5;4;R;T;Shoot in 4;;16711680;4912;F;;",
+  "X6;2;L;T;Shoot in 2;;16711680;4988;B;;",
+  "XP;8;C;M;Pipe;;16711680;4150;P;1;",
+  "PR;3;C;O;Attack on opponent freeball;;255;4949;-;;",
+  "PP;3;L;O;Setter tip;;16711680;4964;S;;",
+  "CF;2;L;N;Slide close to setter;;16711680;4976;C;;",
+  "CD;2;L;N;Slide away from setter;;16711680;4986;C;;",
+  "CB;2;L;N;Slide next to setter;;16711680;4970;C;;"
+];
+const DEFAULT_DVW_SETTER_CALLS = [
+  "K1;;Front Quick;;16711680;3949;4454;4958;;;",
+  "K2;;Back Quick;;16711680;3864;4278;4974;;;",
+  "K7;;Seven;;16711680;3923;4426;4930;;;",
+  "KC;;Quick in 3;;16711680;3849;4449;5049;;;",
+  "KM;;shifted to 2;;16711680;0000;0000;0000;4924,5524,5530,6332,6312,5012,5024,;12632256;",
+  "KP;;Shifted to 4;;16711680;0000;0000;0000;5457,5057,5557,5552,6352,6364,5377,5077,5058,5058,;12632256;",
+  "KE;;No First Tempo;;0;0000;0000;0000;5858,5826,6426,6458,6458,;12632256;"
+];
+const DEFAULT_DVW_WINNING_SYMBOLS = ["=~~~#~~~=~~~~~~~=/~~#~~~=/~~#~~~=~~~~~~~=~~~~~~~=~~~~~~~"];
+function sanitizeDvField(value) {
+  return String(value || "")
+    .replace(/[;\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function getStoredDvwSectionLines(sectionKey, fallback = []) {
+  const raw = state && state.match ? state.match[sectionKey] : null;
+  if (!Array.isArray(raw)) return fallback.slice();
+  return raw.map(line => String(line || "").trimEnd()).filter(Boolean);
+}
+function buildDvTeamCode(name = "", fallback = "TM") {
+  const cleaned = sanitizeDvField(name).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (cleaned) return cleaned.slice(0, 4);
+  return fallback;
+}
+function splitDvName(name = "") {
+  const cleaned = sanitizeDvField(name);
+  if (!cleaned) return { lastName: "", firstName: "" };
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { lastName: cleaned.toUpperCase(), firstName: "" };
+  return {
+    lastName: parts.slice(0, -1).join(" ").toUpperCase(),
+    firstName: parts.slice(-1).join(" ").toUpperCase()
+  };
+}
+function formatDvDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return sanitizeDvField(value);
+  const mm = padDv(date.getMonth() + 1);
+  const dd = padDv(date.getDate());
+  const yyyy = date.getFullYear();
+  return `${mm}/${dd}/${yyyy}`;
+}
+function formatDvDateTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return formatDvDate(new Date()) + " 00.00.00";
+  return (
+    `${padDv(date.getMonth() + 1)}/${padDv(date.getDate())}/${date.getFullYear()} ` +
+    `${padDv(date.getHours())}.${padDv(date.getMinutes())}.${padDv(date.getSeconds())}`
+  );
+}
+function formatDvRowTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${padDv(date.getHours())}.${padDv(date.getMinutes())}.${padDv(date.getSeconds())}`;
+}
+function getDataVolleyTeamPayload(scope = "our") {
+  if (scope === "opponent" && typeof getCurrentOpponentPayload === "function") {
+    return getCurrentOpponentPayload();
+  }
+  if (scope !== "opponent" && typeof getCurrentTeamPayload === "function") {
+    return getCurrentTeamPayload();
+  }
+  const players = scope === "opponent" ? state.opponentPlayers || [] : state.players || [];
+  const numbers = scope === "opponent" ? state.opponentPlayerNumbers || {} : state.playerNumbers || {};
+  const liberos = scope === "opponent" ? state.opponentLiberos || [] : state.liberos || [];
+  const captains = scope === "opponent" ? state.opponentCaptains || [] : state.captains || [];
+  return {
+    name: getTeamNameForScope(scope),
+    officialCode: "",
+    officialId: "",
+    staff: Object.assign({}, DEFAULT_STAFF),
+    playersDetailed: players.map((name, idx) => ({
+      id: typeof generatePlayerId === "function" ? generatePlayerId() : `p-${scope}-${idx + 1}`,
+      name,
+      codeOfficial: "",
+      number: numbers[name] || "",
+      role: liberos.includes(name) ? "L" : "",
+      isCaptain: captains.includes(name),
+      out: false
+    }))
+  };
+}
+function getDvPlayerNumber(player, fallbackIndex = 0) {
+  const raw =
+    player && player.number !== undefined && player.number !== null && String(player.number).trim() !== ""
+      ? String(player.number).trim()
+      : String(fallbackIndex + 1);
+  return padDv(raw, 2);
+}
+function getDvEventPlayerNumber(scope, playerIdx, playerName, teamPayload = null) {
+  const numbers = typeof getPlayerNumbersForScope === "function" ? getPlayerNumbersForScope(scope) || {} : {};
+  const players = typeof getPlayersForScope === "function" ? getPlayersForScope(scope) || [] : [];
+  const name =
+    String(playerName || "").trim() ||
+    (typeof playerIdx === "number" && players[playerIdx] ? String(players[playerIdx]).trim() : "");
+  if (name && numbers[name] !== undefined && numbers[name] !== null && String(numbers[name]).trim() !== "") {
+    return padDv(numbers[name], 2);
+  }
+  const detailed = (teamPayload && teamPayload.playersDetailed) || [];
+  const player = detailed.find(item => item && item.name === name);
+  if (player) return getDvPlayerNumber(player, typeof playerIdx === "number" ? playerIdx : 0);
+  if (typeof playerIdx === "number") return padDv(playerIdx + 1, 2);
+  return "00";
+}
+function buildDvPlayerCode(teamCode, player, fallbackIndex = 0) {
+  const official = sanitizeDvField(player && player.codeOfficial);
+  if (official) return official.toUpperCase();
+  return `${teamCode}${getDvPlayerNumber(player, fallbackIndex)}`;
+}
+function buildDvSetParticipationMap(teamPayload, setNumbers, scope = "our") {
+  const playerStates = new Map();
+  const players = (teamPayload && teamPayload.playersDetailed) || [];
+  players.forEach((player, idx) => {
+    playerStates.set(player.name, {
+      player,
+      index: idx,
+      perSet: {}
+    });
+  });
+  (setNumbers || []).forEach(setNum => {
+    const startEntry = getSetStartEntryForScope(setNum, scope);
+    const startCourt = startEntry && Array.isArray(startEntry.court) ? startEntry.court : [];
+    startCourt.forEach((slot, idx) => {
+      const name = typeof slot === "string" ? slot : slot && typeof slot === "object" ? slot.main || "" : "";
+      if (!name || !playerStates.has(name)) return;
+      playerStates.get(name).perSet[setNum] = String(idx + 1);
+    });
+  });
+  (state.events || []).forEach(ev => {
+    if (!ev || ev.actionType !== "substitution") return;
+    if (getTeamScopeFromEvent(ev) !== scope) return;
+    const setNum = parseInt(ev.set, 10) || 1;
+    const playerIn = (ev.playerIn || "").trim();
+    if (!playerIn || !playerStates.has(playerIn)) return;
+    if (!playerStates.get(playerIn).perSet[setNum]) {
+      playerStates.get(playerIn).perSet[setNum] = "*";
+    }
+  });
+  return playerStates;
+}
+function cloneDvCourt(entry) {
+  return ensureCourtShapeFor(entry || []).map(slot => ({
+    main: (slot && slot.main) || "",
+    replaced: (slot && slot.replaced) || ""
+  }));
+}
+function rotateDvCourt(court, direction) {
+  const base = cloneDvCourt(court);
+  if (direction === "cw") {
+    return [base[5], base[0], base[1], base[2], base[3], base[4]];
+  }
+  return [base[1], base[2], base[3], base[4], base[5], base[0]];
+}
+function applyDvSubstitution(court, playerIn, playerOut) {
+  const nextCourt = cloneDvCourt(court);
+  const inName = String(playerIn || "").trim();
+  const outName = String(playerOut || "").trim();
+  if (!inName || !outName) return nextCourt;
+  const outIdx = nextCourt.findIndex(slot => slot && slot.main === outName);
+  const inIdx = nextCourt.findIndex(slot => slot && slot.main === inName);
+  if (outIdx >= 0 && inIdx >= 0) {
+    const tmp = nextCourt[inIdx].main;
+    nextCourt[inIdx].main = nextCourt[outIdx].main;
+    nextCourt[outIdx].main = tmp;
+    return nextCourt;
+  }
+  if (outIdx >= 0) {
+    nextCourt[outIdx].main = inName;
+  }
+  return nextCourt;
+}
+function getDvSetterPosition(rotation = 1) {
+  for (let pos = 1; pos <= 6; pos += 1) {
+    if (typeof getRoleLabelForRotation === "function" && String(getRoleLabelForRotation(pos, rotation)).toUpperCase() === "P") {
+      return pos;
+    }
+  }
+  return 1;
+}
+function getDvSetterNumber(court, teamPayload, rotation) {
+  const setterPos = getDvSetterPosition(rotation);
+  const slot = ensureCourtShapeFor(court || [])[setterPos - 1];
+  const name = slot && slot.main ? slot.main : "";
+  const players = (teamPayload && teamPayload.playersDetailed) || [];
+  const player = players.find(item => item && item.name === name);
+  return getDvPlayerNumber(player || { number: "" }, setterPos);
+}
+function getDvLineupNumbers(court, teamPayload) {
+  const players = (teamPayload && teamPayload.playersDetailed) || [];
+  return ensureCourtShapeFor(court || []).map((slot, idx) => {
+    const name = slot && slot.main ? slot.main : "";
+    const player = players.find(item => item && item.name === name);
+    return getDvPlayerNumber(player || { number: "" }, idx);
+  });
+}
+function buildDvRow(code, options = {}) {
+  const {
+    setNum = 1,
+    time = "",
+    ourRotation = 1,
+    opponentRotation = 1,
+    ourCourt = [],
+    opponentCourt = [],
+    ourTeam = null,
+    opponentTeam = null,
+    flags = []
+  } = options;
+  const normalizedFlags = Array.from({ length: 7 }, (_, idx) => sanitizeDvField(flags[idx] || ""));
+  return [
+    sanitizeDvField(code),
+    ...normalizedFlags,
+    sanitizeDvField(time),
+    String(setNum || 1),
+    String(getDvSetterPosition(ourRotation)),
+    String(getDvSetterPosition(opponentRotation)),
+    "",
+    "",
+    "",
+    ...getDvLineupNumbers(ourCourt, ourTeam),
+    ...getDvLineupNumbers(opponentCourt, opponentTeam),
+    ""
+  ].join(";");
+}
+function mapOurSetTypeToDvType(value, fallback = "H") {
+  const normalized = normalizeSetTypeValue ? normalizeSetTypeValue(value) : String(value || "").trim().toLowerCase();
+  switch (normalized) {
+    case "mezza":
+      return "M";
+    case "super":
+      return "U";
+    case "quick":
+      return "Q";
+    case "veloce":
+    case "fast":
+      return "N";
+    case "alta":
+      return "H";
+    case "damp":
+      return "O";
+    default:
+      return fallback;
+  }
+}
+function mapServeTypeToDvType(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "F") return "H";
+  if (normalized === "S") return "Q";
+  return "M";
+}
+function getDvEvaluationCode(ev) {
+  const code = String((ev && ev.code) || "").trim();
+  if (RESULT_CODES.includes(code)) return code;
+  if (code === "for" || code === "opp-error") return "#";
+  if (code === "opp-point" || code === "error" || code === "team-error") return "=";
+  return "#";
+}
+function computeDataVolleyEventSignature(ev, teamPayload = null) {
+  if (!ev) return "";
+  const scope = getTeamScopeFromEvent(ev);
+  const skillMap = {
+    serve: "S",
+    pass: "R",
+    attack: "A",
+    block: "B",
+    defense: "D",
+    second: "E",
+    freeball: "F"
+  };
+  const skill = skillMap[ev.skillId] || "";
+  const playerNumber = ev.playerNumberAtEvent
+    ? padDv(ev.playerNumberAtEvent, 2)
+    : getDvEventPlayerNumber(scope, ev.playerIdx, ev.playerName, teamPayload);
+  let type = sanitizeDvField(ev.dv && ev.dv.skillType).toUpperCase();
+  if (!type) {
+    if (ev.skillId === "serve" || ev.skillId === "pass") {
+      type = mapServeTypeToDvType(ev.serveType);
+    } else if (ev.skillId === "freeball") {
+      type = "O";
+    } else if (ev.skillId === "attack" || ev.skillId === "second") {
+      type = mapOurSetTypeToDvType(ev.setType, ev.skillId === "second" ? "H" : "H");
+    } else {
+      type = "H";
+    }
+  }
+  return JSON.stringify({
+    team: ev.team === "opponent" ? "a" : "*",
+    playerNumber,
+    skill,
+    type,
+    evaluation: getDvEvaluationCode(ev),
+    attackCode: sanitizeDvField((ev.dv && ev.dv.attackCode) || ev.attackType || (ev.combination && (ev.combination.code || ev.combination.attackCode)) || ""),
+    setCode: sanitizeDvField((ev.dv && ev.dv.setCode) || ev.base || (ev.combination && ev.combination.code) || ""),
+    skillSubtype: sanitizeDvField(ev.dv && ev.dv.skillSubtype),
+    specialCode: sanitizeDvField(ev.dv && ev.dv.specialCode),
+    startZone: sanitizeDvField(ev.dv && ev.dv.startZone),
+    endZone: sanitizeDvField(ev.dv && ev.dv.endZone),
+    endSubzone: sanitizeDvField(ev.dv && ev.dv.endSubzone),
+    endCone: sanitizeDvField(ev.dv && ev.dv.endCone),
+    numPlayersNumeric:
+      ev && ev.dv && Number.isFinite(ev.dv.numPlayersNumeric)
+        ? ev.dv.numPlayersNumeric
+        : Number.isFinite(parseInt(ev.blockNumber, 10))
+          ? parseInt(ev.blockNumber, 10)
+          : null,
+    serveType: sanitizeDvField(ev.serveType)
+  });
+}
+function sanitizeDvZoneChar(value) {
+  const raw = sanitizeDvField(value).toUpperCase();
+  if (!raw) return "";
+  const char = raw.charAt(0);
+  return /[0-9A-Z]/.test(char) ? char : "";
+}
+function buildDataVolleyZoneTail(ev, skill) {
+  if (!ev || !skill) return "";
+  const meta = ev.dv && typeof ev.dv === "object" ? ev.dv : {};
+  const startZoneAttack = sanitizeDvZoneChar(meta.startZone || ev.attackStartZone || ev.originZone || ev.zone);
+  const startZoneGeneral = sanitizeDvZoneChar(meta.startZone || ev.originZone || ev.zone);
+  const endZone = sanitizeDvZoneChar(meta.endZone || ev.attackEndZone);
+  const endSubzone = sanitizeDvZoneChar(meta.endSubzone);
+
+  if (skill === "A") {
+    if (!startZoneAttack && !endZone && !endSubzone) return "";
+    if (startZoneAttack && !endZone && !endSubzone) {
+      return `~${startZoneAttack}~`;
+    }
+    return `~${startZoneAttack || ""}${endZone || ""}${endSubzone || ""}`;
+  }
+  if (skill === "E") {
+    const inline = sanitizeDvField(meta.skillSubtype).toUpperCase();
+    if (!endZone && !endSubzone) return "";
+    return `${inline ? "~" : "~~"}${endZone || ""}${endSubzone || ""}`;
+  }
+  if (skill === "S" || skill === "R" || skill === "D" || skill === "F") {
+    if (startZoneGeneral) {
+      return `~~~${startZoneGeneral}${endZone || ""}${endSubzone || ""}`;
+    }
+    if (endZone || endSubzone) {
+      return `~~~~${endZone || ""}${endSubzone || ""}`;
+    }
+    return "";
+  }
+  if (skill === "B") {
+    if (!endZone) return "";
+    return `~~~~${endZone}`;
+  }
+  return "";
+}
+function parseDvwZoneMeta(zonePair) {
+  const rawStart = String((zonePair && zonePair.startZone) || "").toUpperCase();
+  const rawEnd = String((zonePair && zonePair.endZone) || "").toUpperCase();
+  const startZone = /^\d$/.test(rawStart) ? rawStart : "";
+  const endZone = /^\d$/.test(rawEnd) ? rawEnd : "";
+  const endSubzone = !endZone && /^[A-Z]$/.test(rawEnd) ? rawEnd : "";
+  return {
+    startZone,
+    endZone,
+    endSubzone,
+    endCone: ""
+  };
+}
+function parseDvwSuffixMeta(skillLetter, inlineCode = "", suffix = "") {
+  const skill = String(skillLetter || "").toUpperCase();
+  const inline = String(inlineCode || "").trim().toUpperCase();
+  const rawSuffix = String(suffix || "").trim().toUpperCase();
+  const cleanedSuffix = rawSuffix.replace(/^~+/, "");
+  const base = {
+    skillSubtype: "",
+    specialCode: "",
+    numPlayersNumeric: null
+  };
+  if (skill === "A") {
+    const match = cleanedSuffix.match(/^([A-Z])(\d*)(.*)$/);
+    if (match) {
+      return {
+        skillSubtype: match[1] || "",
+        numPlayersNumeric: match[2] !== "" ? parseInt(match[2], 10) : null,
+        specialCode: match[3] || ""
+      };
+    }
+    return {
+      skillSubtype: cleanedSuffix ? cleanedSuffix.charAt(0) : "",
+      specialCode: cleanedSuffix ? cleanedSuffix.slice(1) : "",
+      numPlayersNumeric: null
+    };
+  }
+  if (skill === "B") {
+    const match = cleanedSuffix.match(/^(\d*)(.*)$/);
+    if (match) {
+      return {
+        skillSubtype: "",
+        numPlayersNumeric: match[1] !== "" ? parseInt(match[1], 10) : null,
+        specialCode: match[2] || ""
+      };
+    }
+    return {
+      skillSubtype: "",
+      numPlayersNumeric: null,
+      specialCode: cleanedSuffix
+    };
+  }
+  if (skill === "E") {
+    return {
+      skillSubtype: inline || "",
+      specialCode: cleanedSuffix,
+      numPlayersNumeric: null
+    };
+  }
+  if (skill === "R") {
+    if (/^~~/.test(rawSuffix)) {
+      return Object.assign({}, base, {
+        specialCode: cleanedSuffix
+      });
+    }
+    if (/^[A-Z]/.test(cleanedSuffix)) {
+      return {
+        skillSubtype: cleanedSuffix.charAt(0),
+        specialCode: cleanedSuffix.slice(1),
+        numPlayersNumeric: null
+      };
+    }
+    return Object.assign({}, base, {
+      specialCode: cleanedSuffix
+    });
+  }
+  if (skill === "S" || skill === "D" || skill === "F") {
+    return Object.assign({}, base, {
+      specialCode: cleanedSuffix
+    });
+  }
+  return Object.assign({}, base, {
+    skillSubtype: inline || (cleanedSuffix ? cleanedSuffix.charAt(0) : ""),
+    specialCode: inline ? cleanedSuffix : cleanedSuffix.slice(1)
+  });
+}
+function buildDataVolleyPostZoneTail(ev, skill) {
+  if (!ev) return "";
+  const meta = ev.dv && typeof ev.dv === "object" ? ev.dv : {};
+  if (skill === "A") {
+    const subtype = sanitizeDvField(meta.skillSubtype).toUpperCase();
+    const rawNum = Number.isFinite(meta.numPlayersNumeric) ? meta.numPlayersNumeric : null;
+    const num = rawNum !== null ? String(Math.max(0, Math.min(9, rawNum))) : "";
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    const hasSubzone = Boolean(sanitizeDvZoneChar(meta.endSubzone));
+    return subtype || num || special ? `${hasSubzone ? "" : "~"}${subtype}${num}${special}` : "";
+  }
+  if (skill === "B") {
+    const rawNum = Number.isFinite(meta.numPlayersNumeric)
+      ? meta.numPlayersNumeric
+      : Number.isFinite(parseInt(ev.blockNumber, 10))
+        ? parseInt(ev.blockNumber, 10)
+        : null;
+    const num = rawNum !== null ? String(Math.max(0, Math.min(9, rawNum))) : "";
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    const hasZone = Boolean(buildDataVolleyZoneTail(ev, skill));
+    if (num || special) {
+      if (!num && special) {
+        if (hasZone) return `~~~${special}`;
+        return `~~~~~~~~~${special}`;
+      }
+      return hasZone ? `~~${num}${special}` : `~~~~~~~~${num}${special}`;
+    }
+    return "";
+  }
+  if (skill === "R") {
+    const subtype = sanitizeDvField(meta.skillSubtype).toUpperCase();
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    const hasSubzone = Boolean(sanitizeDvZoneChar(meta.endSubzone));
+    if (subtype) return `${hasSubzone ? "" : "~"}${subtype}${special}`;
+    if (special) return `~~${special}`;
+    return "";
+  }
+  if (skill === "E") {
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    if (!special) return "";
+    const hasZone = Boolean(buildDataVolleyZoneTail(ev, skill));
+    const hasSetLead = Boolean(sanitizeDvField(meta.setCode) || sanitizeDvField(meta.skillSubtype));
+    if (!hasZone && !hasSetLead && /^(U|I|0)$/.test(special)) {
+      return `~~~~~~~~${special}`;
+    }
+    return /^[0-9~]/.test(special) ? special : `~~${special}`;
+  }
+  if (skill === "S") {
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    if (!special) return "";
+    const hasZone = Boolean(buildDataVolleyZoneTail(ev, skill));
+    if (!hasZone) return `~~~~~~~~~${special}`;
+    return `~~${special}`;
+  }
+  if (skill === "D") {
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    if (!special) return "";
+    const hasZone = Boolean(buildDataVolleyZoneTail(ev, skill));
+    const hasSubzone = Boolean(sanitizeDvZoneChar(meta.endSubzone));
+    return hasZone ? `${hasSubzone ? "" : "~"}${special}` : `~~~~~~${special}`;
+  }
+  if (skill === "F") {
+    const special = sanitizeDvField(meta.specialCode).toUpperCase();
+    if (!special) return "";
+    const hasZone = Boolean(buildDataVolleyZoneTail(ev, skill));
+    const hasSubzone = Boolean(sanitizeDvZoneChar(meta.endSubzone));
+    return hasZone ? `${hasSubzone ? "" : "~"}${special}` : `~~~~~~~~${special}`;
+  }
+  return sanitizeDvField(meta.specialCode).toUpperCase();
+}
+function buildDataVolleySkillCode(ev, teamPayload) {
+  if (!ev) return "";
+  if (ev.dv && ev.dv.rawCode) {
+    const currentSignature = computeDataVolleyEventSignature(ev, teamPayload);
+    if (currentSignature && currentSignature === (ev.dv.rawCodeSignature || "")) {
+      return ev.dv.rawCode;
+    }
+  }
+  const scope = getTeamScopeFromEvent(ev);
+  if (ev.actionType === "timeout") {
+    return `${ev.team === "opponent" ? "a" : "*"}T`;
+  }
+  if (ev.actionType === "substitution") {
+    const playerInNumber = getDvEventPlayerNumber(scope, null, ev.playerIn, teamPayload);
+    const playerOutNumber = getDvEventPlayerNumber(scope, null, ev.playerOut, teamPayload);
+    return `${ev.team === "opponent" ? "a" : "*"}c${playerInNumber}:${playerOutNumber}`;
+  }
+  if (ev.skillId === "manual") return "";
+  const prefix = ev.team === "opponent" ? "a" : "*";
+  const skillMap = {
+    serve: "S",
+    pass: "R",
+    attack: "A",
+    block: "B",
+    defense: "D",
+    second: "E",
+    freeball: "F"
+  };
+  const skill = skillMap[ev.skillId] || "A";
+  const playerNumber = ev.playerNumberAtEvent
+    ? padDv(ev.playerNumberAtEvent, 2)
+    : getDvEventPlayerNumber(scope, ev.playerIdx, ev.playerName, teamPayload);
+  let type = sanitizeDvField(ev.dv && ev.dv.skillType).toUpperCase();
+  if (!type) {
+    if (ev.skillId === "serve" || ev.skillId === "pass") {
+      type = mapServeTypeToDvType(ev.serveType);
+    } else if (ev.skillId === "freeball") {
+      type = "O";
+    } else if (ev.skillId === "attack" || ev.skillId === "second") {
+      type = mapOurSetTypeToDvType(ev.setType, ev.skillId === "second" ? "H" : "H");
+    } else if (ev.skillId === "block" || ev.skillId === "defense") {
+      type = "H";
+    } else {
+      type = "H";
+    }
+  }
+  const evaluation = getDvEvaluationCode(ev);
+  let tail = "";
+  if (skill === "E") {
+    const setCode = sanitizeDvField((ev.dv && ev.dv.setCode) || ev.base || (ev.combination && ev.combination.code) || "");
+    if (setCode) tail += setCode.toUpperCase();
+    if (ev.dv && ev.dv.skillSubtype) {
+      tail += sanitizeDvField(ev.dv.skillSubtype).toUpperCase();
+    }
+  }
+  if (skill === "A") {
+    const attackCode = sanitizeDvField(
+      (ev.dv && ev.dv.attackCode) ||
+      ev.attackType ||
+      (ev.combination && (ev.combination.code || ev.combination.attackCode)) ||
+      ""
+    );
+    if (attackCode) tail += attackCode.toUpperCase();
+  }
+  tail += buildDataVolleyZoneTail(ev, skill);
+  tail += buildDataVolleyPostZoneTail(ev, skill);
+  return `${prefix}${playerNumber}${skill}${type}${evaluation}${tail}`;
+}
+function buildDataVolleyPointMarkerCode(ev, direction) {
+  if (!ev || !direction) return "";
+  const scoringScope = direction === "for" ? "our" : "opponent";
+  const eventScope = getTeamScopeFromEvent(ev);
+  const evalCode = getDvEvaluationCode(ev);
+  if (ev.skillId === "manual" || ev.actionType === "timeout" || ev.actionType === "substitution") {
+    return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
+  }
+  if (eventScope === scoringScope && evalCode === "#") {
+    return `${scoringScope === "opponent" ? "*" : "a"}$$&H=`;
+  }
+  if (eventScope !== scoringScope && evalCode === "=") {
+    return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
+  }
+  if (eventScope === scoringScope && (evalCode === "+" || evalCode === "!")) {
+    return `${scoringScope === "opponent" ? "*" : "a"}$$&H=`;
+  }
+  return `${scoringScope === "opponent" ? "a" : "*"}$$&H#`;
+}
+function buildDataVolleyScoutRows(events, ourTeam, opponentTeam, setNumbers) {
+  const lines = [];
+  const eventsBySet = new Map();
+  (setNumbers || []).forEach(setNum => eventsBySet.set(setNum, []));
+  (events || []).forEach(ev => {
+    const setNum = parseInt(ev && ev.set, 10) || 1;
+    if (!eventsBySet.has(setNum)) eventsBySet.set(setNum, []);
+    eventsBySet.get(setNum).push(ev);
+  });
+  const sortedSets = Array.from(eventsBySet.keys()).sort((a, b) => a - b);
+  sortedSets.forEach(setNum => {
+    const ourStart = getSetStartEntryForScope(setNum, "our") || getDefaultSetStartForScope("our") || { court: [], rotation: 1 };
+    const oppStart =
+      getSetStartEntryForScope(setNum, "opponent") || getDefaultSetStartForScope("opponent") || { court: [], rotation: 1 };
+    const setEntry = state.setStarts && state.setStarts[setNum] ? state.setStarts[setNum] : {};
+    const context = {
+      setNum,
+      ourCourt: cloneDvCourt(ourStart.court || []),
+      opponentCourt: cloneDvCourt(oppStart.court || []),
+      ourRotation: typeof ourStart.rotation === "number" ? ourStart.rotation : 1,
+      opponentRotation: typeof oppStart.rotation === "number" ? oppStart.rotation : 1,
+      scoreOur: 0,
+      scoreOpp: 0
+    };
+    lines.push(
+      buildDvRow(`*P${getDvSetterNumber(context.ourCourt, ourTeam, context.ourRotation)}>LUp`, {
+        setNum,
+        ourRotation: context.ourRotation,
+        opponentRotation: context.opponentRotation,
+        ourCourt: context.ourCourt,
+        opponentCourt: context.opponentCourt,
+        ourTeam,
+        opponentTeam
+      })
+    );
+    lines.push(
+      buildDvRow(`*z${context.ourRotation}>LUp`, {
+        setNum,
+        ourRotation: context.ourRotation,
+        opponentRotation: context.opponentRotation,
+        ourCourt: context.ourCourt,
+        opponentCourt: context.opponentCourt,
+        ourTeam,
+        opponentTeam
+      })
+    );
+    lines.push(
+      buildDvRow(`aP${getDvSetterNumber(context.opponentCourt, opponentTeam, context.opponentRotation)}>LUp`, {
+        setNum,
+        ourRotation: context.ourRotation,
+        opponentRotation: context.opponentRotation,
+        ourCourt: context.ourCourt,
+        opponentCourt: context.opponentCourt,
+        ourTeam,
+        opponentTeam
+      })
+    );
+    lines.push(
+      buildDvRow(`az${context.opponentRotation}>LUp`, {
+        setNum,
+        ourRotation: context.ourRotation,
+        opponentRotation: context.opponentRotation,
+        ourCourt: context.ourCourt,
+        opponentCourt: context.opponentCourt,
+        ourTeam,
+        opponentTeam
+      })
+    );
+    (eventsBySet.get(setNum) || []).forEach(ev => {
+      if (!ev) return;
+      if (ev.actionType === "set-change" || ev.actionType === "match-end") return;
+      const code = buildDataVolleySkillCode(ev, ev.team === "opponent" ? opponentTeam : ourTeam);
+      const time = formatDvRowTime(ev.t);
+      if (code) {
+        lines.push(
+          buildDvRow(code, {
+            setNum,
+            time,
+            ourRotation: context.ourRotation,
+            opponentRotation: context.opponentRotation,
+            ourCourt: context.ourCourt,
+            opponentCourt: context.opponentCourt,
+            ourTeam,
+            opponentTeam
+          })
+        );
+      }
+      if (ev.actionType === "substitution") {
+        if (getTeamScopeFromEvent(ev) === "opponent") {
+          context.opponentCourt = applyDvSubstitution(context.opponentCourt, ev.playerIn, ev.playerOut);
+        } else {
+          context.ourCourt = applyDvSubstitution(context.ourCourt, ev.playerIn, ev.playerOut);
+        }
+      }
+      const direction = getPointDirection(ev);
+      if (direction) {
+        const scoringScope = direction === "for" ? "our" : "opponent";
+        const markerCode = buildDataVolleyPointMarkerCode(ev, direction);
+        if (markerCode) {
+          lines.push(
+            buildDvRow(markerCode, {
+              setNum,
+              time,
+              ourRotation: context.ourRotation,
+              opponentRotation: context.opponentRotation,
+              ourCourt: context.ourCourt,
+              opponentCourt: context.opponentCourt,
+              ourTeam,
+              opponentTeam
+            })
+          );
+        }
+        if (direction === "for") {
+          context.scoreOur += typeof ev.value === "number" ? ev.value : 1;
+        } else {
+          context.scoreOpp += typeof ev.value === "number" ? ev.value : 1;
+        }
+        lines.push(
+          buildDvRow(
+            `${direction === "for" ? "*" : "a"}p${padDv(context.scoreOur)}:${padDv(context.scoreOpp)}`,
+            {
+              setNum,
+              time,
+              ourRotation: context.ourRotation,
+              opponentRotation: context.opponentRotation,
+              ourCourt: context.ourCourt,
+              opponentCourt: context.opponentCourt,
+              ourTeam,
+              opponentTeam
+            }
+          )
+        );
+      }
+      if (ev.autoRotationDirection && ev.autoRotationScope) {
+        if (ev.autoRotationScope === "opponent") {
+          context.opponentCourt = rotateDvCourt(context.opponentCourt, ev.autoRotationDirection);
+          context.opponentRotation = ev.autoRotationDirection === "ccw"
+            ? (context.opponentRotation === 1 ? 6 : context.opponentRotation - 1)
+            : ((context.opponentRotation % 6) || 0) + 1;
+          lines.push(
+            buildDvRow(`az${context.opponentRotation}`, {
+              setNum,
+              time,
+              ourRotation: context.ourRotation,
+              opponentRotation: context.opponentRotation,
+              ourCourt: context.ourCourt,
+              opponentCourt: context.opponentCourt,
+              ourTeam,
+              opponentTeam
+            })
+          );
+        } else {
+          context.ourCourt = rotateDvCourt(context.ourCourt, ev.autoRotationDirection);
+          context.ourRotation = ev.autoRotationDirection === "ccw"
+            ? (context.ourRotation === 1 ? 6 : context.ourRotation - 1)
+            : ((context.ourRotation % 6) || 0) + 1;
+          lines.push(
+            buildDvRow(`*z${context.ourRotation}`, {
+              setNum,
+              time,
+              ourRotation: context.ourRotation,
+              opponentRotation: context.opponentRotation,
+              ourCourt: context.ourCourt,
+              opponentCourt: context.opponentCourt,
+              ourTeam,
+              opponentTeam
+            })
+          );
+        }
+      }
+    });
+    const winner = (state.setResults && state.setResults[setNum]) || null;
+    if (winner) {
+      lines.push(
+        buildDvRow(`**${setNum}set`, {
+          setNum,
+          ourRotation: context.ourRotation,
+          opponentRotation: context.opponentRotation,
+          ourCourt: context.ourCourt,
+          opponentCourt: context.opponentCourt,
+          ourTeam,
+          opponentTeam
+        })
+      );
+    }
+  });
+  return lines;
+}
+function buildDataVolleyPlayersRows(teamPayload, sideFlag, setNumbers, scope) {
+  const rows = [];
+  const players = ((teamPayload && teamPayload.playersDetailed) || []).filter(player => player && !player.out);
+  const perSetMap = buildDvSetParticipationMap(teamPayload, setNumbers, scope);
+  players.forEach((player, idx) => {
+    const dvCode = buildDvPlayerCode(
+      sanitizeDvField(teamPayload && teamPayload.officialCode) || buildDvTeamCode(teamPayload && teamPayload.name, scope === "opponent" ? "OPP" : "OUR"),
+      player,
+      idx
+    );
+    const nameParts = splitDvName(player.name);
+    const playerState = perSetMap.get(player.name);
+    const setCols = Array.from({ length: 5 }, (_, setIdx) => {
+      const setNum = setIdx + 1;
+      return sanitizeDvField(playerState && playerState.perSet ? playerState.perSet[setNum] || "" : "");
+    });
+    rows.push(
+      [
+        String(sideFlag),
+        getDvPlayerNumber(player, idx),
+        String(idx + 1),
+        ...setCols,
+        "",
+        "",
+        dvCode,
+        nameParts.lastName,
+        nameParts.firstName,
+        "",
+        player.role === "L" ? "L" : "",
+        player.isCaptain ? "1" : "",
+        "False",
+        "",
+        "",
+        ""
+      ].join(";")
+    );
+  });
+  return rows;
+}
+function buildDataVolleySetRows(setNumbers) {
+  return Array.from({ length: 5 }, (_, idx) => {
+    const setNum = idx + 1;
+    if (!(setNumbers || []).includes(setNum)) return "True;;;;;;";
+    const score = computePointsSummary(setNum, { includeOverrides: true });
+    const finalLabel = `${score.totalFor || 0}-${score.totalAgainst || 0}`;
+    return `True;;;;${finalLabel};`;
+  });
+}
+function buildDataVolleyDvwString() {
+  syncEventPlayerLinks(state.events || []);
+  const ourTeam = getDataVolleyTeamPayload("our");
+  const opponentTeam = getDataVolleyTeamPayload("opponent");
+  const setNumbers = Array.from(
+    new Set(
+      []
+        .concat(getPlayedSetNumbers ? getPlayedSetNumbers() : [])
+        .concat(Object.keys(state.setStarts || {}).map(key => parseInt(key, 10)).filter(Boolean))
+        .concat(Object.keys(state.setResults || {}).map(key => parseInt(key, 10)).filter(Boolean))
+    )
+  ).sort((a, b) => a - b);
+  const ourCode = sanitizeDvField(ourTeam.officialCode).toUpperCase() || buildDvTeamCode(ourTeam.name, "OUR");
+  const oppCode = sanitizeDvField(opponentTeam.officialCode).toUpperCase() || buildDvTeamCode(opponentTeam.name, "OPP");
+  const matchDate = formatDvDate(state.match && state.match.date);
+  const season = (() => {
+    const raw = sanitizeDvField(state.match && state.match.date);
+    const date = raw ? new Date(raw) : new Date();
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const next = year + 1;
+    return `${year}/${next}`;
+  })();
+  const scoutRows = buildDataVolleyScoutRows(state.events || [], ourTeam, opponentTeam, setNumbers);
+  const sections = [];
+  sections.push("[3DATAVOLLEYSCOUT]");
+  sections.push("FILEFORMAT: 2.0");
+  sections.push(`GENERATOR-DAY: ${formatDvDateTime(new Date())}`);
+  sections.push("GENERATOR-IDP: DVW");
+  sections.push("GENERATOR-PRG: Simple Volleyball Scout PWA");
+  sections.push(`GENERATOR-REL: ${window.__APP_VERSION__ && window.__APP_VERSION__.version ? window.__APP_VERSION__.version : "custom"}`);
+  sections.push("GENERATOR-VER: Custom");
+  sections.push(`GENERATOR-NAM: ${sanitizeDvField(ourTeam.staff && ourTeam.staff.manager) || "Simple Volleyball Scout PWA"}`);
+  sections.push(`LASTCHANGE-DAY: ${formatDvDateTime(new Date())}`);
+  sections.push("LASTCHANGE-IDP: datavolley");
+  sections.push("LASTCHANGE-PRG: simple-volley-scout");
+  sections.push(`LASTCHANGE-REL: ${window.__APP_VERSION__ && window.__APP_VERSION__.version ? window.__APP_VERSION__.version : "custom"}`);
+  sections.push("LASTCHANGE-VER: ");
+  sections.push("LASTCHANGE-NAM: ");
+  sections.push("[3MATCH]");
+  sections.push(
+    [
+      matchDate,
+      "",
+      season,
+      sanitizeDvField(state.match && state.match.category),
+      sanitizeDvField(state.match && state.match.matchType),
+      "",
+      "",
+      "",
+      "UTF-8",
+      "1",
+      "Z",
+      "0",
+      ""
+    ].join(";")
+  );
+  sections.push(["", "", sanitizeDvField(state.selectedMatch || ""), "", "", "", "", "", ""].join(";"));
+  sections.push("[3TEAMS]");
+  sections.push(
+    [
+      ourCode,
+      sanitizeDvField(ourTeam.name),
+      String(computeSetWinScore().for || 0),
+      sanitizeDvField(ourTeam.staff && ourTeam.staff.headCoach),
+      sanitizeDvField(ourTeam.staff && ourTeam.staff.assistantCoach),
+      "16777215",
+      ""
+    ].join(";")
+  );
+  sections.push(
+    [
+      oppCode,
+      sanitizeDvField(opponentTeam.name),
+      String(computeSetWinScore().against || 0),
+      sanitizeDvField(opponentTeam.staff && opponentTeam.staff.headCoach),
+      sanitizeDvField(opponentTeam.staff && opponentTeam.staff.assistantCoach),
+      "16777215",
+      ""
+    ].join(";")
+  );
+  sections.push("[3MORE]");
+  sections.push(
+    [
+      sanitizeDvField(ourTeam.staff && ourTeam.staff.assistantCoach),
+      sanitizeDvField(ourTeam.staff && ourTeam.staff.manager),
+      "",
+      "",
+      sanitizeDvField(ourTeam.name),
+      sanitizeDvField(state.match && state.match.notes),
+      sanitizeDvField(ourTeam.staff && ourTeam.staff.manager),
+      ""
+    ].join(";")
+  );
+  sections.push(";0;0;");
+  sections.push("[3COMMENTS]");
+  sections.push(sanitizeDvField((state.match && state.match.notes) || "no comments") || "no comments");
+  sections.push("[3SET]");
+  buildDataVolleySetRows(setNumbers).forEach(row => sections.push(row));
+  sections.push("[3PLAYERS-H]");
+  buildDataVolleyPlayersRows(ourTeam, 0, setNumbers, "our").forEach(row => sections.push(row));
+  sections.push("[3PLAYERS-V]");
+  buildDataVolleyPlayersRows(opponentTeam, 1, setNumbers, "opponent").forEach(row => sections.push(row));
+  sections.push("[3ATTACKCOMBINATION]");
+  getStoredDvwSectionLines("dvwAttackCombinations", DEFAULT_DVW_ATTACK_COMBINATIONS).forEach(row => sections.push(row));
+  sections.push("[3SETTERCALL]");
+  getStoredDvwSectionLines("dvwSetterCalls", DEFAULT_DVW_SETTER_CALLS).forEach(row => sections.push(row));
+  sections.push("[3WINNINGSYMBOLS]");
+  getStoredDvwSectionLines("dvwWinningSymbols", DEFAULT_DVW_WINNING_SYMBOLS).forEach(row => sections.push(row));
+  sections.push("[3RESERVE]");
+  getStoredDvwSectionLines("dvwReserve", []).forEach(row => sections.push(row));
+  sections.push("[3VIDEO]");
+  getStoredDvwSectionLines("dvwVideo", []).forEach(row => sections.push(row));
+  sections.push("[3SCOUT]");
+  scoutRows.forEach(row => sections.push(row));
+  return sections.join("\n");
+}
+async function exportDataVolleyToFile() {
+  const dvw = buildDataVolleyDvwString();
+  if (!dvw.trim()) {
+    alert("Nessun dato da esportare in formato DataVolley.");
+    return;
+  }
+  const blob = new Blob([dvw], { type: "text/plain;charset=utf-8" });
+  downloadBlob(blob, "match_" + safeMatchSlug() + ".dvw");
+}
 function encodePayloadForLink(payload) {
   try {
     const json = JSON.stringify(payload);
@@ -20686,18 +21840,1753 @@ function importMatchStateAsNew(nextState, options = {}) {
     }
   }
 }
+function parseDvwSections(text) {
+  const sections = new Map();
+  let current = "";
+  String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .forEach(rawLine => {
+      const line = rawLine.replace(/\uFEFF/g, "");
+      const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+      if (sectionMatch) {
+        current = sectionMatch[1];
+        if (!sections.has(current)) sections.set(current, []);
+        return;
+      }
+      if (!current) return;
+      sections.get(current).push(line);
+    });
+  return sections;
+}
+function getDvwSectionLines(sections, name) {
+  const rows = sections.get(name) || [];
+  return rows.map(line => String(line || "").trimEnd()).filter(line => line.length > 0);
+}
+function parseDvwRow(line) {
+  return String(line || "").split(";").map(part => part.trim());
+}
+function parseDvwAttackCombinationDefinitions(lines) {
+  const map = new Map();
+  (lines || []).forEach(line => {
+    const row = parseDvwRow(line);
+    const code = sanitizeDvField(row[0]).toUpperCase();
+    if (!code) return;
+    const typeLetter = sanitizeDvField(row[3]).toUpperCase();
+    map.set(code, {
+      code,
+      zone: sanitizeDvField(row[1]),
+      side: sanitizeDvField(row[2]),
+      typeLetter,
+      setType: decodeDvwSetType(typeLetter) || "",
+      label: sanitizeDvField(row[4]) || code
+    });
+  });
+  return map;
+}
+function parseDvwSetterCallDefinitions(lines) {
+  const map = new Map();
+  (lines || []).forEach(line => {
+    const row = parseDvwRow(line);
+    const code = sanitizeDvField(row[0]).toUpperCase();
+    if (!code) return;
+    map.set(code, {
+      code,
+      label: sanitizeDvField(row[2] || row[1] || row[3]) || code
+    });
+  });
+  return map;
+}
+function formatDvwImportedName(lastName = "", firstName = "") {
+  const raw = [String(lastName || "").trim(), String(firstName || "").trim()].filter(Boolean).join(" ");
+  if (!raw) return "";
+  return raw
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+function buildDvwImportDateIso(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  const mdy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (mdy) {
+    return `${mdy[3]}-${mdy[1]}-${mdy[2]}`;
+  }
+  const ymd = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  }
+  return raw;
+}
+function buildDvwTimestamp(dateIso, timeValue) {
+  const datePart = buildDvwImportDateIso(dateIso) || new Date().toISOString().slice(0, 10);
+  const timeMatch = String(timeValue || "").trim().match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+  if (!timeMatch) return `${datePart}T00:00:00.000Z`;
+  const local = new Date(
+    Number(datePart.slice(0, 4)),
+    Number(datePart.slice(5, 7)) - 1,
+    Number(datePart.slice(8, 10)),
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+    Number(timeMatch[3])
+  );
+  return local.toISOString();
+}
+function buildDvwZonePoint(zone, side = "start", attackCode = "") {
+  const z = parseInt(zone, 10) || 0;
+  const normalizedCode = String(attackCode || "").trim().toUpperCase();
+  // Mappa entro il rettangolo del campo arancione, non sull'intera immagine.
+  // attack_empty_near.png: bbox campo circa x=[61,1016], y=[122,1077] su 1080.
+  const startMap = {
+    1: { x: 0.83, y: 0.992 },
+    2: { x: 0.83, y: 0.992 },
+    3: { x: 0.5, y: 0.992 },
+    4: { x: 0.17, y: 0.992 },
+    5: { x: 0.17, y: 0.992 },
+    6: { x: 0.5, y: 0.992 },
+    7: { x: 0.14, y: 0.992 },
+    8: { x: 0.5, y: 0.992 },
+    9: { x: 0.86, y: 0.992 }
+  };
+  const endMap = {
+    1: { x: 0.84, y: 0.32 },
+    2: { x: 0.84, y: 0.14 },
+    3: { x: 0.5, y: 0.14 },
+    4: { x: 0.16, y: 0.14 },
+    5: { x: 0.16, y: 0.32 },
+    6: { x: 0.5, y: 0.32 },
+    7: { x: 0.8, y: 0.50 },
+    8: { x: 0.5, y: 0.50 },
+    9: { x: 0.2, y: 0.50 }
+  };
+  const point = Object.assign({}, side === "end" ? endMap[z] : startMap[z]);
+  if (!point || point.x === undefined || point.y === undefined) return null;
+  if (side === "start") {
+    if (normalizedCode === "V5" || normalizedCode === "X5" || normalizedCode === "JJ" || normalizedCode === "VJ") point.x = 0.22;
+    if (normalizedCode === "V6" || normalizedCode === "X6" || normalizedCode === "VI" || normalizedCode === "II") point.x = 0.78;
+    if (normalizedCode === "V8" || normalizedCode === "X8" || normalizedCode === "VO" || normalizedCode === "XO") {
+      point.x = 0.84;
+      point.y = 0.992;
+    }
+    if (normalizedCode === "XP" || normalizedCode === "VP" || normalizedCode === "XB" || normalizedCode === "VB" || normalizedCode === "XR" || normalizedCode === "VR") {
+      point.x = 0.5;
+      point.y = 0.992;
+    }
+    if (normalizedCode === "VV") {
+      point.x = 0.1;
+      point.y = 0.992;
+    }
+  } else {
+    if (z === 7) point.x = 0.78;
+    if (z === 9) point.x = 0.22;
+  }
+  return point;
+}
+function makeImportedCourtFromNames(names = []) {
+  return Array.from({ length: 6 }, (_, idx) => ({ main: String(names[idx] || "").trim(), replaced: "" }));
+}
+function decodeDvwSetType(typeLetter) {
+  switch (String(typeLetter || "").toUpperCase()) {
+    case "M":
+      return "mezza";
+    case "U":
+      return "super";
+    case "Q":
+      return "quick";
+    case "T":
+      return "veloce";
+    case "N":
+      return "fast";
+    case "H":
+      return "alta";
+    case "O":
+      return "damp";
+    default:
+      return null;
+  }
+}
+function decodeDvwServeType(typeLetter) {
+  switch (String(typeLetter || "").toUpperCase()) {
+    case "H":
+      return "F";
+    case "Q":
+      return "S";
+    case "M":
+    default:
+      return "JF";
+  }
+}
+function parseDvwTailParts(tail) {
+  const raw = String(tail || "").trim();
+  if (!raw) {
+    return {
+      advancedCode: "",
+      inlineCode: "",
+      zonePair: null,
+      suffix: "",
+      raw
+    };
+  }
+  const zoneMatch = raw.match(/~(.)?(.)?(.*)$/);
+  const lead = zoneMatch ? raw.slice(0, zoneMatch.index) : raw;
+  const advancedCode = lead.length >= 2 && /^[A-Z0-9]{2}/i.test(lead) ? lead.slice(0, 2).toUpperCase() : "";
+  const inlineCode = advancedCode ? lead.slice(2).toUpperCase() : lead.toUpperCase();
+  if (!zoneMatch) {
+    return {
+      advancedCode,
+      inlineCode,
+      zonePair: null,
+      suffix: "",
+      raw
+    };
+  }
+  const startRaw = (zoneMatch[1] || "").toUpperCase();
+  const endRaw = (zoneMatch[2] || "").toUpperCase();
+  let suffix = String(zoneMatch[3] || "").toUpperCase();
+  if (suffix.startsWith("~")) suffix = suffix.slice(1);
+  return {
+    advancedCode,
+    inlineCode,
+    zonePair: {
+      startZone: startRaw && startRaw !== "~" ? startRaw : "",
+      endZone: endRaw && endRaw !== "~" ? endRaw : ""
+    },
+    suffix,
+    raw
+  };
+}
+function refineDvwTailBySkill(skillLetter, rawTail, parsedParts) {
+  const skill = String(skillLetter || "").toUpperCase();
+  const raw = String(rawTail || "").trim().toUpperCase();
+  const parsed = parsedParts || parseDvwTailParts(raw);
+  const fallback = {
+    zoneMeta: parseDvwZoneMeta(parsed.zonePair),
+    suffix: parsed.suffix
+  };
+  if (!raw) return fallback;
+  if (skill === "A") {
+    const match = raw.match(/^(?:[A-Z0-9]{2})?~(\d)(\d)?([A-D]?)(?:~)?(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: match[1] || "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "E") {
+    const noStartZone = raw.match(/^(?:[A-Z0-9]{2,3})?~~(\d)([A-D]?)(?:~~)?(.*)$/);
+    if (noStartZone) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: noStartZone[1] || "",
+          endSubzone: noStartZone[2] || "",
+          endCone: ""
+        },
+        suffix: String(noStartZone[3] || "").toUpperCase()
+      };
+    }
+    const simpleSuffix = raw.match(/^(?:[A-Z0-9]{2,3})?~~(.*)$/);
+    if (simpleSuffix) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(simpleSuffix[1] || "").toUpperCase()
+      };
+    }
+    const match = raw.match(/^(?:[A-Z0-9]{2})?([A-Z0-9]*)~(\d)([A-D]?)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "S" || skill === "R" || skill === "D" || skill === "F") {
+    const match = raw.match(/^~~~(\d)(\d)([A-D]?)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: match[1] || "",
+          endZone: match[2] || "",
+          endSubzone: match[3] || "",
+          endCone: ""
+        },
+        suffix: String(match[4] || "").toUpperCase()
+      };
+    }
+    const singleZone = raw.match(/^~~~(\d)(.*)$/);
+    if (singleZone) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: singleZone[1] || "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(singleZone[2] || "").toUpperCase()
+      };
+    }
+    const endOnly = raw.match(/^~~~~(\d)([A-D]?)(.*)$/);
+    if (endOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: endOnly[1] || "",
+          endSubzone: endOnly[2] || "",
+          endCone: ""
+        },
+        suffix: String(endOnly[3] || "").toUpperCase()
+      };
+    }
+    const suffixOnly = raw.match(/^~{6,}(.*)$/);
+    if (suffixOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(suffixOnly[1] || "").toUpperCase()
+      };
+    }
+  }
+  if (skill === "B") {
+    const match = raw.match(/^~~~~(\d)(.*)$/);
+    if (match) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: match[1] || "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(match[2] || "").toUpperCase()
+      };
+    }
+    const suffixOnly = raw.match(/^~{6,}(.*)$/);
+    if (suffixOnly) {
+      return {
+        zoneMeta: {
+          startZone: "",
+          endZone: "",
+          endSubzone: "",
+          endCone: ""
+        },
+        suffix: String(suffixOnly[1] || "").toUpperCase()
+      };
+    }
+  }
+  return fallback;
+}
+function parseDvwSkillCode(code) {
+  const raw = String(code || "").trim();
+  const substitution = raw.match(/^([*a])c(\d{1,2}):(\d{1,2})$/i);
+  if (substitution) {
+    return {
+      kind: "substitution",
+      teamScope: substitution[1] === "a" ? "opponent" : "our",
+      playerInNumber: padDv(substitution[2], 2),
+      playerOutNumber: padDv(substitution[3], 2)
+    };
+  }
+  const timeout = raw.match(/^([*a])T$/i);
+  if (timeout) {
+    return {
+      kind: "timeout",
+      teamScope: timeout[1] === "a" ? "opponent" : "our"
+    };
+  }
+  const pointMarker = raw.match(/^([*a])\$\$&([A-Z])([#=!+\-/])?$/i);
+  if (pointMarker) {
+    return {
+      kind: "point-marker",
+      teamScope: pointMarker[1] === "a" ? "opponent" : "our",
+      pointType: String(pointMarker[2] || "").toUpperCase(),
+      evaluation: pointMarker[3] || ""
+    };
+  }
+  const score = raw.match(/^([*a])p(\d+):(\d+)$/i);
+  if (score) {
+    return {
+      kind: "score",
+      teamScope: score[1] === "a" ? "opponent" : "our",
+      scoreOur: parseInt(score[2], 10) || 0,
+      scoreOpp: parseInt(score[3], 10) || 0
+    };
+  }
+  if (/^[*a]z\d+/i.test(raw)) {
+    return { kind: "rotation" };
+  }
+  if (/^[*a]P\d+>LUp/i.test(raw)) {
+    return { kind: "lineup" };
+  }
+  if (/^\*\*\d+set/i.test(raw)) {
+    return { kind: "set-end" };
+  }
+  const skill = raw.match(/^(?:([*a]))?(\d{1,2})([SRABDEF])([HMQTUNO])([#=!+\-/])(.*)$/i);
+  if (!skill) return { kind: "unknown" };
+  const inferredScope = skill[1]
+    ? (skill[1].toLowerCase() === "a" ? "opponent" : "our")
+    : inferDvwScopeFromNumberAndFlow(skill[2], skill[3]);
+  if (!inferredScope) return { kind: "unknown" };
+  const tail = skill[6] || "";
+  const tailParts = parseDvwTailParts(tail);
+  const refinedTail = refineDvwTailBySkill(skill[3], tail, tailParts);
+  return {
+    kind: "skill",
+    teamScope: inferredScope,
+    playerNumber: padDv(skill[2], 2),
+    skillLetter: skill[3].toUpperCase(),
+    typeLetter: skill[4].toUpperCase(),
+    evaluation: skill[5],
+    tail,
+    advancedCode: tailParts.advancedCode,
+    inlineCode: tailParts.inlineCode,
+    zonePair: tailParts.zonePair,
+    zoneMeta: refinedTail.zoneMeta,
+    suffix: refinedTail.suffix
+  };
+}
+function getDvwScopeMatchesByPlayerNumber(playerNumber) {
+  const normalizedNumber = padDv(playerNumber, 2);
+  if (!normalizedNumber) return [];
+  const matches = [];
+  const ourNumbers = getPlayerNumbersForScope("our") || {};
+  if (Object.values(ourNumbers).some(value => padDv(value, 2) === normalizedNumber)) {
+    matches.push("our");
+  }
+  if (state.useOpponentTeam) {
+    const oppNumbers = getPlayerNumbersForScope("opponent") || {};
+    if (Object.values(oppNumbers).some(value => padDv(value, 2) === normalizedNumber)) {
+      matches.push("opponent");
+    }
+  }
+  return matches;
+}
+function getDvwPrefixForScope(scope) {
+  return scope === "opponent" ? "a" : "*";
+}
+function inferDvwScopeFromNumberAndFlow(playerNumber = "", skillLetter = "") {
+  if (!state.useOpponentTeam) return "our";
+  const matches = getDvwScopeMatchesByPlayerNumber(playerNumber);
+  if (matches.length === 1) return matches[0];
+  const flowState = getAutoFlowState();
+  if (flowState && flowState.teamScope) {
+    return flowState.teamScope;
+  }
+  if (matches.length > 0) return matches[0];
+  return null;
+}
+function inferServeEvalFromReceptionEval(receptionEval = "") {
+  const map = {
+    "=": "#",
+    "/": "/",
+    "-": "+",
+    "!": "!",
+    "+": "-",
+    "#": "-"
+  };
+  return map[String(receptionEval || "")] || "";
+}
+function buildDvwDirectionTail(startZone = "", endZone = "", endSubzone = "") {
+  const start = String(startZone || "").toUpperCase();
+  const end = String(endZone || "").toUpperCase();
+  const sub = String(endSubzone || "").toUpperCase();
+  if (!start && !end && !sub) return "";
+  return `~~~${start}${end}${sub}`;
+}
+function expandDvwServeReceptionCompound(rawInput) {
+  const raw = String(rawInput || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!raw || !raw.includes(".")) return null;
+  const parts = raw.split(".");
+  if (parts.length !== 2) return null;
+  const [left, right] = parts;
+  const leftMatch = left.match(/^(?:([*A]))?(\d{1,2})S([HMQTUNO]?)([#=!+\-/]?)(\d{0,2})([A-D]?)$/);
+  if (!leftMatch) return null;
+  const rightMatch = right.match(/^(\d{1,2})([HMQTUNO]?)([#=!+\-/])(\d{0,2})([A-D]?)$/);
+  if (!rightMatch) return null;
+  const serveScope = leftMatch[1]
+    ? (leftMatch[1] === "A" ? "opponent" : "our")
+    : inferDvwScopeFromNumberAndFlow(leftMatch[2], "S");
+  if (!serveScope) return null;
+  const receiveScope = getOppositeScope(serveScope);
+  if (receiveScope === "opponent" && !state.useOpponentTeam) return null;
+  const serveNumber = padDv(leftMatch[2], 2);
+  const receiveNumber = padDv(rightMatch[1], 2);
+  const serveType = String(leftMatch[3] || "").toUpperCase() || "H";
+  const receiveType = String(rightMatch[2] || "").toUpperCase() || serveType;
+  const receiveEval = String(rightMatch[3] || "").toUpperCase();
+  const serveEval = String(leftMatch[4] || "").toUpperCase() || inferServeEvalFromReceptionEval(receiveEval);
+  if (!serveEval) return null;
+  const leftDigits = String(leftMatch[5] || "");
+  const rightDigits = String(rightMatch[4] || "");
+  let startZone = "";
+  let endZone = "";
+  if (leftDigits.length >= 1) startZone = leftDigits.charAt(0);
+  if (rightDigits.length >= 1) {
+    endZone = rightDigits.length === 2 && !startZone ? rightDigits.charAt(1) : rightDigits.charAt(0);
+    if (!startZone && rightDigits.length === 2) startZone = rightDigits.charAt(0);
+  } else if (leftDigits.length >= 2) {
+    endZone = leftDigits.charAt(1);
+  }
+  const sharedSubzone = String(rightMatch[5] || "").toUpperCase() || String(leftMatch[6] || "").toUpperCase();
+  const sharedTail = buildDvwDirectionTail(startZone, endZone, sharedSubzone);
+  const serveCode = `${getDvwPrefixForScope(serveScope)}${serveNumber}S${serveType}${serveEval}${sharedTail}`;
+  const receiveCode = `${getDvwPrefixForScope(receiveScope)}${receiveNumber}R${receiveType}${receiveEval}${sharedTail}`;
+  return [serveCode, receiveCode];
+}
+function expandDvwCompoundToken(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw.includes(".")) return null;
+  const serveReceive = expandDvwServeReceptionCompound(raw);
+  if (serveReceive && serveReceive.length) return serveReceive;
+  const parts = raw.split(".").map(part => part.trim()).filter(Boolean);
+  if (parts.length !== 2) return null;
+  const normalizedParts = parts.map(part => normalizeDvwScoutToken(part));
+  if (normalizedParts.every(item => item.parsed && item.parsed.kind !== "unknown")) {
+    return normalizedParts.map(item => item.normalized || item.raw).filter(Boolean);
+  }
+  return null;
+}
+function normalizeDvwScoutToken(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw) {
+    return {
+      raw,
+      normalized: "",
+      corrected: false,
+      parsed: { kind: "unknown" },
+      correctionReason: ""
+    };
+  }
+  const directParsed = parseDvwSkillCode(raw);
+  if (directParsed && directParsed.kind !== "unknown") {
+    const normalizedDirect =
+      directParsed.kind === "skill" && !/^[*a]/i.test(raw)
+        ? `${getDvwPrefixForScope(directParsed.teamScope)}${raw.toUpperCase().replace(/\s+/g, "")}`
+        : raw;
+    return {
+      raw,
+      normalized: normalizedDirect,
+      corrected: normalizedDirect !== raw,
+      parsed: directParsed,
+      correctionReason: normalizedDirect !== raw ? "implicit-team-prefix" : ""
+    };
+  }
+  const upperRaw = raw.toUpperCase().replace(/\s+/g, "");
+  const teamPrefix = upperRaw.startsWith("*") || upperRaw.startsWith("A") ? upperRaw.charAt(0) : "";
+  const body = teamPrefix ? upperRaw.slice(1) : upperRaw;
+  const evalIndex = body.search(/[#=!+\-/]/);
+  if (evalIndex < 0) {
+    return {
+      raw,
+      normalized: raw,
+      corrected: false,
+      parsed: directParsed,
+      correctionReason: ""
+    };
+  }
+  const mainHead = body.slice(0, evalIndex);
+  const evalSymbol = body.charAt(evalIndex);
+  const tail = body.slice(evalIndex + 1);
+  const skillSet = new Set(["S", "R", "A", "B", "D", "E", "F"]);
+  const typeSet = new Set(["H", "M", "Q", "T", "U", "N", "O"]);
+  const chars = mainHead.split("");
+  const skillIndices = [];
+  const typeIndices = [];
+  chars.forEach((ch, idx) => {
+    if (skillSet.has(ch)) skillIndices.push(idx);
+    if (typeSet.has(ch)) typeIndices.push(idx);
+  });
+  for (const skillIdx of skillIndices) {
+    for (const typeIdx of typeIndices) {
+      if (skillIdx === typeIdx) continue;
+      const playerDigits = chars
+        .filter((_, idx) => idx !== skillIdx && idx !== typeIdx)
+        .join("");
+      if (!/^\d{1,2}$/.test(playerDigits)) continue;
+      const inferredScope = teamPrefix
+        ? (teamPrefix === "A" ? "opponent" : "our")
+        : inferDvwScopeFromNumberAndFlow(playerDigits, chars[skillIdx]);
+      if (!inferredScope) continue;
+      const normalized = `${teamPrefix || getDvwPrefixForScope(inferredScope)}${padDv(playerDigits, 2)}${chars[skillIdx]}${chars[typeIdx]}${evalSymbol}${tail}`;
+      const parsed = parseDvwSkillCode(normalized);
+      if (!parsed || parsed.kind === "unknown") continue;
+      return {
+        raw,
+        normalized,
+        corrected: normalized !== raw,
+        parsed,
+        correctionReason: "main-code-order"
+      };
+    }
+  }
+  return {
+    raw,
+    normalized: raw,
+    corrected: false,
+    parsed: directParsed,
+    correctionReason: ""
+  };
+}
+function setDvwScoutStatus(message, tone = "") {
+  if (!elDvwScoutStatus) return;
+  elDvwScoutStatus.textContent = message || "";
+  elDvwScoutStatus.classList.remove("is-error", "is-success");
+  if (tone === "error") elDvwScoutStatus.classList.add("is-error");
+  if (tone === "success") elDvwScoutStatus.classList.add("is-success");
+}
+function getDvwScoutSkillLabel(letter) {
+  const map = {
+    S: "Battuta",
+    R: "Ricezione",
+    A: "Attacco",
+    B: "Muro",
+    D: "Difesa",
+    E: "Alzata",
+    F: "Freeball"
+  };
+  return map[String(letter || "").toUpperCase()] || String(letter || "").toUpperCase();
+}
+function getDvwScoutTypeLabel(letter, skillLetter = "") {
+  const type = String(letter || "").toUpperCase();
+  const skill = String(skillLetter || "").toUpperCase();
+  const genericMap = {
+    H: "High",
+    M: "Medium",
+    Q: "Quick",
+    T: "Tense",
+    U: "Super",
+    N: "Fast",
+    O: "Other"
+  };
+  const contextualMap = {
+    S: {
+      H: "Float",
+      M: "Jump Float",
+      Q: "Jump Serve"
+    },
+    R: {
+      H: "Su Float",
+      M: "Su Jump Float",
+      Q: "Su Jump Serve"
+    },
+    A: {
+      H: "Alta",
+      M: "Mezza",
+      Q: "Quick",
+      T: "Tesa",
+      U: "Super",
+      N: "Fast",
+      O: "Altro"
+    },
+    B: {
+      H: "Su Alta",
+      M: "Su Mezza",
+      Q: "Su Quick",
+      T: "Su Tesa",
+      U: "Su Super",
+      N: "Su Fast",
+      O: "Su Altro"
+    },
+    D: {
+      H: "Su Alta",
+      M: "Su Mezza",
+      Q: "Su Quick",
+      T: "Su Tesa",
+      U: "Su Super",
+      N: "Su Fast",
+      O: "Su Altro"
+    },
+    E: {
+      H: "Per Alta",
+      M: "Per Mezza",
+      Q: "Per Quick",
+      T: "Per Tesa",
+      U: "Per Super",
+      N: "Per Fast",
+      O: "Per Altro"
+    },
+    F: {
+      H: "Alta",
+      M: "Media",
+      Q: "Rapida",
+      O: "Altra"
+    }
+  };
+  return (contextualMap[skill] && contextualMap[skill][type]) || genericMap[type] || type;
+}
+function getDvwScoutEvalLabel(symbol) {
+  const map = {
+    "#": "#",
+    "+": "+",
+    "!": "!",
+    "-": "-",
+    "/": "/",
+    "=": "="
+  };
+  return map[String(symbol || "")] || String(symbol || "");
+}
+function escapeDvwScoutHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+function renderDvwScoutBreakdownGroup(title, toneClass, entries = [], options = {}) {
+  const extraClass = options.placeholder ? " is-placeholder" : "";
+  const rows = entries.length
+    ? entries
+        .map(entry => {
+          const label = escapeDvwScoutHtml(entry.label);
+          const value = escapeDvwScoutHtml(entry.value);
+          const filledClass = entry.value ? " is-filled" : "";
+          return `<div class="scout-dvw-breakdown__item${filledClass}"><span class="scout-dvw-breakdown__key">${label}</span><span class="scout-dvw-breakdown__value">${value || "—"}</span></div>`;
+        })
+        .join("")
+    : `<div class="scout-dvw-breakdown__empty">—</div>`;
+  return `<section class="scout-dvw-breakdown__group ${toneClass}${extraClass}"><div class="scout-dvw-breakdown__group-title">${escapeDvwScoutHtml(title)}</div><div class="scout-dvw-breakdown__group-body">${rows}</div></section>`;
+}
+function renderDvwScoutBreakdownCommand(title, text) {
+  return `<section class="scout-dvw-breakdown__group scout-dvw-breakdown__group--command"><div class="scout-dvw-breakdown__group-title">${escapeDvwScoutHtml(title)}</div><div class="scout-dvw-breakdown__command-text">${escapeDvwScoutHtml(text)}</div></section>`;
+}
+function renderDvwScoutSuggestion(normalized) {
+  if (!normalized || !normalized.corrected || !normalized.normalized) return "";
+  return `<div class="scout-dvw-breakdown__suggestion"><span class="scout-dvw-breakdown__suggestion-label">Autocorrezione</span><code>${escapeDvwScoutHtml(normalized.normalized)}</code></div>`;
+}
+function buildDvwScoutBreakdown(rawInput) {
+  const raw = String(rawInput || "").trim();
+  if (!raw) {
+    const main = renderDvwScoutBreakdownGroup(
+      "Main code",
+      "scout-dvw-breakdown__group--main",
+      [
+        { label: "Team", value: "" },
+        { label: "N", value: "" },
+        { label: "Skill", value: "" },
+        { label: "Type", value: "" },
+        { label: "Val", value: "" }
+      ],
+      { placeholder: true }
+    );
+    const advanced = renderDvwScoutBreakdownGroup(
+      "Advanced",
+      "scout-dvw-breakdown__group--advanced",
+      [
+        { label: "Cmb", value: "" },
+        { label: "Inline", value: "" },
+        { label: "Start", value: "" },
+        { label: "End", value: "" },
+        { label: "End+", value: "" }
+      ],
+      { placeholder: true }
+    );
+    const extended = renderDvwScoutBreakdownGroup(
+      "Extended",
+      "scout-dvw-breakdown__group--extended",
+      [
+        { label: "Skill type", value: "" },
+        { label: "Players", value: "" },
+        { label: "Special", value: "" }
+      ],
+      { placeholder: true }
+    );
+    return `<div class="scout-dvw-breakdown__grid">${main}${advanced}${extended}</div>`;
+  }
+  const compound = expandDvwCompoundToken(raw);
+  if (compound && compound.length > 1) {
+    const items = compound
+      .map(item => normalizeDvwScoutToken(item))
+      .filter(item => item.parsed && item.parsed.kind === "skill");
+    const suggestion = `<div class="scout-dvw-breakdown__suggestion"><span class="scout-dvw-breakdown__suggestion-label">Compound</span><code>${escapeDvwScoutHtml(compound.join(" · "))}</code></div>`;
+    const groups = items.map((item, idx) => {
+      const parsed = item.parsed;
+      const suffixMeta = parseDvwSuffixMeta(parsed.skillLetter, parsed.inlineCode, parsed.suffix || "");
+      const zoneMeta = parsed.zoneMeta || parseDvwZoneMeta(parsed.zonePair);
+      return renderDvwScoutBreakdownGroup(
+        idx === 0 ? "Skill 1" : `Skill ${idx + 1}`,
+        idx === 0 ? "scout-dvw-breakdown__group--main" : "scout-dvw-breakdown__group--advanced",
+        [
+          { label: "Team", value: parsed.teamScope === "opponent" ? "V" : "H" },
+          { label: "N", value: parsed.playerNumber },
+          { label: "Skill", value: getDvwScoutSkillLabel(parsed.skillLetter) },
+          { label: "Type", value: `${parsed.typeLetter} · ${getDvwScoutTypeLabel(parsed.typeLetter, parsed.skillLetter)}` },
+          { label: "Val", value: getDvwScoutEvalLabel(parsed.evaluation) },
+          { label: "Dir", value: zoneMeta.startZone || zoneMeta.endZone ? `${zoneMeta.startZone || "·"}${zoneMeta.endZone || "·"}${zoneMeta.endSubzone || ""}` : "" },
+          { label: "Ext", value: [suffixMeta.skillSubtype, Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : "", suffixMeta.specialCode].filter(Boolean).join(" ") }
+        ]
+      );
+    });
+    return `${suggestion}<div class="scout-dvw-breakdown__grid">${groups.join("")}</div>`;
+  }
+  const normalized = normalizeDvwScoutToken(raw);
+  const parsed = normalized.parsed;
+  if (parsed && parsed.kind === "skill") {
+    const suffixMeta = parseDvwSuffixMeta(parsed.skillLetter, parsed.inlineCode, parsed.suffix || "");
+    const zoneMeta = parsed.zoneMeta || parseDvwZoneMeta(parsed.zonePair);
+    const suggestion = renderDvwScoutSuggestion(normalized);
+    const main = renderDvwScoutBreakdownGroup("Main code", "scout-dvw-breakdown__group--main", [
+      { label: "Team", value: parsed.teamScope === "opponent" ? "V" : "H" },
+      { label: "N", value: parsed.playerNumber },
+      { label: "Skill", value: getDvwScoutSkillLabel(parsed.skillLetter) },
+      { label: "Type", value: `${parsed.typeLetter} · ${getDvwScoutTypeLabel(parsed.typeLetter, parsed.skillLetter)}` },
+      { label: "Val", value: getDvwScoutEvalLabel(parsed.evaluation) }
+    ]);
+    const advanced = renderDvwScoutBreakdownGroup("Advanced", "scout-dvw-breakdown__group--advanced", [
+      { label: "Cmb", value: parsed.advancedCode || "" },
+      { label: "Inline", value: parsed.inlineCode || "" },
+      { label: "Start", value: zoneMeta.startZone || "" },
+      { label: "End", value: zoneMeta.endZone || "" },
+      { label: "End+", value: zoneMeta.endSubzone || "" }
+    ]);
+    const extended = renderDvwScoutBreakdownGroup("Extended", "scout-dvw-breakdown__group--extended", [
+      { label: "Skill type", value: suffixMeta.skillSubtype || "" },
+      { label: "Players", value: Number.isFinite(suffixMeta.numPlayersNumeric) ? String(suffixMeta.numPlayersNumeric) : "" },
+      { label: "Special", value: suffixMeta.specialCode || "" }
+    ]);
+    return `${suggestion}<div class="scout-dvw-breakdown__grid">${main}${advanced}${extended}</div>`;
+  }
+  if (parsed && parsed.kind === "timeout") {
+    return renderDvwScoutBreakdownCommand("Comando", `Timeout ${parsed.teamScope === "opponent" ? "avversario" : "nostro"}.`);
+  }
+  if (parsed && parsed.kind === "substitution") {
+    return renderDvwScoutBreakdownCommand(
+      "Comando",
+      `Cambio ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · entra ${parsed.playerInNumber} · esce ${parsed.playerOutNumber}.`
+    );
+  }
+  if (parsed && parsed.kind === "point-marker") {
+    return renderDvwScoutBreakdownCommand(
+      "Comando",
+      `Point marker ${parsed.teamScope === "opponent" ? "avversario" : "nostro"} · tipo ${parsed.pointType || "—"} · val ${parsed.evaluation || "—"}.`
+    );
+  }
+  if (parsed && parsed.kind === "score") {
+    return renderDvwScoutBreakdownCommand("Comando", `Punteggio ${parsed.scoreOur}-${parsed.scoreOpp}.`);
+  }
+  if (parsed && parsed.kind === "rotation") return renderDvwScoutBreakdownCommand("Comando", "Rotazione.");
+  if (parsed && parsed.kind === "lineup") return renderDvwScoutBreakdownCommand("Comando", "Lineup.");
+  if (parsed && parsed.kind === "set-end") return renderDvwScoutBreakdownCommand("Comando", "Fine set.");
+  const upper = raw.toUpperCase();
+  let idx = 0;
+  let team = "";
+  let player = "";
+  let skill = "";
+  let type = "";
+  let evaluation = "";
+  if (upper[idx] === "*" || upper[idx] === "A") {
+    team = upper[idx] === "*" ? "Team H" : "Team V";
+    idx += 1;
+  }
+  while (idx < upper.length && /\d/.test(upper[idx]) && player.length < 2) {
+    player += upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[SRABDEF]/.test(upper[idx])) {
+    skill = upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[HMQTUNO]/.test(upper[idx])) {
+    type = upper[idx];
+    idx += 1;
+  }
+  if (idx < upper.length && /[#=!+\-/]/.test(upper[idx])) {
+    evaluation = upper[idx];
+    idx += 1;
+  }
+  const tail = upper.slice(idx);
+  const suggestion = renderDvwScoutSuggestion(normalized);
+  const main = renderDvwScoutBreakdownGroup("Main code", "scout-dvw-breakdown__group--main", [
+    { label: "Team", value: team.replace("Team ", "") || "" },
+    { label: "N", value: player || "" },
+    { label: "Skill", value: skill ? getDvwScoutSkillLabel(skill) : "" },
+    { label: "Type", value: type ? `${type} · ${getDvwScoutTypeLabel(type, skill)}` : "" },
+    { label: "Val", value: evaluation ? getDvwScoutEvalLabel(evaluation) : "" }
+  ]);
+  const advanced = renderDvwScoutBreakdownGroup(
+    "Advanced / Tail",
+    "scout-dvw-breakdown__group--advanced",
+    [{ label: "Tail", value: tail || "" }],
+    { placeholder: !tail }
+  );
+  return `${suggestion}<div class="scout-dvw-breakdown__grid">${main}${advanced}</div>`;
+}
+function renderDvwScoutBreakdown() {
+  if (!elDvwScoutBreakdown) return;
+  const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
+  elDvwScoutBreakdown.innerHTML = buildDvwScoutBreakdown(draft);
+}
+function getDvwScoutChipSkillClass(parsed) {
+  if (!parsed || parsed.kind !== "skill") return "";
+  const skillMap = {
+    S: "serve",
+    R: "pass",
+    E: "second",
+    A: "attack",
+    D: "defense",
+    B: "block",
+    F: "freeball"
+  };
+  const skillId = skillMap[String(parsed.skillLetter || "").toUpperCase()] || "";
+  return skillId ? `is-skill-${skillId}` : "";
+}
+function renderDvwScoutPending() {
+  if (!elDvwScoutPending) return;
+  elDvwScoutPending.innerHTML = "";
+  const draft = elDvwScoutInput ? String(elDvwScoutInput.value || "").trim() : "";
+  renderDvwScoutBreakdown();
+  dvwScoutPendingTokens.forEach(entry => {
+    const chip = document.createElement("div");
+    chip.className = "scout-dvw-chip";
+    const skillClass = getDvwScoutChipSkillClass(entry.parsed);
+    if (skillClass) chip.classList.add(skillClass);
+    const code = document.createElement("span");
+    code.className = "scout-dvw-chip__code";
+    code.textContent = entry.text;
+    chip.appendChild(code);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "scout-dvw-chip__remove";
+    removeBtn.textContent = "×";
+    removeBtn.title = "Rimuovi token";
+    removeBtn.addEventListener("click", () => {
+      dvwScoutPendingTokens = dvwScoutPendingTokens.filter(item => item.id !== entry.id);
+      renderDvwScoutPending();
+      setDvwScoutStatus("Token rimosso.");
+      if (elDvwScoutInput) elDvwScoutInput.focus();
+    });
+    chip.appendChild(removeBtn);
+    elDvwScoutPending.appendChild(chip);
+  });
+  if (draft) {
+    const expanded = expandDvwCompoundToken(draft);
+    const previewItems = expanded && expanded.length
+      ? expanded.map(item => normalizeDvwScoutToken(item))
+      : [normalizeDvwScoutToken(draft)];
+    previewItems.forEach((normalized, idx) => {
+      const parsed = normalized.parsed;
+      const draftChip = document.createElement("div");
+      draftChip.className = "scout-dvw-chip is-draft";
+      const skillClass = getDvwScoutChipSkillClass(parsed);
+      if (skillClass) draftChip.classList.add(skillClass);
+      if (!parsed || parsed.kind === "unknown") {
+        draftChip.classList.add("is-invalid");
+      }
+      const code = document.createElement("span");
+      code.className = "scout-dvw-chip__code";
+      code.textContent = normalized.corrected && normalized.normalized ? normalized.normalized : (normalized.normalized || draft);
+      draftChip.appendChild(code);
+      if (expanded && idx === 0) {
+        draftChip.title = "Compound code espanso";
+      }
+      elDvwScoutPending.appendChild(draftChip);
+    });
+  }
+}
+function queueCurrentDvwScoutToken() {
+  if (!elDvwScoutInput) return false;
+  const token = String(elDvwScoutInput.value || "").trim();
+  if (!token) return false;
+  const expanded = expandDvwCompoundToken(token);
+  const entries = expanded && expanded.length
+    ? expanded.map(item => normalizeDvwScoutToken(item))
+    : [normalizeDvwScoutToken(token)];
+  if (entries.some(item => !item.parsed || item.parsed.kind === "unknown")) {
+    setDvwScoutStatus(`Codice non riconosciuto: ${token}`, "error");
+    renderDvwScoutPending();
+    return false;
+  }
+  const closedAtMs = Date.now();
+  entries.forEach(normalized => {
+    dvwScoutPendingTokens.push({
+      id: `dvw-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: normalized.normalized || token,
+      rawText: token,
+      closedAtMs,
+      parsed: normalized.parsed,
+      corrected: !!normalized.corrected || !!expanded
+    });
+  });
+  elDvwScoutInput.value = "";
+  renderDvwScoutPending();
+  if (expanded && expanded.length > 1) {
+    setDvwScoutStatus(`Compound espanso: ${expanded.join(" · ")}`, "success");
+  } else if (entries[0].corrected && entries[0].normalized) {
+    setDvwScoutStatus(`Token autocorretto: ${token} → ${entries[0].normalized}`, "success");
+  } else {
+    setDvwScoutStatus(`Token aggiunto: ${token}`);
+  }
+  return true;
+}
+function updateLiveDvwMirror() {
+  if (!elDvwScoutLastCode) return;
+  const events = Array.isArray(state.events) ? state.events : [];
+  const last = [...events].reverse().find(ev => ev && ev.skillId !== "manual" && !ev.actionType);
+  if (!last) {
+    elDvwScoutLastCode.textContent = "Ultimo codice: —";
+    return;
+  }
+  const teamPayload = getDataVolleyTeamPayload(getTeamScopeFromEvent(last));
+  const code = buildDataVolleySkillCode(last, teamPayload);
+  elDvwScoutLastCode.textContent = code ? `Ultimo codice: ${code}` : "Ultimo codice: —";
+}
+function openDvwScoutHelp() {
+  const helpUrl = new URL("docs/codici_scouting.html", window.location.href).toString();
+  window.open(helpUrl, "_blank", "noopener");
+}
+function getPlayerIdxByDvNumber(scope, dvNumber) {
+  const normalizedNumber = padDv(dvNumber, 2);
+  const players = getPlayersForScope(scope);
+  const numbers = getPlayerNumbersForScope(scope) || {};
+  return players.findIndex(name => padDv(numbers[name], 2) === normalizedNumber);
+}
+function syncLiveEventWithDecodedDvw(event, decoded, rawCode) {
+  if (!event || !decoded || decoded.kind !== "skill") return;
+  const zoneMeta = decoded.zoneMeta || parseDvwZoneMeta(decoded.zonePair);
+  const suffixMeta = parseDvwSuffixMeta(decoded.skillLetter, decoded.inlineCode, decoded.suffix || "");
+  const scope = getTeamScopeFromEvent(event);
+  const startZoneNum = zoneMeta.startZone ? Number(zoneMeta.startZone) : null;
+  const endZoneNum = zoneMeta.endZone ? Number(zoneMeta.endZone) : null;
+  event.dv = normalizeDataVolleyEventMeta(
+    Object.assign({}, event.dv || {}, {
+      skillType: decoded.typeLetter,
+      attackCode: decoded.skillLetter === "A" ? decoded.advancedCode : event.dv && event.dv.attackCode,
+      setCode: decoded.skillLetter === "E" ? decoded.advancedCode : event.dv && event.dv.setCode,
+      setType:
+        decoded.skillLetter === "A" || decoded.skillLetter === "E"
+          ? decodeDvwSetType(decoded.typeLetter) || ""
+          : event.dv && event.dv.setType,
+      skillSubtype: suffixMeta.skillSubtype,
+      specialCode: suffixMeta.specialCode,
+      startZone: zoneMeta.startZone || "",
+      endZone: zoneMeta.endZone || "",
+      endSubzone: zoneMeta.endSubzone || "",
+      endCone: zoneMeta.endCone || "",
+      numPlayersNumeric: Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
+      rawCode: rawCode || "",
+      rawCodeSignature: ""
+    })
+  );
+  if (decoded.skillLetter === "S") {
+    event.serveType = decodeDvwServeType(decoded.typeLetter) || event.serveType || "JF";
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "R" || decoded.skillLetter === "D" || decoded.skillLetter === "F") {
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "A") {
+    if (decoded.advancedCode) {
+      event.attackType = decoded.advancedCode;
+    }
+    const decodedSetType = decodeDvwSetType(decoded.typeLetter);
+    if (decodedSetType) event.setType = decodedSetType;
+    if (startZoneNum) {
+      event.zone = startZoneNum;
+      event.originZone = startZoneNum;
+      event.playerPosition = startZoneNum;
+      event.attackStartZone = startZoneNum;
+    }
+    if (endZoneNum) {
+      event.attackEndZone = endZoneNum;
+    }
+  }
+  if (decoded.skillLetter === "E") {
+    if (decoded.advancedCode) {
+      event.base = decoded.advancedCode;
+    }
+    const decodedSetType = decodeDvwSetType(decoded.typeLetter);
+    if (decodedSetType) event.setType = decodedSetType;
+  }
+  if (decoded.skillLetter === "B" && Number.isFinite(suffixMeta.numPlayersNumeric)) {
+    event.blockNumber = suffixMeta.numPlayersNumeric;
+  }
+  event.dv.rawCodeSignature = computeDataVolleyEventSignature(event, getDataVolleyTeamPayload(scope));
+}
+function findLiveEventFromDvwApply(startIndex, skillId, code, playerName, scope = "our") {
+  const appended = (state.events || []).slice(startIndex);
+  for (let idx = appended.length - 1; idx >= 0; idx -= 1) {
+    const ev = appended[idx];
+    if (!ev || ev.skillId !== skillId || ev.code !== code) continue;
+    if (getTeamScopeFromEvent(ev) !== scope) continue;
+    if ((ev.playerName || "") !== (playerName || "")) continue;
+    return ev;
+  }
+  return null;
+}
+async function applyDvwScoutToken(rawToken, options = {}) {
+  const token = String(rawToken || "").trim();
+  const closedAtMs = Number(options.closedAtMs);
+  if (!token) return { ok: true, message: "" };
+  const decoded = parseDvwSkillCode(token);
+  if (!decoded || decoded.kind === "unknown") {
+    return { ok: false, message: `Codice non riconosciuto: ${token}` };
+  }
+  if (decoded.kind === "timeout") {
+    const prevLen = Array.isArray(state.events) ? state.events.length : 0;
+    if (decoded.teamScope === "opponent") {
+      if (!state.useOpponentTeam) {
+        return { ok: false, message: `Timeout avversario non disponibile senza doppia squadra: ${token}` };
+      }
+      recordOpponentTimeoutEvent();
+    } else {
+      recordTimeoutEvent();
+    }
+    const timeoutEvent = (state.events || []).slice(prevLen).find(ev => ev && ev.actionType === "timeout");
+    if (timeoutEvent && Number.isFinite(closedAtMs)) {
+      timeoutEvent.t = new Date(closedAtMs).toISOString();
+      saveState({ persistLocal: true });
+      renderEventsLog({ suppressScroll: true });
+    }
+    return { ok: true, message: token };
+  }
+  if (decoded.kind !== "skill") {
+    return { ok: false, message: `Tipo codice non ancora supportato in scout live: ${token}` };
+  }
+  const skillMap = {
+    S: "serve",
+    R: "pass",
+    A: "attack",
+    B: "block",
+    D: "defense",
+    E: "second",
+    F: "freeball"
+  };
+  const scope = decoded.teamScope === "opponent" ? "opponent" : "our";
+  if (scope === "opponent" && !state.useOpponentTeam) {
+    return { ok: false, message: `Codice avversario disponibile solo in doppia squadra: ${token}` };
+  }
+  const skillId = skillMap[decoded.skillLetter];
+  if (!skillId) {
+    return { ok: false, message: `Skill non supportata: ${token}` };
+  }
+  const playerIdx = getPlayerIdxByDvNumber(scope, decoded.playerNumber);
+  if (playerIdx < 0) {
+    return { ok: false, message: `Giocatrice ${decoded.playerNumber} non trovata in ${scope === "opponent" ? "squadra avversaria" : "squadra nostra"}` };
+  }
+  const players = getPlayersForScope(scope);
+  const playerName = players[playerIdx];
+  const setTypeChoice = skillId === "attack" || skillId === "second" ? decodeDvwSetType(decoded.typeLetter) : null;
+  const serveMeta = skillId === "serve" ? { serveType: decodeDvwServeType(decoded.typeLetter) || "JF" } : null;
+  const prevLen = Array.isArray(state.events) ? state.events.length : 0;
+  const ok = await handleEventClick(String(playerIdx), skillId, decoded.evaluation, playerName, null, {
+    setTypeChoice,
+    serveMeta,
+    attackMeta: null,
+    scope
+  });
+  if (!ok) {
+    return { ok: false, message: `Codice rifiutato dal flusso corrente: ${token}` };
+  }
+  const targetEvent = findLiveEventFromDvwApply(prevLen, skillId, decoded.evaluation, playerName, scope);
+  if (targetEvent) {
+    if (Number.isFinite(closedAtMs)) {
+      targetEvent.t = new Date(closedAtMs).toISOString();
+    }
+    syncLiveEventWithDecodedDvw(targetEvent, decoded, token);
+    saveState({ persistLocal: true });
+    renderEventsLog({ suppressScroll: true });
+    renderVideoAnalysis();
+    renderTrajectoryAnalysis();
+    renderServeTrajectoryAnalysis();
+  }
+  return { ok: true, message: token };
+}
+async function applyDvwScoutInput() {
+  if (!elDvwScoutInput) return;
+  if (elDvwScoutInput.value && elDvwScoutInput.value.trim()) {
+    const queued = queueCurrentDvwScoutToken();
+    if (!queued) return;
+  }
+  if (!dvwScoutPendingTokens.length) {
+    setDvwScoutStatus("Inserisci almeno un codice.", "error");
+    return;
+  }
+  let applied = 0;
+  for (const token of dvwScoutPendingTokens) {
+    const result = await applyDvwScoutToken(token.text, { closedAtMs: token.closedAtMs });
+    if (!result.ok) {
+      setDvwScoutStatus(result.message, "error");
+      elDvwScoutInput.focus();
+      return;
+    }
+    applied += 1;
+  }
+  dvwScoutPendingTokens = [];
+  renderDvwScoutPending();
+  updateLiveDvwMirror();
+  setDvwScoutStatus(`${applied} codice/i applicati correttamente.`, "success");
+}
+function parseDvwPlayersSection(lines, teamMeta, side = "our") {
+  const playersDetailed = [];
+  const players = [];
+  const numbers = {};
+  const liberos = [];
+  const captains = [];
+  const numberToName = new Map();
+  (lines || [])
+    .map(parseDvwRow)
+    .filter(row => row.some(Boolean))
+    .forEach((row, idx) => {
+      const shirtNumber = padDv(row[1] || idx + 1, 2);
+      const lastName = row[9] || "";
+      const firstName = row[10] || "";
+      const name = formatDvwImportedName(lastName, firstName) || `${side === "opponent" ? "Avv." : "Gioc."} ${idx + 1}`;
+      const isLibero = String(row[12] || "").toUpperCase() === "L";
+      const isCaptain = String(row[13] || "").trim() === "1";
+      const player = {
+        id: typeof generatePlayerId === "function" ? generatePlayerId() : `dvw-${side}-${idx + 1}`,
+        name,
+        firstName: firstName || "",
+        lastName: lastName || "",
+        number: shirtNumber,
+        codeOfficial: String(row[8] || "").trim(),
+        role: isLibero ? "L" : "",
+        isCaptain,
+        out: false,
+        dvSetCols: row.slice(3, 8)
+      };
+      playersDetailed.push(player);
+      players.push(name);
+      numbers[name] = shirtNumber;
+      numberToName.set(shirtNumber, name);
+      if (isLibero) liberos.push(name);
+      if (isCaptain) captains.push(name);
+    });
+  return {
+    name: teamMeta && teamMeta.name ? teamMeta.name : side === "opponent" ? "Avversaria" : "Squadra",
+    officialCode: teamMeta && teamMeta.code ? teamMeta.code : "",
+    officialId: teamMeta && teamMeta.id ? teamMeta.id : "",
+    playersDetailed,
+    players,
+    numbers,
+    liberos,
+    captains: captains.slice(0, 1),
+    numberToName
+  };
+}
+function buildImportedTeamPayloadFromDvw(parsedTeam) {
+  if (!parsedTeam) return null;
+  const playersDetailed = (parsedTeam.playersDetailed || []).map(player =>
+    Object.assign({}, player, {
+      id: player && player.id ? player.id : (typeof generatePlayerId === "function" ? generatePlayerId() : ""),
+      out: !!(player && player.out)
+    })
+  );
+  const defaultLineup = playersDetailed
+    .filter(player => player && !player.out && player.role !== "L")
+    .slice(0, 6)
+    .map(player => player.name);
+  return {
+    version: 3,
+    name: parsedTeam.name || "",
+    staff: Object.assign({}, DEFAULT_STAFF),
+    officialCode: parsedTeam.officialCode || "",
+    officialId: parsedTeam.officialId || "",
+    playersDetailed,
+    defaultLineup,
+    defaultRotation: 1,
+    preferredLibero: (parsedTeam.liberos && parsedTeam.liberos[0]) || ""
+  };
+}
+function buildDvwSetStarts(homePayload, awayPayload, scoutRows) {
+  const setStarts = {};
+  const tryBuildFromPlayers = (payload, setNum) => {
+    const lineup = Array(6).fill("");
+    (payload.playersDetailed || []).forEach(player => {
+      const val = player.dvSetCols && player.dvSetCols[setNum - 1] ? String(player.dvSetCols[setNum - 1]).trim() : "";
+      const pos = parseInt(val, 10);
+      if (pos >= 1 && pos <= 6) lineup[pos - 1] = player.name;
+    });
+    return lineup.some(Boolean) ? lineup : null;
+  };
+  [1, 2, 3, 4, 5].forEach(setNum => {
+    const homeLineup = tryBuildFromPlayers(homePayload, setNum);
+    const awayLineup = tryBuildFromPlayers(awayPayload, setNum);
+    if (homeLineup || awayLineup) {
+      setStarts[setNum] = {
+        our: { court: makeImportedCourtFromNames(homeLineup || []), rotation: 1 },
+        opponent: { court: makeImportedCourtFromNames(awayLineup || []), rotation: 1 },
+        swapCourt: false,
+        isServing: false
+      };
+    }
+  });
+  (scoutRows || []).forEach(row => {
+    const cells = parseDvwRow(row);
+    const code = String(cells[0] || "").trim();
+    const setNum = parseInt(cells[9], 10) || 1;
+    const homeRotation = parseInt(cells[10], 10) || 1;
+    const awayRotation = parseInt(cells[11], 10) || 1;
+    const homeLineupNums = cells.slice(15, 21);
+    const awayLineupNums = cells.slice(21, 27);
+    const homeLineup = homeLineupNums.map(num => homePayload.numberToName.get(padDv(num, 2)) || "");
+    const awayLineup = awayLineupNums.map(num => awayPayload.numberToName.get(padDv(num, 2)) || "");
+    if (!setStarts[setNum] && (homeLineup.some(Boolean) || awayLineup.some(Boolean))) {
+      setStarts[setNum] = {
+        our: { court: makeImportedCourtFromNames(homeLineup), rotation: homeRotation },
+        opponent: { court: makeImportedCourtFromNames(awayLineup), rotation: awayRotation },
+        swapCourt: false,
+        isServing: /^[*]/.test(code)
+      };
+    }
+  });
+  return setStarts;
+}
+function parseDataVolleyDvwToMatchState(text) {
+  const sections = parseDvwSections(text);
+  if (!sections.has("3DATAVOLLEYSCOUT") || !sections.has("3SCOUT")) {
+    throw new Error("Formato DVW non valido");
+  }
+  const dvwAttackCombinations = getDvwSectionLines(sections, "3ATTACKCOMBINATION");
+  const dvwSetterCalls = getDvwSectionLines(sections, "3SETTERCALL");
+  const dvwWinningSymbols = getDvwSectionLines(sections, "3WINNINGSYMBOLS");
+  const dvwReserve = getDvwSectionLines(sections, "3RESERVE");
+  const dvwVideo = getDvwSectionLines(sections, "3VIDEO");
+  const matchRows = (sections.get("3MATCH") || []).filter(line => String(line || "").trim());
+  const teamRows = (sections.get("3TEAMS") || []).filter(line => String(line || "").trim()).map(parseDvwRow);
+  const setRows = (sections.get("3SET") || []).filter(line => String(line || "").trim()).map(parseDvwRow);
+  const scoutRows = (sections.get("3SCOUT") || []).filter(line => String(line || "").trim());
+  const matchInfo = matchRows.length ? parseDvwRow(matchRows[0]) : [];
+  const homeTeamMeta = teamRows[0]
+    ? { code: teamRows[0][0] || "", name: teamRows[0][1] || "Squadra", id: teamRows[0][0] || "" }
+    : { code: "OUR", name: "Squadra", id: "OUR" };
+  const awayTeamMeta = teamRows[1]
+    ? { code: teamRows[1][0] || "", name: teamRows[1][1] || "Avversaria", id: teamRows[1][0] || "" }
+    : { code: "OPP", name: "Avversaria", id: "OPP" };
+  const homePayload = parseDvwPlayersSection(sections.get("3PLAYERS-H") || [], homeTeamMeta, "our");
+  const awayPayload = parseDvwPlayersSection(sections.get("3PLAYERS-V") || [], awayTeamMeta, "opponent");
+  const attackCombinationDefs = parseDvwAttackCombinationDefinitions(dvwAttackCombinations);
+  const setterCallDefs = parseDvwSetterCallDefinitions(dvwSetterCalls);
+  const setStarts = buildDvwSetStarts(homePayload, awayPayload, scoutRows);
+  const setResults = {};
+  setRows.forEach((row, idx) => {
+    const setNum = idx + 1;
+    const finalScore = String(row[4] || "").trim();
+    const scoreMatch = finalScore.match(/^(\d+)-(\d+)$/);
+    if (!scoreMatch) return;
+    setResults[setNum] = Number(scoreMatch[1]) > Number(scoreMatch[2]) ? "our" : "opponent";
+  });
+  const events = [];
+  const playerIdByScopeAndName = {
+    our: new Map((homePayload.playersDetailed || []).map(player => [player.name, player.id])),
+    opponent: new Map((awayPayload.playersDetailed || []).map(player => [player.name, player.id]))
+  };
+  const lastSecondByScope = { our: null, opponent: null };
+  const setContexts = new Map();
+  let lastHomeCourt = setStarts[1] ? cloneDvCourt(setStarts[1].our.court || []) : makeImportedCourtFromNames([]);
+  let lastAwayCourt = setStarts[1] ? cloneDvCourt(setStarts[1].opponent.court || []) : makeImportedCourtFromNames([]);
+  let lastHomeRotation = setStarts[1] ? setStarts[1].our.rotation || 1 : 1;
+  let lastAwayRotation = setStarts[1] ? setStarts[1].opponent.rotation || 1 : 1;
+  scoutRows.forEach((line, idx) => {
+    const cells = parseDvwRow(line);
+    const rawCode = String(cells[0] || "").trim();
+    const decoded = parseDvwSkillCode(rawCode);
+    const setNum = parseInt(cells[9], 10) || 1;
+    const homeRotation = parseInt(cells[10], 10) || lastHomeRotation || 1;
+    const awayRotation = parseInt(cells[11], 10) || lastAwayRotation || 1;
+    const homeLineupNums = cells.slice(15, 21);
+    const awayLineupNums = cells.slice(21, 27);
+    const homeLineup = homeLineupNums.map(num => homePayload.numberToName.get(padDv(num, 2)) || "");
+    const awayLineup = awayLineupNums.map(num => awayPayload.numberToName.get(padDv(num, 2)) || "");
+    if (homeLineup.some(Boolean)) lastHomeCourt = makeImportedCourtFromNames(homeLineup);
+    if (awayLineup.some(Boolean)) lastAwayCourt = makeImportedCourtFromNames(awayLineup);
+    lastHomeRotation = homeRotation;
+    lastAwayRotation = awayRotation;
+    if (!setStarts[setNum] && (homeLineup.some(Boolean) || awayLineup.some(Boolean))) {
+      setStarts[setNum] = {
+        our: { court: cloneDvCourt(lastHomeCourt), rotation: homeRotation },
+        opponent: { court: cloneDvCourt(lastAwayCourt), rotation: awayRotation },
+        swapCourt: false,
+        isServing: /^[*]/.test(rawCode)
+      };
+    }
+    let setContext = setContexts.get(setNum);
+    if (!setContext) {
+      setContext = {
+        scoreOur: 0,
+        scoreOpp: 0,
+        pendingPointMarker: null,
+        lastEventIndex: null
+      };
+      setContexts.set(setNum, setContext);
+    }
+    if (decoded.kind === "point-marker") {
+      setContext.pendingPointMarker = decoded;
+      return;
+    }
+    if (decoded.kind === "score") {
+      const prevOur = setContext.scoreOur;
+      const prevOpp = setContext.scoreOpp;
+      setContext.scoreOur = decoded.scoreOur;
+      setContext.scoreOpp = decoded.scoreOpp;
+      const targetIndex = setContext.lastEventIndex;
+      if (targetIndex !== null && events[targetIndex]) {
+        const targetEvent = events[targetIndex];
+        const deltaOur = decoded.scoreOur - prevOur;
+        const deltaOpp = decoded.scoreOpp - prevOpp;
+        let direction = null;
+        if (deltaOur > deltaOpp && deltaOur > 0) {
+          direction = "for";
+        } else if (deltaOpp > deltaOur && deltaOpp > 0) {
+          direction = "against";
+        } else if (setContext.pendingPointMarker && setContext.pendingPointMarker.teamScope) {
+          direction = setContext.pendingPointMarker.teamScope === "our" ? "for" : "against";
+        } else if (decoded.teamScope) {
+          direction = decoded.teamScope === "our" ? "for" : "against";
+        }
+        targetEvent.homeScore = decoded.scoreOur;
+        targetEvent.visitorScore = decoded.scoreOpp;
+        if (direction) {
+          targetEvent.pointDirection = direction;
+          targetEvent.value = Math.max(deltaOur, deltaOpp, 1);
+          if (direction === "for" && targetEvent.team !== "our") {
+            targetEvent.dv.rallyEndReason = "opponent-point";
+          } else if (direction === "against" && targetEvent.team === "our") {
+            targetEvent.dv.rallyEndReason = "opponent-point";
+          }
+        }
+        if (setContext.pendingPointMarker) {
+          const marker = setContext.pendingPointMarker;
+          targetEvent.dv.rallyEndReason =
+            marker.pointType === "H"
+              ? marker.teamScope === getTeamScopeFromEvent(targetEvent)
+                ? "team-point-marker"
+                : "opponent-point-marker"
+              : targetEvent.dv.rallyEndReason || "";
+          if (!targetEvent.dv.specialCode && marker.evaluation) {
+            targetEvent.dv.specialCode = marker.evaluation;
+          }
+        }
+      }
+      setContext.pendingPointMarker = null;
+      return;
+    }
+    if (decoded.kind === "lineup" || decoded.kind === "rotation" || decoded.kind === "set-end" || decoded.kind === "unknown") {
+      return;
+    }
+    if (decoded.kind === "timeout") {
+      events.push({
+        eventId: `dvw-${idx + 1}`,
+        t: buildDvwTimestamp(matchInfo[0], cells[8]),
+        set: setNum,
+        rotation: decoded.teamScope === "opponent" ? awayRotation : homeRotation,
+        playerIdx: null,
+        playerId: null,
+        playerName: decoded.teamScope === "opponent" ? "Timeout Avv." : "Timeout",
+        skillId: "manual",
+        code: decoded.teamScope === "opponent" ? "TOA" : "TO",
+        value: 1,
+        team: decoded.teamScope === "opponent" ? "opponent" : "our",
+        teamName: decoded.teamScope === "opponent" ? awayPayload.name : homePayload.name,
+        actionType: "timeout",
+        playerIn: null,
+        playerOut: null,
+        homeScore: 0,
+        visitorScore: 0,
+        videoTime: 0,
+        dv: normalizeDataVolleyEventMeta({})
+      });
+      return;
+    }
+    if (decoded.kind === "substitution") {
+      const scope = decoded.teamScope;
+      const payload = scope === "opponent" ? awayPayload : homePayload;
+      const playerIn = payload.numberToName.get(decoded.playerInNumber) || "";
+      const playerOut = payload.numberToName.get(decoded.playerOutNumber) || "";
+      events.push({
+        eventId: `dvw-${idx + 1}`,
+        t: buildDvwTimestamp(matchInfo[0], cells[8]),
+        set: setNum,
+        rotation: scope === "opponent" ? awayRotation : homeRotation,
+        playerIdx: null,
+        playerId: null,
+        playerName: playerIn || "Cambio",
+        skillId: "manual",
+        code: "CH",
+        value: 1,
+        team: scope === "opponent" ? "opponent" : "our",
+        teamName: payload.name,
+        actionType: "substitution",
+        playerIn,
+        playerOut,
+        homeScore: 0,
+        visitorScore: 0,
+        videoTime: 0,
+        dv: normalizeDataVolleyEventMeta({})
+      });
+      return;
+    }
+    if (decoded.kind !== "skill") return;
+    const scope = decoded.teamScope;
+    const payload = scope === "opponent" ? awayPayload : homePayload;
+    const players = payload.players || [];
+    const playerName = payload.numberToName.get(decoded.playerNumber) || "";
+    const playerIdx = players.indexOf(playerName);
+    const skillMap = {
+      S: "serve",
+      R: "pass",
+      A: "attack",
+      B: "block",
+      D: "defense",
+      E: "second",
+      F: "freeball"
+    };
+    const skillId = skillMap[decoded.skillLetter] || "manual";
+    const zoneMeta = decoded.zoneMeta || parseDvwZoneMeta(decoded.zonePair);
+    const startZoneNum = zoneMeta.startZone ? Number(zoneMeta.startZone) : null;
+    const endZoneNum = zoneMeta.endZone ? Number(zoneMeta.endZone) : null;
+    const suffix = String(decoded.suffix || "").trim().toUpperCase();
+    const suffixMeta = parseDvwSuffixMeta(decoded.skillLetter, decoded.inlineCode, suffix);
+    const dvMeta = {
+      skillType: decoded.typeLetter,
+      attackCode: decoded.skillLetter === "A" ? decoded.advancedCode : "",
+      setCode: decoded.skillLetter === "E" ? decoded.advancedCode : "",
+      setType: decodeDvwSetType(decoded.typeLetter) || "",
+      skillSubtype: suffixMeta.skillSubtype,
+      specialCode: suffixMeta.specialCode,
+      startZone: zoneMeta.startZone || "",
+      endZone: zoneMeta.endZone || "",
+      endSubzone: zoneMeta.endSubzone || "",
+      endCone: zoneMeta.endCone || "",
+      numPlayersNumeric: Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
+      rallyEndReason: ""
+    };
+    const event = {
+      eventId: `dvw-${idx + 1}`,
+      t: buildDvwTimestamp(matchInfo[0], cells[8]),
+      durationMs: 0,
+      clockMs: idx * 1000,
+      set: setNum,
+      rotation: scope === "opponent" ? awayRotation : homeRotation,
+      courtSideSwapped: false,
+      playerIdx: playerIdx >= 0 ? playerIdx : null,
+      playerId: playerIdByScopeAndName[scope].get(playerName) || null,
+      playerCodeOfficial: (() => {
+        const player = (payload.playersDetailed || []).find(item => item && item.name === playerName);
+        return player && player.codeOfficial ? player.codeOfficial : "";
+      })(),
+      playerNumberAtEvent: decoded.playerNumber,
+      playerName: playerName || null,
+      zone: startZoneNum,
+      originZone: startZoneNum,
+      skillId,
+      code: decoded.evaluation,
+      pointDirection: null,
+      value: 1,
+      autoRotationDirection: null,
+      autoRotateNext: null,
+      setterPosition: scope === "opponent" ? awayRotation : homeRotation,
+      opponentSetterPosition: scope === "opponent" ? homeRotation : awayRotation,
+      playerPosition: startZoneNum,
+      receivePosition: null,
+      base: decoded.skillLetter === "E" ? decoded.advancedCode || null : null,
+      setType: skillId === "attack" || skillId === "second" ? decodeDvwSetType(decoded.typeLetter) : null,
+      combination: null,
+      serveStart: null,
+      serveEnd: null,
+      serveType: skillId === "serve" ? decodeDvwServeType(decoded.typeLetter) : null,
+      receiveEvaluation: null,
+      attackEvaluation: null,
+      attackBp: null,
+      attackType: decoded.skillLetter === "A" ? (decoded.advancedCode || null) : null,
+      attackStartZone: startZoneNum,
+      attackEndZone: endZoneNum,
+      attackStart: null,
+      attackEnd: null,
+      attackDirection: null,
+      blockNumber: skillId === "block" && Number.isFinite(suffixMeta.numPlayersNumeric) ? suffixMeta.numPlayersNumeric : null,
+      errorType: null,
+      playerIn: null,
+      playerOut: null,
+      relatedEvents: [],
+      team: scope === "opponent" ? "opponent" : "our",
+      teamName: payload.name,
+      teamCodeOfficial: payload.officialCode || "",
+      teamIdOfficial: payload.officialId || "",
+      homeScore: setContext.scoreOur,
+      visitorScore: setContext.scoreOpp,
+      actionType: null,
+      prevSet: null,
+      nextSet: null,
+      prevMatchFinished: null,
+      nextMatchFinished: null,
+      prevClock: null,
+      nextClock: null,
+      prevVideoClock: null,
+      nextVideoClock: null,
+      videoTime: 0,
+      dv: normalizeDataVolleyEventMeta(dvMeta)
+    };
+    if (skillId === "attack" && decoded.advancedCode) {
+      const combo = attackCombinationDefs.get(decoded.advancedCode);
+      if (combo) {
+        event.combination = {
+          code: combo.code,
+          label: combo.label,
+          setType: combo.setType || "",
+          set_type: combo.setType || ""
+        };
+        if (!event.setType && combo.setType) {
+          event.setType = combo.setType;
+        }
+      }
+    }
+    if (skillId === "second" && decoded.advancedCode) {
+      const setterCall = setterCallDefs.get(decoded.advancedCode);
+      if (setterCall) {
+        event.combination = {
+          code: setterCall.code,
+          label: setterCall.label
+        };
+      }
+    }
+    if (skillId === "attack" && startZoneNum) {
+      const start = buildDvwZonePoint(startZoneNum, "start", decoded.advancedCode);
+      const end = endZoneNum ? buildDvwZonePoint(endZoneNum, "end", decoded.advancedCode) : null;
+      event.attackStart = start;
+      event.attackEnd = end;
+      if (start && end) {
+        event.attackDirection = {
+          start,
+          end,
+          startZone: startZoneNum,
+          endZone: endZoneNum,
+          directionDeg: computeAttackDirectionDeg(start, end)
+        };
+        event.attackTrajectory = event.attackDirection;
+      }
+    }
+    if (skillId === "serve" && startZoneNum) {
+      event.serveStart = buildDvwZonePoint(startZoneNum, "start");
+      event.serveEnd = endZoneNum ? buildDvwZonePoint(endZoneNum, "end") : null;
+    }
+    if (skillId === "second") {
+      lastSecondByScope[scope] = event;
+    } else if (skillId === "attack" && lastSecondByScope[scope]) {
+      event.relatedEvents = [lastSecondByScope[scope].eventId];
+      event.setterIdx = lastSecondByScope[scope].playerIdx;
+    }
+    event.dv.rawCode = rawCode;
+    event.dv.rawCodeSignature = computeDataVolleyEventSignature(event);
+    setContext.lastEventIndex = events.length;
+    events.push(event);
+  });
+  const playedSetNumbers = Array.from(new Set(events.map(ev => parseInt(ev.set, 10)).filter(Boolean))).sort((a, b) => a - b);
+  const currentSet = playedSetNumbers.length ? playedSetNumbers[playedSetNumbers.length - 1] : 1;
+  const homeTeamPayload = buildImportedTeamPayloadFromDvw(homePayload);
+  const awayTeamPayload = buildImportedTeamPayloadFromDvw(awayPayload);
+  const savedTeams = {};
+  if (homeTeamPayload && homeTeamPayload.name) savedTeams[homeTeamPayload.name] = homeTeamPayload;
+  if (awayTeamPayload && awayTeamPayload.name) savedTeams[awayTeamPayload.name] = awayTeamPayload;
+  return {
+    match: {
+      opponent: awayPayload.name,
+      category: matchInfo[3] || "",
+      date: buildDvwImportDateIso(matchInfo[0]),
+      notes: "",
+      leg: "",
+      matchType: matchInfo[4] || "",
+      teamName: homePayload.name,
+      dvwAttackCombinations,
+      dvwSetterCalls,
+      dvwWinningSymbols,
+      dvwReserve,
+      dvwVideo
+    },
+    players: homePayload.players,
+    playerNumbers: homePayload.numbers,
+    captains: homePayload.captains,
+    liberos: homePayload.liberos,
+    opponentPlayers: awayPayload.players,
+    opponentPlayerNumbers: awayPayload.numbers,
+    opponentLiberos: awayPayload.liberos,
+    opponentCaptains: awayPayload.captains,
+    selectedTeam: homePayload.name,
+    selectedOpponentTeam: awayPayload.name,
+    useOpponentTeam: true,
+    setStarts,
+    setResults,
+    currentSet,
+    rotation: setStarts[currentSet] && setStarts[currentSet].our ? setStarts[currentSet].our.rotation || 1 : 1,
+    opponentRotation:
+      setStarts[currentSet] && setStarts[currentSet].opponent ? setStarts[currentSet].opponent.rotation || 1 : 1,
+    court: setStarts[currentSet] && setStarts[currentSet].our ? cloneDvCourt(setStarts[currentSet].our.court || []) : makeImportedCourtFromNames([]),
+    opponentCourt:
+      setStarts[currentSet] && setStarts[currentSet].opponent
+        ? cloneDvCourt(setStarts[currentSet].opponent.court || [])
+        : makeImportedCourtFromNames([]),
+    isServing: false,
+    autoRotatePending: false,
+    opponentAutoRotatePending: false,
+    matchFinished: !!setResults[currentSet],
+    events,
+    savedTeams,
+    savedOpponentTeams: savedTeams,
+    stats: {},
+    scoreOverrides: {},
+    metricsConfig: state.metricsConfig || {},
+    pointRules: state.pointRules || {},
+    video: { offsetSeconds: 0, fileName: "", youtubeId: "", youtubeUrl: "", lastPlaybackSeconds: 0 }
+  };
+}
 function handleImportMatchFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
       const txt = (e.target && e.target.result) || "";
-      const parsed = JSON.parse(txt);
-      const nextState = parsed && parsed.state ? parsed.state : parsed;
-      const importedBaseName =
-        (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
-        (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
-        "Match importato";
+      let parsed = null;
+      let nextState = null;
+      let importedBaseName = "Match importato";
+      if (/^\s*\[3DATAVOLLEYSCOUT\]/i.test(txt)) {
+        nextState = parseDataVolleyDvwToMatchState(txt);
+        if (nextState && nextState.savedTeams && typeof saveTeamToStorage === "function") {
+          Object.entries(nextState.savedTeams).forEach(([name, payload]) => {
+            if (!name || !payload) return;
+            saveTeamToStorage(name, payload);
+          });
+          if (typeof syncTeamsFromStorage === "function") syncTeamsFromStorage();
+          if (typeof syncOpponentTeamsFromStorage === "function") syncOpponentTeamsFromStorage();
+        }
+        importedBaseName =
+          (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+          `${(nextState.match && nextState.match.teamName) || "Squadra"} - ${(nextState.match && nextState.match.opponent) || "Match"}`;
+      } else {
+        parsed = JSON.parse(txt);
+        nextState = parsed && parsed.state ? parsed.state : parsed;
+        importedBaseName =
+          (parsed && typeof parsed.name === "string" && parsed.name.trim()) ||
+          (typeof buildMatchDisplayName === "function" ? buildMatchDisplayName((nextState && nextState.match) || {}) : "") ||
+          "Match importato";
+      }
       importMatchStateAsNew(nextState, { baseName: importedBaseName });
     } catch (err) {
       console.error("Import match error", err);
@@ -20866,16 +23755,21 @@ function buildAggregatedDataForPdf() {
       };
     return Object.assign(emptyCounts(), base);
   };
-  const totalFromCounts = counts =>
-    (counts["#"] || 0) +
-    (counts["+"] || 0) +
-    (counts["!"] || 0) +
-    (counts["-"] || 0) +
-    (counts["="] || 0) +
-    (counts["/"] || 0);
+  const totalFromCounts = counts => {
+    const safeCounts = Object.assign(emptyCounts(), counts || {});
+    return (
+      (safeCounts["#"] || 0) +
+      (safeCounts["+"] || 0) +
+      (safeCounts["!"] || 0) +
+      (safeCounts["-"] || 0) +
+      (safeCounts["="] || 0) +
+      (safeCounts["/"] || 0)
+    );
+  };
   const totalsBySkill = {
     serve: emptyCounts(),
     pass: emptyCounts(),
+    freeball: emptyCounts(),
     attack: emptyCounts(),
     defense: emptyCounts(),
     block: emptyCounts(),
@@ -20889,6 +23783,7 @@ function buildAggregatedDataForPdf() {
   const rows = getSortedPlayerEntries().map(({ name, idx }) => {
     const serveCounts = getCounts(idx, "serve");
     const passCounts = getCounts(idx, "pass");
+    const freeballCounts = getCounts(idx, "freeball");
     const attackCounts = getCounts(idx, "attack");
     const defenseCounts = getCounts(idx, "defense");
     const blockCounts = getCounts(idx, "block");
@@ -20896,6 +23791,7 @@ function buildAggregatedDataForPdf() {
 
     const serveMetrics = computeMetrics(serveCounts, "serve");
     const passMetrics = computeMetrics(passCounts, "pass");
+    const freeballMetrics = computeMetrics(freeballCounts, "freeball");
     const attackMetrics = computeMetrics(attackCounts, "attack");
     const defenseMetrics = computeMetrics(defenseCounts, "defense");
     const blockMetrics = computeMetrics(blockCounts, "block");
@@ -20903,6 +23799,7 @@ function buildAggregatedDataForPdf() {
 
     addCounts(totalsBySkill.serve, serveCounts);
     addCounts(totalsBySkill.pass, passCounts);
+    addCounts(totalsBySkill.freeball, freeballCounts);
     addCounts(totalsBySkill.attack, attackCounts);
     addCounts(totalsBySkill.defense, defenseCounts);
     addCounts(totalsBySkill.block, blockCounts);
@@ -20921,6 +23818,12 @@ function buildAggregatedDataForPdf() {
         neg: passMetrics.negativeCount || 0,
         pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
         prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      freeball: {
+        tot: totalFromCounts(freeballCounts),
+        neg: freeballMetrics.negativeCount || 0,
+        pos: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos),
+        prf: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf)
       },
       attack: {
         tot: totalFromCounts(attackCounts),
@@ -20950,6 +23853,7 @@ function buildAggregatedDataForPdf() {
   const totals = (() => {
     const serveMetrics = computeMetrics(totalsBySkill.serve, "serve");
     const passMetrics = computeMetrics(totalsBySkill.pass, "pass");
+    const freeballMetrics = computeMetrics(totalsBySkill.freeball, "freeball");
     const attackMetrics = computeMetrics(totalsBySkill.attack, "attack");
     const defenseMetrics = computeMetrics(totalsBySkill.defense, "defense");
     const blockMetrics = computeMetrics(totalsBySkill.block, "block");
@@ -20967,6 +23871,12 @@ function buildAggregatedDataForPdf() {
         neg: passMetrics.negativeCount || 0,
         pos: passMetrics.pos === null ? "-" : formatPercent(passMetrics.pos),
         prf: passMetrics.prf === null ? "-" : formatPercent(passMetrics.prf)
+      },
+      freeball: {
+        tot: totalFromCounts(totalsBySkill.freeball),
+        neg: freeballMetrics.negativeCount || 0,
+        pos: freeballMetrics.pos === null ? "-" : formatPercent(freeballMetrics.pos),
+        prf: freeballMetrics.prf === null ? "-" : formatPercent(freeballMetrics.prf)
       },
       attack: {
         tot: totalFromCounts(totalsBySkill.attack),
@@ -21006,6 +23916,7 @@ function formatAggRow(row) {
     16, // nome
     4, 4, 4, 4, // serve
     4, 4, 4, 4, // pass
+    4, 4, 4, 4, // freeball
     4, 4, 4, 4, // attack
     4, 4, 4, 4, // defense
     4, 4, 4, 4, // block
@@ -21021,6 +23932,10 @@ function formatAggRow(row) {
     row.pass.neg,
     row.pass.pos,
     row.pass.prf,
+    row.freeball.tot,
+    row.freeball.neg,
+    row.freeball.pos,
+    row.freeball.prf,
     row.attack.tot,
     row.attack.neg,
     row.attack.pos,
@@ -21082,6 +23997,7 @@ function buildAnalysisPdfLines() {
       name: "Atleta",
       serve: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       pass: { tot: "Tot", neg: "Neg", pos: "Pos", prf: "Prf" },
+      freeball: { tot: "Tot", neg: "Neg", pos: "Pos", prf: "Prf" },
       attack: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       defense: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
       block: { tot: "Tot", neg: "Neg", pos: "Pos", eff: "Eff" },
@@ -23409,10 +26325,11 @@ async function init() {
   const opponentSkillToggles = [
     { id: "serve", el: elOpponentSkillServe },
     { id: "pass", el: elOpponentSkillPass },
+    { id: "freeball", el: elOpponentSkillFreeball },
+    { id: "second", el: elOpponentSkillSecond },
     { id: "attack", el: elOpponentSkillAttack },
     { id: "defense", el: elOpponentSkillDefense },
-    { id: "block", el: elOpponentSkillBlock },
-    { id: "second", el: elOpponentSkillSecond }
+    { id: "block", el: elOpponentSkillBlock }
   ];
   const syncOpponentSkillToggles = () => {
     state.opponentSkillConfig = state.opponentSkillConfig || {};
@@ -23856,6 +26773,7 @@ async function init() {
   if (elBtnExportPdf) elBtnExportPdf.addEventListener("click", exportAnalysisPdf);
   if (elBtnExportHtml) elBtnExportHtml.addEventListener("click", exportAnalysisHtml);
   if (elBtnExportMatch) elBtnExportMatch.addEventListener("click", exportMatchToFile);
+  if (elBtnExportDvw) elBtnExportDvw.addEventListener("click", exportDataVolleyToFile);
   if (elBtnImportMatch && elMatchFileInput) {
     elBtnImportMatch.addEventListener("click", () => elMatchFileInput.click());
     elMatchFileInput.addEventListener("change", e => {
@@ -23900,6 +26818,46 @@ async function init() {
     elBtnForceRefreshApp.addEventListener("click", forceRefreshAppAssets);
   }
   if (elBtnUndo) elBtnUndo.addEventListener("click", undoLastEvent);
+  if (elBtnDvwScoutApply) {
+    elBtnDvwScoutApply.addEventListener("click", () => {
+      applyDvwScoutInput();
+    });
+  }
+  if (elBtnDvwScoutClear) {
+    elBtnDvwScoutClear.addEventListener("click", () => {
+      dvwScoutPendingTokens = [];
+      if (elDvwScoutInput) {
+        elDvwScoutInput.value = "";
+        elDvwScoutInput.focus();
+      }
+      renderDvwScoutPending();
+      setDvwScoutStatus("Pronto.");
+    });
+  }
+  if (elBtnDvwScoutHelp) {
+    elBtnDvwScoutHelp.addEventListener("click", () => {
+      openDvwScoutHelp();
+    });
+  }
+  if (elDvwScoutInput) {
+    elDvwScoutInput.addEventListener("input", () => {
+      renderDvwScoutPending();
+    });
+    elDvwScoutInput.addEventListener("keydown", e => {
+      e.stopPropagation();
+      if (e.key === " " || e.key === "Tab") {
+        const hasToken = String(elDvwScoutInput.value || "").trim();
+        if (hasToken) {
+          e.preventDefault();
+          queueCurrentDvwScoutToken();
+        }
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      applyDvwScoutInput();
+    });
+  }
   // pulsanti lineup mobile rimossi
   const elMobileMenuBtn = document.getElementById("btn-open-menu-mobile");
   const elMobileLogBtn = document.getElementById("btn-open-log-mobile");
