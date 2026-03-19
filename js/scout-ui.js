@@ -25,9 +25,15 @@ function isFarSideForScopeAtSwap(scope, swapped) {
 function isServingForScope(scope) {
   return scope === "opponent" ? !state.isServing : !!state.isServing;
 }
+function hasPendingServeSelectionForScope(scope = "our") {
+  return Object.keys(selectedSkillPerPlayer || {}).some(key => {
+    if (!key.startsWith(scope + ":")) return false;
+    return selectedSkillPerPlayer[key] === "serve";
+  });
+}
 function getServeDisplayCourt(scope = "our") {
   let baseCourt = scope === "opponent" ? state.opponentCourt : state.court;
-  if (state.autoRolePositioning) {
+  if (state.autoRolePositioning && !hasPendingServeSelectionForScope(scope)) {
     if (scope === "opponent") {
       if (state.opponentAutoRoleBaseCourt && state.opponentAutoRoleBaseCourt.length === 6) {
         baseCourt = state.opponentAutoRoleBaseCourt;
@@ -14501,6 +14507,14 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
       state.opponentAutoRotatePending = !opponentKeepsServe;
       state.autoRotatePending = opponentKeepsServe;
       eventObj.autoRotateNext = !opponentKeepsServe;
+      if (typeof enforceAutoLiberoForScope === "function") {
+        if (!state.isServing) {
+          enforceAutoLiberoForScope("our", { skipServerOnServe: true });
+        }
+        if (state.isServing) {
+          enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+        }
+      }
       saveState();
       return;
     }
@@ -14508,6 +14522,9 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
       state.opponentAutoRotatePending = true;
       state.isServing = true;
       eventObj.autoRotateNext = true;
+      if (typeof enforceAutoLiberoForScope === "function") {
+        enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+      }
       saveState();
       return;
     }
@@ -14553,6 +14570,14 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     state.autoRotatePending = !keepServe;
     state.opponentAutoRotatePending = keepServe;
     eventObj.autoRotateNext = !keepServe;
+    if (typeof enforceAutoLiberoForScope === "function") {
+      if (!state.isServing) {
+        enforceAutoLiberoForScope("our", { skipServerOnServe: true });
+      }
+      if (state.isServing) {
+        enforceAutoLiberoForScope("opponent", { skipServerOnServe: true });
+      }
+    }
     saveState();
     return;
   }
@@ -14560,6 +14585,9 @@ function handleAutoRotationFromEvent(eventObj, scope = "our") {
     state.autoRotatePending = true;
     state.isServing = false;
     eventObj.autoRotateNext = true;
+    if (typeof enforceAutoLiberoForScope === "function") {
+      enforceAutoLiberoForScope("our", { skipServerOnServe: true });
+    }
     saveState();
     return;
   }

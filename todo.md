@@ -14,7 +14,6 @@ crea stampa tipo foglio gara
 # Features teoricamente implementate
 
 # Bug funzionalità
-Quando il centrale sbaglia battuta, il libero non entra
 
 # bug in teoria risolti
 Da touch si cliccano i tasti sottostanti dagli overlay
