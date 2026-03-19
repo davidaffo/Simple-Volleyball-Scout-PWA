@@ -255,6 +255,7 @@
         <div class="set-controls grid-row">
           <div class="score-card score-card-top">
             <div class="score-top-row">
+              <button id="btn-next-set" class="small secondary score-top-action score-top-action-left">Set successivo</button>
               <div class="score-set-select">
                 <label for="current-set">Set corrente</label>
                 <div class="set-display" id="current-set-display" aria-live="polite">Set 1</div>
@@ -266,11 +267,12 @@
                   <option value="5">Set 5</option>
                 </select>
               </div>
+              <button id="btn-end-match" class="small danger score-top-action score-top-action-right">Pausa/Termina</button>
             </div>
           <div class="score-layout">
             <div class="score-side score-side-for">
-              <button id="btn-score-for-plus" class="small">+ Fatti</button>
               <button id="btn-score-for-minus" class="small secondary">- Fatti</button>
+              <button id="btn-score-for-plus" class="small">+ Fatti</button>
             </div>
               <div class="score-center">
                 <label>Punteggio</label>
@@ -281,14 +283,10 @@
                 </div>
               </div>
               <div class="score-side score-side-against">
-                <button id="btn-score-against-plus" class="small">+ Subiti</button>
                 <button id="btn-score-against-minus" class="small secondary">- Subiti</button>
+                <button id="btn-score-against-plus" class="small">+ Subiti</button>
               </div>
             </div>
-          </div>
-          <div class="set-bottom-actions">
-            <button id="btn-next-set" class="small secondary">Set successivo</button>
-            <button id="btn-end-match" class="small danger">Pausa/Termina</button>
           </div>
           <div class="rotation-toggles">
             <label class="auto-rotate-toggle">
