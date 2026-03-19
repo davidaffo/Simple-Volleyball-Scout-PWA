@@ -13,6 +13,7 @@ crea stampa tipo foglio gara
 # Features teoricamente implementate
 
 # Bug funzionalità
+Colonna sinistra scout live ha troppe newlines bianche che occupano spazio inutile
 Quando il centrale sbaglia battuta, il libero non entra
 
 # bug in teoria risolti
