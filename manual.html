@@ -11,7 +11,10 @@
     <div>
       <p class="manual-kicker">Manuale utente</p>
       <h1>Simple Volleyball Scout PWA</h1>
-      <p class="manual-updated">Guida professionale all’uso dell’app, con procedure operative e best practice per lo scouting live e l’analisi video.</p>
+      <p class="manual-updated">
+        Manuale operativo strutturato sul flusso informativo di un handbook professionale:
+        configurazione, scouting, correzione, analisi, video, esportazione e manutenzione dati.
+      </p>
     </div>
     <div class="manual-links">
       <a href="index.html" class="manual-link">← Torna all'app</a>
@@ -21,138 +24,915 @@
   <nav class="manual-nav">
     <h2>Indice</h2>
     <ul>
-      <li><a href="#introduzione">Introduzione</a></li>
-      <li><a href="#requisiti">Requisiti e compatibilità</a></li>
-      <li><a href="#avvio-rapido">Avvio rapido</a></li>
-      <li><a href="#impostazioni-partita">Impostazioni partita</a></li>
-      <li><a href="#formazione-rotazioni">Formazione e rotazioni</a></li>
-      <li><a href="#scout-live">Scout live</a></li>
-      <li><a href="#log-eventi">Log eventi e modifiche</a></li>
-      <li><a href="#analisi">Analisi e tabellino</a></li>
-      <li><a href="#analisi-video">Analisi video</a></li>
-      <li><a href="#scorciatoie">Scorciatoie da tastiera</a></li>
-      <li><a href="#salvataggi">Salvataggi e backup</a></li>
-      <li><a href="#mobile">Uso da mobile</a></li>
+      <li><a href="#cap1">1. Introduzione</a></li>
+      <li><a href="#cap2">2. Primo utilizzo</a></li>
+      <li><a href="#cap3">3. Scout di una partita</a></li>
+      <li><a href="#cap4">4. Apertura e gestione match</a></li>
+      <li><a href="#cap5">5. Analisi</a></li>
+      <li><a href="#cap6">6. Strumenti e manutenzione</a></li>
+      <li><a href="#cap7">7. Appendici</a></li>
     </ul>
   </nav>
 
   <main class="manual-content">
-    <section id="introduzione">
-      <h2>Introduzione</h2>
-      <p>Simple Volleyball Scout PWA è pensata per lo scouting professionale di una partita di pallavolo. L’app consente di registrare eventi in tempo reale, mantenere la rotazione aggiornata e trasformare i dati in analisi chiare. È ottimizzata per l’uso su desktop e mobile e funziona anche offline.</p>
-    </section>
+    <section id="cap1">
+      <h2>1. Introduzione</h2>
+      <p>
+        Simple Volleyball Scout PWA e un software per lo scouting e l'analisi delle partite di pallavolo.
+        L'applicazione permette di trasformare le azioni osservate in dati strutturati, mantenerne la
+        coerenza rotazionale durante lo scout live e produrre analisi statistiche, distribuzioni,
+        grafici, traiettorie e riferimenti video.
+      </p>
+      <p>
+        Il programma e stato progettato per un uso operativo reale: sessioni di scout live durante la gara,
+        revisione post partita, analisi video, confronto giocatrici, esportazione del match e consultazione
+        offline del materiale prodotto.
+      </p>
 
-    <section id="requisiti">
-      <h2>Requisiti e compatibilità</h2>
+      <h3>1.1 Obiettivo del programma</h3>
+      <p>
+        L'obiettivo principale e registrare in modo affidabile cio che accade in campo e renderlo disponibile
+        in una forma leggibile e verificabile. Questo richiede tre elementi:
+      </p>
       <ul>
-        <li>Browser moderno con supporto PWA (Chrome, Edge, Safari recenti).</li>
-        <li>Connessione necessaria solo per il primo caricamento o per i video YouTube.</li>
-        <li>Per la modalità video: file locale oppure URL YouTube.</li>
+        <li>una rappresentazione coerente delle giocatrici in campo e della rotazione;</li>
+        <li>un flusso di inserimento abbastanza rapido da essere usato durante la partita;</li>
+        <li>strumenti di analisi che permettano di tornare dal dato grezzo alla decisione tecnica.</li>
       </ul>
+
+      <h3>1.2 Requisiti e compatibilita</h3>
+      <ul>
+        <li>Browser moderno con buon supporto HTML5, IndexedDB, File API e Clipboard API.</li>
+        <li>Desktop consigliato per scout live e analisi estese; tablet e mobile supportati per utilizzi rapidi.</li>
+        <li>Connessione internet necessaria solo per primo caricamento, aggiornamenti, link remoti e YouTube.</li>
+        <li>Il programma puo funzionare offline una volta caricato, con salvataggio locale dei dati.</li>
+      </ul>
+
+      <h3>1.3 Modalita di utilizzo</h3>
+      <ul>
+        <li><strong>Scout live:</strong> inserimento eventi durante la partita.</li>
+        <li><strong>Analisi:</strong> tabellini, grafici, distribuzioni, confronto giocatrici.</li>
+        <li><strong>Video:</strong> sincronizzazione eventi e revisione temporale.</li>
+        <li><strong>Gestione match:</strong> apertura, import/export, backup e ripristino.</li>
+      </ul>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-01 · Vista generale dell'applicazione con tab principali.</p>
+      </div>
     </section>
 
-    <section id="avvio-rapido">
-      <h2>Avvio rapido</h2>
+    <section id="cap2">
+      <h2>2. Primo utilizzo</h2>
+      <p>
+        Prima di iniziare uno scout e necessario predisporre l'ambiente di lavoro. La logica e simile a quella
+        dei software professionali di scouting: prima si organizza il contesto, poi si registra la partita.
+      </p>
+
+      <h3>2.1 Homepage e navigazione principale</h3>
+      <p>Le aree principali del programma sono:</p>
+      <ul>
+        <li><strong>Gestione match:</strong> anagrafica del match, squadre, elenco match e operazioni di import/export.</li>
+        <li><strong>Impostazioni:</strong> metriche, codici, opzioni di scout e parametri applicativi.</li>
+        <li><strong>Scout live:</strong> campo, punteggio, panchina, controlli di inserimento e log.</li>
+        <li><strong>Analisi:</strong> tabellini, alzate, traiettorie, grafici, analisi giocatrici.</li>
+        <li><strong>Video:</strong> revisione e collegamento temporale degli eventi.</li>
+      </ul>
+
+      <h3>2.2 Operazioni preliminari consigliate</h3>
       <ol>
-        <li>Apri la scheda <strong>Scout live</strong>.</li>
-        <li>Compila le <strong>impostazioni partita</strong> e seleziona le squadre.</li>
-        <li>Inserisci la <strong>formazione in campo</strong> e la rotazione iniziale.</li>
-        <li>Attiva il <strong>flusso automatico</strong> se vuoi un inserimento guidato.</li>
-        <li>Registra gli eventi cliccando la giocatrice e il relativo codice.</li>
+        <li>Creare o selezionare il match da lavorare.</li>
+        <li>Associare squadra nostra e, se necessario, squadra avversaria.</li>
+        <li>Verificare il roster: numeri, nomi, libero, capitana, eventuali ruoli nel nome.</li>
+        <li>Definire metriche e regole di calcolo prima di iniziare a scoutare.</li>
+        <li>Configurare le opzioni di flusso, auto-rotazione, auto-posizionamento e traiettorie.</li>
+      </ol>
+      <p>
+        L'ordine e importante. Se prima di configurare match e roster si comincia a registrare skill, si rischia di
+        introdurre incoerenze nei nomi giocatrice, nelle alzatrici, nei liberi, nei filtri di analisi e nelle successive
+        esportazioni.
+      </p>
+
+      <h3>2.3 Gestione match</h3>
+      <p>
+        La sezione <strong>Gestione match</strong> e il punto di ingresso obbligato. Qui si definiscono i dati della partita
+        e si sceglie quale match e realmente caricato nell'applicazione.
+      </p>
+
+      <h4>2.3.1 Informazioni match</h4>
+      <ul>
+        <li>Avversario</li>
+        <li>Categoria</li>
+        <li>Data</li>
+        <li>Tipo partita</li>
+        <li>Turno</li>
+      </ul>
+      <p>
+        Queste informazioni non servono solo a livello descrittivo: vengono riutilizzate nelle intestazioni, nelle esportazioni
+        e nelle liste dei match salvati.
+      </p>
+      <p>
+        Il pulsante <strong>Salva info match</strong> conferma esplicitamente questi dati. Anche se il programma salva in automatico
+        in molte situazioni, e buona pratica confermare le informazioni match prima di iniziare lo scout.
+      </p>
+
+      <h4>2.3.2 Squadre del match</h4>
+      <p>
+        Si selezionano la squadra nostra e, opzionalmente, la squadra avversaria. Quando la squadra avversaria e attiva,
+        il programma abilita anche flussi e analisi differenziati per scope.
+      </p>
+      <ul>
+        <li><strong>Squadra nostra:</strong> roster principale da usare per lo scout corrente.</li>
+        <li><strong>Squadra avversaria:</strong> roster separato con skill attivabili singolarmente.</li>
+        <li><strong>Gestione squadre:</strong> accesso a creazione, modifica, importazione ed esportazione roster.</li>
+      </ul>
+      <p>
+        Se si lavora con una sola squadra, le skill avversarie vengono ignorate nei flussi che le prevederebbero. Questo
+        permette di mantenere un comportamento pulito anche in configurazioni semplificate.
+      </p>
+
+      <h4>2.3.2.1 Gestione roster</h4>
+      <p>Ogni roster dovrebbe essere verificato prima dell'uso, in particolare nei seguenti campi:</p>
+      <ul>
+        <li><strong>Numero:</strong> usato nel campo, nei tabellini e nelle esportazioni.</li>
+        <li><strong>Nome:</strong> identificativo principale per visualizzazione e mapping eventi.</li>
+        <li><strong>Libero:</strong> necessario per le logiche di sostituzione e auto-gestione linea arretrata.</li>
+        <li><strong>Capitana:</strong> informazione di supporto per la gestione squadra.</li>
+        <li><strong>Ruolo nel nome:</strong> utile nelle squadre di test e nei posizionamenti di default.</li>
+      </ul>
+
+      <h4>2.3.2.2 Gestione squadre di test</h4>
+      <p>
+        Quando si lavora con una squadra di prova o si sta validando l'interfaccia, l'app puo creare e disporre
+        automaticamente giocatrici di test in posizioni coerenti con il ruolo indicato nel nome. Questo aiuta a
+        verificare rapidamente auto-posizionamenti, flussi e tabellini senza dover ricostruire ogni volta un roster reale.
+      </p>
+
+      <h4>2.3.3 Match salvati</h4>
+      <p>
+        La lista dei match salvati permette di caricare, creare, eliminare o duplicare il contesto di lavoro. E importante
+        distinguere tra match selezionato e match realmente caricato: il programma salva e riapre i dati sul match corrente.
+      </p>
+      <ul>
+        <li><strong>Carica match:</strong> apre il match selezionato e ripristina lo stato operativo.</li>
+        <li><strong>Nuovo match:</strong> crea un match vuoto pronto per essere compilato.</li>
+        <li><strong>Elimina selezionati:</strong> rimuove i match scelti dalla lista salvata.</li>
+      </ul>
+      <p>
+        Quando si passa da un match a un altro, il programma deve salvare prima il match realmente aperto. Questa logica
+        evita che i dati finiscano per errore nel match sbagliato o che un export usi una snapshot obsoleta.
+      </p>
+
+      <h4>2.3.4 Azioni match</h4>
+      <ul>
+        <li><strong>Reset match:</strong> azzera lo scout corrente.</li>
+        <li><strong>Esporta match:</strong> salva un JSON del solo match.</li>
+        <li><strong>Esporta DataVolley:</strong> produce il formato compatibile previsto dall'app.</li>
+        <li><strong>Importa match:</strong> crea un nuovo match da file JSON/DVW.</li>
+        <li><strong>Esporta database completo:</strong> backup di dati app, squadre e match.</li>
+        <li><strong>Importa database:</strong> ripristino completo da backup.</li>
+        <li><strong>Importa da URL:</strong> importazione diretta da link JSON con CORS valido.</li>
+      </ul>
+      <p>
+        L'importazione di un match non deve sovrascrivere un match esistente con lo stesso nome: se il nome collide,
+        il programma genera un nome univoco per creare un nuovo elemento in archivio.
+      </p>
+      <p>
+        Il comando <strong>Cancella dati app</strong> e un'operazione distruttiva globale: va usato solo quando si vuole
+        realmente riportare l'applicazione a uno stato iniziale.
+      </p>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-02 · Gestione match: informazioni partita, squadre, elenco match e azioni.</p>
+      </div>
+
+      <h3>2.4 Impostazioni applicative</h3>
+      <p>
+        La sezione <strong>Impostazioni</strong> definisce la logica con cui i dati vengono interpretati. Per mantenere
+        omogeneita statistica, queste scelte dovrebbero essere fissate prima dello scout.
+      </p>
+
+      <h4>2.4.1 Regole di calcolo</h4>
+      <ul>
+        <li>Pesi delle valutazioni e loro classificazione positiva, neutra o negativa.</li>
+        <li>Formule di positività, perfezione ed efficienza.</li>
+        <li>Simboli che assegnano punto o errore.</li>
+        <li>Reset selettivo delle metriche e dei criteri di punteggio.</li>
+      </ul>
+      <p>
+        Queste impostazioni influenzano direttamente il colore dei grafici, le metriche del tabellino, il confronto
+        giocatrici e gli indicatori mostrati nelle analisi. Per questo motivo dovrebbero restare stabili durante la stagione,
+        salvo una decisione consapevole di cambiare il criterio statistico.
+      </p>
+
+      <h4>2.4.2 Opzioni di scout</h4>
+      <ul>
+        <li>Rotazione automatica su cambio palla.</li>
+        <li>Auto posizionamento per ruolo.</li>
+        <li>Flusso di gioco automatico.</li>
+        <li>Direzione attacco semplificata.</li>
+        <li>P1 americana.</li>
+        <li>Traiettorie di attacco, battuta e tipo alzata.</li>
+      </ul>
+      <p>Le opzioni piu importanti da comprendere prima dello scout sono:</p>
+      <ul>
+        <li>
+          <strong>Rotazione automatica su cambio palla:</strong> se attiva, la squadra ruota automaticamente quando conquista il servizio.
+        </li>
+        <li>
+          <strong>Auto posizionamento per ruolo:</strong> dispone le giocatrici in funzione della fase di gioco, mantenendo separata la rotazione base.
+        </li>
+        <li>
+          <strong>Flusso di gioco automatico:</strong> mostra solo la prossima skill coerente da inserire.
+        </li>
+        <li>
+          <strong>P1 americana:</strong> modifica il comportamento standard della prima linea nelle situazioni previste.
+        </li>
+      </ul>
+
+      <h4>2.4.3 Scorciatoie e comportamento operativo</h4>
+      <p>
+        L'applicazione non replica il sistema comandi di Datavolley in modo letterale, ma adotta scorciatoie operative
+        per video, navigazione e correzione temporale. Queste scorciatoie devono essere note prima dell'uso intensivo.
+      </p>
+      <ul>
+        <li><strong>Spazio:</strong> play/pausa del video.</li>
+        <li><strong>Frecce sinistra/destra:</strong> spostamento rapido nel video.</li>
+        <li><strong>Shift + frecce:</strong> avanzamento frame-by-frame.</li>
+        <li><strong>Q/W:</strong> correzione fine del timestamp skill in analisi video.</li>
+      </ul>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-03 · Impostazioni metriche e opzioni di scout.</p>
+      </div>
+    </section>
+
+    <section id="cap3">
+      <h2>3. Scout di una partita</h2>
+      <p>
+        Questa sezione descrive il flusso operativo completo durante la rilevazione. La logica e: preparazione della
+        formazione, inserimento dei fondamentali, gestione dei casi speciali, correzione di errori, chiusura del set.
+      </p>
+
+      <h3>3.1 Modello di registrazione dell'azione</h3>
+      <p>
+        Ogni evento contiene un fondamentale, una giocatrice o una squadra, un codice di valutazione e metadati
+        opzionali come set, rotazione, tipo di alzata, traiettoria, link con altre skill e timestamp video.
+      </p>
+      <p>I fondamentali principali gestiti dall'app sono:</p>
+      <ul>
+        <li>Battuta</li>
+        <li>Ricezione</li>
+        <li>Alzata</li>
+        <li>Attacco</li>
+        <li>Difesa</li>
+        <li>Muro</li>
+        <li>Manuale / eventi di servizio</li>
+      </ul>
+
+      <h3>3.2 Creazione del match operativo</h3>
+      <ol>
+        <li>Aprire o creare il match nella sezione Gestione match.</li>
+        <li>Passare a <strong>Scout live</strong>.</li>
+        <li>Verificare set corrente, punteggio e stato della gara.</li>
+        <li>Impostare la formazione iniziale tramite la finestra di formazione/sostituzione.</li>
+        <li>Definire il lato del campo e la squadra al servizio.</li>
+      </ol>
+      <p>
+        Una partita non dovrebbe mai essere scoutata senza essere prima stata creata e selezionata. In assenza di un
+        match attivo, l'app deve bloccare le funzioni operative principali e invitare alla creazione/selezione del match.
+      </p>
+
+      <h3>3.3 Lista giocatrici, panchina e ruoli</h3>
+      <p>
+        Il programma utilizza il roster caricato per costruire il campo, la panchina e la lista disponibile per i cambi.
+        In base ai nomi e ai ruoli inseriti puo anche preparare una squadra di test con posizionamento coerente.
+      </p>
+      <ul>
+        <li>Le giocatrici in campo devono sempre rappresentare la rotazione reale del momento.</li>
+        <li>La panchina mostra le atlete non presenti sul campo.</li>
+        <li>Il libero e gestito come sostituzione funzionale e puo essere associato automaticamente.</li>
+      </ul>
+      <p>
+        La panchina cambia funzione in base al contesto. Durante la selezione errore, ad esempio, puo mostrare anche
+        il controllo per assegnare un errore di squadra, separato dall'errore individuale su giocatrice.
+      </p>
+
+      <h3>3.4 Finestra scout live</h3>
+      <p>La finestra e composta da tre zone principali:</p>
+      <ul>
+        <li><strong>Colonna sinistra:</strong> set, punteggio, controlli partita, flag operativi, timeout e formazione.</li>
+        <li><strong>Colonna centrale:</strong> campo, giocatrici, pulsanti skill, controlli di inserimento e panchina.</li>
+        <li><strong>Colonna destra:</strong> log eventi in tempo reale e ultimo codice registrato.</li>
+      </ul>
+      <p>
+        Le colonne laterali e il pannello video possono essere ridimensionati con maniglie, in modo da privilegiare lo
+        spazio centrale quando si sta lavorando sulla parte di inserimento eventi.
+      </p>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-04 · Finestra Scout live con campo, panchina e log.</p>
+      </div>
+
+      <h3>3.5 Inserimento delle skill</h3>
+      <h4>3.5.1 Modalita manuale</h4>
+      <ol>
+        <li>Selezionare la giocatrice sul campo.</li>
+        <li>Selezionare il fondamentale.</li>
+        <li>Scegliere la valutazione dalla griglia dei codici.</li>
+        <li>Controllare che il log si aggiorni correttamente.</li>
+      </ol>
+      <p>
+        In modalita manuale, dopo l'inserimento del voto il programma dovrebbe riportare l'utente alla selezione delle skill,
+        per mantenere il flusso rapido e ridurre i click durante la partita.
+      </p>
+
+      <h4>3.5.2 Modalita guidata dal flusso automatico</h4>
+      <p>
+        Con il flusso automatico attivo, l'app propone la skill successiva coerente con lo stato del rally. In questa
+        modalita l'utente non vede tutte le skill disponibili ma solo quella attesa nel punto attuale del flusso.
+      </p>
+      <p>Il flusso e stato pensato in modo estendibile anche al futuro scout dell'avversaria.</p>
+      <p>Esempi di comportamento:</p>
+      <ul>
+        <li>Dopo una battuta valida avversaria, l'app propone la ricezione se la nostra squadra e in ricezione.</li>
+        <li>Dopo una ricezione, propone alzata e poi attacco.</li>
+        <li>Dopo punto o errore, ricalcola il possesso palla e la fase successiva.</li>
+        <li>Freeball e situazioni speciali possono forzare il flusso a uno stato specifico.</li>
+      </ul>
+
+      <h4>3.5.3 Errori, falli e punto squadra</h4>
+      <ul>
+        <li><strong>Errore individuale:</strong> si seleziona la giocatrice responsabile e poi il tipo di errore.</li>
+        <li><strong>Errore squadra:</strong> disponibile nel blocco panchina durante la selezione errore.</li>
+        <li><strong>Punto / Errore avv:</strong> aggiornano il flusso e la logica di possesso palla.</li>
+      </ul>
+      <p>
+        Il tipo di errore squadra va scelto con la stessa logica dei tipi di errore individuale, in modo che il log e le
+        analisi mantengano coerenza semantica.
+      </p>
+
+      <h3>3.6 Formazione, rotazioni e auto-posizionamento</h3>
+      <p>
+        Il programma mantiene separata la rotazione originale dalla disposizione modificata di fase. Questo consente
+        di tornare alla base corretta quando si disattivano i flag o quando cambia la fase di gioco.
+      </p>
+      <ul>
+        <li><strong>Rotazione automatica:</strong> ruota il campo in caso di cambio palla.</li>
+        <li><strong>Auto posizionamento:</strong> sposta le giocatrici nella disposizione prevista per battuta o ricezione.</li>
+        <li><strong>P1 americana:</strong> altera la disposizione di prima linea nelle condizioni previste.</li>
+        <li><strong>Ricezione:</strong> vengono portate in seconda linea solo le giocatrici coinvolte nella linea di ricezione.</li>
+      </ul>
+      <p>Per evitare errori di interpretazione, e utile distinguere i tre livelli seguenti:</p>
+      <ul>
+        <li><strong>Rotazione reale:</strong> ordine delle giocatrici determinato dal regolamento.</li>
+        <li><strong>Posizionamento grafico di fase:</strong> disposizione visuale usata in battuta o ricezione.</li>
+        <li><strong>Posizionamento funzionale:</strong> eventuali eccezioni logiche, come P1 americana o ricezione a tre.</li>
+      </ul>
+      <p>
+        La disposizione in ricezione non deve semplicemente replicare il campo ruotato: deve spostare in seconda linea le
+        atlete che effettivamente ricevono, come avviene nei software di riferimento e nella pratica tecnica.
+      </p>
+
+      <h3>3.7 Timeout, sostituzioni e comandi di set</h3>
+      <ul>
+        <li>Timeout della squadra con relativo contatore.</li>
+        <li>Formazione/Sostituzione con conteggio dei cambi.</li>
+        <li>Set successivo e chiusura del set.</li>
+        <li>Pausa/Termina per chiudere o sospendere il match.</li>
+      </ul>
+      <p>
+        La finestra formazione/sostituzione deve essere interpretata come uno strumento di controllo del sestetto corrente:
+        non solo inserimento iniziale, ma anche sostituzioni reali, rientri, gestione libero e controllo dei cambi usati.
+      </p>
+
+      <h3>3.8 Chiusura set e chiusura match</h3>
+      <p>
+        Quando termina un set o viene messa in pausa la partita, l'app salva lo stato persistente del match. Questo
+        comportamento e fondamentale per evitare disallineamenti tra stato corrente, match salvato ed esportazioni.
+      </p>
+      <ol>
+        <li>Confermare la chiusura del set.</li>
+        <li>Verificare punteggio finale del set e passaggio al set successivo.</li>
+        <li>Controllare che formazione e rotazione siano pronte per il nuovo set.</li>
+        <li>Alla fine del match, usare Pausa/Termina per concludere correttamente la sessione.</li>
+      </ol>
+      <p>
+        Una chiusura corretta e importante anche per evitare mismatch tra dati visti in analisi, match salvato e file
+        esportati successivamente.
+      </p>
+    </section>
+
+    <section id="cap4">
+      <h2>4. Apertura e gestione match</h2>
+      <p>
+        Una volta registrato un match, il programma permette di riaprirlo, modificarlo, esportarlo o cancellarlo. Le azioni
+        descritte qui si applicano al singolo match, non al database completo.
+      </p>
+
+      <h3>4.1 Aprire un match</h3>
+      <p>
+        Selezionando un match salvato e premendo <strong>Carica match</strong>, l'app ripristina eventi, campo, rotazione,
+        punteggio, set, squadre collegate e preferenze specifiche di quella partita.
+      </p>
+      <p>Durante il caricamento, il programma deve riportare nello stato operativo almeno i seguenti elementi:</p>
+      <ul>
+        <li>eventi del match;</li>
+        <li>formazione in campo e panchina;</li>
+        <li>rotazione corrente e set corrente;</li>
+        <li>punteggio e risultati parziali dei set;</li>
+        <li>flag di scout attivi;</li>
+        <li>impostazioni video collegate al match;</li>
+        <li>preset filtri legati a quel match.</li>
+      </ul>
+      <p>
+        Se un match viene caricato correttamente, l'utente deve poter passare da Gestione match a Scout live o Analisi
+        senza dover reinserire dati di contesto.
+      </p>
+
+      <h3>4.2 Modificare un match</h3>
+      <p>
+        Le correzioni possono essere effettuate da scout live, dal log o dalla sezione video. Il programma aggiorna i
+        riepiloghi dopo la modifica, senza richiedere ricostruzioni manuali da parte dell'utente.
+      </p>
+      <p>Le modifiche più frequenti riguardano:</p>
+      <ul>
+        <li>correzione del codice di valutazione;</li>
+        <li>correzione della giocatrice associata all'evento;</li>
+        <li>rettifica del set, della rotazione o del timestamp video;</li>
+        <li>aggiunta di metadati come tipo alzata, traiettoria o link fra skill;</li>
+        <li>correzione di punteggio, timeout e sostituzioni.</li>
+      </ul>
+      <p>
+        Ogni correzione dovrebbe riflettersi subito nel log, nel tabellino, nelle distribuzioni e nei grafici della sezione
+        Analisi. Se questo non avviene, significa che c'è uno stato derivato non riallineato.
+      </p>
+
+      <h3>4.3 Importare un match</h3>
+      <p>
+        L'importazione crea un nuovo match invece di sovrascrivere quelli esistenti. Se il nome collide con un match gia
+        presente, viene generato un nome univoco.
+      </p>
+      <p>I formati di import gestiti dall'app sono:</p>
+      <ul>
+        <li><strong>JSON match:</strong> esportazione nativa del programma.</li>
+        <li><strong>Database JSON:</strong> ripristino completo dell'applicazione.</li>
+        <li><strong>DataVolley / DVW:</strong> importazione secondo le integrazioni presenti nel progetto.</li>
+        <li><strong>URL remoto:</strong> importazione da file accessibile via browser.</li>
+      </ul>
+      <p>
+        In caso di import da URL, il file deve essere raggiungibile direttamente e il server deve consentire richieste
+        cross-origin. Link non diretti o servizi che bloccano CORS possono impedire l'import anche se il file esiste.
+      </p>
+
+      <h3>4.4 Eliminare un match</h3>
+      <p>
+        L'eliminazione opera sul match selezionato. Se non esiste almeno un match creato e selezionato, l'applicazione
+        limita le funzionalita operative e richiede di crearne uno prima di continuare.
+      </p>
+      <p>
+        La rimozione del match deve anche aggiornare la lista persistente dei match salvati, evitando il problema del
+        "match che ricompare" al reload. Per questo la cancellazione non puo limitarsi al solo stato in memoria.
+      </p>
+
+      <h3>4.5 Esportazioni disponibili</h3>
+      <ul>
+        <li><strong>JSON match:</strong> archivio del singolo match.</li>
+        <li><strong>Database completo:</strong> backup totale dell'app.</li>
+        <li><strong>Export HTML:</strong> report analitico apribile anche offline nel browser.</li>
+        <li><strong>Export DataVolley:</strong> conversione nel formato supportato.</li>
+        <li><strong>Stampa / PDF:</strong> esportazione visuale dell'analisi.</li>
+      </ul>
+      <p>Ogni formato ha uno scopo diverso:</p>
+      <ul>
+        <li><strong>JSON match:</strong> portabilita operativa del singolo match.</li>
+        <li><strong>Backup database:</strong> sicurezza e migrazione dell'intera app.</li>
+        <li><strong>HTML:</strong> condivisione di analisi consultabili senza aprire l'app.</li>
+        <li><strong>PDF:</strong> distribuzione rapida di report statici.</li>
+      </ul>
+      <p>
+        L'export HTML deve riprodurre i dati realmente visibili nel momento dell'esportazione. Se c'e un mismatch tra
+        tabellino aperto e file HTML esportato, va verificata la sincronizzazione tra stato corrente, match persistito,
+        filtri attivi e snapshot usato per costruire il file.
+      </p>
+
+      <h3>4.6 Filtrare e riusare lo storico</h3>
+      <p>
+        Anche se la sezione non replica la gestione stagioni di Datavolley, l'uso corretto dei nomi match, delle squadre
+        e dei backup consente comunque di organizzare archivi storici riapribili e confrontabili nel tempo.
+      </p>
+      <ul>
+        <li>Usare nomi match univoci e leggibili.</li>
+        <li>Mantenere coerenza nei codici squadra e nei nomi roster.</li>
+        <li>Creare backup periodici del database.</li>
+        <li>Usare export HTML e PDF come snapshot di consultazione.</li>
+      </ul>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-05 · Elenco match e azioni di import/export.</p>
+      </div>
+    </section>
+
+    <section id="cap5">
+      <h2>5. Analisi</h2>
+      <p>
+        La sezione Analisi raccoglie strumenti di lettura del match a diversi livelli: squadra, set, fondamentale,
+        giocatrice, distribuzione, traiettoria e video.
+      </p>
+      <p>
+        Il principio generale e semplice: lo scout live produce eventi, l'analisi li riorganizza in viste diverse.
+        Tutte le tabelle e i grafici devono quindi leggere una base eventi coerente, filtrata ma non alterata.
+      </p>
+
+      <h3>5.1 Tabellino</h3>
+      <p>
+        Il tabellino e la vista riepilogativa principale. Mostra le statistiche per giocatrice e fondamentale, i punti,
+        gli errori e gli indicatori sintetici del match o del set filtrato.
+      </p>
+      <p>Il tabellino deve permettere almeno queste letture:</p>
+      <ul>
+        <li>rendimento complessivo della squadra;</li>
+        <li>rendimento per giocatrice e per fondamentale;</li>
+        <li>lettura per singolo set o per match completo;</li>
+        <li>accesso al dettaglio di una singola skill o di una singola giocatrice.</li>
+      </ul>
+
+      <h4>5.1.1 Filtri di analisi</h4>
+      <p>I filtri disponibili variano a seconda della sotto-sezione, ma includono tipicamente:</p>
+      <ul>
+        <li>squadra o scope analizzato;</li>
+        <li>giocatrici;</li>
+        <li>alzatrici;</li>
+        <li>fondamentali;</li>
+        <li>codici;</li>
+        <li>set;</li>
+        <li>rotazione;</li>
+        <li>zona;</li>
+        <li>tipo alzata, fase di gioco, tipo servizio, zona ricezione e skill precedente.</li>
+      </ul>
+      <p>
+        I filtri salvabili per il video permettono di creare preset specifici di consultazione, trascinabili e riutilizzabili
+        all'interno dello stesso match.
+      </p>
+
+      <h4>5.1.2 Selezione di piu partite</h4>
+      <p>
+        Nelle aree che lo prevedono, il programma puo sommare al match corrente eventi provenienti da altri match
+        selezionati. Questo consente analisi multi-match mantenendo la distinzione tra ambito squadra nostra e avversaria.
+      </p>
+
+      <h3>5.2 Grafici skill</h3>
+      <p>
+        I grafici mostrano, evento per evento, l'andamento delle metriche cumulative della skill selezionata.
+        Le bande verticali separano i set, i colori seguono la classificazione positiva, neutra e negativa configurata
+        nelle impostazioni, e l'hover mostra dettaglio di valore, set e codice.
+      </p>
+      <p>Le metriche attualmente piu utili in questa vista sono:</p>
+      <ul>
+        <li>efficienza cumulativa;</li>
+        <li>positivita cumulativa;</li>
+        <li>perfezione cumulativa;</li>
+        <li>esito singolo codificato.</li>
+      </ul>
+      <p>
+        Nei grafici dove esistono valori negativi, come l'efficienza, l'asse deve essere centrato in modo che lo zero sia
+        leggibile e non schiacciato sul fondo. Le bande di set aiutano a leggere l'evoluzione della prestazione nel tempo.
+      </p>
+
+      <h4>5.2.1 Interazione con i grafici</h4>
+      <ul>
+        <li>hover con linea verticale sul punto corrente;</li>
+        <li>tooltip con set, valore, codice ed eventuale rotazione;</li>
+        <li>pulsante copia per esportare la card grafico come immagine;</li>
+        <li>aggiornamento solo quando la relativa vista e visibile, per evitare spreco di risorse.</li>
+      </ul>
+
+      <h4>5.2.2 Grafici nel dettaglio skill</h4>
+      <p>
+        Nel dettaglio di una singola skill e utile mostrare piu metriche direttamente, senza costringere l'utente a
+        cambiare selettore. In questo modo la lettura resta confrontabile e meno deformata.
+      </p>
+
+      <h3>5.3 Alzate e distribuzione</h3>
+      <ul>
+        <li><strong>Alzate:</strong> tabella delle vere skill di alzata registrate.</li>
+        <li><strong>Attacchi dopo alzata:</strong> esiti degli attacchi attribuiti all'alzatrice.</li>
+        <li><strong>Distribuzione alzate:</strong> ripartizione per zone, attaccanti e risultati.</li>
+      </ul>
+      <p>
+        E importante mantenere la distinzione concettuale fra skill di alzata realmente registrate e attacchi attribuiti
+        a una certa alzatrice. Le due viste non sono la stessa cosa e non devono essere confuse.
+      </p>
+
+      <h4>5.3.1 Tabella alzate</h4>
+      <p>
+        Deve contenere solo eventi reali di alzata. Se in un match non esistono skill di alzata registrate, questa tabella
+        deve restare vuota, anche se esistono attacchi dopo alzata attribuibili a una certa alzatrice.
+      </p>
+
+      <h4>5.3.2 Tabella attacchi dopo alzata</h4>
+      <p>
+        Questa tabella e costruita dagli attacchi che seguono l'alzata di una certa alzatrice. Serve per valutare
+        l'efficacia indiretta della distribuzione. In questa vista e utile avere l'elenco delle attaccanti prima del totale.
+      </p>
+
+      <h4>5.3.3 Distribuzione alzate</h4>
+      <p>
+        La distribuzione alzate mostra come l'alzatrice ripartisce il gioco: destinazioni, frequenze, risultati, efficienza.
+        Nella modalita confronto giocatrici, anche queste metriche devono ereditare la colorazione comparativa del valore migliore.
+      </p>
+
+      <h3>5.4 Analisi giocatrici e confronto</h3>
+      <p>
+        La sotto-tab giocatrici consente di isolare una singola atleta e analizzarne rendimento, distribuzioni e grafici.
+        La modalita confronto mette fianco a fianco due giocatrici e colora i valori migliori nelle aree previste.
+      </p>
+      <p>In questa area il programma dovrebbe rendere leggibili almeno tre livelli:</p>
+      <ul>
+        <li><strong>profilo singola giocatrice:</strong> riepilogo della prestazione individuale;</li>
+        <li><strong>approfondimenti per fondamentale:</strong> grafici, distribuzioni, traiettorie e dettagli di skill;</li>
+        <li><strong>confronto diretto:</strong> due giocatrici messe in relazione metrica per metrica.</li>
+      </ul>
+
+      <h4>5.4.1 Confronto giocatrici</h4>
+      <p>
+        In modalita confronto i valori migliori devono essere resi evidenti con la stessa logica visiva usata in tutto il
+        modulo: questo vale non solo per le statistiche principali, ma anche per tabelle di alzata, attacchi dopo alzata
+        e distribuzione.
+      </p>
+
+      <h4>5.4.2 Coerenza dati tra viste</h4>
+      <p>
+        Le tabelle della sotto-tab giocatrici devono leggere la stessa semantica dei dati usata nel resto dell'analisi:
+        se una vista mostra alzate reali e un'altra mostra attacchi dopo alzata, questa differenza deve essere mantenuta
+        anche quando si cambia giocatrice o si passa alla modalita confronto.
+      </p>
+
+      <h3>5.5 Traiettorie</h3>
+      <p>
+        Le traiettorie di attacco e battuta usano la direzione registrata durante lo scout o aggiunta in modifica successiva.
+        I filtri consentono di restringere l'analisi per set, zona, tipo attacco, valutazione o skill precedente.
+      </p>
+      <p>
+        Le traiettorie sono particolarmente utili quando si vuole passare da una statistica sintetica a una lettura spaziale
+        dell'azione: da dove parte l'attacco, dove cade la palla, come varia la distribuzione per zona, quali servizi sono
+        piu frequentemente giocati su certe porzioni di campo.
+      </p>
+
+      <h3>5.6 Analisi video</h3>
+      <p>
+        La scheda Video collega il log eventi al video caricato. Le skill possono essere selezionate per saltare al timestamp
+        corrispondente, correggere l'offset, unificare tempi collegati e lavorare in modalita play by play.
+      </p>
+      <p>Flusso operativo tipico:</p>
+      <ol>
+        <li>caricare video locale o URL YouTube;</li>
+        <li>sincronizzare la prima skill o impostare un offset;</li>
+        <li>selezionare una skill dal log per saltare al tempo corretto;</li>
+        <li>correggere i timestamp errati;</li>
+        <li>unificare tempi tra eventi collegati quando necessario;</li>
+        <li>filtrare il log e salvare preset per analisi ripetute.</li>
+      </ol>
+      <p>
+        L'analisi video e anche il punto in cui le incongruenze temporali diventano piu evidenti. Per questo e utile
+        che i preset filtri, i link tra skill e i comandi di correzione tempi siano tutti riutilizzabili durante la revisione.
+      </p>
+
+      <div class="manual-grid">
+        <div class="manual-card">
+          <h4>Screenshot da aggiungere</h4>
+          <ul>
+            <li>SCH-06 · Tabellino squadra</li>
+            <li>SCH-07 · Grafici skill</li>
+            <li>SCH-08 · Distribuzione alzate</li>
+            <li>SCH-09 · Confronto giocatrici</li>
+            <li>SCH-10 · Analisi video</li>
+          </ul>
+        </div>
+        <div class="manual-card">
+          <h4>Nota operativa</h4>
+          <p>
+            I grafici vengono aggiornati solo quando la relativa vista e visibile, per limitare il consumo di risorse
+            durante lo scout o in presenza di molti eventi.
+          </p>
+        </div>
+      </div>
+
+      <div class="manual-shot">
+        <div class="manual-shot__box">Placeholder screenshot</div>
+        <p class="manual-shot__caption">SCH-06/SCH-10 · Tabellino, grafici, analisi giocatrici e revisione video.</p>
+      </div>
+    </section>
+
+    <section id="cap6">
+      <h2>6. Strumenti e manutenzione</h2>
+      <h3>6.1 Salvataggio e persistenza</h3>
+      <p>
+        Il programma salva localmente lo stato applicativo e il match corrente. Le operazioni di pausa, fine set, cambio
+        match ed export devono mantenere allineati lo stato vivo, il match persistente e gli export.
+      </p>
+      <p>In pratica, il sistema di persistenza deve coprire almeno questi casi:</p>
+      <ul>
+        <li>salvataggio progressivo durante l'uso normale;</li>
+        <li>salvataggio esplicito nei momenti critici, come pausa match o chiusura set;</li>
+        <li>ripristino coerente al riavvio dell'applicazione;</li>
+        <li>sincronizzazione fra stato live e match salvato prima di export o cambio match.</li>
+      </ul>
+      <p>
+        Una buona regola operativa e considerare il salvataggio locale come parte del flusso di lavoro, non come un evento
+        finale. Se il match e importante, conviene comunque generare periodicamente un export JSON del singolo match o
+        un backup completo.
+      </p>
+
+      <h3>6.2 Backup e ripristino</h3>
+      <ul>
+        <li>Backup completo database per migrazione o sicurezza.</li>
+        <li>Importazione database per ripristinare squadre, impostazioni e match.</li>
+        <li>Import da URL per file JSON hostati esternamente.</li>
+      </ul>
+      <p>
+        Il backup completo e il formato piu sicuro quando si vuole trasferire l'intero ambiente di lavoro su un altro
+        dispositivo o prima di eseguire operazioni rischiose come pulizia dati, refactoring massivo dei roster o test di import.
+      </p>
+      <p>Prima di un ripristino completo e consigliabile:</p>
+      <ol>
+        <li>esportare un backup attuale del database esistente;</li>
+        <li>verificare che il file di backup sia leggibile;</li>
+        <li>solo dopo procedere con l'import del database da ripristinare.</li>
+      </ol>
+
+      <h3>6.3 Import da link remoto</h3>
+      <p>
+        L'app supporta import da URL di file JSON remoti. Questa funzione e utile quando i file vengono ospitati su servizi
+        esterni o distribuiti a collaboratori senza passare da file system locale.
+      </p>
+      <ul>
+        <li>Il link deve puntare al file JSON reale, non a una pagina intermedia.</li>
+        <li>Il server remoto deve consentire la richiesta dal browser.</li>
+        <li>Se il servizio blocca CORS, l'import dal browser non potra funzionare.</li>
+      </ul>
+      <p>
+        In questi casi non e un bug del programma: e un vincolo del browser e dell'host remoto. Quando possibile, conviene
+        usare URL diretti serviti con header corretti oppure scaricare il file localmente e importarlo da disco.
+      </p>
+
+      <h3>6.3 Aggiornamento applicazione</h3>
+      <p>
+        L'app include logiche PWA e un pulsante di aggiornamento forzato. In ambiente locale di sviluppo il comportamento
+        del service worker puo essere limitato o disattivato per evitare cache stale.
+      </p>
+      <p>
+        In ambiente di produzione il service worker consente uso offline e aggiornamenti controllati. In ambiente locale,
+        invece, puo capitare che il browser continui a servire una versione vecchia di JavaScript o CSS. Per questo esiste
+        il comando di aggiornamento forzato e, in alcuni scenari, puo essere preferibile usare una porta diversa o il profilo
+        in incognito durante il debug.
+      </p>
+
+      <h3>6.4 Export HTML offline</h3>
+      <p>
+        L'export HTML e pensato come report autoportante apribile fuori dall'app. Questo richiede che lo snapshot del match,
+        gli asset necessari e la configurazione dell'analisi vengano incorporati nel file al momento dell'esportazione.
+      </p>
+      <p>I punti critici di questa funzione sono:</p>
+      <ul>
+        <li>coerenza dei dati con il match realmente caricato;</li>
+        <li>allineamento dei filtri attivi e delle viste rese visibili prima dell'export;</li>
+        <li>disattivazione dei rami runtime che non hanno senso su file locale, come service worker o richiami non necessari;</li>
+        <li>incorporazione corretta delle risorse necessarie, come snapshot di stato o asset grafici.</li>
+      </ul>
+      <p>
+        L'HTML esportato va inteso come un report di consultazione. Se deve diventare la base di nuove modifiche, il formato
+        corretto da riaprire nell'app resta il JSON del match o il backup database.
+      </p>
+
+      <h3>6.5 Risoluzione problemi</h3>
+      <div class="manual-card">
+        <h4>Problemi frequenti</h4>
+        <ul>
+          <li>Mismatch tra match caricato ed export HTML.</li>
+          <li>Dati non persistiti correttamente dopo pausa o cambio set.</li>
+          <li>Versione stale servita da cache o service worker.</li>
+          <li>Import JSON da URL bloccato da CORS.</li>
+          <li>HTML esportato aperto in locale con limiti del browser su file://.</li>
+        </ul>
+      </div>
+      <p>Procedura minima di diagnosi consigliata:</p>
+      <ol>
+        <li>verificare se il problema e nello stato live, nel match salvato o solo nell'export;</li>
+        <li>controllare se l'anomalia compare anche in incognito o offline;</li>
+        <li>se il problema riguarda l'HTML esportato, rigenerare il file dopo aver salvato e chiuso correttamente il match;</li>
+        <li>se il problema riguarda caricamento o persistenza, riaprire il match dalla lista e controllare se i dati coincidono.</li>
       </ol>
     </section>
 
-    <section id="impostazioni-partita">
-      <h2>Impostazioni partita</h2>
-      <p>La prima schermata di impostazioni è il centro di controllo della gara. Qui si definiscono i dati anagrafici della partita, le squadre e le preferenze operative.</p>
+    <section id="cap7">
+      <h2>7. Appendici</h2>
+      <h3>7.1 Glossario rapido</h3>
       <ul>
-        <li><strong>Dati gara:</strong> avversario, categoria, data, note e tipo di partita.</li>
-        <li><strong>Gestione squadre:</strong> seleziona o crea un roster, assegna numeri, liberi e capitani.</li>
-        <li><strong>Parametri operativi:</strong> attiva flusso automatico, auto-posizionamento, p1 americana e tracciamento traiettorie.</li>
-        <li><strong>Match salvati:</strong> crea, seleziona, esporta o importa i match con un pannello dedicato.</li>
+        <li><strong>Rotazione originale:</strong> disposizione base del sestetto da preservare come riferimento.</li>
+        <li><strong>Auto-posizionamento:</strong> disposizione temporanea di fase per battuta o ricezione.</li>
+        <li><strong>Flusso automatico:</strong> proposta guidata della skill successiva.</li>
+        <li><strong>Attacchi dopo alzata:</strong> esiti degli attacchi attribuiti a una specifica alzatrice.</li>
+        <li><strong>Export HTML:</strong> report autoportante consultabile fuori dall'app.</li>
       </ul>
-    </section>
 
-    <section id="formazione-rotazioni">
-      <h2>Formazione e rotazioni</h2>
-      <p>La formazione in campo rappresenta la rotazione reale. Le posizioni vengono interpretate in base alla posizione del palleggiatore, senza dover impostare manualmente i ruoli.</p>
-      <ol>
-        <li>Apri <strong>Formazione/Sostituzione</strong> e posiziona le giocatrici.</li>
-        <li>Conferma con <strong>Metti in campo</strong> (override) o <strong>Sostituisci</strong> (conteggio cambi).</li>
-        <li>Usa i pulsanti di rotazione o lascia attiva l’auto-rotazione.</li>
-      </ol>
-      <p><strong>Auto-posizionamento per ruolo</strong> dispone i ruoli in base alla fase (battuta o ricezione), mantenendo la rotazione base come riferimento stabile.</p>
-    </section>
-
-    <section id="scout-live">
-      <h2>Scout live</h2>
-      <p>Lo scout live è organizzato attorno a un flusso rapido: scegli la giocatrice, seleziona il fondamentale e inserisci il codice.</p>
-      <h3>Flusso automatico</h3>
-      <p>Quando attivo, l’app propone automaticamente la skill successiva (es. ricezione → alzata → attacco). In caso di punto o errore, la sequenza si adatta alla nuova fase di gioco.</p>
-      <h3>Eventi speciali</h3>
+      <h3>7.2 Convenzioni operative consigliate</h3>
+      <p>Per mantenere lo storico pulito e confrontabile nel tempo, e utile adottare alcune convenzioni stabili:</p>
       <ul>
-        <li><strong>Errori e falli:</strong> registrabili come errori individuali o di squadra.</li>
-        <li><strong>Timeout e sostituzioni:</strong> tracciati nel log con contatori per set.</li>
-        <li><strong>Freeball:</strong> forza il flusso alla fase corretta quando il gioco lo richiede.</li>
+        <li>nomi squadra sempre coerenti tra match diversi;</li>
+        <li>numeri e nomi giocatrici verificati prima dell'inizio;</li>
+        <li>uso coerente di liberi, capitane e ruoli nei roster;</li>
+        <li>una sola convenzione per metriche e pesi statistici durante la stagione;</li>
+        <li>esportazione periodica dei match piu importanti.</li>
       </ul>
-    </section>
 
-    <section id="log-eventi">
-      <h2>Log eventi e modifiche</h2>
-      <p>Il log contiene tutte le skill, con ID e dettagli tecnici. Ogni riga è modificabile, con selezione multipla per le operazioni bulk.</p>
+      <h3>7.3 Workflow consigliati</h3>
+      <div class="manual-grid">
+        <div class="manual-card">
+          <h4>Workflow A · Scout live</h4>
+          <ol>
+            <li>Carica match e roster.</li>
+            <li>Imposta formazione iniziale.</li>
+            <li>Attiva i flag operativi necessari.</li>
+            <li>Scauta il match.</li>
+            <li>Chiudi il set e salva.</li>
+            <li>Rivedi il log a fine gara.</li>
+          </ol>
+        </div>
+        <div class="manual-card">
+          <h4>Workflow B · Revisione video</h4>
+          <ol>
+            <li>Apri il match gia scoutato.</li>
+            <li>Carica il video e sincronizza.</li>
+            <li>Correggi tempi e codici dal log.</li>
+            <li>Riesegui l'analisi.</li>
+            <li>Esporta HTML o PDF.</li>
+          </ol>
+        </div>
+      </div>
+
+      <h3>7.4 Check-list pre partita</h3>
+      <div class="manual-card">
+        <h4>Controllo rapido prima dello scout</h4>
+        <ol>
+          <li>Match creato e selezionato.</li>
+          <li>Squadra nostra caricata correttamente.</li>
+          <li>Squadra avversaria caricata se necessaria.</li>
+          <li>Roster verificato.</li>
+          <li>Flag di scout controllati.</li>
+          <li>Set iniziale e punteggio a zero.</li>
+          <li>Formazione iniziale pronta.</li>
+          <li>Lato campo e servizio corretti.</li>
+          <li>Video caricato o pianificato, se previsto.</li>
+          <li>Backup precedente disponibile, se il match e importante.</li>
+        </ol>
+      </div>
+
+      <h3>7.5 Check-list post partita</h3>
+      <div class="manual-card">
+        <h4>Controllo rapido dopo lo scout</h4>
+        <ol>
+          <li>Ultimo set chiuso correttamente.</li>
+          <li>Match sospeso o terminato in modo regolare.</li>
+          <li>Riapertura di controllo del match salvato.</li>
+          <li>Esportazione JSON del match.</li>
+          <li>Esportazione HTML o PDF se richiesta.</li>
+          <li>Backup database se il match deve essere archiviato.</li>
+          <li>Eventuale revisione video pianificata.</li>
+        </ol>
+      </div>
+
+      <h3>7.6 Placeholder screenshot pianificati</h3>
+      <p>
+        I seguenti screenshot non sono ancora inseriti. Le sigle riportate nel manuale servono a collegare in modo stabile
+        il testo alle future immagini.
+      </p>
       <ul>
-        <li><strong>Colonna ID:</strong> identificatore univoco della skill.</li>
-        <li><strong>Colonna Link:</strong> mostra gli ID collegati (battuta-ricezione, alzata-attacco, attacco-muro, ecc.).</li>
-        <li><strong>Modifica rapida:</strong> doppio click sulle celle modificabili o bulk edit dall’header.</li>
+        <li>SCH-01 · Vista generale applicazione</li>
+        <li>SCH-02 · Gestione match</li>
+        <li>SCH-03 · Impostazioni metriche e opzioni scout</li>
+        <li>SCH-04 · Scout live</li>
+        <li>SCH-05 · Elenco match e export</li>
+        <li>SCH-06 · Tabellino analisi</li>
+        <li>SCH-07 · Grafici skill</li>
+        <li>SCH-08 · Distribuzione alzate</li>
+        <li>SCH-09 · Confronto giocatrici</li>
+        <li>SCH-10 · Analisi video</li>
       </ul>
-    </section>
 
-    <section id="analisi">
-      <h2>Analisi e tabellino</h2>
-      <p>La sezione Analisi mostra statistiche per fondamentali, rotazioni e distribuzione alzate. I filtri consentono di isolare set, giocatrici o ruoli specifici.</p>
+      <h3>7.7 Sviluppi futuri del manuale</h3>
+      <p>Questa prima versione e il telaio del manuale. Le prossime espansioni consigliate sono:</p>
       <ul>
-        <li>Tabellino per squadra con righe e intestazioni complete.</li>
-        <li>Metriche di efficienza, positivi/negativi e distribuzioni.</li>
+        <li>aggiunta di screenshot reali in ogni sezione;</li>
+        <li>mini tutorial guidati per casi d'uso specifici;</li>
+        <li>appendice dedicata ai codici e alla loro interpretazione;</li>
+        <li>appendice dedicata alle integrazioni DataVolley e ai limiti di compatibilita;</li>
+        <li>sezione troubleshooting con casi concreti e procedure di recovery.</li>
       </ul>
-    </section>
-
-    <section id="analisi-video">
-      <h2>Analisi video</h2>
-      <p>Carica un video locale o un link YouTube, sincronizza le skill e correggi i tempi direttamente dal log video.</p>
-      <ol>
-        <li>Carica il video.</li>
-        <li>Usa <strong>Sincronizza prima skill</strong> o imposta un offset.</li>
-        <li>Seleziona una skill per saltare al timestamp.</li>
-        <li>Usa <strong>Unifica tempi</strong> per allineare eventi collegati.</li>
-      </ol>
-      <p>La modalità <strong>Play by play</strong> riproduce le skill in sequenza, rispettando la durata impostata.</p>
-    </section>
-
-    <section id="scorciatoie">
-      <h2>Scorciatoie da tastiera</h2>
-      <ul>
-        <li><strong>Spazio:</strong> play/pausa video.</li>
-        <li><strong>Frecce sinistra/destra:</strong> ±3 secondi.</li>
-        <li><strong>Shift + frecce:</strong> frame-by-frame.</li>
-        <li><strong>Q/W:</strong> -0,5s / +0,5s sulla skill selezionata (analisi video).</li>
-      </ul>
-    </section>
-
-    <section id="salvataggi">
-      <h2>Salvataggi e backup</h2>
-      <p>Tutti i dati vengono salvati localmente. Puoi esportare o importare squadre, match e backup completi in formato JSON.</p>
-      <ul>
-        <li><strong>Esporta match:</strong> genera un file con tutte le skill e le impostazioni.</li>
-        <li><strong>Importa match:</strong> ricarica una partita salvata in precedenza.</li>
-        <li><strong>Importa da URL:</strong> incolla un link diretto a un JSON (HTTP/HTTPS) e usa i pulsanti “Importa match da URL” o “Importa database da URL”.</li>
-        <li><strong>Nota CORS:</strong> il provider deve consentire richieste dal browser. Se il link non e diretto al file JSON o blocca CORS, l'import fallisce.</li>
-        <li><strong>Backup:</strong> salva l’intero database locale.</li>
-      </ul>
-    </section>
-
-    <section id="mobile">
-      <h2>Uso da mobile</h2>
-      <p>Su schermi piccoli l’interfaccia si adatta per mantenere campo e strumenti principali sempre visibili. I menu laterali sono apribili e richiudibili con gesture o pulsanti dedicati.</p>
     </section>
   </main>
 </body>

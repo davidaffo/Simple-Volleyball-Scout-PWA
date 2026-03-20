@@ -430,6 +430,25 @@ body[data-theme="light"] .app-footer {
   border-color: #60a5fa;
   color: #dbeafe;
 }
+.app-footer-manual {
+  min-height: 2rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid #1d4ed8;
+  background: #0b1c2e;
+  color: #dbeafe;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+.app-footer-manual:hover {
+  border-color: #60a5fa;
+  color: #eff6ff;
+}
 .app-footer-github {
   min-height: 2rem;
   padding: 0.3rem 0.6rem;
@@ -459,6 +478,11 @@ body[data-theme="light"] .app-footer-github {
   background: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
+}
+body[data-theme="light"] .app-footer-manual {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }
 body[data-theme="light"] .app-footer-refresh {
   background: #eff6ff;
@@ -2135,6 +2159,69 @@ body {
 }
 .manual-content li + li {
   margin-top: 0.25rem;
+}
+.manual-content h3,
+.manual-content h4 {
+  margin-bottom: 0.4rem;
+}
+.manual-content h3:not(:first-child),
+.manual-content h4:not(:first-child) {
+  margin-top: 1rem;
+}
+.manual-content p + p,
+.manual-content p + ul,
+.manual-content p + ol,
+.manual-content ul + p,
+.manual-content ol + p {
+  margin-top: 0.55rem;
+}
+.manual-content ol {
+  margin: 0.35rem 0 0;
+  padding-left: 1.35rem;
+}
+.manual-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+.manual-card {
+  background: #111827;
+  border: 1px solid #243244;
+  border-radius: 10px;
+  padding: 0.8rem 0.9rem;
+}
+.manual-card h4 {
+  margin-top: 0;
+}
+.manual-shot {
+  margin-top: 0.95rem;
+}
+.manual-shot__box {
+  min-height: 220px;
+  border: 1px dashed #3b82f6;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(15, 23, 42, 0.2)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(148, 163, 184, 0.08),
+      rgba(148, 163, 184, 0.08) 12px,
+      rgba(15, 23, 42, 0.14) 12px,
+      rgba(15, 23, 42, 0.14) 24px
+    );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.82rem;
+  color: #93c5fd;
+}
+.manual-shot__caption {
+  margin: 0.4rem 0 0;
+  color: #cbd5e1;
+  font-size: 0.92rem;
 }
 .rotation-number {
   font-size: 1rem;
