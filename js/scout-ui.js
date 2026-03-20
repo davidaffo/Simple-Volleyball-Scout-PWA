@@ -670,6 +670,12 @@ function getTrajectoryImageForZone(zone, isFarSide) {
   if (zone === 2 || zone === 1) return "images/trajectory/attack_2_far.png";
   return TRAJECTORY_IMG_FAR;
 }
+function resolveExportAssetPath(path) {
+  if (!path) return path;
+  if (typeof window === "undefined") return path;
+  const map = window.__analysisAssetMap;
+  return map && map[path] ? map[path] : path;
+}
 let trajectoryStart = null;
 let trajectoryEnd = null;
 let trajectoryResolver = null;
@@ -10377,6 +10383,7 @@ function formatPercent(x) {
   return x.toFixed(0) + "%";
 }
 function updateSkillStatsUI(playerIdx, skillId) {
+  if (!elPlayersContainer) return;
   const row = elPlayersContainer.querySelector(
     '.skill-row[data-player-idx="' +
       playerIdx +
@@ -14967,7 +14974,7 @@ function endMatch() {
       state.matchEndSetSnapshot = null;
     }
     state.matchEndSetRecorded = null;
-    saveState();
+    saveState({ persistLocal: true });
     updateSetScoreDisplays();
     updateMatchStatusUI();
     return;
@@ -15556,7 +15563,7 @@ function normalizeMatchKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 function getCurrentMatchKey() {
-  const selected = (state.selectedMatch || "").trim();
+  const selected = (state.loadedMatchName || state.selectedMatch || "").trim();
   if (selected) return selected;
   if (typeof buildMatchDisplayName === "function") {
     return buildMatchDisplayName(state.match || {}) || "";
@@ -15564,10 +15571,12 @@ function getCurrentMatchKey() {
   return "";
 }
 function getCurrentMatchLabel() {
+  const loaded = (state.loadedMatchName || state.selectedMatch || "").trim();
+  if (loaded) return loaded;
   if (typeof buildMatchDisplayName === "function") {
     return buildMatchDisplayName(state.match || {}) || "";
   }
-  return (state.selectedMatch || "").trim();
+  return loaded;
 }
 function getMatchTeamNameForScope(payload, scope) {
   if (!payload || !payload.state) return "";
@@ -18567,7 +18576,7 @@ function getTrajectoryBg(zone, isFarSide, cb) {
     return trajectoryBgCache[key];
   }
   const img = new Image();
-  img.src = getTrajectoryImageForZone(zone, far);
+  img.src = resolveExportAssetPath(getTrajectoryImageForZone(zone, far));
   if (onLoad) {
     img.onload = onLoad;
   }
@@ -18595,10 +18604,10 @@ function getServeTrajectoryImages(cb) {
   const end = new Image();
   const startFar = new Image();
   const endFar = new Image();
-  start.src = SERVE_START_IMG_NEAR;
-  end.src = SERVE_END_IMG_NEAR;
-  startFar.src = SERVE_START_IMG_FAR;
-  endFar.src = SERVE_END_IMG_FAR;
+  start.src = resolveExportAssetPath(SERVE_START_IMG_NEAR);
+  end.src = resolveExportAssetPath(SERVE_END_IMG_NEAR);
+  startFar.src = resolveExportAssetPath(SERVE_START_IMG_FAR);
+  endFar.src = resolveExportAssetPath(SERVE_END_IMG_FAR);
   if (cb) {
     start.onload = cb;
     end.onload = cb;
@@ -18614,7 +18623,7 @@ function getAttackEmptyImage(isFarSide, cb) {
     return trajectoryBgCache[key];
   }
   const img = new Image();
-  img.src = isFarSide ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR;
+  img.src = resolveExportAssetPath(isFarSide ? TRAJECTORY_IMG_FAR : TRAJECTORY_IMG_NEAR);
   if (cb) {
     img.onload = cb;
   }
@@ -20650,7 +20659,8 @@ function buildMatchExportPayload() {
             ? state.videoFilterPresets
             : [],
       courtViewMirrored: !!state.courtViewMirrored,
-      courtSideSwapped: !!state.courtSideSwapped
+      courtSideSwapped: !!state.courtSideSwapped,
+      loadedMatchName: state.loadedMatchName || state.selectedMatch || ""
     }
   };
 }
@@ -20662,12 +20672,13 @@ function buildDatabaseBackupPayload() {
     state && state.savedMatches && typeof state.savedMatches === "object"
       ? JSON.parse(JSON.stringify(state.savedMatches))
       : {};
-  const currentMatchName = String(state.selectedMatch || "").trim();
+  const currentMatchName = String(state.loadedMatchName || state.selectedMatch || "").trim();
   if (currentMatchName && typeof getCurrentMatchPayload === "function") {
     savedMatches[currentMatchName] = getCurrentMatchPayload(currentMatchName);
   }
   payload.state.savedMatches = savedMatches;
   payload.state.selectedMatch = state.selectedMatch || "";
+  payload.state.loadedMatchName = state.loadedMatchName || state.selectedMatch || "";
   return payload;
 }
 async function exportMatchToFile() {
@@ -21734,6 +21745,7 @@ function applyImportedMatch(nextState, options = {}) {
   merged.setResults = nextState.setResults || state.setResults || {};
   merged.setStarts = nextState.setStarts || state.setStarts || {};
   merged.video = nextState.video || state.video || { offsetSeconds: 0, fileName: "", lastPlaybackSeconds: 0 };
+  merged.loadedMatchName = nextState.loadedMatchName || nextState.selectedMatch || state.loadedMatchName || "";
   if (typeof merged.video.lastPlaybackSeconds !== "number") {
     merged.video.lastPlaybackSeconds = 0;
   }
@@ -21807,6 +21819,7 @@ function applyImportedDatabase(nextState) {
     });
     syncMatchesFromStorage();
     state.selectedMatch = nextState.state.selectedMatch || "";
+    state.loadedMatchName = nextState.state.loadedMatchName || nextState.state.selectedMatch || "";
     renderMatchesSelect();
   }
   if (nextState.state.savedOpponentTeams && typeof nextState.state.savedOpponentTeams === "object") {
@@ -21858,6 +21871,7 @@ function importMatchStateAsNew(nextState, options = {}) {
   try {
     applyImportedMatch(nextState, { silent: true });
     state.selectedMatch = uniqueName;
+    state.loadedMatchName = uniqueName;
     if (typeof persistCurrentMatch === "function") {
       persistCurrentMatch({ allowCreate: true });
     }
@@ -24311,6 +24325,27 @@ function replaceExportAssetsInScript(source, assetMap) {
   });
   return updated;
 }
+function replaceExportAssetsInText(source, assetMap) {
+  return replaceExportAssetsInScript(source, assetMap);
+}
+function replaceExportAssetsInDom(root, assetMap) {
+  if (!root || !assetMap) return;
+  const entries = Object.entries(assetMap).filter(([path, dataUrl]) => path && dataUrl);
+  if (!entries.length) return;
+  root.querySelectorAll("[src],[href],[style]").forEach(node => {
+    ["src", "href", "style"].forEach(attr => {
+      const current = node.getAttribute && node.getAttribute(attr);
+      if (!current) return;
+      let next = current;
+      entries.forEach(([path, dataUrl]) => {
+        next = next.split(path).join(dataUrl);
+      });
+      if (next !== current) {
+        node.setAttribute(attr, next);
+      }
+    });
+  });
+}
 async function exportAnalysisHtml() {
   const aggPanel = document.getElementById("aggregated-panel");
   if (!aggPanel) {
@@ -24322,10 +24357,36 @@ async function exportAnalysisHtml() {
   const prevTheme = state.theme || document.body.dataset.theme || "dark";
   showExportSplash();
   try {
+    if (typeof saveState === "function") {
+      saveState({ persistLocal: true });
+    }
     setActiveTab("aggregated");
     setActiveAggTab("summary");
+    if (typeof renderAggregatedTable === "function") {
+      renderAggregatedTable();
+    }
+    if (typeof renderTrajectoryAnalysis === "function") {
+      renderTrajectoryAnalysis();
+    }
+    if (typeof renderServeTrajectoryAnalysis === "function") {
+      renderServeTrajectoryAnalysis();
+    }
+    if (typeof renderVideoAnalysis === "function") {
+      renderVideoAnalysis();
+    }
     setPrintMatchTitle();
     const exportState = JSON.parse(JSON.stringify(state));
+    const exportCurrentMatchName = String(state.loadedMatchName || state.selectedMatch || "").trim();
+    if (exportCurrentMatchName) {
+      exportState.savedMatches = exportState.savedMatches && typeof exportState.savedMatches === "object"
+        ? exportState.savedMatches
+        : {};
+      if (typeof getCurrentMatchPayload === "function") {
+        exportState.savedMatches[exportCurrentMatchName] = getCurrentMatchPayload(exportCurrentMatchName);
+      }
+      exportState.selectedMatch = exportCurrentMatchName;
+      exportState.loadedMatchName = exportCurrentMatchName;
+    }
     exportState.uiActiveTab = "aggregated";
     exportState.uiAggTab = "summary";
     const exportRoot = document.documentElement.cloneNode(true);
@@ -24424,19 +24485,21 @@ async function exportAnalysisHtml() {
     const assetMap = await buildExportAssetMap();
     const assetMapJson = JSON.stringify(assetMap);
     const stateJson = JSON.stringify(exportState);
-  const prelude = `
+    const stateJsonBase64 = btoa(unescape(encodeURIComponent(stateJson)));
+    cssText = replaceExportAssetsInText(cssText, assetMap);
+    replaceExportAssetsInDom(exportRoot, assetMap);
+    const prelude = `
 (function(){
   try {
-    localStorage.setItem("volleyScoutV1", ${JSON.stringify(JSON.stringify(exportState))});
+    var exportedStateJson = decodeURIComponent(escape(atob(${JSON.stringify(stateJsonBase64)})));
+    window.__exportedAnalysisState = JSON.parse(exportedStateJson);
+    localStorage.setItem("volleyScoutV1", exportedStateJson);
   } catch (e) {}
   window.__EXPORT_ANALYSIS_HTML__ = true;
   window.__analysisAssetMap = ${assetMapJson};
 })();
 `;
     const postlude = `
-if (typeof init === "function") {
-  init();
-}
 if (typeof getTrajectoryImageForZone === "function" && window.__analysisAssetMap) {
   var originalGetTrajectoryImageForZone = getTrajectoryImageForZone;
   var assetMap = window.__analysisAssetMap;
@@ -24444,6 +24507,9 @@ if (typeof getTrajectoryImageForZone === "function" && window.__analysisAssetMap
     var path = originalGetTrajectoryImageForZone(zone, isFarSide);
     return assetMap && assetMap[path] ? assetMap[path] : path;
   };
+}
+if (typeof init === "function") {
+  init();
 }
 if (typeof setActiveTab === "function") setActiveTab("aggregated");
 if (typeof setActiveAggTab === "function") setActiveAggTab("summary");
@@ -24456,7 +24522,7 @@ if (typeof setActiveAggTab === "function") setActiveAggTab("summary");
     exportBody.insertAdjacentHTML("beforeend", scriptTag);
     exportHead.querySelectorAll("title").forEach(el => el.remove());
     exportHead.insertAdjacentHTML("afterbegin", `<title>${title}</title>`);
-    const html = "<!doctype html>\n" + exportRoot.outerHTML;
+    const html = replaceExportAssetsInText("<!doctype html>\n" + exportRoot.outerHTML, assetMap);
     const fileName = "analisi_" + safeMatchSlug() + ".html";
     downloadBlob(new Blob([html], { type: "text/html" }), fileName);
   } finally {
@@ -24878,6 +24944,9 @@ function applyAggColumnsVisibility() {
   });
 }
 function registerServiceWorker() {
+  if (typeof location !== "undefined" && location.protocol === "file:") {
+    return;
+  }
   const supportsSw = "serviceWorker" in navigator;
   const secureContext =
     window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost";
@@ -25285,16 +25354,18 @@ async function init() {
   document.addEventListener("keydown", handleVideoShortcut, true);
   document.body.dataset.activeTab = activeTab;
   setActiveAggTab(activeAggTab || "summary");
+  const isExportAnalysisHtml =
+    typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
   let loadedFromIndexedDb = false;
-  if (typeof loadStateFromIndexedDb === "function") {
+  if (isExportAnalysisHtml && typeof window !== "undefined" && window.__exportedAnalysisState) {
+    applyStateSnapshot(window.__exportedAnalysisState, { skipStorageSync: true });
+  } else if (!isExportAnalysisHtml && typeof loadStateFromIndexedDb === "function") {
     loadedFromIndexedDb = await loadStateFromIndexedDb();
   }
-  if (!loadedFromIndexedDb) {
+  if (!isExportAnalysisHtml && !loadedFromIndexedDb) {
     loadState();
   }
   applyVideoLayoutWidths();
-  const isExportAnalysisHtml =
-    typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
   if (!isExportAnalysisHtml && typeof syncMatchesFromStorage === "function") {
     syncMatchesFromStorage();
   }
@@ -27506,7 +27577,9 @@ async function init() {
   if (shouldOpenNextSetModal()) {
     openNextSetModal(state.currentSet || 1);
   }
-  registerServiceWorker();
+  if (!isExportAnalysisHtml) {
+    registerServiceWorker();
+  }
   isLoadingMatch = false;
   if (typeof window !== "undefined") {
     window.isLoadingMatch = false;

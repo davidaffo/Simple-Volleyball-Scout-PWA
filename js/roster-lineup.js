@@ -484,6 +484,7 @@ function applyStateSnapshot(parsed, options = {}) {
   state.opponentPreferredLibero = typeof parsed.opponentPreferredLibero === "string" ? parsed.opponentPreferredLibero : "";
   state.opponentSkillFlowOverride = parsed.opponentSkillFlowOverride || null;
   state.selectedMatch = parsed.selectedMatch || "";
+  state.loadedMatchName = parsed.loadedMatchName || parsed.selectedMatch || "";
   if ((!state.captains || state.captains.length === 0) && state.selectedTeam && state.savedTeams) {
     const selectedTeamData = state.savedTeams[state.selectedTeam];
     if (selectedTeamData) {
@@ -3049,7 +3050,7 @@ function deleteSelectedOpponentTeam() {
   renderOpponentTeamsSelect();
 }
 function getCurrentMatchPayload(name = "") {
-  const safeName = (name || state.selectedMatch || state.match.opponent || "match").trim();
+  const safeName = (name || state.loadedMatchName || state.selectedMatch || state.match.opponent || "match").trim();
   const payload = buildMatchExportPayload();
   payload.name = safeName;
   return payload;
@@ -3061,11 +3062,15 @@ function applyMatchPayload(payload, opts = {}) {
   if (!payload || !payload.state) return;
   applyImportedMatch(payload.state, { silent: opts.silent });
   state.selectedMatch = opts.selectedName || payload.name || "";
+  state.loadedMatchName = state.selectedMatch;
   saveState();
   renderMatchesSelect();
 }
 function loadSelectedMatch() {
   if (!elSavedMatchesSelect) return;
+  if (!isLoadingMatch && (state.loadedMatchName || "").trim()) {
+    persistCurrentMatch({ allowCreate: false });
+  }
   const name = elSavedMatchesSelect.value;
   if (!name) {
     const ok =
@@ -3077,6 +3082,7 @@ function loadSelectedMatch() {
       return;
     }
     state.selectedMatch = "";
+    state.loadedMatchName = "";
     resetMatchState();
     // Hard reset del set per evitare trascinamenti da match precedenti.
     state.setResults = {};
@@ -3088,6 +3094,7 @@ function loadSelectedMatch() {
       if (typeof syncCurrentSetUI === "function") syncCurrentSetUI(1);
     }
     state.selectedMatch = generateMatchName();
+    state.loadedMatchName = state.selectedMatch;
     persistCurrentMatch({ allowCreate: true });
     if (typeof syncMatchInfoInputs === "function") {
       syncMatchInfoInputs(state.match);
@@ -3118,13 +3125,14 @@ function deleteSelectedMatch() {
   if (!name) return;
   const ok = confirm('Eliminare il match "' + name + '"?');
   if (!ok) return;
-  const wasCurrent = (state.selectedMatch || "") === name;
+  const wasCurrent = (state.loadedMatchName || state.selectedMatch || "") === name;
   deleteMatchFromStorage(name);
   if (state.savedMatches && Object.prototype.hasOwnProperty.call(state.savedMatches, name)) {
     delete state.savedMatches[name];
   }
   syncMatchesFromStorage();
   state.selectedMatch = "";
+  state.loadedMatchName = "";
   if (elSavedMatchesSelect) {
     elSavedMatchesSelect.value = "";
   }
@@ -4008,7 +4016,7 @@ function persistCurrentMatch(options = {}) {
   const { allowCreate = true } = options || {};
   if (typeof buildMatchExportPayload !== "function") return;
   state.savedMatches = state.savedMatches || {};
-  const currentName = (state.selectedMatch || "").trim();
+  const currentName = (state.loadedMatchName || state.selectedMatch || "").trim();
   if (!currentName && !allowCreate) {
     return;
   }
@@ -4019,8 +4027,9 @@ function persistCurrentMatch(options = {}) {
       return;
     }
   }
-  const desiredName = currentName || generateMatchName(state.selectedMatch);
+  const desiredName = currentName || generateMatchName(state.loadedMatchName || state.selectedMatch);
   const payload = getCurrentMatchPayload(desiredName);
+  state.loadedMatchName = desiredName;
   state.selectedMatch = desiredName;
   state.savedMatches[desiredName] = payload;
   saveMatchToStorage(desiredName, payload);
