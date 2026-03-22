@@ -926,7 +926,8 @@ function applyLiveTeamManagerPayload(payload) {
     playerNumbers: payload.numbers,
     captains: payload.captains,
     preserveCourt: true,
-    preferredLibero: payload.preferredLibero || ""
+    preferredLibero: payload.preferredLibero || "",
+    preserveFlowState: true
   });
   return true;
 }
@@ -3908,6 +3909,15 @@ function ensurePointRulesDefaults() {
   state.pointRules = state.pointRules || {};
   SKILLS.forEach(skill => {
     state.pointRules[skill.id] = normalizePointRule(skill.id, state.pointRules[skill.id]);
+    if (skill.id === "serve") {
+      const current = state.pointRules[skill.id];
+      if (
+        sameCodeList(current.for, ["#", "+", "!", "/"]) &&
+        sameCodeList(current.against, ["="])
+      ) {
+        state.pointRules[skill.id] = normalizePointRule(skill.id, POINT_RULE_DEFAULTS.serve);
+      }
+    }
     if (skill.id === "pass" || skill.id === "freeball") {
       const current = state.pointRules[skill.id];
       if (
@@ -5424,7 +5434,8 @@ function updatePlayersList(newPlayers, options = {}) {
     defaultLineupNames = null,
     defaultLineupRotation = null,
     preserveCourt = false,
-    preferredLibero = null
+    preferredLibero = null,
+    preserveFlowState = false
   } = options;
   const normalized = normalizePlayers(newPlayers);
   const providedNumbers = playerNumbers && typeof playerNumbers === "object" ? playerNumbers : null;
@@ -5459,7 +5470,7 @@ function updatePlayersList(newPlayers, options = {}) {
     applyPlayersFromStateToTextarea();
     renderPlayersManagerList();
   } else {
-    if (typeof resetSetTypeState === "function") {
+    if (!preserveFlowState && typeof resetSetTypeState === "function") {
       resetSetTypeState();
     }
     state.players = normalized;

@@ -3095,8 +3095,10 @@ function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
 function getFreeballStartSkill(scope = "our") {
-  if (isSkillEnabledForScope("freeball", scope)) return "freeball";
-  if (isSkillEnabledForScope("second", scope)) return "second";
+  const candidates = ["freeball", "second", "attack", "defense", "pass", "serve"];
+  for (let i = 0; i < candidates.length; i += 1) {
+    if (isSkillEnabledForScope(candidates[i], scope)) return candidates[i];
+  }
   return null;
 }
 function getPredictedSkillIdSingle() {
@@ -3143,6 +3145,15 @@ function getPredictedSkillIdSingle() {
   const possessionServe = !!state.isServing;
   const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
+  if (last.skillId === "serve") {
+    if (last.code === "/") {
+      return resolveEnabledSkill(getFreeballStartSkill("our")) || fallback;
+    }
+    const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
+    if (dir === "for") return resolveEnabledSkill("serve") || fallback;
+    if (dir === "against") return resolveEnabledSkill("pass") || fallback;
+    return resolveEnabledSkill(flowNext("serve")) || fallback;
+  }
   if (last.skillId === "pass" && (last.code === "/" || last.receiveEvaluation === "/")) {
     return resolveEnabledSkill("defense") || fallback;
   }
@@ -7484,12 +7495,20 @@ function renderPlayers() {
     }
   }
   if (state.predictiveSkillFlow && !state.useOpponentTeam && !predictedSkillId) {
-    const fallbackSeed = state.isServing ? "serve" : "pass";
-    if (isSkillEnabled(fallbackSeed)) {
-      predictedSkillId = fallbackSeed;
-    } else {
-      const enabled = getEnabledSkills();
-      predictedSkillId = enabled.length ? enabled[0].id : null;
+    const ownEvents = (state.events || []).filter(ev => {
+      if (!ev || !ev.skillId) return false;
+      if (!ev.team) return true;
+      return ev.team !== "opponent";
+    });
+    const lastOwnFlowEvent = getLastFlowEvent(ownEvents);
+    if (!lastOwnFlowEvent) {
+      const fallbackSeed = state.isServing ? "serve" : "pass";
+      if (isSkillEnabled(fallbackSeed)) {
+        predictedSkillId = fallbackSeed;
+      } else {
+        const enabled = getEnabledSkills();
+        predictedSkillId = enabled.length ? enabled[0].id : null;
+      }
     }
   }
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
@@ -8049,6 +8068,17 @@ async function handleEventClick(
   applyReceiveContextToEvent(event);
   state.events.push(event);
   handleAutoRotationFromEvent(event, scope);
+  if (!state.useOpponentTeam && state.predictiveSkillFlow && scope === "our" && skillId === "serve") {
+    if (code === "/") {
+      state.freeballPending = true;
+      state.freeballPendingScope = "our";
+      state.skillFlowOverride = getFreeballStartSkill("our");
+    } else {
+      const direction = typeof getPointDirection === "function" ? getPointDirection(event) : null;
+      state.skillFlowOverride = direction === "for" ? "serve" : direction === "against" ? "pass" : "defense";
+    }
+    state.flowTeamScope = "our";
+  }
   if (state.useOpponentTeam) {
     const nextFlow = computeTwoTeamFlowFromEvent(event);
     state.flowTeamScope = nextFlow.teamScope;
@@ -13889,12 +13919,6 @@ function getPointDirection(ev) {
   if (ev && (ev.derivedFromPassServe || ev.derivedFromBlock)) return null;
   if (ev && ev.skillId === "manual" && (ev.pointDirection === "for" || ev.pointDirection === "against")) {
     return ev.pointDirection;
-  }
-  if (ev && ev.skillId === "serve" && ev.code === "=") {
-    return "against";
-  }
-  if (ev && (ev.skillId === "defense" || ev.skillId === "pass") && ev.code === "/") {
-    return null;
   }
   ensurePointRulesDefaults();
   const skill = ev.skillId;
