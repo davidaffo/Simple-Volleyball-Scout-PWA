@@ -689,8 +689,25 @@ async function loadStateFromIndexedDb() {
 function saveState(options = {}) {
   const { persistLocal = false, skipMatchPersist = false } = options || {};
   try {
-    if (typeof window !== "undefined" && window.__appResetInProgress) {
-      return;
+    if (typeof window !== "undefined") {
+      const resetCooldownActive =
+        Number.isFinite(window.__recentAppResetAt) &&
+        Date.now() - window.__recentAppResetAt < 5000;
+      if (window.__appResetInProgress || resetCooldownActive) {
+        if (resetCooldownActive) {
+          window.__resetWriteLog = window.__resetWriteLog || [];
+          window.__resetWriteLog.push({
+            kind: "saveState-blocked",
+            at: new Date().toISOString(),
+            persistLocal: !!persistLocal,
+            skipMatchPersist: !!skipMatchPersist,
+            selectedMatch: state && state.selectedMatch,
+            loadedMatchName: state && state.loadedMatchName,
+            stack: new Error().stack
+          });
+        }
+        return;
+      }
     }
     state.lastSavedAt = Date.now();
     if (persistLocal) {
@@ -2634,8 +2651,22 @@ function getMatchPayloadTimestamp(payload) {
 function saveMatchToStorage(name, data) {
   if (!name) return;
   try {
-    if (typeof window !== "undefined" && window.__appResetInProgress) {
-      return false;
+    if (typeof window !== "undefined") {
+      const resetCooldownActive =
+        Number.isFinite(window.__recentAppResetAt) &&
+        Date.now() - window.__recentAppResetAt < 5000;
+      if (window.__appResetInProgress || resetCooldownActive) {
+        window.__resetWriteLog = window.__resetWriteLog || [];
+        window.__resetWriteLog.push({
+          kind: "saveMatchToStorage-blocked",
+          at: new Date().toISOString(),
+          name,
+          selectedMatch: state && state.selectedMatch,
+          loadedMatchName: state && state.loadedMatchName,
+          stack: new Error().stack
+        });
+        return false;
+      }
     }
     if (typeof window !== "undefined" && window.__debugMatchWrites) {
       console.group("[saveMatchToStorage]", name);
@@ -4045,8 +4076,22 @@ function generateMatchName(base = "") {
 }
 function persistCurrentMatch(options = {}) {
   const { allowCreate = true } = options || {};
-  if (typeof window !== "undefined" && window.__appResetInProgress) {
-    return;
+  if (typeof window !== "undefined") {
+    const resetCooldownActive =
+      Number.isFinite(window.__recentAppResetAt) &&
+      Date.now() - window.__recentAppResetAt < 5000;
+    if (window.__appResetInProgress || resetCooldownActive) {
+      window.__resetWriteLog = window.__resetWriteLog || [];
+      window.__resetWriteLog.push({
+        kind: "persistCurrentMatch-blocked",
+        at: new Date().toISOString(),
+        allowCreate: !!allowCreate,
+        selectedMatch: state && state.selectedMatch,
+        loadedMatchName: state && state.loadedMatchName,
+        stack: new Error().stack
+      });
+      return;
+    }
   }
   if (typeof buildMatchExportPayload !== "function") return;
   state.savedMatches = state.savedMatches || {};
