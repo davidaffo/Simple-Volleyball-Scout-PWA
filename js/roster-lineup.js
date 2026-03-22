@@ -579,7 +579,6 @@ function applyStateSnapshot(parsed, options = {}) {
   if (!skipStorageSync) {
     migrateTeamsToPersistent();
     migrateOpponentTeamsToPersistent();
-    migrateMatchesToPersistent();
     syncTeamsFromStorage();
     syncOpponentTeamsFromStorage();
     syncMatchesFromStorage();
@@ -690,19 +689,23 @@ async function loadStateFromIndexedDb() {
 function saveState(options = {}) {
   const { persistLocal = false, skipMatchPersist = false } = options || {};
   try {
+    if (typeof window !== "undefined" && window.__appResetInProgress) {
+      return;
+    }
     state.lastSavedAt = Date.now();
     if (persistLocal) {
       syncTeamsFromStorage();
       syncOpponentTeamsFromStorage();
       syncMatchesFromStorage();
     }
-    writeStateToIndexedDb(state);
+    const snapshot = buildCompactLocalStateSnapshot(state) || state;
+    writeStateToIndexedDb(snapshot);
     const shouldPersistLocal = persistLocal || typeof indexedDB === "undefined";
     if (shouldPersistLocal) {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
       } catch (localErr) {
-        const compact = buildCompactLocalStateSnapshot(state);
+        const compact = snapshot;
         let compactSaved = false;
         try {
           if (compact) {
@@ -721,7 +724,7 @@ function saveState(options = {}) {
       typeof window !== "undefined" && typeof window.isLoadingMatch !== "undefined"
         ? !!window.isLoadingMatch
         : isLoadingMatch;
-    if (!loading && shouldPersistLocal && !skipMatchPersist) {
+    if (!loading && !skipMatchPersist) {
       persistCurrentMatch({ allowCreate: false });
     }
   } catch (e) {
@@ -2631,6 +2634,32 @@ function getMatchPayloadTimestamp(payload) {
 function saveMatchToStorage(name, data) {
   if (!name) return;
   try {
+    if (typeof window !== "undefined" && window.__appResetInProgress) {
+      return false;
+    }
+    if (typeof window !== "undefined" && window.__debugMatchWrites) {
+      console.group("[saveMatchToStorage]", name);
+      console.log("payload.name", data && data.name);
+      console.log("payload.exportedAt", data && data.exportedAt);
+      console.log("selectedMatch", state && state.selectedMatch);
+      console.log("loadedMatchName", state && state.loadedMatchName);
+      console.trace();
+      console.groupEnd();
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("debug_matches") === "1") {
+          console.groupCollapsed("[match-save]", name);
+          console.log("storageKey", getMatchStorageKey(name));
+          console.log("payload", data);
+          console.trace();
+          console.groupEnd();
+        }
+      } catch (_) {
+        // ignore debug tracing failures
+      }
+    }
     localStorage.setItem(getMatchStorageKey(name), JSON.stringify(data));
     return true;
   } catch (e) {
@@ -2654,22 +2683,18 @@ function deleteMatchFromStorage(name) {
   }
 }
 function loadMatchesMapFromStorage() {
-  const map =
-    state && state.savedMatches && typeof state.savedMatches === "object"
-      ? JSON.parse(JSON.stringify(state.savedMatches))
-      : {};
+  const map = {};
   listMatchesFromStorage().forEach(name => {
     const data = loadMatchFromStorage(name);
     if (!data) return;
-    const existing = map[name];
-    if (!existing || getMatchPayloadTimestamp(data) >= getMatchPayloadTimestamp(existing)) {
-      map[name] = data;
-    }
+    map[name] = data;
   });
   return map;
 }
-function migrateMatchesToPersistent() {
+function migrateMatchesToPersistent(options = {}) {
+  const { onlyIfStorageEmpty = false } = options || {};
   if (!state.savedMatches || Object.keys(state.savedMatches).length === 0) return;
+  if (onlyIfStorageEmpty && listMatchesFromStorage().length > 0) return;
   Object.entries(state.savedMatches).forEach(([name, data]) => {
     if (!localStorage.getItem(getMatchStorageKey(name))) {
       saveMatchToStorage(name, data);
@@ -2681,6 +2706,9 @@ function syncMatchesFromStorage() {
   const names = Object.keys(state.savedMatches || {});
   if (state.selectedMatch && !names.includes(state.selectedMatch)) {
     state.selectedMatch = "";
+  }
+  if (state.loadedMatchName && !names.includes(state.loadedMatchName)) {
+    state.loadedMatchName = "";
   }
 }
 function renderTeamsSelect() {
@@ -3101,7 +3129,10 @@ function loadSelectedMatch() {
     }
     return;
   }
-  const data = loadMatchFromStorage(name);
+  const data =
+    loadMatchFromStorage(name) ||
+    (state.savedMatches && state.savedMatches[name]) ||
+    null;
   if (!data) {
     alert("Match non trovato o corrotto.");
     return;
@@ -4014,6 +4045,9 @@ function generateMatchName(base = "") {
 }
 function persistCurrentMatch(options = {}) {
   const { allowCreate = true } = options || {};
+  if (typeof window !== "undefined" && window.__appResetInProgress) {
+    return;
+  }
   if (typeof buildMatchExportPayload !== "function") return;
   state.savedMatches = state.savedMatches || {};
   const currentName = (state.loadedMatchName || state.selectedMatch || "").trim();

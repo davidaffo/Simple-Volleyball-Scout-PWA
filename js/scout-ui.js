@@ -5216,6 +5216,7 @@ function applySavedPlaybackToVideo(videoEl) {
   videoEl.addEventListener("loadedmetadata", onMeta);
 }
 function updateVideoPlaybackSnapshot(forcedSeconds = null, force = false) {
+  if (typeof window !== "undefined" && window.__appResetInProgress) return;
   if (!state.video) return;
   const now = Date.now();
   if (!force && now - lastVideoSnapshotMs < 1500) return;
@@ -24635,9 +24636,6 @@ function resetMatch() {
   renderPlayers();
   renderBenchChips();
   updateRotationDisplay();
-  setTimeout(() => {
-    window.location.reload();
-  }, 200);
 }
 function deleteIndexedDbByName(name) {
   if (!name || !("indexedDB" in window)) return Promise.resolve(false);
@@ -24702,6 +24700,16 @@ async function resetAppData() {
     "Questa operazione elimina tutti i dati dell'app (squadre, match, impostazioni, video). Procedere?"
   );
   if (!ok) return;
+  if (typeof window !== "undefined") {
+    window.__appResetInProgress = true;
+  }
+  try {
+    state.savedMatches = {};
+    state.selectedMatch = "";
+    state.loadedMatchName = "";
+  } catch (_) {
+    // ignore
+  }
   if ("serviceWorker" in navigator) {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -24722,7 +24730,38 @@ async function resetAppData() {
     }
   }
   try {
-    localStorage.clear();
+    if (typeof localStorage !== "undefined") {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key) keys.push(key);
+      }
+      keys.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+        } catch (_) {
+          // ignore single-key failures
+        }
+      });
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (_) {
+        // ignore
+      }
+      try {
+        if (typeof listMatchesFromStorage === "function") {
+          listMatchesFromStorage().forEach(name => {
+            try {
+              localStorage.removeItem(getMatchStorageKey(name));
+            } catch (_) {
+              // ignore
+            }
+          });
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
   } catch (_) {
     // ignore
   }
@@ -24733,8 +24772,110 @@ async function resetAppData() {
   }
   await clearStateSnapshotFromIndexedDb();
   await deleteAllIndexedDbDatabases();
-  const cleanUrl = window.location.origin + window.location.pathname;
-  window.location.replace(cleanUrl);
+  state.match = {
+    opponent: "",
+    category: "",
+    date: typeof getTodayIso === "function" ? getTodayIso() : "",
+    notes: "",
+    leg: "",
+    matchType: "amichevole",
+    teamName: "",
+    opponentManual: ""
+  };
+  state.currentSet = 1;
+  state.players = [];
+  state.captains = [];
+  state.playerNumbers = {};
+  state.events = [];
+  state.stats = {};
+  state.court = [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }];
+  state.rotation = 1;
+  state.liberos = [];
+  state.liberoAutoMap = {};
+  state.autoLiberoRole = "";
+  state.preferredLibero = "";
+  state.playersDb = {};
+  state.savedTeams = {};
+  state.savedOpponentTeams = {};
+  state.savedMatches = {};
+  state.selectedTeam = "";
+  state.selectedOpponentTeam = "";
+  state.selectedMatch = "";
+  state.loadedMatchName = "";
+  state.opponentPlayers = [];
+  state.opponentPlayerNumbers = {};
+  state.opponentLiberos = [];
+  state.opponentCaptains = [];
+  state.opponentCourt = [{ main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }, { main: "" }];
+  state.opponentRotation = 1;
+  state.opponentStats = {};
+  state.metricsConfig = {};
+  state.pointRules = {};
+  state.scoreOverrides = {};
+  state.setResults = {};
+  state.setStarts = {};
+  state.autoRoleBaseCourt = [];
+  state.opponentAutoRoleBaseCourt = [];
+  state.isServing = false;
+  state.autoRotatePending = false;
+  state.opponentAutoRotatePending = false;
+  state.matchFinished = false;
+  state.skillFlowOverride = null;
+  state.opponentSkillFlowOverride = null;
+  state.freeballPending = false;
+  state.freeballPendingScope = "our";
+  state.flowTeamScope = "our";
+  state.useOpponentTeam = false;
+  state.video = {
+    offsetSeconds: 0,
+    fileName: "",
+    youtubeId: "",
+    youtubeUrl: "",
+    lastPlaybackSeconds: 0
+  };
+  state.videoFilterPresets = [];
+  state.skillClock = { paused: false, pausedAtMs: null, pausedAccumMs: 0, lastEffectiveMs: null };
+  if (typeof resetSetTypeState === "function") {
+    resetSetTypeState();
+  }
+  if (typeof ensureMetricsConfigDefaults === "function") {
+    ensureMetricsConfigDefaults();
+  }
+  if (typeof ensurePointRulesDefaults === "function") {
+    ensurePointRulesDefaults();
+  }
+  if (typeof ensureOpponentSkillConfigDefaults === "function") {
+    ensureOpponentSkillConfigDefaults();
+  }
+  if (typeof clearEventSelection === "function") {
+    clearEventSelection({ clearContexts: true });
+  }
+  if (typeof applyMatchInfoToUI === "function") applyMatchInfoToUI();
+  if (typeof applyPlayersFromStateToTextarea === "function") applyPlayersFromStateToTextarea();
+  if (typeof applyOpponentPlayersFromStateToTextarea === "function") applyOpponentPlayersFromStateToTextarea();
+  if (typeof renderTeamsSelect === "function") renderTeamsSelect();
+  if (typeof renderOpponentTeamsSelect === "function") renderOpponentTeamsSelect();
+  if (typeof renderMatchesSelect === "function") renderMatchesSelect();
+  if (typeof renderPlayersManagerList === "function") renderPlayersManagerList();
+  if (typeof renderOpponentPlayersList === "function") renderOpponentPlayersList();
+  if (typeof renderPlayers === "function") renderPlayers();
+  if (typeof renderBenchChips === "function") renderBenchChips();
+  if (typeof renderLiberoTags === "function") renderLiberoTags();
+  if (typeof renderOpponentLiberoTags === "function") renderOpponentLiberoTags();
+  if (typeof renderLiberoChipsInline === "function") renderLiberoChipsInline();
+  if (typeof renderLineupChips === "function") renderLineupChips();
+  if (typeof renderEventsLog === "function") renderEventsLog();
+  if (typeof renderLiveScore === "function") renderLiveScore();
+  if (typeof renderMatchSummary === "function") renderMatchSummary();
+  if (typeof updateRotationDisplay === "function") updateRotationDisplay();
+  if (typeof applyMatchRequirementLock === "function") applyMatchRequirementLock();
+  if (typeof updateMatchButtonsState === "function") updateMatchButtonsState();
+  if (typeof setCurrentSet === "function") {
+    setCurrentSet(1, { save: false });
+  }
+  if (typeof window !== "undefined") {
+    window.__appResetInProgress = false;
+  }
 }
 async function forceRefreshAppAssets() {
   try {
@@ -25356,13 +25497,51 @@ async function init() {
   setActiveAggTab(activeAggTab || "summary");
   const isExportAnalysisHtml =
     typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
+  const resetRequestedByUrl =
+    !isExportAnalysisHtml &&
+    typeof window !== "undefined" &&
+    new URL(window.location.href).searchParams.get("reset_app") === "1";
+  const resetJustCompleted =
+    !isExportAnalysisHtml &&
+    typeof window !== "undefined" &&
+    window.sessionStorage &&
+    window.sessionStorage.getItem("volleyScoutResetDone") === "1";
+  if (resetRequestedByUrl || resetJustCompleted) {
+    try {
+      window.sessionStorage.removeItem("volleyScoutResetDone");
+    } catch (_) {
+      // ignore
+    }
+    try {
+      localStorage.clear();
+    } catch (_) {
+      // ignore
+    }
+    if (typeof clearStateSnapshotFromIndexedDb === "function") {
+      await clearStateSnapshotFromIndexedDb();
+    }
+    try {
+      if (typeof deleteAllIndexedDbDatabases === "function") {
+        await deleteAllIndexedDbDatabases();
+      }
+    } catch (_) {
+      // ignore
+    }
+    try {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("reset_app");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    } catch (_) {
+      // ignore
+    }
+  }
   let loadedFromIndexedDb = false;
   if (isExportAnalysisHtml && typeof window !== "undefined" && window.__exportedAnalysisState) {
     applyStateSnapshot(window.__exportedAnalysisState, { skipStorageSync: true });
-  } else if (!isExportAnalysisHtml && typeof loadStateFromIndexedDb === "function") {
+  } else if (!isExportAnalysisHtml && !resetRequestedByUrl && !resetJustCompleted && typeof loadStateFromIndexedDb === "function") {
     loadedFromIndexedDb = await loadStateFromIndexedDb();
   }
-  if (!isExportAnalysisHtml && !loadedFromIndexedDb) {
+  if (!isExportAnalysisHtml && !resetRequestedByUrl && !resetJustCompleted && !loadedFromIndexedDb) {
     loadState();
   }
   applyVideoLayoutWidths();
@@ -26929,7 +27108,15 @@ async function init() {
       saveState({ persistLocal: true });
     });
   }
-  if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
+  if (elBtnResetApp) {
+    elBtnResetApp.addEventListener("click", e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      resetAppData();
+    });
+  }
   const elBtnForceRefreshApp = document.getElementById("btn-force-refresh-app");
   if (elBtnForceRefreshApp) {
     elBtnForceRefreshApp.addEventListener("click", forceRefreshAppAssets);
