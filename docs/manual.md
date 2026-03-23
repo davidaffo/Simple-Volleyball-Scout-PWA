@@ -194,7 +194,138 @@ Il programma può essere utilizzato anche da un dispositivo mobile molto piccolo
 
 ## Analisi
 
-TODO
+La sezione **Analisi** offre diverse viste e filtri per poter analizzare tutti i dati raccolti durante la partita. Si può utilizzare sia durante la partita per recuperare dati utili, sia dopo la partita, le funzionalità sono identiche.
+
+### Filtri generali
+
+Nella parte alta della sezione puoi filtrare l'analisi per:
+
+- **Squadra**
+- **Set**
+- **Match**
+
+In modalità doppia squadra puoi scegliere se analizzare la tua squadra, l'avversaria oppure entrambe. Se non selezioni nessuna squadra in particolare, in alcune schermate il programma mostra il riepilogo affiancato delle due squadre.
+
+Tutte le sottosezioni dell'analisi usano gli stessi filtri di base: cambiando set o squadra, si aggiornano automaticamente tabelle, grafici, traiettorie e riepiloghi.
+
+Puoi inoltre aggregare i dati della partita corrente ai dati di partite precedenti tramite il pulsante apposito. In questo modo, verranno sommati tutti i dati della partita corrente e di quelle selezionate.
+
+### Tabellino riepilogativo
+
+La prima vista è il **tabellino riepilogativo**, che mostra per ogni giocatrice:
+
+- formazione di partenza e ingressi
+- punti fatti e punti subiti
+- errori personali
+- dati principali di battuta, ricezione, freeball, attacco, muro e difesa
+- metriche come **Pos**, **Prf** ed **Eff**
+- riepilogo totale squadra
+- riepilogo per singolo set
+
+Inoltre:
+
+- Cliccando sul nome di una giocatrice, apri la sua interfaccia di analisi individuale (accessibile anche dall'apposito tasto di analisi)
+- Cliccando sopra il nome di un fondamentale, apri una tabella in dettaglio di quel determinato fondamentale
+
+Sotto il riepilogo principale è presente anche una tabella aggiuntiva con alcuni indicatori di squadra.
+
+Qui trovi, tra le altre cose:
+
+- dati di **cambio palla**
+- attacchi dopo **ricezione positiva**
+- attacchi dopo **ricezione non positiva**
+- dati di **break point**
+- rendimento del **contrattacco**
+- differenza di rendimento per **rotazione**
+
+### Grafici skill
+
+I grafici permettono di vedere l'andamento di ogni fondamentale durante la partita, in modo da contestualizzare nel tempo gli eventi inseriti. Se vengono aggregati i dati di più partite, i grafici mostrano invece il totale della metrica per ogni partita, in modo da darmi l'idea dell'andamento del fondamentale sulla totalità delle partite.
+
+Per ogni skill puoi visualizzare diverse metriche:
+
+- **Eff % cumulativa**
+- **Pos % cumulativa**
+- **Prf % cumulativa**
+- **Esito singolo (codice)**
+
+Sono utili per individuare, ad esempio:
+
+- cali o miglioramenti
+- serie positive o negative
+- differenze tra l'inizio e la fine del match
+- impatto di un set specifico sul rendimento complessivo
+
+Nel grafico i punti sono colorati in base al tono dell'evento:
+
+- positivo
+- neutro
+- negativo
+
+Passando con il mouse su un punto puoi leggere il dettaglio dell'evento corrispondente. I grafici possono anche essere copiati come immagine, per essere esportati.
+
+### Grafici nella scheda atleta
+
+Anche la **scheda giocatrice** include i grafici skill. In questo caso i grafici non sono più aggregati sulla squadra, ma costruiti solo sugli eventi di quella atleta.
+
+Questo permette di vedere l'andamento individuale di ciascun fondamentale nel corso della partita, con la stessa logica usata per i grafici globali.
+
+### Andamento dei set
+
+La sottosezione **Andamento set** mostra l'evoluzione del punteggio all'interno di ciascun set.
+
+Per ogni set viene disegnato un grafico del **delta punti**, cioè la differenza tra i punti della tua squadra e quelli dell'avversaria nel corso del set. 
+
+Cliccando sui punti del grafico puoi leggere un dettaglio del rally o della sequenza di eventi che ha portato a quel cambio di punteggio.
+
+### Filtri condivisi
+
+Tutte le successive viste della sezione **Analisi** usano un sistema di filtri specifici, che si aggiungono a quelli principali di prima.
+
+Questi mi permettono, oltre ad altre cose, di filtrare ad esempio i dati per giocatrice, per alzatrice, per palla precedente, per valutazione ecc...
+
+
+### Analisi delle alzate
+
+È disponibile una sezione dedicata alle **alzate**, pensata per studiare la distribuzione.
+
+La vista mostra graficamente la distribuzione totale e nelle varie rotazioni. Vengono mostrate con sfondo verde le zone con efficienza più alta d'attacco e con contorno blu le zone con la maggiore distribuzione. Se corrispondono, su numeri sensati, significa che la distribuzione è stata efficiente.
+
+La sezione mostra anche le valutazioni d'alzata, disponibili nel tabellino, e un riepilogo con i dati di attacco di ogni giocatore relativi a quell'alzata (utile soprattutto con i filtri per vedere gli esiti di attacco con un determinato tipo di alzata o con un determinato alzatore).
+
+### Analisi delle traiettorie di attacco
+
+Se durante lo scout hai registrato le traiettorie di attacco, il programma le organizza in una vista dedicata.
+
+Le traiettorie vengono raggruppate per zona di partenza.
+
+Le linee sono colorate in base all'esito dell'azione. Oltre alla mappa delle traiettorie, viene mostrato anche un riepilogo statistico degli attacchi filtrati, compreso il dettaglio per tipo di attacco.
+
+### Analisi delle traiettorie di battuta
+
+È presente anche una vista dedicata alle **traiettorie di battuta**. In questo caso il programma raggruppa le battute per giocatrice e disegna le traiettorie registrate.
+
+Ogni card mostra le traiettorie della singola atleta, così puoi vedere con facilità abitudini, direzioni preferite e distribuzione del servizio.
+
+### Scheda atleta e confronto
+
+La sezione **Giocatrice** permette di selezionare un'atleta e vedere una scheda completa con tutti i dati delle altre sezioni di analisi (tabellino, traiettorie ecc...)
+
+Puoi anche attivare il **confronto tra giocatrici**. In questo caso il programma affianca due atlete della stessa squadra e confronta automaticamente i loro valori, evidenziando dove una rende meglio o peggio dell'altra.
+
+### Esportazione dell'analisi
+
+È possibile esportare l'intera analisi in formato html. In questo modo chiunque, da qualunque dispositivo, ha accesso a tutte le funzionalità di analisi in modo interattivo senza dover per forza utilizzare il programma.
+
+### Nota importante sulle metriche
+
+Tutti i risultati mostrati nella sezione analisi dipendono da due elementi:
+
+- i dati realmente inseriti nello scout
+- le regole di valutazione configurate nelle impostazioni
+
+In particolare, metriche come **Pos**, **Prf**, **Eff** e l'assegnazione dei punti sono sempre calcolate in base ai criteri che hai definito per i singoli fondamentali. Se modifichi quei criteri, cambierà anche la lettura statistica dell'analisi.
+
 
 ---
 
