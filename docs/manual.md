@@ -331,7 +331,108 @@ In particolare, metriche come **Pos**, **Prf**, **Eff** e l'assegnazione dei pun
 
 ## Video
 
-TODO
+La sezione **Video** serve a sincronizzare gli eventi dello scout al filmato della partita, in modo da poter rivedere rapidamente le azioni, filtrare solo quelle che interessano ed eventualmente creare tagli video e usare il video come strumento di analisi tecnica.
+
+Quando la sincronizzazione è corretta, ogni evento del log può portarti direttamente al punto giusto del filmato.
+
+### Tipi di video supportati
+
+L'app supporta due modalità principali:
+
+- **video locale**
+- **video YouTube**
+
+Con il **video locale** puoi caricare un file direttamente dal tuo dispositivo.
+
+Con **YouTube** puoi collegare il match a un link di YouTube.
+
+#### Video durante lo scout
+
+Quando lavori in **scout da video**, gli eventi vengono registrati mentre osservi il filmato. In questo caso l'app può salvare anche il tempo video associato all'evento nel momento in cui lo inserisci.
+
+Questo rende la sincronizzazione molto più immediata, perché il log nasce già con riferimenti temporali video.
+
+#### Analisi video dopo lo scout
+
+Puoi anche caricare o collegare un video **dopo** aver già completato lo scout. In questo caso il log esiste già, ma va allineato al filmato tramite una procedura di sincronizzazione iniziale.
+
+È la situazione più comune quando:
+
+- hai scoutato live e vuoi aggiungere il video dopo
+- hai importato un match già registrato
+- vuoi rivedere o correggere l'associazione tra eventi e filmato
+
+### Come funziona la sincronizzazione
+
+La sincronizzazione si basa su un concetto semplice: devi dire all'app in quale punto del video si trova un evento noto del log.
+
+Da quel momento l'app calcola un **offset temporale** e lo usa per collegare tutti gli altri eventi al filmato.
+
+Di solito questo viene fatto sulla prima battuta della partita.
+
+Una volta fatto ciò, bisogna aggiustare i vari eventi, basandosi sul fatto che l'inserimento di ogni evento ha un ritardo dato dall'essere umano che lo inserisce, che può variare in base al fondamentale e alle capacità dello scoutman.
+
+### Procedura di sincronizzazione consigliata
+
+La procedura più semplice è questa.
+
+#### 1. Carica o apri il video
+
+Per prima cosa:
+
+- carica un file locale
+- oppure collega un video YouTube
+
+Se usi YouTube, apri il video e fallo partire almeno una volta prima di sincronizzare.
+
+#### 2. Verifica di avere già un log eventi
+
+La sincronizzazione richiede che nel match ci siano già eventi registrati. Senza almeno una skill nel log non è possibile creare un allineamento utile.
+
+#### 3. Scegli un evento di riferimento
+
+Decidi da quale evento cominciare la sincronizzazione. Se presente, è sempre la prima battuta della partita.
+
+#### 4. Porta il video nel punto esatto dell'evento
+
+Muovi il player fino al momento preciso in cui avviene quell'azione.
+
+#### 5. Lancia la sincronizzazione
+
+A questo punto usa il comando di sincronizzazione della prima skill. L'app salva l'offset tra il tempo del video e il tempo interno del log.
+
+Adesso gli eventi sono sincronizzati, ma ancora non combaciano perfettamente al video.
+
+#### 6. Correzione manuale
+
+Questa è la parte più lunga del lavoro. In quanto ovviamente la sincronizzazione non è ancora perfetta, a causa dei ritardi di valutazione ed inserimento da parte dello scout man.
+
+Questo ritardo di inserimento, viene detto offset. L'applicazione fornisce uno strumento per applicare un offset ad ogni fondamentale. Una volta applicato, posso procedere a sistemare tutti gli eventi a mano.
+
+Solitamente, è bene procedere per ogni fondamentale, quindi ad esempio, vogliamo correggere tutte le battute. La procedura diventa la seguente:
+
+1. Filtro gli eventi per battuta
+2. Seleziono tutti gli eventi
+3. Premo il tasto offset, e per l'evento battuta, inserisco un offset negativo (perché l'inserimento è sicuramente stato fatto dopo l'evento) di quanto più o meno mi aspetto che il ritardo di inserimento sia.
+4. Cotrollo un evento per vedere quanto è lontano dalla sincronizzazione perfetta, posso applicare nuovamente l'offset desiderato (attenzione, l'offset non si resetta, ma viene accumulato)
+5. Una volta che l'offset applicato mi soddisfa, procedo con le correzioni manuali
+6. Mi piazzo sulla prima battuta, e cambio il timestamp con i tasti Q e W finché non corrisponde esattamente al momento desiderato
+7. Ripeto l'operazione per tutte le battute rimaste
+8. Posso correggere qualunque campo dell'evento con il doppio click o con il tasto scorciatoia apposito
+
+Queste azioni vengono ripetute per tutti gli altri tipi di eventi.
+
+Alcuni eventi sono collegati, ad esempio battuta e ricezione, attacco muro e difesa ecc...
+
+In questo caso basta sincronizzare solo, ad esempio, tutte le battute, e poi premere il taasto apposito per sincronizzare automaticamente tutte le ricezioni allo stesso tempo.
+
+### Cosa succede dopo la sincronizzazione
+
+Una volta sincronizzato il match:
+
+- posso cliccare su un evento e il video si sposta a quell'evento
+- posso usare il tasto play by play per vedere uno dopo l'altro gli eventi filtrati (il tempo di visualizzazione può essere modificato dall'apposito campo)
+- posso creare dei tagli video. Questo non viene fatto direttamente dal programma a causa dei limiti delle PWA, ma viene copiato un codice da usare con ffmpeg sul video originale per creare il taglio.
 
 ---
 
