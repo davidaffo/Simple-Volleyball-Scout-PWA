@@ -4,6 +4,72 @@ function getEnabledSkills() {
     return !cfg || cfg.enabled !== false;
   });
 }
+const APP_RESET_SIGNAL_KEY = "volleyScoutResetSignal";
+const APP_RESET_CHANNEL = "volley-scout-reset";
+let resetSyncChannel = null;
+let lastHandledResetSignal = "";
+function navigateToResetBootstrap() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("reset_app") === "1") return;
+  url.searchParams.set("reset_app", "1");
+  window.location.replace(url.toString());
+}
+function handleIncomingResetSignal(signalId = "") {
+  if (typeof window === "undefined") return;
+  const normalized = String(signalId || "").trim();
+  if (!normalized || normalized === lastHandledResetSignal) return;
+  lastHandledResetSignal = normalized;
+  window.__appResetInProgress = true;
+  window.__recentAppResetAt = Date.now();
+  navigateToResetBootstrap();
+}
+function broadcastResetSignal(signalId) {
+  if (typeof window === "undefined") return;
+  const payload = {
+    id: String(signalId || Date.now()),
+    at: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem(APP_RESET_SIGNAL_KEY, JSON.stringify(payload));
+  } catch (_) {
+    // ignore
+  }
+  try {
+    if (!resetSyncChannel && "BroadcastChannel" in window) {
+      resetSyncChannel = new BroadcastChannel(APP_RESET_CHANNEL);
+    }
+    if (resetSyncChannel) {
+      resetSyncChannel.postMessage(payload);
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+function initCrossTabResetSync() {
+  if (typeof window === "undefined" || window.__resetSyncInitialized) return;
+  window.__resetSyncInitialized = true;
+  window.addEventListener("storage", event => {
+    if (!event || event.key !== APP_RESET_SIGNAL_KEY || !event.newValue) return;
+    try {
+      const payload = JSON.parse(event.newValue);
+      handleIncomingResetSignal(payload && payload.id);
+    } catch (_) {
+      // ignore
+    }
+  });
+  try {
+    if ("BroadcastChannel" in window) {
+      resetSyncChannel = new BroadcastChannel(APP_RESET_CHANNEL);
+      resetSyncChannel.addEventListener("message", event => {
+        const payload = event && event.data;
+        handleIncomingResetSignal(payload && payload.id);
+      });
+    }
+  } catch (_) {
+    // ignore
+  }
+}
 function isSkillEnabled(skillId) {
   if (!skillId) return false;
   const cfg = state.metricsConfig && state.metricsConfig[skillId];
@@ -3029,8 +3095,10 @@ function resetSetTypeState() {
   Object.keys(selectedSkillPerPlayer).forEach(key => delete selectedSkillPerPlayer[key]);
 }
 function getFreeballStartSkill(scope = "our") {
-  if (isSkillEnabledForScope("freeball", scope)) return "freeball";
-  if (isSkillEnabledForScope("second", scope)) return "second";
+  const candidates = ["freeball", "second", "attack", "defense", "pass", "serve"];
+  for (let i = 0; i < candidates.length; i += 1) {
+    if (isSkillEnabledForScope(candidates[i], scope)) return candidates[i];
+  }
   return null;
 }
 function getPredictedSkillIdSingle() {
@@ -3077,6 +3145,15 @@ function getPredictedSkillIdSingle() {
   const possessionServe = !!state.isServing;
   const fallback = resolveEnabledSkill(possessionServe ? "serve" : "pass");
   if (!last) return fallback;
+  if (last.skillId === "serve") {
+    if (last.code === "/") {
+      return resolveEnabledSkill(getFreeballStartSkill("our")) || fallback;
+    }
+    const dir = typeof getPointDirection === "function" ? getPointDirection(last) : null;
+    if (dir === "for") return resolveEnabledSkill("serve") || fallback;
+    if (dir === "against") return resolveEnabledSkill("pass") || fallback;
+    return resolveEnabledSkill(flowNext("serve")) || fallback;
+  }
   if (last.skillId === "pass" && (last.code === "/" || last.receiveEvaluation === "/")) {
     return resolveEnabledSkill("defense") || fallback;
   }
@@ -5216,6 +5293,7 @@ function applySavedPlaybackToVideo(videoEl) {
   videoEl.addEventListener("loadedmetadata", onMeta);
 }
 function updateVideoPlaybackSnapshot(forcedSeconds = null, force = false) {
+  if (typeof window !== "undefined" && window.__appResetInProgress) return;
   if (!state.video) return;
   const now = Date.now();
   if (!force && now - lastVideoSnapshotMs < 1500) return;
@@ -7417,12 +7495,20 @@ function renderPlayers() {
     }
   }
   if (state.predictiveSkillFlow && !state.useOpponentTeam && !predictedSkillId) {
-    const fallbackSeed = state.isServing ? "serve" : "pass";
-    if (isSkillEnabled(fallbackSeed)) {
-      predictedSkillId = fallbackSeed;
-    } else {
-      const enabled = getEnabledSkills();
-      predictedSkillId = enabled.length ? enabled[0].id : null;
+    const ownEvents = (state.events || []).filter(ev => {
+      if (!ev || !ev.skillId) return false;
+      if (!ev.team) return true;
+      return ev.team !== "opponent";
+    });
+    const lastOwnFlowEvent = getLastFlowEvent(ownEvents);
+    if (!lastOwnFlowEvent) {
+      const fallbackSeed = state.isServing ? "serve" : "pass";
+      if (isSkillEnabled(fallbackSeed)) {
+        predictedSkillId = fallbackSeed;
+      } else {
+        const enabled = getEnabledSkills();
+        predictedSkillId = enabled.length ? enabled[0].id : null;
+      }
     }
   }
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
@@ -7982,6 +8068,17 @@ async function handleEventClick(
   applyReceiveContextToEvent(event);
   state.events.push(event);
   handleAutoRotationFromEvent(event, scope);
+  if (!state.useOpponentTeam && state.predictiveSkillFlow && scope === "our" && skillId === "serve") {
+    if (code === "/") {
+      state.freeballPending = true;
+      state.freeballPendingScope = "our";
+      state.skillFlowOverride = getFreeballStartSkill("our");
+    } else {
+      const direction = typeof getPointDirection === "function" ? getPointDirection(event) : null;
+      state.skillFlowOverride = direction === "for" ? "serve" : direction === "against" ? "pass" : "defense";
+    }
+    state.flowTeamScope = "our";
+  }
   if (state.useOpponentTeam) {
     const nextFlow = computeTwoTeamFlowFromEvent(event);
     state.flowTeamScope = nextFlow.teamScope;
@@ -13822,12 +13919,6 @@ function getPointDirection(ev) {
   if (ev && (ev.derivedFromPassServe || ev.derivedFromBlock)) return null;
   if (ev && ev.skillId === "manual" && (ev.pointDirection === "for" || ev.pointDirection === "against")) {
     return ev.pointDirection;
-  }
-  if (ev && ev.skillId === "serve" && ev.code === "=") {
-    return "against";
-  }
-  if (ev && (ev.skillId === "defense" || ev.skillId === "pass") && ev.code === "/") {
-    return null;
   }
   ensurePointRulesDefaults();
   const skill = ev.skillId;
@@ -24635,9 +24726,6 @@ function resetMatch() {
   renderPlayers();
   renderBenchChips();
   updateRotationDisplay();
-  setTimeout(() => {
-    window.location.reload();
-  }, 200);
 }
 function deleteIndexedDbByName(name) {
   if (!name || !("indexedDB" in window)) return Promise.resolve(false);
@@ -24702,39 +24790,13 @@ async function resetAppData() {
     "Questa operazione elimina tutti i dati dell'app (squadre, match, impostazioni, video). Procedere?"
   );
   if (!ok) return;
-  if ("serviceWorker" in navigator) {
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      regs.forEach(reg => reg.unregister());
-    } catch (_) {
-      // ignore
-    }
+  const signalId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  if (typeof window !== "undefined") {
+    window.__appResetInProgress = true;
+    window.__recentAppResetAt = Date.now();
   }
-  if (typeof clearCachedLocalVideo === "function") {
-    await clearCachedLocalVideo();
-  }
-  if ("caches" in window) {
-    try {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(key => caches.delete(key)));
-    } catch (_) {
-      // ignore
-    }
-  }
-  try {
-    localStorage.clear();
-  } catch (_) {
-    // ignore
-  }
-  try {
-    sessionStorage.clear();
-  } catch (_) {
-    // ignore
-  }
-  await clearStateSnapshotFromIndexedDb();
-  await deleteAllIndexedDbDatabases();
-  const cleanUrl = window.location.origin + window.location.pathname;
-  window.location.replace(cleanUrl);
+  broadcastResetSignal(signalId);
+  navigateToResetBootstrap();
 }
 async function forceRefreshAppAssets() {
   try {
@@ -25342,6 +25404,7 @@ async function init() {
   if (typeof window !== "undefined") {
     window.isLoadingMatch = true;
   }
+  initCrossTabResetSync();
   if (typeof window !== "undefined") {
     window.openMatchManagerModal = openMatchManagerModal;
     window.closeMatchManagerModal = closeMatchManagerModal;
@@ -25356,13 +25419,92 @@ async function init() {
   setActiveAggTab(activeAggTab || "summary");
   const isExportAnalysisHtml =
     typeof window !== "undefined" && !!window.__EXPORT_ANALYSIS_HTML__;
+  const resetRequestedByUrl =
+    !isExportAnalysisHtml &&
+    typeof window !== "undefined" &&
+    new URL(window.location.href).searchParams.get("reset_app") === "1";
+  const resetJustCompleted =
+    !isExportAnalysisHtml &&
+    typeof window !== "undefined" &&
+    window.sessionStorage &&
+    window.sessionStorage.getItem("volleyScoutResetDone") === "1";
+  if (resetRequestedByUrl || resetJustCompleted) {
+    if (typeof window !== "undefined") {
+      window.__appResetInProgress = true;
+      window.__recentAppResetAt = Date.now();
+      window.__resetWriteLog = [];
+    }
+    try {
+      window.sessionStorage.removeItem("volleyScoutResetDone");
+    } catch (_) {
+      // ignore
+    }
+    if ("serviceWorker" in navigator) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(reg => reg.unregister()));
+      } catch (_) {
+        // ignore
+      }
+    }
+    if (typeof clearCachedLocalVideo === "function") {
+      try {
+        await clearCachedLocalVideo();
+      } catch (_) {
+        // ignore
+      }
+    }
+    if ("caches" in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+      } catch (_) {
+        // ignore
+      }
+    }
+    try {
+      localStorage.clear();
+    } catch (_) {
+      // ignore
+    }
+    if (typeof clearStateSnapshotFromIndexedDb === "function") {
+      await clearStateSnapshotFromIndexedDb();
+    }
+    try {
+      if (typeof deleteAllIndexedDbDatabases === "function") {
+        await deleteAllIndexedDbDatabases();
+      }
+    } catch (_) {
+      // ignore
+    }
+    try {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("reset_app");
+      if (resetRequestedByUrl) {
+        try {
+          window.sessionStorage.setItem("volleyScoutResetDone", "1");
+        } catch (_) {
+          // ignore
+        }
+        window.location.replace(cleanUrl.toString());
+        return;
+      }
+      window.history.replaceState({}, "", cleanUrl.toString());
+    } catch (_) {
+      // ignore
+    }
+    if (typeof window !== "undefined") {
+      window.__recentAppResetAt = Date.now();
+      window.__appResetInProgress = false;
+    }
+  }
   let loadedFromIndexedDb = false;
   if (isExportAnalysisHtml && typeof window !== "undefined" && window.__exportedAnalysisState) {
     applyStateSnapshot(window.__exportedAnalysisState, { skipStorageSync: true });
-  } else if (!isExportAnalysisHtml && typeof loadStateFromIndexedDb === "function") {
+  } else if (!isExportAnalysisHtml && !resetRequestedByUrl && !resetJustCompleted && typeof loadStateFromIndexedDb === "function") {
     loadedFromIndexedDb = await loadStateFromIndexedDb();
   }
-  if (!isExportAnalysisHtml && !loadedFromIndexedDb) {
+  if (!isExportAnalysisHtml && !resetRequestedByUrl && !resetJustCompleted && !loadedFromIndexedDb) {
     loadState();
   }
   applyVideoLayoutWidths();
@@ -26929,7 +27071,15 @@ async function init() {
       saveState({ persistLocal: true });
     });
   }
-  if (elBtnResetApp) elBtnResetApp.addEventListener("click", resetAppData);
+  if (elBtnResetApp) {
+    elBtnResetApp.addEventListener("click", e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      resetAppData();
+    });
+  }
   const elBtnForceRefreshApp = document.getElementById("btn-force-refresh-app");
   if (elBtnForceRefreshApp) {
     elBtnForceRefreshApp.addEventListener("click", forceRefreshAppAssets);

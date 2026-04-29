@@ -111,22 +111,13 @@ Alcune impostazioni si possono configurare separatamente per le due squadre:
 - Rilevazione delle **traiettorie di battuta**
 - Visualizzazione delle **traiettorie del battitore** corrente nella colonna destra
 
-TODO SONO ARRIVATO QUI
-
 ### Inserimento in modalità flusso automatico
 
-In modalità automatica il programma ti dice automaticamente cosa andare a valutare seguendo il flusso di gioco, questa è la modalità d'utlizzo consigliata.
+Nella modalità automatica, il programma predice automaticamente quale sia il prossimo fondamentale da valutare in base all'esito del precedente. Ad esempio dopo una ricezione che non sia slash o generi errore, viene chiamata l'alzata se inclusa nelle valutazioni o l'attacco.
 
-Esempio di flusso completo partendo dalla battuta:
+Il flusso si adatta all'esito di ogni azione.
 
-1. **Tipo di battuta** → si seleziona tramite clic o codice da tastiera (indicato tra parentesi sul tasto)
-2. **Traiettoria di battuta** → si clicca la zona di partenza e poi la zona di arrivo
-3. **Ricezione avversaria** → si valuta, oppure si preme doppio meno per ace diretto
-4. **Alzata avversaria** → si valuta
-5. **Tipo di alzata** (se attivo) → si sceglie il tipo
-6. **Attacco** → si seleziona l'attaccante, si inserisce la traiettoria e si valuta
-
-Il flusso si adatta all'esito di ogni azione: ace → torna alla battuta; errore avversario → passa la battuta all'avversario; punto in cambio palla → la squadra ruota e la battuta passa all'avversario.
+Soltanto alcuni eventi richiedono intervento manuale, ad esempio se dopo un appoggio per qualche motivo si genera una freeball. In quel caso esiste il tasto freeball, per far passare il flusso freeball ad una delle due squadre. La stessa cosa vale anche per gli errori che non sono contemplati dalle valutazioni dei fondamentali.
 
 ### Inserimento in modalità manuale
 
@@ -136,14 +127,16 @@ Se disattivi il flusso automatico, per ogni giocatrice scegli tu il fondamentale
 
 Il programma supporta due modalità:
 
-- **Direzione semplificata** (default): il punto di partenza viene inferito automaticamente dalla posizione del giocatore in campo; devi cliccare solo il punto di arrivo
-- **Modalità manuale**: clicca e tieni premuto sul punto di partenza, poi trascina fino al punto di arrivo
+- **Direzione semplificata** (default): il punto di partenza viene inferito automaticamente in base alla posizione del giocatore in campo; devi cliccare solo il punto di arrivo. Puoi anche modificare con dei tasti appositi il punto rete di partenza.
+- **Modalità manuale**: clicca e tieni premuto sul punto di partenza, poi trascina fino al punto di arrivo. Non è necessario cliccare precisamente sulla rete, in quanto il programma fa comunque partire la traiettoria dalla rete.
 
 Puoi anche scegliere di non inserire la traiettoria premendo ESC o cliccando sulla X: il programma registra comunque la valutazione. Questo è utile quando l'attaccante attacca in rete o viene murato.
 
 ### Gestione del muro
 
-In modalità automatica il muro si valuta solo se c'è stato effettivamente un tocco. Per segnalarlo, premi il tasto **/** (slash) durante la valutazione dell'attacco: si apre la valutazione del muro avversario, da cui il programma inferisce automaticamente la valutazione dell'attacco (ad esempio muro+ → attacco-).
+In modalità automatica e con doppia squadra il muro si valuta solo se c'è stato effettivamente un tocco. Per segnalarlo, premi il tasto **/** (slash) durante la valutazione dell'attacco: si apre la valutazione del muro avversario, da cui il programma inferisce automaticamente la valutazione dell'attacco (ad esempio muro+ → attacco-).
+In questo caso quindi, il tasto **/** non corrisponde alla valutazione dell'attacco murato, ma attiva la valutazione del muro.
+In modalità squadra singola invece, non essendoci una squadra avversaria da cui inferire la valutazione del muro, nel momento in cui il flusso sarebbe nella squadra avversaria, oltre alla valutazione del fondamentale di difesa, c'è un tasto a rete per valutare l'eventuale muro.
 
 Puoi aggiungere dati aggiuntivi all'ultimo attacco tramite i tasti centrali:
 
@@ -151,72 +144,295 @@ Puoi aggiungere dati aggiuntivi all'ultimo attacco tramite i tasti centrali:
 - **Tipo di attacco** (regolare, pallonetto, piazzata, ecc.)
 - **Numero di giocatori a muro**
 
-Tutti questi tasti hanno codici da tastiera indicati tra parentesi.
+Tutti questi tasti hanno scorciatoie da tastiera indicati tra parentesi.
 
 ### Rotazione, formazione e sostituzioni
 
-Il programma tiene separate tre cose che sembrano uguali ma non lo sono: la rotazione regolamentare, la disposizione grafica in campo e i casi speciali come libero e P1 americana. Una squadra può stare in ricezione con una certa disposizione grafica, ma la rotazione di base deve restare corretta per il cambio palla successivo.
+Il programma tiene separate in memoria:
+- La rotazione base, ovvero la posizione in campo delle giocatrici
+- La disposizione grafica in campo, ovvero la posizione in campo delle giocatrici dopo le varie transizioni dell'azione. Ad esempio se la squadra è in ricezione, le giocatrici vengono posizionate nelle varie posizioni di ricezione, idem per le fasi di attacco e difesa. Questi automatismi sono configurabili tramite le varie opzioni.
 
-Per effettuare una **sostituzione**, premi il tasto Formazione della squadra corrispondente, trascina la giocatrice in panchina al posto di quella in campo, poi scegli:
+Per effettuare una **sostituzione**, premi il tasto Formazione/Sostituzione della squadra corrispondente, trascina la giocatrice in panchina al posto di quella in campo, poi scegli:
 
-- **Tasto rosso** (*Effettua Sostituzione*): conteggia il cambio nel totale delle sostituzioni
-- **Tasto blu** (*Sovrascrivi Formazione*): corregge la formazione senza conteggiare un cambio, per quando hai inserito la formazione sbagliata
+- **Tasto rosso** (*Effettua Sostituzione*): conteggia i cambi nel totale delle sostituzioni, quindi effettua la sostituzione vera e propria
+- **Tasto blu** (*Sovrascrivi Formazione*): sovrascrive la formazione corrente senza conteggiare i cambi, serve se ad esempio è stata inserita la formazione sbagliata a inizio set o se va corretta durante la partita
 
-È disponibile anche la **modalità numerica** per inserire il numero di maglia direttamente da tastiera, utile per gli inserimenti più veloci.
+È disponibile anche la **modalità numerica** per inserire il numero di maglia direttamente da tastiera, utile per inserire velocemente la formazione a inizio set.
 
 ### Correzioni e annullamenti
 
-- **Annulla**: il tasto nel log annulla l'ultimo evento; funziona su più eventi in catena, puoi annullarne quanti ne vuoi
+Tutti gli eventi inseriti sono visualizzati nel log della colonna di destra.
+
+- **Annulla**: annulla l'ultimo evento inserito; funziona su più eventi in catena, puoi annullarne quanti ne vuoi. Attenzione: per eliminare invece parzialmente un inserimento di un fondamentale (ad esempio hai inserito una traiettoria di attacco ma non volevi valutare l'attacco, puoi premere sul tasto x in corrispondenza del giocatore da valutare).
 - **Modifica**: fai doppio clic su un campo nel log per correggere una valutazione, aggiungere una traiettoria mancante o modificare qualsiasi altro dato
-- **Elimina**: puoi eliminare direttamente un fondamentale dal log
+- **Elimina**: puoi eliminare direttamente un fondamentale dal log premendo il tasto x nell'ultima colonna.
 
 ### Fine set
 
 Quando il set è terminato, premi **Set Successivo**: si apre di nuovo la schermata di preparazione, dove puoi modificare le formazioni, cambiare campo e scegliere chi batte. Cambio campo e battuta iniziale vengono inferiti automaticamente ma sono sempre modificabili.
+Quando termina l'ultimo set, premi sul tasto **Pausa/Termina** per terminare la partita e mettere in pausa lo scout. Questo tasto mette anche in pausa il timer della partita. Per riaprire la partita basta cliccare sul medesimo tasto.
 
 ### Modalità singola squadra
 
 Quando la squadra avversaria è disattivata il comportamento è quasi identico, con alcune differenze:
 
-- La ricezione avversaria non viene valutata: dopo la battuta si passa direttamente alla valutazione della battuta stessa
+- La ricezione avversaria non viene valutata, quindi il voto di battuta non viene inferito, ma viene inserito direttamente sulla giocatrice come valutazione di battuta
 - Lo slash sull'attacco vale come attacco murato con punto avversario, non apre la valutazione del muro
-- Il tasto Muro permette di valutare il muro della propria squadra quando si difende
-- Il flusso rimane sempre sulla propria squadra, salvo errori
+- Il tasto Muro permette di valutare l'eventuale muro della propria squadra quando si difende
+- Il flusso rimane sempre sulla propria squadra
 
 ### Modalità mobile
 
-La modalità mobile si attiva automaticamente quando il programma rileva uno schermo piccolo. In questa modalità:
+Il programma può essere utilizzato anche da un dispositivo mobile molto piccolo, come ad esempio uno smartphone. Nel caso il programma rilevi uno schermo piccolo, si attiva la modalità mobile. In questa modalità:
 
 - Le colonne laterali sono nascoste di default e richiamabili tramite tasti dedicati
 - Viene visualizzato un solo campo alla volta, quello della squadra attiva nel flusso corrente
 - Le valutazioni non appaiono direttamente sulle giocatrici: cliccando sul tasto del fondamentale si apre un pop-up con i voti da inserire
-- La navigazione tra schermate avviene con uno swipe verso il basso nella parte alta dello schermo
+- La navigazione tra schermate avviene con uno swipe verso destra o sinistra nella parte alta dello schermo
 
 ---
 
 ## Analisi
 
-Cliccando sul tasto **Analisi** puoi vedere in tempo reale i dati di tutta la partita. Sono disponibili:
+La sezione **Analisi** offre diverse viste e filtri per poter analizzare tutti i dati raccolti durante la partita. Si può utilizzare sia durante la partita per recuperare dati utili, sia dopo la partita, le funzionalità sono identiche.
 
-- **Tabellino** con le varie opzioni di visualizzazione
-- **Distribuzione d'alzata**
-- **Traiettorie di attacco** di entrambe le squadre
-- **Traiettorie di battuta**
-- **Analisi della singola giocatrice**
+### Filtri generali
 
-I filtri servono a restringere il contesto: set, giocatrice, valutazione, zona, tipo attacco. L'analisi non inventa nulla: riassume e filtra quello che è nel log. Se qualcosa che vedi nel log non coincide con l'analisi, il riferimento corretto è sempre il log.
+Nella parte alta della sezione puoi filtrare l'analisi per:
 
-> Il dettaglio completo delle funzionalità di analisi è trattato in un documento separato.
+- **Squadra**
+- **Set**
+- **Match**
+
+In modalità doppia squadra puoi scegliere se analizzare la tua squadra, l'avversaria oppure entrambe. Se non selezioni nessuna squadra in particolare, in alcune schermate il programma mostra il riepilogo affiancato delle due squadre.
+
+Tutte le sottosezioni dell'analisi usano gli stessi filtri di base: cambiando set o squadra, si aggiornano automaticamente tabelle, grafici, traiettorie e riepiloghi.
+
+Puoi inoltre aggregare i dati della partita corrente ai dati di partite precedenti tramite il pulsante apposito. In questo modo, verranno sommati tutti i dati della partita corrente e di quelle selezionate.
+
+### Tabellino riepilogativo
+
+La prima vista è il **tabellino riepilogativo**, che mostra per ogni giocatrice:
+
+- formazione di partenza e ingressi
+- punti fatti e punti subiti
+- errori personali
+- dati principali di battuta, ricezione, freeball, attacco, muro e difesa
+- metriche come **Pos**, **Prf** ed **Eff**
+- riepilogo totale squadra
+- riepilogo per singolo set
+
+Inoltre:
+
+- Cliccando sul nome di una giocatrice, apri la sua interfaccia di analisi individuale (accessibile anche dall'apposito tasto di analisi)
+- Cliccando sopra il nome di un fondamentale, apri una tabella in dettaglio di quel determinato fondamentale
+
+Sotto il riepilogo principale è presente anche una tabella aggiuntiva con alcuni indicatori di squadra.
+
+Qui trovi, tra le altre cose:
+
+- dati di **cambio palla**
+- attacchi dopo **ricezione positiva**
+- attacchi dopo **ricezione non positiva**
+- dati di **break point**
+- rendimento del **contrattacco**
+- differenza di rendimento per **rotazione**
+
+### Grafici skill
+
+I grafici permettono di vedere l'andamento di ogni fondamentale durante la partita, in modo da contestualizzare nel tempo gli eventi inseriti. Se vengono aggregati i dati di più partite, i grafici mostrano invece il totale della metrica per ogni partita, in modo da darmi l'idea dell'andamento del fondamentale sulla totalità delle partite.
+
+Per ogni skill puoi visualizzare diverse metriche:
+
+- **Eff % cumulativa**
+- **Pos % cumulativa**
+- **Prf % cumulativa**
+- **Esito singolo (codice)**
+
+Sono utili per individuare, ad esempio:
+
+- cali o miglioramenti
+- serie positive o negative
+- differenze tra l'inizio e la fine del match
+- impatto di un set specifico sul rendimento complessivo
+
+Nel grafico i punti sono colorati in base al tono dell'evento:
+
+- positivo
+- neutro
+- negativo
+
+Passando con il mouse su un punto puoi leggere il dettaglio dell'evento corrispondente. I grafici possono anche essere copiati come immagine, per essere esportati.
+
+### Grafici nella scheda atleta
+
+Anche la **scheda giocatrice** include i grafici skill. In questo caso i grafici non sono più aggregati sulla squadra, ma costruiti solo sugli eventi di quella atleta.
+
+Questo permette di vedere l'andamento individuale di ciascun fondamentale nel corso della partita, con la stessa logica usata per i grafici globali.
+
+### Andamento dei set
+
+La sottosezione **Andamento set** mostra l'evoluzione del punteggio all'interno di ciascun set.
+
+Per ogni set viene disegnato un grafico del **delta punti**, cioè la differenza tra i punti della tua squadra e quelli dell'avversaria nel corso del set. 
+
+Cliccando sui punti del grafico puoi leggere un dettaglio del rally o della sequenza di eventi che ha portato a quel cambio di punteggio.
+
+### Filtri condivisi
+
+Tutte le successive viste della sezione **Analisi** usano un sistema di filtri specifici, che si aggiungono a quelli principali di prima.
+
+Questi mi permettono, oltre ad altre cose, di filtrare ad esempio i dati per giocatrice, per alzatrice, per palla precedente, per valutazione ecc...
+
+
+### Analisi delle alzate
+
+È disponibile una sezione dedicata alle **alzate**, pensata per studiare la distribuzione.
+
+La vista mostra graficamente la distribuzione totale e nelle varie rotazioni. Vengono mostrate con sfondo verde le zone con efficienza più alta d'attacco e con contorno blu le zone con la maggiore distribuzione. Se corrispondono, su numeri sensati, significa che la distribuzione è stata efficiente.
+
+La sezione mostra anche le valutazioni d'alzata, disponibili nel tabellino, e un riepilogo con i dati di attacco di ogni giocatore relativi a quell'alzata (utile soprattutto con i filtri per vedere gli esiti di attacco con un determinato tipo di alzata o con un determinato alzatore).
+
+### Analisi delle traiettorie di attacco
+
+Se durante lo scout hai registrato le traiettorie di attacco, il programma le organizza in una vista dedicata.
+
+Le traiettorie vengono raggruppate per zona di partenza.
+
+Le linee sono colorate in base all'esito dell'azione. Oltre alla mappa delle traiettorie, viene mostrato anche un riepilogo statistico degli attacchi filtrati, compreso il dettaglio per tipo di attacco.
+
+### Analisi delle traiettorie di battuta
+
+È presente anche una vista dedicata alle **traiettorie di battuta**. In questo caso il programma raggruppa le battute per giocatrice e disegna le traiettorie registrate.
+
+Ogni card mostra le traiettorie della singola atleta, così puoi vedere con facilità abitudini, direzioni preferite e distribuzione del servizio.
+
+### Scheda atleta e confronto
+
+La sezione **Giocatrice** permette di selezionare un'atleta e vedere una scheda completa con tutti i dati delle altre sezioni di analisi (tabellino, traiettorie ecc...)
+
+Puoi anche attivare il **confronto tra giocatrici**. In questo caso il programma affianca due atlete della stessa squadra e confronta automaticamente i loro valori, evidenziando dove una rende meglio o peggio dell'altra.
+
+### Esportazione dell'analisi
+
+È possibile esportare l'intera analisi in formato html. In questo modo chiunque, da qualunque dispositivo, ha accesso a tutte le funzionalità di analisi in modo interattivo senza dover per forza utilizzare il programma.
+
+### Nota importante sulle metriche
+
+Tutti i risultati mostrati nella sezione analisi dipendono da due elementi:
+
+- i dati realmente inseriti nello scout
+- le regole di valutazione configurate nelle impostazioni
+
+In particolare, metriche come **Pos**, **Prf**, **Eff** e l'assegnazione dei punti sono sempre calcolate in base ai criteri che hai definito per i singoli fondamentali. Se modifichi quei criteri, cambierà anche la lettura statistica dell'analisi.
+
 
 ---
 
-## Video e codici DataVolley
+## Video
 
-Il video e i codici DataVolley non sono due mondi separati: sono due modi diversi di arrivare allo stesso evento.
+La sezione **Video** serve a sincronizzare gli eventi dello scout al filmato della partita, in modo da poter rivedere rapidamente le azioni, filtrare solo quelle che interessano ed eventualmente creare tagli video e usare il video come strumento di analisi tecnica.
 
-Usa il **video** quando devi rifinire timestamp e traiettorie, quando vuoi filtrare eventi e rivederli in sequenza, o quando devi correggere un dettaglio tecnico che dal solo log non si riesce a verificare.
+Quando la sincronizzazione è corretta, ogni evento del log può portarti direttamente al punto giusto del filmato.
 
-Usa i **codici DataVolley** se sei veloce con la tastiera: la barra DataVolley ti permette di inserire i token e far aggiornare subito il flusso grafico. Se preferisci l'interfaccia classica, puoi continuare a usare solo il campo e il log. Le due modalità sono intercambiabili: stesso evento finale, due modi diversi per arrivarci.
+### Tipi di video supportati
+
+L'app supporta due modalità principali:
+
+- **video locale**
+- **video YouTube**
+
+Con il **video locale** puoi caricare un file direttamente dal tuo dispositivo.
+
+Con **YouTube** puoi collegare il match a un link di YouTube.
+
+#### Video durante lo scout
+
+Quando lavori in **scout da video**, gli eventi vengono registrati mentre osservi il filmato. In questo caso l'app può salvare anche il tempo video associato all'evento nel momento in cui lo inserisci.
+
+Questo rende la sincronizzazione molto più immediata, perché il log nasce già con riferimenti temporali video.
+
+#### Analisi video dopo lo scout
+
+Puoi anche caricare o collegare un video **dopo** aver già completato lo scout. In questo caso il log esiste già, ma va allineato al filmato tramite una procedura di sincronizzazione iniziale.
+
+È la situazione più comune quando:
+
+- hai scoutato live e vuoi aggiungere il video dopo
+- hai importato un match già registrato
+- vuoi rivedere o correggere l'associazione tra eventi e filmato
+
+### Come funziona la sincronizzazione
+
+La sincronizzazione si basa su un concetto semplice: devi dire all'app in quale punto del video si trova un evento noto del log.
+
+Da quel momento l'app calcola un **offset temporale** e lo usa per collegare tutti gli altri eventi al filmato.
+
+Di solito questo viene fatto sulla prima battuta della partita.
+
+Una volta fatto ciò, bisogna aggiustare i vari eventi, basandosi sul fatto che l'inserimento di ogni evento ha un ritardo dato dall'essere umano che lo inserisce, che può variare in base al fondamentale e alle capacità dello scoutman.
+
+### Procedura di sincronizzazione consigliata
+
+La procedura più semplice è questa.
+
+#### 1. Carica o apri il video
+
+Per prima cosa:
+
+- carica un file locale
+- oppure collega un video YouTube
+
+Se usi YouTube, apri il video e fallo partire almeno una volta prima di sincronizzare.
+
+#### 2. Verifica di avere già un log eventi
+
+La sincronizzazione richiede che nel match ci siano già eventi registrati. Senza almeno una skill nel log non è possibile creare un allineamento utile.
+
+#### 3. Scegli un evento di riferimento
+
+Decidi da quale evento cominciare la sincronizzazione. Se presente, è sempre la prima battuta della partita.
+
+#### 4. Porta il video nel punto esatto dell'evento
+
+Muovi il player fino al momento preciso in cui avviene quell'azione.
+
+#### 5. Lancia la sincronizzazione
+
+A questo punto usa il comando di sincronizzazione della prima skill. L'app salva l'offset tra il tempo del video e il tempo interno del log.
+
+Adesso gli eventi sono sincronizzati, ma ancora non combaciano perfettamente al video.
+
+#### 6. Correzione manuale
+
+Questa è la parte più lunga del lavoro. In quanto ovviamente la sincronizzazione non è ancora perfetta, a causa dei ritardi di valutazione ed inserimento da parte dello scout man.
+
+Questo ritardo di inserimento, viene detto offset. L'applicazione fornisce uno strumento per applicare un offset ad ogni fondamentale. Una volta applicato, posso procedere a sistemare tutti gli eventi a mano.
+
+Solitamente, è bene procedere per ogni fondamentale, quindi ad esempio, vogliamo correggere tutte le battute. La procedura diventa la seguente:
+
+1. Filtro gli eventi per battuta
+2. Seleziono tutti gli eventi
+3. Premo il tasto offset, e per l'evento battuta, inserisco un offset negativo (perché l'inserimento è sicuramente stato fatto dopo l'evento) di quanto più o meno mi aspetto che il ritardo di inserimento sia.
+4. Cotrollo un evento per vedere quanto è lontano dalla sincronizzazione perfetta, posso applicare nuovamente l'offset desiderato (attenzione, l'offset non si resetta, ma viene accumulato)
+5. Una volta che l'offset applicato mi soddisfa, procedo con le correzioni manuali
+6. Mi piazzo sulla prima battuta, e cambio il timestamp con i tasti Q e W finché non corrisponde esattamente al momento desiderato
+7. Ripeto l'operazione per tutte le battute rimaste
+8. Posso correggere qualunque campo dell'evento con il doppio click o con il tasto scorciatoia apposito
+
+Queste azioni vengono ripetute per tutti gli altri tipi di eventi.
+
+Alcuni eventi sono collegati, ad esempio battuta e ricezione, attacco muro e difesa ecc...
+
+In questo caso basta sincronizzare solo, ad esempio, tutte le battute, e poi premere il taasto apposito per sincronizzare automaticamente tutte le ricezioni allo stesso tempo.
+
+### Cosa succede dopo la sincronizzazione
+
+Una volta sincronizzato il match:
+
+- posso cliccare su un evento e il video si sposta a quell'evento
+- posso usare il tasto play by play per vedere uno dopo l'altro gli eventi filtrati (il tempo di visualizzazione può essere modificato dall'apposito campo)
+- posso creare dei tagli video. Questo non viene fatto direttamente dal programma a causa dei limiti delle PWA, ma viene copiato un codice da usare con ffmpeg sul video originale per creare il taglio.
 
 ---
 
@@ -228,4 +444,4 @@ Esporta spesso, soprattutto prima di aggiornare l'app o di importare dati grossi
 - **Esporta database completo** → giocatrici, squadre e tutti i match in un unico backup
 - **Importa match** → per aggiungere una partita senza toccare il resto
 - **Importa database** → solo per sostituire o ripristinare l'intero archivio
-- **Esporta DataVolley** → per portare i dati in formato compatibile con altri programmi
+- **Esporta DataVolley** → per esportare i dati in formato compatibile con altri programmi
