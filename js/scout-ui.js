@@ -144,6 +144,18 @@ const rosterIdMapsCache = {
   our: { teamName: null, playersKey: null, map: null },
   opponent: { teamName: null, playersKey: null, map: null }
 };
+function invalidateRosterIdMapsCache(scope = "") {
+  if (!scope) {
+    rosterIdMapsCache.our = { teamName: null, playersKey: null, map: null };
+    rosterIdMapsCache.opponent = { teamName: null, playersKey: null, map: null };
+    return;
+  }
+  if (!rosterIdMapsCache[scope]) return;
+  rosterIdMapsCache[scope] = { teamName: null, playersKey: null, map: null };
+}
+if (typeof window !== "undefined") {
+  window.invalidateRosterIdMapsCache = invalidateRosterIdMapsCache;
+}
 function sanitizeOfficialString(value) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || "";
@@ -209,6 +221,12 @@ function getPlayerOfficialCodeForScope(scope, playerIdx, playerName) {
   if (!name) return "";
   const player = maps.nameToPlayer.get(normalizePlayerKey(name));
   return player ? sanitizeOfficialString(player.codeOfficial) : "";
+}
+function getPlayerPhotoForScope(scope, playerName) {
+  const maps = getRosterIdMapsForScope(scope);
+  if (!maps || !maps.nameToPlayer || !playerName) return "";
+  const player = maps.nameToPlayer.get(normalizePlayerKey(playerName));
+  return player && typeof player.photo === "string" ? player.photo : "";
 }
 function normalizeDataVolleyEventMeta(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
@@ -680,6 +698,7 @@ const elPlayersDbClean = document.getElementById("btn-clean-players-db");
 const elPlayersDbMergePrimary = document.getElementById("players-db-merge-primary");
 const elPlayersDbMergeSecondary = document.getElementById("players-db-merge-secondary");
 const elBtnMergePlayers = document.getElementById("btn-merge-players");
+const elPlayerAnalysisHero = document.getElementById("player-analysis-hero");
 const elDebugModal = document.getElementById("debug-modal");
 const elDebugModalClose = document.getElementById("debug-modal-close");
 const elBtnOpenDebugModal = document.getElementById("btn-open-debug-modal");
@@ -4502,7 +4521,7 @@ function renderPlayersDbList() {
   if (entries.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 4;
+    td.colSpan = 5;
     td.textContent = "Nessuna giocatrice nell'archivio.";
     tr.appendChild(td);
     elPlayersDbBody.appendChild(tr);
@@ -4515,14 +4534,56 @@ function renderPlayersDbList() {
     const tr = document.createElement("tr");
     const tdLast = document.createElement("td");
     const tdFirst = document.createElement("td");
+    const tdPhoto = document.createElement("td");
     const tdTeams = document.createElement("td");
     const tdId = document.createElement("td");
     tdLast.textContent = entry.lastName || "";
     tdFirst.textContent = entry.firstName || "";
+    const photoWrap = document.createElement("div");
+    photoWrap.className = "players-db-photo-cell";
+    const photoPreview = document.createElement("div");
+    photoPreview.className = "players-db-photo-preview" + (entry.photo ? "" : " empty");
+    if (entry.photo) {
+      photoPreview.style.backgroundImage = `url(${JSON.stringify(entry.photo)})`;
+    }
+    const photoActions = document.createElement("div");
+    photoActions.className = "players-db-photo-actions";
+    const photoBtn = document.createElement("button");
+    photoBtn.type = "button";
+    photoBtn.className = "small secondary";
+    photoBtn.textContent = entry.photo ? "Cambia" : "Foto";
+    photoBtn.addEventListener("click", async () => {
+      try {
+        const file =
+          typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
+        if (!file) return;
+        const photo =
+          typeof window.preparePlayerPhotoDataUrl === "function"
+            ? await window.preparePlayerPhotoDataUrl(file)
+            : "";
+        if (!photo) return;
+        updatePlayerPhotoInDbAndTeams(entry.id, photo);
+      } catch (err) {
+        logError("Errore caricamento foto archivio giocatrici", err);
+        alert("Immagine non valida o non caricabile.");
+      }
+    });
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "small";
+    removeBtn.textContent = "Rimuovi";
+    removeBtn.disabled = !entry.photo;
+    removeBtn.addEventListener("click", () => updatePlayerPhotoInDbAndTeams(entry.id, ""));
+    photoActions.appendChild(photoBtn);
+    photoActions.appendChild(removeBtn);
+    photoWrap.appendChild(photoPreview);
+    photoWrap.appendChild(photoActions);
+    tdPhoto.appendChild(photoWrap);
     tdTeams.textContent = (usage[entry.id] || []).join(", ") || "—";
     tdId.textContent = entry.id || "";
     tr.appendChild(tdLast);
     tr.appendChild(tdFirst);
+    tr.appendChild(tdPhoto);
     tr.appendChild(tdTeams);
     tr.appendChild(tdId);
     elPlayersDbBody.appendChild(tr);
@@ -4713,6 +4774,7 @@ function mergePlayersDbEntries(primaryId, secondaryId) {
     id: primaryId,
     firstName: primary.firstName || secondary.firstName || "",
     lastName: primary.lastName || secondary.lastName || "",
+    photo: primary.photo || secondary.photo || "",
     name:
       primary.name ||
       secondary.name ||
@@ -4769,6 +4831,43 @@ function mergePlayersDbEntries(primaryId, secondaryId) {
   }
   syncEventPlayerLinks(state.events || []);
   saveState();
+  return true;
+}
+function updatePlayerPhotoInDbAndTeams(playerId, photoDataUrl = "") {
+  if (!playerId) return false;
+  const db = Object.assign({}, state.playersDb || {});
+  const current = db[playerId];
+  if (!current) return false;
+  db[playerId] = Object.assign({}, current, {
+    photo: typeof photoDataUrl === "string" ? photoDataUrl : ""
+  });
+  state.playersDb = db;
+  if (typeof savePlayersDbToStorage === "function") {
+    savePlayersDbToStorage(db);
+  }
+  const teamsMap = typeof loadTeamsMapFromStorage === "function" ? loadTeamsMapFromStorage() : {};
+  Object.entries(teamsMap || {}).forEach(([teamName, team]) => {
+    const normalized = typeof normalizeTeamPayload === "function" ? normalizeTeamPayload(team, teamName) : team;
+    if (!normalized || !Array.isArray(normalized.playersDetailed)) return;
+    let changed = false;
+    normalized.playersDetailed = normalized.playersDetailed.map(player => {
+      const id = player && (player.id || player.playerId);
+      if (id !== playerId) return player;
+      changed = true;
+      return Object.assign({}, player, { photo: typeof photoDataUrl === "string" ? photoDataUrl : "" });
+    });
+    if (changed && typeof saveTeamToStorage === "function") {
+      saveTeamToStorage(teamName, normalized);
+    }
+  });
+  invalidateRosterIdMapsCache();
+  renderPlayersDbList();
+  if (typeof renderPlayers === "function") {
+    renderPlayers();
+  }
+  if (typeof renderPlayerAnalysis === "function") {
+    renderPlayerAnalysis();
+  }
   return true;
 }
 const BULK_EDIT_CONFIG = {
@@ -7090,6 +7189,7 @@ function renderTeamCourtCards(options = {}) {
     const activeName = effectiveSlot.main;
     const card = document.createElement("div");
     card.className = "player-card court-card pos-" + (idx + 1);
+    const playerPhoto = activeName ? getPlayerPhotoForScope(scope, activeName) : "";
     const isLibSlot = libSet.has(effectiveSlot.main);
     if (isLibSlot) {
       card.classList.add("libero-card");
@@ -7100,6 +7200,10 @@ function renderTeamCourtCards(options = {}) {
     card.dataset.teamScope = scope;
     if (!activeName) {
       card.classList.add("empty");
+    }
+    if (playerPhoto) {
+      card.classList.add("has-player-photo");
+      card.style.setProperty("--player-photo-image", `url(${JSON.stringify(playerPhoto)})`);
     }
     if (isCompactMobile) {
       card.classList.add("compact-card");
@@ -10327,10 +10431,56 @@ function updatePlayerAnalysisVisibility() {
     elPlayerAnalysisSecond.classList.toggle("hidden", !prefs.showSecond);
   }
 }
+function renderPlayerAnalysisHero() {
+  if (!elPlayerAnalysisHero) return;
+  const analysisScope = getAnalysisTeamScope();
+  const idx = getPlayerAnalysisPlayerIdx();
+  const compareIdx = getPlayerAnalysisCompareIdx();
+  const prefs = ensurePlayerAnalysisState();
+  const players = getPlayersForScope(analysisScope);
+  if (prefs.compareEnabled && compareIdx !== null) {
+    elPlayerAnalysisHero.classList.add("hidden");
+    elPlayerAnalysisHero.innerHTML = "";
+    return;
+  }
+  if (idx === null || !players || !players[idx]) {
+    elPlayerAnalysisHero.classList.add("hidden");
+    elPlayerAnalysisHero.innerHTML = "";
+    return;
+  }
+  const name = players[idx];
+  const numbers = getPlayerNumbersForScope(analysisScope);
+  const photo = getPlayerPhotoForScope(analysisScope, name);
+  const displayName =
+    analysisScope === "opponent"
+      ? formatNameWithNumberFor(name, numbers)
+      : formatNameWithNumber(name);
+  const sideLabel = analysisScope === "opponent" ? "Squadra avversaria" : "La tua squadra";
+  elPlayerAnalysisHero.classList.remove("hidden");
+  elPlayerAnalysisHero.innerHTML = "";
+  const card = document.createElement("div");
+  card.className = "player-analysis-hero-card" + (photo ? " has-photo" : "");
+  if (photo) {
+    card.style.setProperty("--player-analysis-photo-image", `url(${JSON.stringify(photo)})`);
+  }
+  const content = document.createElement("div");
+  content.className = "player-analysis-hero-card__content";
+  const badge = document.createElement("div");
+  badge.className = "player-analysis-hero-card__badge";
+  badge.textContent = sideLabel;
+  const title = document.createElement("h3");
+  title.className = "player-analysis-hero-card__title";
+  title.textContent = displayName;
+  content.appendChild(badge);
+  content.appendChild(title);
+  card.appendChild(content);
+  elPlayerAnalysisHero.appendChild(card);
+}
 function renderPlayerAnalysis() {
   if (!elPlayerAnalysisBody) return;
   renderPlayerAnalysisControls();
   renderPlayerAnalysisTable();
+  renderPlayerAnalysisHero();
   updatePlayerAnalysisVisibility();
   const prefs = ensurePlayerAnalysisState();
   if (prefs.compareEnabled && getPlayerAnalysisCompareIdx() !== null) {

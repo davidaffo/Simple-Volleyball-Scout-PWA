@@ -7,7 +7,6 @@ Modalità allenamento (si trova su branch allenamento)
 # Minor features
 Play by play
 Import da url dovrebbe usare anche fetch da link dl e non solo usare i raw
-foto giocatrici
 roatazione avversario nella modalita singola
 crea stampa tipo foglio gara
 

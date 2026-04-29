@@ -6,14 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v359-75dd12e";
+    window.__APP_CACHE_VERSION__ = "v364-683f86a";
     window.__IS_LOCALHOST_DEV__ =
       location.hostname === "localhost" ||
       location.hostname === "127.0.0.1" ||
       location.hostname === "::1";
     window.__APP_ASSET_SUFFIX__ = window.__IS_LOCALHOST_DEV__
-      ? `?v=v359-75dd12e`
-      : `?v=v359-75dd12e`;
+      ? `?v=v364-683f86a`
+      : `?v=v364-683f86a`;
     if (location.protocol === "file:") {
       document.documentElement.dataset.fileOrigin = "true";
     }
@@ -1188,6 +1188,7 @@
               </label>
             </div>
           </div>
+          <div id="player-analysis-hero" class="player-analysis-hero hidden"></div>
           <div id="player-analysis-table-wrap" class="table-wrapper">
             <table class="agg-table player-analysis-table">
               <thead>
@@ -1710,6 +1711,7 @@
                     <th>#</th>
                     <th>Cognome</th>
                     <th>Nome</th>
+                    <th>Foto</th>
                     <th>Capitano</th>
                     <th>Libero</th>
                     <th>Fuori rosa</th>
@@ -2074,12 +2076,38 @@
               <tr>
                 <th>Cognome</th>
                 <th>Nome</th>
+                <th>Foto</th>
                 <th>Squadre</th>
                 <th>ID</th>
               </tr>
             </thead>
             <tbody id="players-db-body"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="player-photo-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="player-photo-title">
+    <div class="settings-modal__backdrop" data-close-player-photo></div>
+    <div class="settings-modal__content player-photo-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="player-photo-title">Ritaglia foto giocatrice</h3>
+        <button id="player-photo-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body player-photo-modal__body">
+        <p class="section-note">Trascina la foto per spostarla e usa lo zoom per decidere l'inquadratura finale.</p>
+        <div class="player-photo-cropper">
+          <div id="player-photo-stage" class="player-photo-stage">
+            <img id="player-photo-image" alt="Anteprima foto giocatrice" draggable="false" />
+          </div>
+        </div>
+        <label class="player-photo-zoom">
+          <span>Zoom</span>
+          <input id="player-photo-zoom" type="range" min="1" max="3" step="0.01" value="1" />
+        </label>
+        <div class="settings-actions">
+          <button id="player-photo-cancel" class="secondary" type="button">Annulla</button>
+          <button id="player-photo-save" class="primary" type="button">Usa questa foto</button>
         </div>
       </div>
     </div>

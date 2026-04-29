@@ -2899,6 +2899,121 @@ body[data-theme="light"] .player-card {
   min-height: 0;
   position: relative;
   background: #181818;
+  overflow: hidden;
+}
+.court-card.has-player-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(180deg, rgba(8, 15, 28, 0.12) 0%, rgba(8, 15, 28, 0.58) 56%, rgba(8, 15, 28, 0.76) 100%),
+    var(--player-photo-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  z-index: 0;
+}
+.court-card.has-player-photo .court-role-tag,
+.court-card.has-player-photo .court-libero-pill,
+.court-card.has-player-photo .libero-replace-pill {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.court-card .skill-picker-btn,
+.court-card .event-btn,
+.court-card .libero-return-btn,
+.court-card .clear-slot {
+  background: rgba(15, 23, 42, 0.18) !important;
+}
+.court-card .player-skill-cancel {
+  background: rgba(220, 38, 38, 0.72) !important;
+}
+.court-card .event-btn.code-positive {
+  background: rgba(22, 101, 52, 0.28) !important;
+}
+.court-card .event-btn.code-neutral {
+  background: rgba(202, 138, 4, 0.28) !important;
+}
+.court-card .event-btn.code-negative {
+  background: rgba(185, 28, 28, 0.28) !important;
+}
+.court-card .event-btn.block-confirm-skip {
+  background: rgba(55, 65, 81, 0.34) !important;
+}
+.court-card .event-btn.block-confirm-go {
+  background: rgba(22, 163, 74, 0.34) !important;
+}
+.court-card .skill-picker-btn.skill-serve {
+  background: color-mix(in srgb, var(--skill-serve-bg, #1b5e20) 26%, transparent) !important;
+  color: var(--skill-serve-text, #d1fae5) !important;
+  border-color: color-mix(in srgb, var(--skill-serve-bg, #1b5e20) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-pass {
+  background: color-mix(in srgb, var(--skill-pass-bg, #f9a825) 26%, transparent) !important;
+  color: var(--skill-pass-text, #ffffff) !important;
+  border-color: color-mix(in srgb, var(--skill-pass-bg, #f9a825) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-freeball {
+  background: color-mix(in srgb, var(--skill-freeball-bg, #c026d3) 26%, transparent) !important;
+  color: var(--skill-freeball-text, #fdf4ff) !important;
+  border-color: color-mix(in srgb, var(--skill-freeball-bg, #c026d3) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-attack {
+  background: color-mix(in srgb, var(--skill-attack-bg, #b71c1c) 26%, transparent) !important;
+  color: var(--skill-attack-text, #ffe4e6) !important;
+  border-color: color-mix(in srgb, var(--skill-attack-bg, #b71c1c) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-defense {
+  background: color-mix(in srgb, var(--skill-defense-bg, #546e7a) 26%, transparent) !important;
+  color: var(--skill-defense-text, #e2e8f0) !important;
+  border-color: color-mix(in srgb, var(--skill-defense-bg, #546e7a) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-block {
+  background: color-mix(in srgb, var(--skill-block-bg, #4a148c) 26%, transparent) !important;
+  color: var(--skill-block-text, #ede9fe) !important;
+  border-color: color-mix(in srgb, var(--skill-block-bg, #4a148c) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn.skill-second {
+  background: color-mix(in srgb, var(--skill-second-bg, #00838f) 26%, transparent) !important;
+  color: var(--skill-second-text, #ccfbf1) !important;
+  border-color: color-mix(in srgb, var(--skill-second-bg, #00838f) 88%, #ffffff 12%) !important;
+}
+.court-card .skill-picker-btn:hover,
+.court-card .event-btn:hover,
+.court-card .libero-return-btn:hover,
+.court-card .clear-slot:hover {
+  background: rgba(37, 99, 235, 0.28) !important;
+}
+.court-card .skill-picker-btn.skill-serve:hover {
+  background: color-mix(in srgb, var(--skill-serve-bg, #1b5e20) 38%, transparent) !important;
+  color: var(--skill-serve-text, #d1fae5) !important;
+}
+.court-card .skill-picker-btn.skill-pass:hover {
+  background: color-mix(in srgb, var(--skill-pass-bg, #f9a825) 38%, transparent) !important;
+  color: var(--skill-pass-text, #ffffff) !important;
+}
+.court-card .skill-picker-btn.skill-freeball:hover {
+  background: color-mix(in srgb, var(--skill-freeball-bg, #c026d3) 38%, transparent) !important;
+  color: var(--skill-freeball-text, #fdf4ff) !important;
+}
+.court-card .skill-picker-btn.skill-attack:hover {
+  background: color-mix(in srgb, var(--skill-attack-bg, #b71c1c) 38%, transparent) !important;
+  color: var(--skill-attack-text, #ffe4e6) !important;
+}
+.court-card .skill-picker-btn.skill-defense:hover {
+  background: color-mix(in srgb, var(--skill-defense-bg, #546e7a) 38%, transparent) !important;
+  color: var(--skill-defense-text, #e2e8f0) !important;
+}
+.court-card .skill-picker-btn.skill-block:hover {
+  background: color-mix(in srgb, var(--skill-block-bg, #4a148c) 38%, transparent) !important;
+  color: var(--skill-block-text, #ede9fe) !important;
+}
+.court-card .skill-picker-btn.skill-second:hover {
+  background: color-mix(in srgb, var(--skill-second-bg, #00838f) 38%, transparent) !important;
+  color: var(--skill-second-text, #ccfbf1) !important;
+}
+.court-card > * {
+  position: relative;
+  z-index: 1;
 }
 .player-skill-cancel {
   position: absolute;
@@ -2947,6 +3062,36 @@ body[data-theme="light"] .court-card[data-team-scope="opponent"] .court-role-tag
 body[data-theme="light"] .court-card,
 body[data-theme="light"] .court-card.compact-card {
   background: #ffffff;
+}
+body[data-theme="light"] .court-card .skill-picker-btn,
+body[data-theme="light"] .court-card .event-btn,
+body[data-theme="light"] .court-card .libero-return-btn,
+body[data-theme="light"] .court-card .clear-slot {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+body[data-theme="light"] .court-card .player-skill-cancel {
+  background: rgba(220, 38, 38, 0.78) !important;
+}
+body[data-theme="light"] .court-card .event-btn.code-positive {
+  background: rgba(34, 197, 94, 0.18) !important;
+}
+body[data-theme="light"] .court-card .event-btn.code-neutral {
+  background: rgba(234, 179, 8, 0.18) !important;
+}
+body[data-theme="light"] .court-card .event-btn.code-negative {
+  background: rgba(239, 68, 68, 0.18) !important;
+}
+body[data-theme="light"] .court-card .event-btn.block-confirm-skip {
+  background: rgba(148, 163, 184, 0.24) !important;
+}
+body[data-theme="light"] .court-card .event-btn.block-confirm-go {
+  background: rgba(34, 197, 94, 0.22) !important;
+}
+body[data-theme="light"] .court-card .skill-picker-btn:hover,
+body[data-theme="light"] .court-card .event-btn:hover,
+body[data-theme="light"] .court-card .libero-return-btn:hover,
+body[data-theme="light"] .court-card .clear-slot:hover {
+  background: rgba(37, 99, 235, 0.16) !important;
 }
 .court-card.compact-card {
   min-height: 0;
@@ -3193,11 +3338,12 @@ body[data-theme="light"] .skill-row {
   width: 100%;
 }
 .skill-picker-btn {
-  padding: 0.6rem 0.4rem;
+  padding: 0.42rem 0.32rem;
   border-radius: 10px;
   border: 1px solid #1f2937;
   font-weight: 600;
   text-align: center;
+  font-size: 0.88rem;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 .skill-single-btn {
@@ -4795,6 +4941,71 @@ body[data-theme="light"] .analysis-filter select {
   display: grid;
   gap: 0.7rem;
 }
+.player-analysis-hero.hidden {
+  display: none;
+}
+.player-analysis-hero {
+  margin-top: -0.1rem;
+}
+.player-analysis-hero-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  min-height: 140px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.22), transparent 42%),
+    rgba(12, 18, 30, 0.58);
+}
+.player-analysis-hero-card.has-photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(90deg, rgba(8, 15, 28, 0.78) 0%, rgba(8, 15, 28, 0.46) 42%, rgba(8, 15, 28, 0.2) 100%),
+    var(--player-analysis-photo-image);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.player-analysis-hero-card__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  min-height: 140px;
+  padding: 1rem;
+}
+.player-analysis-hero-card__badge,
+.player-analysis-hero-card__title {
+  width: fit-content;
+  max-width: 100%;
+  backdrop-filter: blur(8px);
+}
+.player-analysis-hero-card__badge {
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.player-analysis-hero-card__title {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.52);
+  color: #f8fafc;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+.player-analysis-hero-card:not(.has-photo) .player-analysis-hero-card__title,
+.player-analysis-hero-card:not(.has-photo) .player-analysis-hero-card__badge {
+  background: rgba(15, 23, 42, 0.22);
+}
 .analysis-skill-charts-panel {
   display: grid;
   gap: 0.7rem;
@@ -5475,6 +5686,18 @@ body[data-theme="light"] .player-analysis-columns > .player-analysis-section {
 }
 body[data-theme="light"] .player-analysis-compare-card {
   background: rgba(255, 255, 255, 0.92);
+}
+body[data-theme="light"] .player-analysis-hero-card {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 42%),
+    rgba(255, 255, 255, 0.92);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+body[data-theme="light"] .player-analysis-hero-card__badge,
+body[data-theme="light"] .player-analysis-hero-card__title {
+  background: rgba(255, 255, 255, 0.72);
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.08);
 }
 .player-analysis-compare-card.is-primary {
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.45);
@@ -7229,19 +7452,22 @@ body[data-theme="light"] .default-lineup-slot::before {
 .team-manager-table td:nth-child(1) {
   width: 64px;
 }
-.team-manager-table td:nth-child(4),
-.team-manager-table td:nth-child(5) {
+.team-manager-table td:nth-child(4) {
+  width: 132px;
+}
+.team-manager-table td:nth-child(5),
+.team-manager-table td:nth-child(6) {
   text-align: center;
   width: 60px;
 }
-.team-manager-table td:nth-child(6) {
+.team-manager-table td:nth-child(7) {
   width: 88px;
   text-align: center;
 }
-.team-manager-table td:nth-child(7) {
+.team-manager-table td:nth-child(8) {
   width: 180px;
 }
-.team-manager-table td:nth-child(8) {
+.team-manager-table td:nth-child(9) {
   width: 88px;
   text-align: center;
 }
@@ -7323,6 +7549,38 @@ body[data-theme="light"] .team-manager-row--libero .team-manager-input {
   background: #0b1224;
   color: #e5e7eb;
 }
+.team-manager-photo-cell,
+.players-db-photo-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.team-manager-photo-preview,
+.players-db-photo-preview {
+  width: 42px;
+  height: 42px;
+  border-radius: 0.65rem;
+  border: 1px solid #334155;
+  background-color: #0f172a;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  flex: 0 0 auto;
+}
+.team-manager-photo-preview.empty,
+.players-db-photo-preview.empty {
+  background-image: linear-gradient(135deg, rgba(148, 163, 184, 0.14), rgba(30, 41, 59, 0.4));
+}
+.team-manager-photo-actions,
+.players-db-photo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.team-manager-photo-actions .small,
+.players-db-photo-actions .small {
+  min-width: 68px;
+}
 #team-meta-name:disabled {
   background: #374151;
   color: #cbd5e1;
@@ -7346,6 +7604,64 @@ body[data-theme="light"] #team-meta-name:disabled {
   flex-direction: column;
   gap: 0.75rem;
 }
+.player-photo-modal__content {
+  width: min(560px, 95vw);
+}
+#player-photo-modal {
+  z-index: 2100;
+}
+.player-photo-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.player-photo-cropper {
+  display: flex;
+  justify-content: center;
+}
+.player-photo-stage {
+  position: relative;
+  width: min(82vw, 360px);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid #334155;
+  background:
+    linear-gradient(45deg, rgba(15, 23, 42, 0.92) 25%, rgba(30, 41, 59, 0.92) 25%, rgba(30, 41, 59, 0.92) 50%, rgba(15, 23, 42, 0.92) 50%, rgba(15, 23, 42, 0.92) 75%, rgba(30, 41, 59, 0.92) 75%, rgba(30, 41, 59, 0.92) 100%);
+  background-size: 22px 22px;
+  cursor: grab;
+  touch-action: none;
+}
+.player-photo-stage.dragging {
+  cursor: grabbing;
+}
+.player-photo-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 9999px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+.player-photo-stage img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+  max-width: none;
+  max-height: none;
+}
+.player-photo-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+}
+.player-photo-zoom input[type="range"] {
+  width: 100%;
+}
 .players-db__summary {
   font-size: 0.9rem;
   color: #94a3b8;
@@ -7368,7 +7684,7 @@ body[data-theme="light"] #team-meta-name:disabled {
   border-bottom: 1px solid #1f2937;
   text-align: left;
 }
-.players-db-table td:nth-child(4) {
+.players-db-table td:nth-child(5) {
   font-family: "SFMono-Regular", ui-monospace, "DejaVu Sans Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.78rem;
   color: #94a3b8;
@@ -7376,6 +7692,25 @@ body[data-theme="light"] #team-meta-name:disabled {
 }
 body[data-theme="light"] .players-db__summary {
   color: #64748b;
+}
+body[data-theme="light"] .player-photo-stage {
+  border-color: #cbd5e1;
+  background:
+    linear-gradient(45deg, rgba(248, 250, 252, 0.96) 25%, rgba(226, 232, 240, 0.96) 25%, rgba(226, 232, 240, 0.96) 50%, rgba(248, 250, 252, 0.96) 50%, rgba(248, 250, 252, 0.96) 75%, rgba(226, 232, 240, 0.96) 75%, rgba(226, 232, 240, 0.96) 100%);
+  background-size: 22px 22px;
+}
+body[data-theme="light"] .player-photo-stage::after {
+  box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.1);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+body[data-theme="light"] .team-manager-photo-preview,
+body[data-theme="light"] .players-db-photo-preview {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+body[data-theme="light"] .team-manager-photo-preview.empty,
+body[data-theme="light"] .players-db-photo-preview.empty {
+  background-image: linear-gradient(135deg, rgba(226, 232, 240, 0.92), rgba(203, 213, 225, 0.9));
 }
 .teams-manager__content {
   width: min(640px, 95vw);

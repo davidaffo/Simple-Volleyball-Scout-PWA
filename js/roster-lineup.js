@@ -2247,7 +2247,8 @@ function buildPlayersDbEntry(player, existing = {}) {
     id: player.id,
     firstName,
     lastName,
-    name
+    name,
+    photo: typeof player.photo === "string" ? player.photo : existing.photo || ""
   };
 }
 function isTemplatePlayerName(name) {
@@ -2384,6 +2385,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
           firstName: p.firstName || parts.firstName || "",
           lastName: p.lastName || parts.lastName || "",
           codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
+          photo: typeof p.photo === "string" ? p.photo : "",
           number: p.number || "",
           role: p.role === "L" ? "L" : "",
           isCaptain: !!p.isCaptain,
@@ -2423,6 +2425,7 @@ function normalizeTeamPayload(raw, fallbackName = "") {
     name: n,
     ...splitNameParts(n),
     codeOfficial: "",
+    photo: "",
     number: numbers[n] || "",
     role: liberos.includes(n) ? "L" : "",
     isCaptain: false,
@@ -2463,6 +2466,7 @@ function compactTeamPayload(data, fallbackName = "") {
             firstName: p.firstName || parts.firstName || "",
             lastName: p.lastName || parts.lastName || "",
             codeOfficial: p.codeOfficial || "",
+            photo: typeof p.photo === "string" ? p.photo : "",
             number: p.number || "",
             role: p.role === "L" ? "L" : "",
             isCaptain: !!p.isCaptain,
@@ -4216,6 +4220,8 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
           const fullName = p.name || buildFullName(p.lastName, p.firstName);
           const isLib = baseLiberos.includes(fullName) || p.role === "L";
           const fallbackNumber = baseNumbers[fullName] || (p.name && baseNumbers[p.name]) || "";
+          const dbEntry =
+            (state.playersDb && state.playersDb[p.id]) || findPlayersDbMatchByFullName(fullName, p.id) || null;
           return Object.assign(
             {},
             p,
@@ -4225,7 +4231,13 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
               lastName: p.lastName || parts.lastName || "",
               name: fullName,
               role: isLib ? "L" : "",
-              number: p.number || fallbackNumber
+              number: p.number || fallbackNumber,
+              photo:
+                typeof p.photo === "string"
+                  ? p.photo
+                  : dbEntry && typeof dbEntry.photo === "string"
+                    ? dbEntry.photo
+                    : ""
             }
           );
         })
@@ -4241,6 +4253,7 @@ function buildTeamManagerStateFromSource(source, scope = "our") {
               id,
               name,
               ...parts,
+              photo: match && typeof match.photo === "string" ? match.photo : "",
               number: baseNumbers[name] || "",
               role: baseLiberos.includes(name) ? "L" : "",
               isCaptain: captainSet.has(name),
@@ -4347,6 +4360,49 @@ function renderTeamManagerTable() {
     firstNameInput.type = "text";
     firstNameInput.placeholder = "Nome";
     firstNameInput.value = p.firstName || splitNameParts(p.name).firstName || "";
+    const photoCell = document.createElement("div");
+    photoCell.className = "team-manager-photo-cell";
+    const photoPreview = document.createElement("div");
+    photoPreview.className = "team-manager-photo-preview" + (p.photo ? "" : " empty");
+    if (p.photo) {
+      photoPreview.style.backgroundImage = `url(${JSON.stringify(p.photo)})`;
+    }
+    const photoActions = document.createElement("div");
+    photoActions.className = "team-manager-photo-actions";
+    const photoBtn = document.createElement("button");
+    photoBtn.type = "button";
+    photoBtn.className = "small secondary";
+    photoBtn.textContent = p.photo ? "Cambia" : "Foto";
+    photoBtn.addEventListener("click", async () => {
+      try {
+        const file =
+          typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
+        if (!file) return;
+        const photo =
+          typeof window.preparePlayerPhotoDataUrl === "function"
+            ? await window.preparePlayerPhotoDataUrl(file)
+            : "";
+        if (!photo) return;
+        p.photo = photo;
+        renderTeamManagerTable();
+      } catch (err) {
+        logError("Errore caricamento foto giocatrice", err);
+        alert("Immagine non valida o non caricabile.");
+      }
+    });
+    const removePhotoBtn = document.createElement("button");
+    removePhotoBtn.type = "button";
+    removePhotoBtn.className = "small";
+    removePhotoBtn.textContent = "Rimuovi";
+    removePhotoBtn.disabled = !p.photo;
+    removePhotoBtn.addEventListener("click", () => {
+      p.photo = "";
+      renderTeamManagerTable();
+    });
+    photoActions.appendChild(photoBtn);
+    photoActions.appendChild(removePhotoBtn);
+    photoCell.appendChild(photoPreview);
+    photoCell.appendChild(photoActions);
     const syncFullName = () => {
       p.lastName = lastNameInput.value.trim();
       p.firstName = firstNameInput.value.trim();
@@ -4372,6 +4428,7 @@ function renderTeamManagerTable() {
           p.firstName = match.firstName || first;
           p.lastName = match.lastName || last;
           p.name = buildFullName(p.lastName, p.firstName);
+          p.photo = typeof match.photo === "string" ? match.photo : p.photo || "";
           renderTeamManagerTable();
           return;
         }
@@ -4449,6 +4506,7 @@ function renderTeamManagerTable() {
       numberInput,
       lastNameInput,
       firstNameInput,
+      photoCell,
       captainChk,
       liberoChk,
       outChk,
@@ -5000,6 +5058,7 @@ function collectTeamManagerPayload() {
         firstName: p.firstName || splitNameParts(p.name).firstName || "",
         lastName: p.lastName || splitNameParts(p.name).lastName || "",
         codeOfficial: typeof p.codeOfficial === "string" ? p.codeOfficial.trim() : "",
+        photo: typeof p.photo === "string" ? p.photo : "",
         number: p.number || "",
         role: p.role === "L" ? "L" : "",
         isCaptain: !!p.isCaptain,
@@ -5060,6 +5119,9 @@ function saveTeamManagerPayload(options = {}) {
     return;
   }
   const isOpponent = teamManagerScope === "opponent";
+  if (typeof window.invalidateRosterIdMapsCache === "function") {
+    window.invalidateRosterIdMapsCache(isOpponent ? "opponent" : "our");
+  }
   if (liveEditMode && isOpponent) {
     alert("La modifica rapida in partita è disponibile solo per la squadra principale.");
     return;

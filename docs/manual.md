@@ -41,6 +41,7 @@ Con il tasto **Gestione squadre**, puoi visualizzare e modificare tutte le squad
 ### Modifica di una squadra
 Premendo il tasto **Gestione squadra**, puoi aprire la finestra di modifica squadra.
 Da questa finestra puoi modificare il nome della squadra e le informazioni secondarie. Per le giocatrici hai due opzioni: modificarle a mano una per una oppure aggiungerle da un elenco.
+Per ogni giocatrice puoi anche caricare una **foto**: prima del salvataggio puoi ritagliarla e zoomarla, così il programma conserva solo una versione compressa e già adattata alla card. Se presente, viene usata come sfondo della card in campo senza cambiarne dimensioni o impaginazione. La stessa foto è modificabile anche dall'**Archivio giocatrici**.
 
 Puoi anche:
 

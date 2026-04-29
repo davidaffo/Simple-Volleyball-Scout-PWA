@@ -249,6 +249,244 @@ async function shareText(title, text) {
 function logError(context, err) {
   console.error(context, err);
 }
+function pickImageFile(accept = "image/*") {
+  return new Promise(resolve => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.addEventListener(
+      "change",
+      () => {
+        resolve((input.files && input.files[0]) || null);
+      },
+      { once: true }
+    );
+    input.click();
+  });
+}
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image-load-failed"));
+    img.src = src;
+  });
+}
+const elPlayerPhotoModal = document.getElementById("player-photo-modal");
+const elPlayerPhotoStage = document.getElementById("player-photo-stage");
+const elPlayerPhotoImage = document.getElementById("player-photo-image");
+const elPlayerPhotoZoom = document.getElementById("player-photo-zoom");
+const elPlayerPhotoClose = document.getElementById("player-photo-close");
+const elPlayerPhotoCancel = document.getElementById("player-photo-cancel");
+const elPlayerPhotoSave = document.getElementById("player-photo-save");
+const PLAYER_PHOTO_EXPORT_SIZE = 320;
+const playerPhotoEditorState = {
+  resolve: null,
+  image: null,
+  sourceUrl: "",
+  baseScale: 1,
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  pointerId: null,
+  dragStartX: 0,
+  dragStartY: 0,
+  dragOriginX: 0,
+  dragOriginY: 0
+};
+function syncPlayerPhotoBaseScale() {
+  if (!playerPhotoEditorState.image || !elPlayerPhotoStage) return;
+  const cropSize = Math.max(1, elPlayerPhotoStage.clientWidth || 320);
+  playerPhotoEditorState.baseScale = Math.max(
+    cropSize / playerPhotoEditorState.image.naturalWidth,
+    cropSize / playerPhotoEditorState.image.naturalHeight
+  );
+}
+function setPlayerPhotoModalOpen(isOpen) {
+  if (!elPlayerPhotoModal) return;
+  elPlayerPhotoModal.classList.toggle("hidden", !isOpen);
+}
+function clampPlayerPhotoOffsets() {
+  if (!playerPhotoEditorState.image || !elPlayerPhotoStage) return;
+  const cropSize = Math.max(1, elPlayerPhotoStage.clientWidth || 320);
+  const scale = playerPhotoEditorState.baseScale * playerPhotoEditorState.zoom;
+  const imgWidth = playerPhotoEditorState.image.naturalWidth * scale;
+  const imgHeight = playerPhotoEditorState.image.naturalHeight * scale;
+  const maxOffsetX = Math.max(0, (imgWidth - cropSize) / 2);
+  const maxOffsetY = Math.max(0, (imgHeight - cropSize) / 2);
+  playerPhotoEditorState.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, playerPhotoEditorState.offsetX));
+  playerPhotoEditorState.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, playerPhotoEditorState.offsetY));
+}
+function renderPlayerPhotoEditor() {
+  if (!elPlayerPhotoImage || !elPlayerPhotoStage || !playerPhotoEditorState.image) return;
+  syncPlayerPhotoBaseScale();
+  clampPlayerPhotoOffsets();
+  const scale = playerPhotoEditorState.baseScale * playerPhotoEditorState.zoom;
+  elPlayerPhotoImage.style.transform =
+    `translate(calc(-50% + ${playerPhotoEditorState.offsetX}px), calc(-50% + ${playerPhotoEditorState.offsetY}px)) scale(${scale})`;
+}
+function closePlayerPhotoEditor(result = null) {
+  if (playerPhotoEditorState.sourceUrl && playerPhotoEditorState.sourceUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(playerPhotoEditorState.sourceUrl);
+  }
+  const resolve = playerPhotoEditorState.resolve;
+  playerPhotoEditorState.resolve = null;
+  playerPhotoEditorState.image = null;
+  playerPhotoEditorState.sourceUrl = "";
+  playerPhotoEditorState.baseScale = 1;
+  playerPhotoEditorState.zoom = 1;
+  playerPhotoEditorState.offsetX = 0;
+  playerPhotoEditorState.offsetY = 0;
+  playerPhotoEditorState.pointerId = null;
+  if (elPlayerPhotoImage) {
+    elPlayerPhotoImage.removeAttribute("src");
+    elPlayerPhotoImage.style.transform = "";
+  }
+  setPlayerPhotoModalOpen(false);
+  if (typeof resolve === "function") {
+    resolve(result);
+  }
+}
+function exportPlayerPhotoDataUrl(options = {}) {
+  if (!playerPhotoEditorState.image || !elPlayerPhotoStage) {
+    throw new Error("player-photo-not-ready");
+  }
+  const size = Number(options.size) > 0 ? Number(options.size) : PLAYER_PHOTO_EXPORT_SIZE;
+  const quality = Number(options.quality) > 0 ? Math.min(0.9, Number(options.quality)) : 0.72;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas-unavailable");
+  const cropSize = Math.max(1, elPlayerPhotoStage.clientWidth || 320);
+  const img = playerPhotoEditorState.image;
+  const scale = playerPhotoEditorState.baseScale * playerPhotoEditorState.zoom;
+  const displayWidth = img.naturalWidth * scale;
+  const displayHeight = img.naturalHeight * scale;
+  const left = cropSize / 2 - displayWidth / 2 + playerPhotoEditorState.offsetX;
+  const top = cropSize / 2 - displayHeight / 2 + playerPhotoEditorState.offsetY;
+  const sourceX = Math.max(0, (-left / displayWidth) * img.naturalWidth);
+  const sourceY = Math.max(0, (-top / displayHeight) * img.naturalHeight);
+  const sourceW = Math.min(img.naturalWidth, (cropSize / displayWidth) * img.naturalWidth);
+  const sourceH = Math.min(img.naturalHeight, (cropSize / displayHeight) * img.naturalHeight);
+  ctx.drawImage(img, sourceX, sourceY, sourceW, sourceH, 0, 0, size, size);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+async function openPlayerPhotoEditor(sourceUrl, options = {}) {
+  if (!sourceUrl) return null;
+  if (!elPlayerPhotoModal || !elPlayerPhotoStage || !elPlayerPhotoImage || !elPlayerPhotoZoom) {
+    throw new Error("player-photo-modal-missing");
+  }
+  const img = await loadImageElement(sourceUrl);
+  playerPhotoEditorState.image = img;
+  playerPhotoEditorState.sourceUrl = sourceUrl;
+  playerPhotoEditorState.baseScale = 1;
+  playerPhotoEditorState.zoom = 1;
+  playerPhotoEditorState.offsetX = 0;
+  playerPhotoEditorState.offsetY = 0;
+  elPlayerPhotoImage.src = sourceUrl;
+  elPlayerPhotoZoom.min = "1";
+  elPlayerPhotoZoom.max = options.maxZoom ? String(options.maxZoom) : "3";
+  elPlayerPhotoZoom.step = "0.01";
+  elPlayerPhotoZoom.value = "1";
+  setPlayerPhotoModalOpen(true);
+  requestAnimationFrame(() => renderPlayerPhotoEditor());
+  return new Promise(resolve => {
+    playerPhotoEditorState.resolve = resolve;
+  });
+}
+async function preparePlayerPhotoDataUrl(file, options = {}) {
+  if (!file) return "";
+  const type = String(file.type || "").toLowerCase();
+  if (!type.startsWith("image/")) {
+    throw new Error("invalid-image");
+  }
+  const sourceUrl = URL.createObjectURL(file);
+  const edited = await openPlayerPhotoEditor(sourceUrl, options);
+  return edited || "";
+}
+function handlePlayerPhotoPointerDown(ev) {
+  if (!playerPhotoEditorState.image || !elPlayerPhotoStage || !(ev.target instanceof HTMLElement)) return;
+  playerPhotoEditorState.pointerId = ev.pointerId;
+  playerPhotoEditorState.dragStartX = ev.clientX;
+  playerPhotoEditorState.dragStartY = ev.clientY;
+  playerPhotoEditorState.dragOriginX = playerPhotoEditorState.offsetX;
+  playerPhotoEditorState.dragOriginY = playerPhotoEditorState.offsetY;
+  elPlayerPhotoStage.classList.add("dragging");
+  if (elPlayerPhotoStage.setPointerCapture) {
+    elPlayerPhotoStage.setPointerCapture(ev.pointerId);
+  }
+  ev.preventDefault();
+}
+function handlePlayerPhotoPointerMove(ev) {
+  if (playerPhotoEditorState.pointerId !== ev.pointerId) return;
+  playerPhotoEditorState.offsetX = playerPhotoEditorState.dragOriginX + (ev.clientX - playerPhotoEditorState.dragStartX);
+  playerPhotoEditorState.offsetY = playerPhotoEditorState.dragOriginY + (ev.clientY - playerPhotoEditorState.dragStartY);
+  renderPlayerPhotoEditor();
+}
+function handlePlayerPhotoPointerUp(ev) {
+  if (playerPhotoEditorState.pointerId !== ev.pointerId) return;
+  playerPhotoEditorState.pointerId = null;
+  if (elPlayerPhotoStage && elPlayerPhotoStage.releasePointerCapture) {
+    try {
+      elPlayerPhotoStage.releasePointerCapture(ev.pointerId);
+    } catch (_) {}
+  }
+  if (elPlayerPhotoStage) {
+    elPlayerPhotoStage.classList.remove("dragging");
+  }
+}
+window.addEventListener("resize", () => {
+  if (elPlayerPhotoModal && !elPlayerPhotoModal.classList.contains("hidden")) {
+    renderPlayerPhotoEditor();
+  }
+});
+if (elPlayerPhotoStage && !elPlayerPhotoStage._playerPhotoBound) {
+  elPlayerPhotoStage.addEventListener("pointerdown", handlePlayerPhotoPointerDown);
+  elPlayerPhotoStage.addEventListener("pointermove", handlePlayerPhotoPointerMove);
+  elPlayerPhotoStage.addEventListener("pointerup", handlePlayerPhotoPointerUp);
+  elPlayerPhotoStage.addEventListener("pointercancel", handlePlayerPhotoPointerUp);
+  elPlayerPhotoStage._playerPhotoBound = true;
+}
+if (elPlayerPhotoZoom && !elPlayerPhotoZoom._playerPhotoBound) {
+  elPlayerPhotoZoom.addEventListener("input", () => {
+    const nextZoom = parseFloat(elPlayerPhotoZoom.value);
+    playerPhotoEditorState.zoom = Number.isFinite(nextZoom) ? Math.max(1, nextZoom) : 1;
+    renderPlayerPhotoEditor();
+  });
+  elPlayerPhotoZoom._playerPhotoBound = true;
+}
+if (elPlayerPhotoClose && !elPlayerPhotoClose._playerPhotoBound) {
+  elPlayerPhotoClose.addEventListener("click", () => closePlayerPhotoEditor(null));
+  elPlayerPhotoClose._playerPhotoBound = true;
+}
+if (elPlayerPhotoCancel && !elPlayerPhotoCancel._playerPhotoBound) {
+  elPlayerPhotoCancel.addEventListener("click", () => closePlayerPhotoEditor(null));
+  elPlayerPhotoCancel._playerPhotoBound = true;
+}
+if (elPlayerPhotoSave && !elPlayerPhotoSave._playerPhotoBound) {
+  elPlayerPhotoSave.addEventListener("click", () => {
+    try {
+      closePlayerPhotoEditor(exportPlayerPhotoDataUrl());
+    } catch (err) {
+      logError("player-photo-export", err);
+      closePlayerPhotoEditor(null);
+    }
+  });
+  elPlayerPhotoSave._playerPhotoBound = true;
+}
+if (elPlayerPhotoModal && !elPlayerPhotoModal._playerPhotoBound) {
+  elPlayerPhotoModal.addEventListener("click", ev => {
+    const target = ev.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.closePlayerPhoto !== undefined || target === elPlayerPhotoModal) {
+      closePlayerPhotoEditor(null);
+    }
+  });
+  elPlayerPhotoModal._playerPhotoBound = true;
+}
+window.pickImageFile = pickImageFile;
+window.preparePlayerPhotoDataUrl = preparePlayerPhotoDataUrl;
 const elOpponent = document.getElementById("match-opponent");
 const elCategory = document.getElementById("match-category");
 const elDate = document.getElementById("match-date");
