@@ -661,6 +661,9 @@ const elAnalysisFilterMatches = document.getElementById("analysis-filter-matches
 const elAnalysisScoreSummary = document.getElementById("analysis-score-summary");
 const elSetTrendGrid = document.getElementById("set-trend-grid");
 const elSetTrendDetail = document.getElementById("set-trend-detail");
+const elAnalysisPlayByPlaySet = document.getElementById("analysis-play-by-play-set");
+const elAnalysisPlayByPlay = document.getElementById("analysis-play-by-play");
+const elAnalysisPlayByPlaySummary = document.getElementById("analysis-play-by-play-summary");
 const elBtnOpenMultiscout = document.getElementById("btn-open-multiscout");
 const elMultiscoutModal = document.getElementById("multiscout-modal");
 const elMultiscoutList = document.getElementById("multiscout-list");
@@ -14607,6 +14610,268 @@ function renderSetTrendAnalysis() {
   });
   renderSetTrendDetailFromSelection(setTrendSelectionKey);
 }
+function getPlayByPlayEventCode(ev) {
+  if (!ev) return "";
+  if (ev.dv && ev.dv.rawCode) return ev.dv.rawCode;
+  if (ev.actionType === "timeout") return ev.team === "opponent" ? "aT" : "*T";
+  if (ev.actionType === "substitution") return ev.team === "opponent" ? "aCH" : "*CH";
+  const prefix = getTeamScopeFromEvent(ev) === "opponent" ? "a" : "*";
+  const number = ev.playerNumberAtEvent || "";
+  return `${prefix}${number}${getShortSkill(ev.skillId)}${ev.code || ""}`;
+}
+function getPlayByPlayEventCompact(ev, scope) {
+  if (!ev) return "";
+  const skill = getSetTrendEventSkillLabel(ev, scope);
+  const actor = getSetTrendEventActorLabel(ev, scope);
+  const code = getPlayByPlayEventCode(ev);
+  const extras = [];
+  if (ev.skillId === "attack" && ev.attackType) extras.push(ev.attackType);
+  if (ev.skillId === "serve" && ev.serveType) extras.push(ev.serveType);
+  if (ev.skillId === "second" && (ev.base || (ev.combination && ev.combination.code))) {
+    extras.push(ev.base || ev.combination.code);
+  }
+  if (ev.dv && (ev.dv.startZone || ev.dv.endZone)) {
+    extras.push(`${ev.dv.startZone || "-"}>${ev.dv.endZone || "-"}`);
+  }
+  return {
+    code,
+    skill,
+    actor,
+    extras: extras.join(" · "),
+    team: getTeamScopeFromEvent(ev) === "opponent" ? "V" : "H"
+  };
+}
+function getPlayByPlayPhaseLabel(rally, scope) {
+  if (!rally || !rally.servingTeam) return "";
+  return rally.servingTeam === getTeamNameForScope(scope) ? "BP" : "SO";
+}
+function ensurePlayByPlayUiState() {
+  if (!state.uiPlayByPlay || typeof state.uiPlayByPlay !== "object") {
+    state.uiPlayByPlay = { set: "" };
+  }
+  return state.uiPlayByPlay;
+}
+function getPlayByPlayActionLabel(ev) {
+  if (!ev) return "";
+  if (ev.skillId === "attack") {
+    return (ev.dv && ev.dv.attackCode) || ev.attackType || (ev.combination && ev.combination.code) || ev.code || "A";
+  }
+  if (ev.skillId === "serve") return ev.code === "#" ? "ACE" : ev.code === "=" ? "ERR" : ev.serveType || ev.code || "S";
+  if (ev.skillId === "pass") return ev.code || "R";
+  if (ev.skillId === "second") return ev.base || (ev.combination && ev.combination.code) || ev.code || "E";
+  if (ev.skillId === "block") return ev.code === "#" ? "Block" : ev.code || "B";
+  if (ev.skillId === "defense") return ev.code || "D";
+  if (ev.skillId === "freeball") return ev.code || "F";
+  if (ev.actionType === "timeout") return "Timeout";
+  if (ev.actionType === "substitution") return "Cambio";
+  return ev.code || "";
+}
+function getPlayByPlayCellKey(ev, rally, focusScope) {
+  if (!ev) return null;
+  const eventScope = getTeamScopeFromEvent(ev);
+  const side = eventScope === focusScope ? "focus" : "opponent";
+  if (ev.skillId === "serve" || ev.skillId === "pass") return `${side}Sr`;
+  return `${side}Tr`;
+}
+function getPlayByPlayTone(ev, rally, focusScope) {
+  if (!ev) return "neutral";
+  const direction = getPointDirectionFor(focusScope, ev);
+  if (direction === "for") return "positive";
+  if (direction === "against") return "negative";
+  if (ev.skillId === "serve" && ev.code === "#") return "ace";
+  if ((ev.skillId === "serve" || ev.skillId === "attack") && ev.code === "=") return "error";
+  if (ev.code === "#") return "positive";
+  if (ev.code === "=" || ev.code === "/") return "negative";
+  return "neutral";
+}
+function getPlayByPlayPlayerNumber(ev) {
+  if (!ev) return "";
+  if (ev.playerNumberAtEvent !== undefined && ev.playerNumberAtEvent !== null && ev.playerNumberAtEvent !== "") {
+    return String(ev.playerNumberAtEvent).replace(/^0+/, "") || "0";
+  }
+  const numbers = getPlayerNumbersForScope(getTeamScopeFromEvent(ev));
+  return ev.playerName && numbers && numbers[ev.playerName] ? String(numbers[ev.playerName]) : "";
+}
+function getPlayByPlayTooltipHtml(rally, focusScope) {
+  const rows = (rally.actions || []).map(entry => {
+    const ev = entry.ev;
+    const item = getPlayByPlayEventCompact(ev, focusScope);
+    const evalLabel = getSetTrendEventReasonLabel(ev, focusScope);
+    return `<tr>
+      <td>${escapeDvwScoutHtml(getTeamNameForScope(getTeamScopeFromEvent(ev)))}</td>
+      <td>${escapeDvwScoutHtml(item.actor || "-")}</td>
+      <td>${escapeDvwScoutHtml(item.skill || "-")}</td>
+      <td>${escapeDvwScoutHtml(item.extras || getPlayByPlayEventCode(ev) || "-")}</td>
+      <td>${escapeDvwScoutHtml(evalLabel || ev.code || "-")}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="play-by-play-tooltip__title">
+      <span>Point ${rally.rallyNumber} · Set ${rally.setNum}</span>
+      <strong>${escapeDvwScoutHtml(rally.startScoreLabel)} → ${escapeDvwScoutHtml(rally.scoreLabel)}</strong>
+    </div>
+    <table>
+      <thead><tr><th>Team</th><th>Player</th><th>Skill</th><th>Code</th><th>Evaluation</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+function renderPlayByPlaySetSelect(rallies) {
+  if (!elAnalysisPlayByPlaySet) return "";
+  const ui = ensurePlayByPlayUiState();
+  const setNums = Array.from(new Set((rallies || []).map(rally => rally.setNum).filter(Boolean))).sort((a, b) => a - b);
+  if (!setNums.length) {
+    elAnalysisPlayByPlaySet.innerHTML = "";
+    return "";
+  }
+  if (!ui.set || !setNums.includes(Number(ui.set))) ui.set = String(setNums[0]);
+  elAnalysisPlayByPlaySet.innerHTML = setNums.map(setNum => `<option value="${setNum}">Set ${setNum}</option>`).join("");
+  elAnalysisPlayByPlaySet.value = String(ui.set);
+  if (!elAnalysisPlayByPlaySet.dataset.playByPlayBound) {
+    elAnalysisPlayByPlaySet.addEventListener("change", () => {
+      ensurePlayByPlayUiState().set = elAnalysisPlayByPlaySet.value || "";
+      saveState({ persistLocal: true });
+      renderPlayByPlayAnalysis();
+    });
+    elAnalysisPlayByPlaySet.dataset.playByPlayBound = "1";
+  }
+  return String(ui.set);
+}
+function buildPlayByPlayRallies(scope = getAnalysisTeamScope()) {
+  const groups = buildSetTrendGroups(scope);
+  const rallies = [];
+  groups.forEach(group => {
+    let previousScoringIndex = -1;
+    (group.points || []).forEach(point => {
+      if (!point || !point.ev || point.allEventIndex < 0) return;
+      const direction = getPointDirectionFor(scope, point.ev);
+      if (!direction) return;
+      const rallyEntries = group.allEvents
+        .slice(previousScoringIndex + 1, point.allEventIndex + 1)
+        .map((entry, localIdx) => ({
+          ev: entry.ev,
+          globalEventIndex: previousScoringIndex + 1 + localIdx
+        }))
+        .filter(entry => entry.ev);
+      previousScoringIndex = point.allEventIndex;
+      const scoringEvent = point.ev;
+      const serveEntry = rallyEntries.find(entry => entry.ev && entry.ev.skillId === "serve");
+      const winnerScope = direction === "for" ? scope : getOppositeScope(scope);
+      const winner = getTeamNameForScope(winnerScope);
+      const pointValue = typeof scoringEvent.value === "number" && isFinite(scoringEvent.value) ? scoringEvent.value : 1;
+      rallies.push({
+        key: point.pointKey,
+        setNum: group.setNum,
+        matchLabel: group.matchLabel || "",
+        rallyNumber: rallies.length + 1,
+        scoreLabel: point.label,
+        startScoreLabel: `${Math.max(0, point.forScore - (direction === "for" ? pointValue : 0))}-${Math.max(0, point.againstScore - (direction === "against" ? pointValue : 0))}`,
+        direction,
+        winner,
+        servingTeam: serveEntry ? getTeamNameForScope(getTeamScopeFromEvent(serveEntry.ev)) : "",
+        scoringReason: getSetTrendEventReasonLabel(scoringEvent, scope),
+        scoringActor: getSetTrendEventActorLabel(scoringEvent, scope),
+        actions: rallyEntries
+      });
+    });
+  });
+  return rallies;
+}
+function renderPlayByPlayAnalysis() {
+  if (!elAnalysisPlayByPlay) return;
+  if (!isAggSubtabVisible("play-by-play")) return;
+  const scope = getAnalysisTeamScope();
+  const rallies = buildPlayByPlayRallies(scope);
+  elAnalysisPlayByPlay.innerHTML = "";
+  if (!rallies.length) {
+    if (elAnalysisPlayByPlaySummary) elAnalysisPlayByPlaySummary.innerHTML = "";
+    elAnalysisPlayByPlay.innerHTML = '<div class="players-empty">Registra o importa eventi con punteggio per vedere il play by play.</div>';
+    return;
+  }
+  const selectedSet = renderPlayByPlaySetSelect(rallies);
+  const visibleRallies = selectedSet ? rallies.filter(rally => String(rally.setNum) === String(selectedSet)) : rallies;
+  const won = rallies.filter(rally => rally.direction === "for").length;
+  const lost = rallies.length - won;
+  const avgTouches = rallies.reduce((sum, rally) => sum + rally.actions.length, 0) / rallies.length;
+  if (elAnalysisPlayByPlaySummary) {
+    elAnalysisPlayByPlaySummary.innerHTML = `
+      <span><strong>${rallies.length}</strong> rally</span>
+      <span class="positive"><strong>${won}</strong> vinti</span>
+      <span class="negative"><strong>${lost}</strong> persi</span>
+      <span><strong>${avgTouches.toFixed(1)}</strong> tocchi scoutati/rally</span>
+    `;
+  }
+  const rowsHtml = visibleRallies.map((rally, idx) => {
+    const tone = rally.direction === "for" ? "positive" : "negative";
+    const phase = getPlayByPlayPhaseLabel(rally, scope);
+    const actionTokens = (rally.actions || []).map((entry, actionIdx) => {
+      const ev = entry.ev;
+      const item = getPlayByPlayEventCompact(ev, scope);
+      const actionTone = getPlayByPlayTone(ev, rally, scope);
+      const label = getPlayByPlayActionLabel(ev);
+      return `<span class="play-by-play-token is-${actionTone}" data-rally-index="${idx}" data-action-index="${actionIdx}">
+        <span class="play-by-play-token__idx">${actionIdx + 1}</span>
+        <code>${escapeDvwScoutHtml(item.code || label || "-")}</code>
+        <span>${escapeDvwScoutHtml(item.actor || "-")}</span>
+      </span>`;
+    }).join("");
+    return `<tr class="play-by-play-row is-${tone}">
+      <td class="num">${rally.rallyNumber}</td>
+      <td class="score">${escapeDvwScoutHtml(rally.startScoreLabel)}</td>
+      <td class="score final">${escapeDvwScoutHtml(rally.scoreLabel)}</td>
+      <td>${escapeDvwScoutHtml(rally.servingTeam || "-")}</td>
+      <td class="phase">${escapeDvwScoutHtml(phase || "-")}</td>
+      <td class="winner">${escapeDvwScoutHtml(rally.winner || "-")}</td>
+      <td>${escapeDvwScoutHtml(rally.scoringReason || "-")}</td>
+      <td><div class="play-by-play-sequence">${actionTokens || '<span class="play-by-play-token is-neutral">Nessuna azione</span>'}</div></td>
+    </tr>`;
+  }).join("");
+  const tooltipData = visibleRallies.map(rally => getPlayByPlayTooltipHtml(rally, scope));
+  elAnalysisPlayByPlay.innerHTML = `
+    <div class="play-by-play-table-shell">
+      <div class="play-by-play-tooltip hidden"></div>
+      <table class="play-by-play-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Start</th>
+            <th>Score</th>
+            <th>Servizio</th>
+            <th>Fase</th>
+            <th>Punto</th>
+            <th>Motivo</th>
+            <th>Sequenza scout</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `;
+  const root = elAnalysisPlayByPlay.querySelector(".play-by-play-table-shell");
+  const tooltip = root ? root.querySelector(".play-by-play-tooltip") : null;
+  if (root && tooltip) {
+    root.querySelectorAll(".play-by-play-token").forEach(bar => {
+      const rallyIdx = parseInt(bar.dataset.rallyIndex, 10);
+      bar.addEventListener("mouseenter", ev => {
+        tooltip.innerHTML = tooltipData[rallyIdx] || "";
+        tooltip.classList.remove("hidden");
+        const rect = root.getBoundingClientRect();
+        const maxLeft = Math.max(8, rect.width - 260);
+        tooltip.style.left = `${Math.min(maxLeft, Math.max(8, ev.clientX - rect.left + 12))}px`;
+        tooltip.style.top = `${Math.max(8, ev.clientY - rect.top + 12)}px`;
+      });
+      bar.addEventListener("mousemove", ev => {
+        const rect = root.getBoundingClientRect();
+        const maxLeft = Math.max(8, rect.width - 260);
+        tooltip.style.left = `${Math.min(maxLeft, Math.max(8, ev.clientX - rect.left + 12))}px`;
+        tooltip.style.top = `${Math.max(8, ev.clientY - rect.top + 12)}px`;
+      });
+      bar.addEventListener("mouseleave", () => {
+        tooltip.classList.add("hidden");
+      });
+    });
+  }
+}
 function computePlayerPointsMap(events = state.events || [], scope = "our") {
   const map = {};
   (events || []).forEach(ev => {
@@ -19475,6 +19740,9 @@ function renderAggregatedTable() {
   renderAnalysisSummarySetFilter();
   if (isAggSubtabVisible("set-trend")) {
     renderSetTrendAnalysis();
+  }
+  if (isAggSubtabVisible("play-by-play")) {
+    renderPlayByPlayAnalysis();
   }
   const analysisScope = getAnalysisTeamScope();
   const analysisEvents = getAnalysisEvents();
@@ -25347,6 +25615,15 @@ function setActiveAggTab(target) {
     requestAnimationFrame(refreshSetTrend);
     setTimeout(refreshSetTrend, 0);
   }
+  if (desired === "play-by-play") {
+    const refreshPlayByPlay = () => {
+      if (typeof renderPlayByPlayAnalysis === "function") {
+        renderPlayByPlayAnalysis();
+      }
+    };
+    requestAnimationFrame(refreshPlayByPlay);
+    setTimeout(refreshPlayByPlay, 0);
+  }
   if (desired === "skill-charts") {
     const refreshCharts = () => {
       if (typeof renderAnalysisSkillChartsPanel === "function") {
@@ -25393,6 +25670,7 @@ function setActiveTab(target) {
       activeAggTab === "serve" ||
       activeAggTab === "player" ||
       activeAggTab === "skill-charts" ||
+      activeAggTab === "play-by-play" ||
       activeAggTab === "set-trend")
   ) {
     const refresh = () => {
@@ -25407,6 +25685,9 @@ function setActiveTab(target) {
       }
       if (typeof renderSetTrendAnalysis === "function" && activeAggTab === "set-trend") {
         renderSetTrendAnalysis();
+      }
+      if (typeof renderPlayByPlayAnalysis === "function" && activeAggTab === "play-by-play") {
+        renderPlayByPlayAnalysis();
       }
       if (typeof renderAnalysisSkillChartsPanel === "function" && activeAggTab === "skill-charts") {
         renderAnalysisSkillChartsPanel();
