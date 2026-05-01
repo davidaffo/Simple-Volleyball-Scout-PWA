@@ -1631,7 +1631,10 @@ function openNextSetModal(setNum) {
   if (elNextSetServeOur) elNextSetServeOur.checked = !!nextSetDraft.isServing;
   if (elNextSetServeOpp) elNextSetServeOpp.checked = !nextSetDraft.isServing;
   if (elNextSetBlockOpp) {
-    elNextSetBlockOpp.classList.toggle("hidden", !state.useOpponentTeam);
+    elNextSetBlockOpp.classList.remove("hidden");
+    elNextSetBlockOpp
+      .querySelectorAll("#next-set-default-opp, #next-set-court-opp, .next-set-bench, .next-set-libero")
+      .forEach(node => node.classList.toggle("hidden", !state.useOpponentTeam));
   }
   const isFirstSet = nextSetDraft.setNum === 1;
   if (elNextSetSwapRow) elNextSetSwapRow.classList.toggle("hidden", isFirstSet);
@@ -1704,24 +1707,20 @@ function applyNextSetDraft() {
   } else {
     state.court = cloneCourt(nextSetDraft.our.court || []);
   }
-  if (state.useOpponentTeam) {
-    if (typeof commitCourtChangeForScope === "function") {
-      commitCourtChangeForScope(cloneCourt(nextSetDraft.opponent.court || []), "opponent");
-    } else {
-      state.opponentCourt = cloneCourt(nextSetDraft.opponent.court || []);
-    }
+  if (typeof commitCourtChangeForScope === "function") {
+    commitCourtChangeForScope(cloneCourt(nextSetDraft.opponent.court || []), "opponent");
+  } else {
+    state.opponentCourt = cloneCourt(nextSetDraft.opponent.court || []);
   }
   if (typeof setRotation === "function") {
     setRotation(ourRotation);
   } else {
     state.rotation = ourRotation;
   }
-  if (state.useOpponentTeam) {
-    if (typeof setOpponentRotation === "function") {
-      setOpponentRotation(oppRotation);
-    } else {
-      state.opponentRotation = oppRotation;
-    }
+  if (typeof setOpponentRotation === "function") {
+    setOpponentRotation(oppRotation);
+  } else {
+    state.opponentRotation = oppRotation;
   }
   if (typeof setIsServing === "function") {
     setIsServing(!!nextSetDraft.isServing);
@@ -1756,9 +1755,7 @@ function applyNextSetDraft() {
   renderPlayers();
   renderBenchChips();
   renderLineupChips();
-  if (state.useOpponentTeam) {
-    renderOpponentPlayers();
-  }
+  renderOpponentPlayers();
   updateSetScoreDisplays();
   closeNextSetModal({ force: true });
 }
@@ -4631,7 +4628,10 @@ function syncOpponentSettingsUI() {
   }
   const opponentPanel = document.querySelector('[data-team-panel="opponent"]');
   if (opponentPanel) {
-    opponentPanel.classList.toggle("hidden", !enabled);
+    opponentPanel.classList.remove("hidden");
+    opponentPanel
+      .querySelectorAll(".score-actions, .team-controls-panel")
+      .forEach(node => node.classList.toggle("hidden", !enabled));
   }
   const opponentSettingsPanel = document.querySelector('[data-team-panel="opponent-settings"]');
   if (opponentSettingsPanel) {
@@ -7146,7 +7146,8 @@ function renderTeamCourtCards(options = {}) {
     allowReturn = false,
     isCompactMobile = false,
     nextSkillId = null,
-    allowDrop = false
+    allowDrop = false,
+    allowSkills = true
   } = options;
   if (!container) return;
   const renderOrder = [3, 2, 1, 4, 5, 0];
@@ -7294,7 +7295,7 @@ function renderTeamCourtCards(options = {}) {
       card.addEventListener("drop", e => handlePositionDrop(e, card), true);
     }
 
-    if (activeName && (scope === "our" || scope === "opponent")) {
+    if (allowSkills && activeName && (scope === "our" || scope === "opponent")) {
       const players = getPlayersForScope(scope);
       const playerIdx = players.findIndex(p => p === activeName);
       if (playerIdx === -1) {
@@ -7656,9 +7657,16 @@ function renderPlayers() {
   maybeScrollToActiveCourtOnMobile();
 }
 function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
-  if (!state.useOpponentTeam) return;
   const elOpponentContainer = document.getElementById("opponent-players-container");
   if (!elOpponentContainer) return;
+  if (!state.useOpponentTeam) {
+    elOpponentContainer.innerHTML = "";
+    elOpponentContainer.classList.add("hidden");
+    if (typeof updateOpponentRotationDisplay === "function") {
+      updateOpponentRotationDisplay();
+    }
+    return;
+  }
   const isCompactMobile = !!state.forceMobileLayout || window.matchMedia("(max-width: 900px)").matches;
   const mobileActiveScope = isCompactMobile ? getMobileActiveScope() : null;
   const hideOpponentCourt = mobileActiveScope === "our";
@@ -7693,8 +7701,8 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     typeof ensureCourtShapeFor === "function"
       ? ensureCourtShapeFor(baseOppCourt)
       : Array.from({ length: 6 }, (_, idx) => baseOppCourt[idx] || { main: "" });
-  let predictedSkillId = nextSkillId || getPredictedSkillIdForScope("opponent");
-  if (state.predictiveSkillFlow && !predictedSkillId) {
+  let predictedSkillId = state.useOpponentTeam ? nextSkillId || getPredictedSkillIdForScope("opponent") : null;
+  if (state.useOpponentTeam && state.predictiveSkillFlow && !predictedSkillId) {
     const fallbackSeed = isServingForScope("opponent") ? "serve" : "pass";
     if (isSkillEnabledForScope(fallbackSeed, "opponent")) {
       predictedSkillId = fallbackSeed;
@@ -7722,9 +7730,10 @@ function renderOpponentPlayers({ nextSkillId = null, animate = false } = {}) {
     captainSet: new Set((state.opponentCaptains || []).map(name => name.toLowerCase())),
     libSet: new Set(state.opponentLiberos || []),
     allowReturn: true,
-    allowDrop: true,
+    allowDrop: !!state.useOpponentTeam,
     isCompactMobile,
-    nextSkillId: predictedSkillId
+    nextSkillId: predictedSkillId,
+    allowSkills: !!state.useOpponentTeam
   });
   if (shouldAnimate) {
     animateFlip(prevRects, '.court-card[data-team-scope="opponent"]', el => {
@@ -26657,6 +26666,10 @@ async function init() {
   }
   if (elBtnNewMatch) {
     elBtnNewMatch.addEventListener("click", () => {
+      if (typeof createNewMatchFromPrompt === "function") {
+        createNewMatchFromPrompt();
+        return;
+      }
       if (!elSavedMatchesSelect) return;
       elSavedMatchesSelect.value = "";
       loadSelectedMatch();

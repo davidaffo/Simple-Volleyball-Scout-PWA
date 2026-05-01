@@ -5,7 +5,6 @@ Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
 Import da url dovrebbe usare anche fetch da link dl e non solo usare i raw
-roatazione avversario nella modalita singola
 crea stampa tipo foglio gara
 
 # Features teoricamente implementate
