@@ -24271,11 +24271,107 @@ async function fetchJsonFromUrl(url) {
   if (!["http:", "https:"].includes(parsedUrl.protocol)) {
     throw new Error("Protocollo URL non supportato");
   }
-  const response = await fetch(parsedUrl.toString(), { method: "GET", mode: "cors" });
-  if (!response.ok) {
-    throw new Error("Download fallito (" + response.status + ")");
+  const candidates = buildImportUrlCandidates(parsedUrl);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate, {
+        method: "GET",
+        mode: "cors",
+        redirect: "follow",
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        throw new Error("Download fallito (" + response.status + ")");
+      }
+      const text = await response.text();
+      return JSON.parse(text);
+    } catch (err) {
+      lastError = err;
+    }
   }
-  return response.json();
+  throw lastError || new Error("Download fallito");
+}
+function addImportUrlCandidate(list, seen, value) {
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return;
+    const key = url.toString();
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push(key);
+  } catch (_) {
+    // ignore invalid candidate
+  }
+}
+function buildImportUrlCandidates(parsedUrl) {
+  const candidates = [];
+  const seen = new Set();
+  addImportUrlCandidate(candidates, seen, parsedUrl.toString());
+
+  const host = parsedUrl.hostname.toLowerCase();
+  const path = parsedUrl.pathname || "";
+  const genericDownload = new URL(parsedUrl.toString());
+  let changedGeneric = false;
+  ["download", "dl"].forEach(key => {
+    if (genericDownload.searchParams.has(key) && genericDownload.searchParams.get(key) !== "1") {
+      genericDownload.searchParams.set(key, "1");
+      changedGeneric = true;
+    }
+  });
+  if (changedGeneric) {
+    addImportUrlCandidate(candidates, seen, genericDownload.toString());
+  }
+
+  if (host === "github.com" && path.includes("/blob/")) {
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length >= 5) {
+      const [owner, repo, , branch, ...fileParts] = parts;
+      addImportUrlCandidate(
+        candidates,
+        seen,
+        `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${fileParts.join("/")}`
+      );
+    }
+  }
+
+  if ((host === "gitlab.com" || host.endsWith(".gitlab.com")) && path.includes("/-/blob/")) {
+    const rawUrl = new URL(parsedUrl.toString());
+    rawUrl.pathname = rawUrl.pathname.replace("/-/blob/", "/-/raw/");
+    addImportUrlCandidate(candidates, seen, rawUrl.toString());
+  }
+
+  if (host === "www.dropbox.com" || host === "dropbox.com") {
+    const direct = new URL(parsedUrl.toString());
+    direct.hostname = "dl.dropboxusercontent.com";
+    direct.searchParams.delete("dl");
+    direct.searchParams.delete("raw");
+    addImportUrlCandidate(candidates, seen, direct.toString());
+    const dl = new URL(parsedUrl.toString());
+    dl.searchParams.set("dl", "1");
+    addImportUrlCandidate(candidates, seen, dl.toString());
+  }
+
+  const driveId =
+    host === "drive.google.com"
+      ? (path.match(/\/file\/d\/([^/]+)/) || [])[1] || parsedUrl.searchParams.get("id")
+      : "";
+  if (driveId) {
+    addImportUrlCandidate(
+      candidates,
+      seen,
+      `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveId)}`
+    );
+  }
+
+  if (host.endsWith("1drv.ms") || host.includes("sharepoint.com")) {
+    const download = new URL(parsedUrl.toString());
+    download.searchParams.set("download", "1");
+    addImportUrlCandidate(candidates, seen, download.toString());
+  }
+
+  return candidates;
 }
 async function importMatchFromUrl(url) {
   try {
@@ -24290,7 +24386,7 @@ async function importMatchFromUrl(url) {
   } catch (err) {
     console.error("Import match URL error", err);
     alert(
-      "Errore import URL match. Verifica link diretto JSON e CORS del provider (es. Dropbox raw link)."
+      "Errore import URL match. Verifica che il link sia pubblico e che il provider consenta il download via browser/CORS."
     );
   }
 }
@@ -24307,7 +24403,7 @@ async function importDatabaseFromUrl(url) {
   } catch (err) {
     console.error("Import database URL error", err);
     alert(
-      "Errore import URL database. Verifica link diretto JSON e CORS del provider (es. Dropbox raw link)."
+      "Errore import URL database. Verifica che il link sia pubblico e che il provider consenta il download via browser/CORS."
     );
   }
 }
