@@ -4,7 +4,6 @@ Lettura Camp3 ocr
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
-Import da url dovrebbe usare anche fetch da link dl e non solo usare i raw
 crea stampa tipo foglio gara
 
 # Features teoricamente implementate
