@@ -6,14 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v368-6680a7e";
+    window.__APP_CACHE_VERSION__ = "v370-6649073";
     window.__IS_LOCALHOST_DEV__ =
       location.hostname === "localhost" ||
       location.hostname === "127.0.0.1" ||
       location.hostname === "::1";
     window.__APP_ASSET_SUFFIX__ = window.__IS_LOCALHOST_DEV__
-      ? `?v=v368-6680a7e`
-      : `?v=v368-6680a7e`;
+      ? `?v=v370-6649073`
+      : `?v=v370-6649073`;
     if (location.protocol === "file:") {
       document.documentElement.dataset.fileOrigin = "true";
     }
@@ -1716,6 +1716,8 @@
         <div class="team-manager-actions">
           <button id="team-manager-add" class="secondary">Aggiungi giocatrice</button>
           <button id="btn-open-players-paste" class="secondary">Incolla elenco</button>
+          <button id="btn-import-camp3" class="secondary">Importa CAMP3</button>
+          <input id="camp3-file-input" type="file" accept=".pdf,.txt,text/plain,application/pdf,image/*" hidden />
           <button id="team-manager-template" class="secondary hidden">Genera squadra di default</button>
         </div>
         <div class="team-manager-roster-layout">
@@ -1794,6 +1796,22 @@
           <button id="btn-apply-players">Aggiungi elenco</button>
           <button id="btn-replace-players" class="danger">Sostituisci squadra</button>
           <button class="secondary" data-close-paste>Annulla</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="camp3-confirm-modal" class="settings-modal hidden camp3-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="camp3-confirm-title">
+    <div class="settings-modal__backdrop" data-close-camp3-confirm></div>
+    <div class="settings-modal__content camp3-confirm-modal__content">
+      <div class="settings-modal__head">
+        <h3 id="camp3-confirm-title">Conferma import CAMP3</h3>
+        <button id="camp3-confirm-close" class="pill-remove" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="settings-modal__body camp3-confirm-modal__body">
+        <div id="camp3-confirm-summary" class="camp3-confirm-summary"></div>
+        <div class="settings-actions">
+          <button id="camp3-confirm-cancel" class="secondary" type="button">Annulla</button>
+          <button id="camp3-confirm-apply" class="primary" type="button">Applica modifiche</button>
         </div>
       </div>
     </div>
@@ -2123,6 +2141,7 @@
         </label>
         <div class="settings-actions">
           <button id="player-photo-cancel" class="secondary" type="button">Annulla</button>
+          <button id="player-photo-remove" class="danger hidden" type="button">Rimuovi foto</button>
           <button id="player-photo-save" class="primary" type="button">Usa questa foto</button>
         </div>
       </div>

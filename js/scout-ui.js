@@ -4546,38 +4546,43 @@ function renderPlayersDbList() {
     if (entry.photo) {
       photoPreview.style.backgroundImage = `url(${JSON.stringify(entry.photo)})`;
     }
-    const photoActions = document.createElement("div");
-    photoActions.className = "players-db-photo-actions";
-    const photoBtn = document.createElement("button");
-    photoBtn.type = "button";
-    photoBtn.className = "small secondary";
-    photoBtn.textContent = entry.photo ? "Cambia" : "Foto";
-    photoBtn.addEventListener("click", async () => {
+    photoPreview.setAttribute("role", "button");
+    photoPreview.tabIndex = 0;
+    photoPreview.title = entry.photo ? "Modifica foto" : "Aggiungi foto";
+    photoPreview.setAttribute("aria-label", entry.photo ? "Modifica foto" : "Aggiungi foto");
+    const handlePhotoClick = async () => {
       try {
-        const file =
-          typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
-        if (!file) return;
-        const photo =
-          typeof window.preparePlayerPhotoDataUrl === "function"
-            ? await window.preparePlayerPhotoDataUrl(file)
-            : "";
+        let photo = "";
+        if (entry.photo && typeof window.openPlayerPhotoEditor === "function") {
+          const edited = await window.openPlayerPhotoEditor(entry.photo, { allowRemove: true });
+          if (edited === window.PLAYER_PHOTO_REMOVE_RESULT) {
+            updatePlayerPhotoInDbAndTeams(entry.id, "");
+            return;
+          }
+          photo = edited || "";
+        } else {
+          const file =
+            typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
+          if (!file) return;
+          photo =
+            typeof window.preparePlayerPhotoDataUrl === "function"
+              ? await window.preparePlayerPhotoDataUrl(file)
+              : "";
+        }
         if (!photo) return;
         updatePlayerPhotoInDbAndTeams(entry.id, photo);
       } catch (err) {
         logError("Errore caricamento foto archivio giocatrici", err);
         alert("Immagine non valida o non caricabile.");
       }
+    };
+    photoPreview.addEventListener("click", handlePhotoClick);
+    photoPreview.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      handlePhotoClick();
     });
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "small";
-    removeBtn.textContent = "Rimuovi";
-    removeBtn.disabled = !entry.photo;
-    removeBtn.addEventListener("click", () => updatePlayerPhotoInDbAndTeams(entry.id, ""));
-    photoActions.appendChild(photoBtn);
-    photoActions.appendChild(removeBtn);
     photoWrap.appendChild(photoPreview);
-    photoWrap.appendChild(photoActions);
     tdPhoto.appendChild(photoWrap);
     tdTeams.textContent = (usage[entry.id] || []).join(", ") || "—";
     tdId.textContent = entry.id || "";
@@ -26383,6 +26388,48 @@ async function init() {
       }
       if (elPlayersInput) {
         elPlayersInput.focus();
+      }
+    });
+  }
+  if (typeof elBtnImportCamp3 !== "undefined" && elBtnImportCamp3 && typeof elCamp3FileInput !== "undefined" && elCamp3FileInput) {
+    elBtnImportCamp3.addEventListener("click", () => {
+      elCamp3FileInput.value = "";
+      elCamp3FileInput.click();
+    });
+    elCamp3FileInput.addEventListener("change", async e => {
+      const input = e.target;
+      const file = input && input.files && input.files[0];
+      if (!file || typeof importCamp3IntoTeamManager !== "function") return;
+      const previousLabel = elBtnImportCamp3.textContent;
+      elBtnImportCamp3.disabled = true;
+      elBtnImportCamp3.textContent = "Lettura CAMP3...";
+      try {
+        await importCamp3IntoTeamManager(file);
+      } catch (err) {
+        logError("Errore import CAMP3", err);
+        alert("CAMP3 non leggibile. Per PDF o foto serve connessione per caricare il motore di lettura.");
+      } finally {
+        elBtnImportCamp3.disabled = false;
+        elBtnImportCamp3.textContent = previousLabel || "Importa CAMP3";
+        elCamp3FileInput.value = "";
+      }
+    });
+  }
+  if (typeof elCamp3ConfirmApply !== "undefined" && elCamp3ConfirmApply) {
+    elCamp3ConfirmApply.addEventListener("click", () => closeCamp3ConfirmModal(true));
+  }
+  if (typeof elCamp3ConfirmCancel !== "undefined" && elCamp3ConfirmCancel) {
+    elCamp3ConfirmCancel.addEventListener("click", () => closeCamp3ConfirmModal(false));
+  }
+  if (typeof elCamp3ConfirmClose !== "undefined" && elCamp3ConfirmClose) {
+    elCamp3ConfirmClose.addEventListener("click", () => closeCamp3ConfirmModal(false));
+  }
+  if (typeof elCamp3ConfirmModal !== "undefined" && elCamp3ConfirmModal) {
+    elCamp3ConfirmModal.addEventListener("click", e => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.closeCamp3Confirm !== undefined || target === elCamp3ConfirmModal) {
+        closeCamp3ConfirmModal(false);
       }
     });
   }

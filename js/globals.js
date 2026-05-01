@@ -278,7 +278,9 @@ const elPlayerPhotoImage = document.getElementById("player-photo-image");
 const elPlayerPhotoZoom = document.getElementById("player-photo-zoom");
 const elPlayerPhotoClose = document.getElementById("player-photo-close");
 const elPlayerPhotoCancel = document.getElementById("player-photo-cancel");
+const elPlayerPhotoRemove = document.getElementById("player-photo-remove");
 const elPlayerPhotoSave = document.getElementById("player-photo-save");
+const PLAYER_PHOTO_REMOVE_RESULT = "__REMOVE_PLAYER_PHOTO__";
 const PLAYER_PHOTO_EXPORT_SIZE = 320;
 const playerPhotoEditorState = {
   resolve: null,
@@ -292,7 +294,8 @@ const playerPhotoEditorState = {
   dragStartX: 0,
   dragStartY: 0,
   dragOriginX: 0,
-  dragOriginY: 0
+  dragOriginY: 0,
+  allowRemove: false
 };
 function syncPlayerPhotoBaseScale() {
   if (!playerPhotoEditorState.image || !elPlayerPhotoStage) return;
@@ -338,6 +341,10 @@ function closePlayerPhotoEditor(result = null) {
   playerPhotoEditorState.offsetX = 0;
   playerPhotoEditorState.offsetY = 0;
   playerPhotoEditorState.pointerId = null;
+  playerPhotoEditorState.allowRemove = false;
+  if (elPlayerPhotoRemove) {
+    elPlayerPhotoRemove.classList.add("hidden");
+  }
   if (elPlayerPhotoImage) {
     elPlayerPhotoImage.removeAttribute("src");
     elPlayerPhotoImage.style.transform = "";
@@ -384,6 +391,10 @@ async function openPlayerPhotoEditor(sourceUrl, options = {}) {
   playerPhotoEditorState.zoom = 1;
   playerPhotoEditorState.offsetX = 0;
   playerPhotoEditorState.offsetY = 0;
+  playerPhotoEditorState.allowRemove = !!options.allowRemove;
+  if (elPlayerPhotoRemove) {
+    elPlayerPhotoRemove.classList.toggle("hidden", !playerPhotoEditorState.allowRemove);
+  }
   elPlayerPhotoImage.src = sourceUrl;
   elPlayerPhotoZoom.min = "1";
   elPlayerPhotoZoom.max = options.maxZoom ? String(options.maxZoom) : "3";
@@ -464,6 +475,10 @@ if (elPlayerPhotoCancel && !elPlayerPhotoCancel._playerPhotoBound) {
   elPlayerPhotoCancel.addEventListener("click", () => closePlayerPhotoEditor(null));
   elPlayerPhotoCancel._playerPhotoBound = true;
 }
+if (elPlayerPhotoRemove && !elPlayerPhotoRemove._playerPhotoBound) {
+  elPlayerPhotoRemove.addEventListener("click", () => closePlayerPhotoEditor(PLAYER_PHOTO_REMOVE_RESULT));
+  elPlayerPhotoRemove._playerPhotoBound = true;
+}
 if (elPlayerPhotoSave && !elPlayerPhotoSave._playerPhotoBound) {
   elPlayerPhotoSave.addEventListener("click", () => {
     try {
@@ -487,6 +502,8 @@ if (elPlayerPhotoModal && !elPlayerPhotoModal._playerPhotoBound) {
 }
 window.pickImageFile = pickImageFile;
 window.preparePlayerPhotoDataUrl = preparePlayerPhotoDataUrl;
+window.openPlayerPhotoEditor = openPlayerPhotoEditor;
+window.PLAYER_PHOTO_REMOVE_RESULT = PLAYER_PHOTO_REMOVE_RESULT;
 const elOpponent = document.getElementById("match-opponent");
 const elCategory = document.getElementById("match-category");
 const elDate = document.getElementById("match-date");

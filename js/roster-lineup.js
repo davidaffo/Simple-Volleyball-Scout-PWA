@@ -153,6 +153,13 @@ let defaultLineupTouchGhost = null;
 const elTeamManagerAdd = document.getElementById("team-manager-add");
 const elTeamManagerSave = document.getElementById("team-manager-save");
 const elTeamManagerCancel = document.getElementById("team-manager-cancel");
+const elBtnImportCamp3 = document.getElementById("btn-import-camp3");
+const elCamp3FileInput = document.getElementById("camp3-file-input");
+const elCamp3ConfirmModal = document.getElementById("camp3-confirm-modal");
+const elCamp3ConfirmSummary = document.getElementById("camp3-confirm-summary");
+const elCamp3ConfirmClose = document.getElementById("camp3-confirm-close");
+const elCamp3ConfirmCancel = document.getElementById("camp3-confirm-cancel");
+const elCamp3ConfirmApply = document.getElementById("camp3-confirm-apply");
 const elTeamMetaName = document.getElementById("team-meta-name");
 const elTeamMetaHead = document.getElementById("team-meta-head");
 const elTeamMetaAssistant = document.getElementById("team-meta-assistant");
@@ -3658,6 +3665,341 @@ function parseDelimitedTeamText(text) {
   if (players.length === 0) return null;
   return { players, numbers, liberos };
 }
+function readCamp3FileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("File non leggibile."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function readCamp3FileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("File non leggibile."));
+    reader.readAsText(file);
+  });
+}
+function loadCamp3ExternalScript(src, globalName) {
+  return new Promise((resolve, reject) => {
+    if (globalName && window[globalName]) {
+      resolve(window[globalName]);
+      return;
+    }
+    const existing = document.querySelector(`script[data-camp3-loader="${globalName || src}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(globalName ? window[globalName] : true), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Libreria non caricata.")), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.dataset.camp3Loader = globalName || src;
+    script.onload = () => resolve(globalName ? window[globalName] : true);
+    script.onerror = () => reject(new Error("Libreria non caricata."));
+    document.head.appendChild(script);
+  });
+}
+async function extractTextFromCamp3Pdf(file) {
+  const pdfjsLib = await loadCamp3ExternalScript(
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+    "pdfjsLib"
+  );
+  if (!pdfjsLib || typeof pdfjsLib.getDocument !== "function") {
+    throw new Error("PDF.js non disponibile.");
+  }
+  if (pdfjsLib.GlobalWorkerOptions) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  const data = await readCamp3FileAsArrayBuffer(file);
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pages = [];
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    let previousY = null;
+    const lines = [];
+    let current = [];
+    content.items.forEach(item => {
+      const y = item && item.transform ? Math.round(item.transform[5]) : 0;
+      if (previousY !== null && Math.abs(y - previousY) > 3) {
+        lines.push(current.join(" "));
+        current = [];
+      }
+      previousY = y;
+      current.push(item.str || "");
+    });
+    if (current.length) lines.push(current.join(" "));
+    pages.push(lines.join("\n"));
+  }
+  return pages.join("\n");
+}
+async function extractTextFromCamp3Image(file) {
+  const Tesseract = await loadCamp3ExternalScript(
+    "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
+    "Tesseract"
+  );
+  if (!Tesseract || typeof Tesseract.recognize !== "function") {
+    throw new Error("Tesseract non disponibile.");
+  }
+  const result = await Tesseract.recognize(file, "ita+eng");
+  return (result && result.data && result.data.text) || "";
+}
+async function extractTextFromCamp3File(file) {
+  const type = (file.type || "").toLowerCase();
+  const name = (file.name || "").toLowerCase();
+  if (type === "application/pdf" || name.endsWith(".pdf")) {
+    return extractTextFromCamp3Pdf(file);
+  }
+  if (type.startsWith("image/")) {
+    return extractTextFromCamp3Image(file);
+  }
+  return readCamp3FileAsText(file);
+}
+function parseCamp3RosterText(text) {
+  if (!text || typeof text !== "string") return [];
+  const beforeStaff = text.split(/\bQualifica\b/i)[0] || text;
+  const lines = beforeStaff.split(/\r?\n/).map(line => line.replace(/\u00a0/g, " "));
+  const players = [];
+  const seenNumbers = new Set();
+  const flagPattern = /^(K|L|L1|L2)$/i;
+  lines.forEach(rawLine => {
+    const dateMatch = rawLine.match(/\b\d{2}[/. -]\d{2}[/. -]\d{4}\b/);
+    if (!dateMatch) return;
+    const beforeDate = rawLine.slice(0, dateMatch.index).trim();
+    const numberMatch = beforeDate.match(/^\s*(\d{1,3})\s+(.+)$/);
+    if (!numberMatch) return;
+    const number = numberMatch[1];
+    if (seenNumbers.has(number)) return;
+    let namePart = numberMatch[2].trim();
+    let isCaptain = false;
+    let isLibero = false;
+    const spacedGroups = namePart.split(/\s{2,}/).map(part => part.trim()).filter(Boolean);
+    let groups = spacedGroups.length >= 2 ? spacedGroups : namePart.split(/\s+/).filter(Boolean);
+    while (groups.length > 0 && flagPattern.test(groups[groups.length - 1])) {
+      const flag = groups.pop().toUpperCase();
+      if (flag === "K") isCaptain = true;
+      if (flag.startsWith("L")) isLibero = true;
+    }
+    if (groups.length < 2) return;
+    const lastName = groups[0];
+    const firstName = groups.slice(1).join(" ");
+    const cleanName = normalizePlayers([normalizePlayerNameCase(buildFullName(lastName, firstName))])[0];
+    if (!cleanName) return;
+    seenNumbers.add(number);
+    players.push({
+      number,
+      name: cleanName,
+      lastName: splitNameParts(cleanName).lastName,
+      firstName: splitNameParts(cleanName).firstName,
+      role: isLibero ? "L" : "",
+      isCaptain
+    });
+  });
+  return players;
+}
+function findCamp3PlayerMatch(camp3Player, currentPlayers) {
+  const wanted = (camp3Player.name || "").trim().toLowerCase();
+  if (!wanted) return null;
+  const exact = currentPlayers.find(player => (player.name || "").trim().toLowerCase() === wanted);
+  if (exact) return exact;
+  const wantedParts = splitNameParts(camp3Player.name || "");
+  return currentPlayers.find(player => {
+    const parts = splitNameParts(player.name || buildFullName(player.lastName, player.firstName));
+    return (
+      (parts.lastName || "").trim().toLowerCase() === (wantedParts.lastName || "").trim().toLowerCase() &&
+      (parts.firstName || "").trim().toLowerCase() === (wantedParts.firstName || "").trim().toLowerCase()
+    );
+  }) || null;
+}
+function buildCamp3ImportPlan(camp3Players) {
+  if (!teamManagerState) return null;
+  const currentPlayers = (teamManagerState.players || []).filter(player => {
+    const name = player && (player.name || buildFullName(player.lastName, player.firstName));
+    return !(typeof isTemplatePlayerName === "function" && isTemplatePlayerName(name));
+  });
+  const recognizedIds = new Set();
+  const changes = {
+    added: [],
+    numberUpdated: [],
+    restored: [],
+    out: [],
+    liberos: [],
+    captains: []
+  };
+  const nextPlayers = currentPlayers.map(player => Object.assign({}, player));
+  camp3Players.forEach(camp3Player => {
+    let target = findCamp3PlayerMatch(camp3Player, nextPlayers);
+    let isNewPlayer = false;
+    if (!target) {
+      const dbMatch =
+        findPlayersDbMatchByName(camp3Player.firstName, camp3Player.lastName) ||
+        findPlayersDbMatchByFullName(camp3Player.name);
+      target = {
+        id: dbMatch && dbMatch.id ? dbMatch.id : generatePlayerId(),
+        name: camp3Player.name,
+        firstName: camp3Player.firstName,
+        lastName: camp3Player.lastName,
+        codeOfficial: "",
+        photo: dbMatch && typeof dbMatch.photo === "string" ? dbMatch.photo : "",
+        number: "",
+        role: "",
+        isCaptain: false,
+        out: false
+      };
+      nextPlayers.push(target);
+      changes.added.push(`${camp3Player.number} ${camp3Player.name}`);
+      isNewPlayer = true;
+    }
+    if (target.id) recognizedIds.add(target.id);
+    if (!isNewPlayer && String(target.number || "") !== String(camp3Player.number || "")) {
+      changes.numberUpdated.push(
+        `${target.name || camp3Player.name}: ${target.number || "senza numero"} -> ${camp3Player.number}`
+      );
+    }
+    target.number = camp3Player.number;
+    if (target.out) {
+      changes.restored.push(target.name || camp3Player.name);
+      target.out = false;
+    }
+    if (camp3Player.role === "L" && target.role !== "L") {
+      changes.liberos.push(target.name || camp3Player.name);
+      target.role = "L";
+    }
+    if (camp3Player.isCaptain && !target.isCaptain) {
+      changes.captains.push(target.name || camp3Player.name);
+    }
+    target.isCaptain = !!camp3Player.isCaptain;
+    target.name = camp3Player.name;
+    target.firstName = camp3Player.firstName;
+    target.lastName = camp3Player.lastName;
+  });
+  nextPlayers.forEach(player => {
+    if (!player || !player.id || recognizedIds.has(player.id) || player.out) return;
+    player.out = true;
+    changes.out.push(player.name || buildFullName(player.lastName, player.firstName));
+  });
+  enforceSingleCaptainFlag(nextPlayers, (camp3Players.find(player => player.isCaptain) || {}).name || "");
+  return { nextPlayers, changes };
+}
+function formatCamp3ImportPreview(changes) {
+  const lines = ["Modifiche riconosciute dal CAMP3:"];
+  const append = (title, list) => {
+    if (!list || list.length === 0) return;
+    lines.push("");
+    lines.push(title + ":");
+    list.slice(0, 20).forEach(item => lines.push("- " + item));
+    if (list.length > 20) lines.push("- ... altre " + (list.length - 20));
+  };
+  append("Aggiunte", changes.added);
+  append("Numeri aggiornati", changes.numberUpdated);
+  append("Rimesse in rosa", changes.restored);
+  append("Fuori rosa", changes.out);
+  append("Liberi riconosciuti", changes.liberos);
+  append("Capitana riconosciuta", changes.captains);
+  if (lines.length === 1) {
+    lines.push("");
+    lines.push("Nessuna modifica necessaria.");
+  } else {
+    lines.push("");
+    lines.push("Applicare queste modifiche alla tabella squadra?");
+  }
+  return lines.join("\n");
+}
+function renderCamp3ConfirmSummary(changes) {
+  if (!elCamp3ConfirmSummary) return;
+  elCamp3ConfirmSummary.innerHTML = "";
+  const title = document.createElement("p");
+  title.className = "section-note";
+  title.textContent = "Controlla le modifiche riconosciute prima di applicarle alla squadra.";
+  elCamp3ConfirmSummary.appendChild(title);
+  const sections = [
+    ["Aggiunte", changes.added],
+    ["Numeri aggiornati", changes.numberUpdated],
+    ["Rimesse in rosa", changes.restored],
+    ["Fuori rosa", changes.out],
+    ["Liberi riconosciuti", changes.liberos],
+    ["Capitana riconosciuta", changes.captains]
+  ];
+  let rendered = false;
+  sections.forEach(([label, list]) => {
+    if (!list || list.length === 0) return;
+    rendered = true;
+    const section = document.createElement("section");
+    section.className = "camp3-confirm-section";
+    const heading = document.createElement("h4");
+    heading.textContent = `${label} (${list.length})`;
+    const ul = document.createElement("ul");
+    list.forEach(item => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      ul.appendChild(li);
+    });
+    section.appendChild(heading);
+    section.appendChild(ul);
+    elCamp3ConfirmSummary.appendChild(section);
+  });
+  if (!rendered) {
+    const empty = document.createElement("div");
+    empty.className = "players-empty";
+    empty.textContent = "Nessuna modifica necessaria.";
+    elCamp3ConfirmSummary.appendChild(empty);
+  }
+}
+function closeCamp3ConfirmModal(result = false) {
+  if (!elCamp3ConfirmModal) return;
+  const resolver = elCamp3ConfirmModal._camp3Resolve;
+  elCamp3ConfirmModal._camp3Resolve = null;
+  elCamp3ConfirmModal.classList.add("hidden");
+  if (typeof resolver === "function") resolver(!!result);
+}
+function showCamp3ImportConfirm(changes) {
+  if (!elCamp3ConfirmModal || !elCamp3ConfirmSummary) {
+    return Promise.resolve(confirm(formatCamp3ImportPreview(changes)));
+  }
+  renderCamp3ConfirmSummary(changes);
+  elCamp3ConfirmModal.classList.remove("hidden");
+  return new Promise(resolve => {
+    elCamp3ConfirmModal._camp3Resolve = resolve;
+  });
+}
+async function importCamp3IntoTeamManager(file) {
+  if (!file) return;
+  if (!teamManagerState) {
+    openTeamManagerModal(teamManagerScope || "our");
+  }
+  if (teamManagerLiveEditMode) {
+    alert("Import CAMP3 non disponibile nella modifica rapida in partita, perché può mettere giocatrici fuori rosa.");
+    return;
+  }
+  const text = await extractTextFromCamp3File(file);
+  const camp3Players = parseCamp3RosterText(text);
+  if (!camp3Players || camp3Players.length === 0) {
+    alert("Nessuna giocatrice riconosciuta nel CAMP3. Con una foto prova un'immagine più dritta e leggibile.");
+    return;
+  }
+  const plan = buildCamp3ImportPlan(camp3Players);
+  if (!plan) return;
+  const hasChanges = Object.values(plan.changes).some(list => Array.isArray(list) && list.length > 0);
+  if (!hasChanges) {
+    alert(formatCamp3ImportPreview(plan.changes));
+    return;
+  }
+  const ok = await showCamp3ImportConfirm(plan.changes);
+  if (!ok) return;
+  teamManagerState.players = plan.nextPlayers;
+  teamManagerState.defaultLineup = normalizePlayers(teamManagerState.defaultLineup || []).filter(name =>
+    plan.nextPlayers.some(player => player.name === name && !player.out && player.role !== "L")
+  );
+  const liberoNames = plan.nextPlayers.filter(player => player.role === "L" && !player.out).map(player => player.name);
+  if (!liberoNames.includes(teamManagerState.preferredLibero)) {
+    teamManagerState.preferredLibero = liberoNames[0] || "";
+  }
+  renderTeamManagerTable();
+}
 function importOpponentTeamFromFile(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -4417,26 +4759,34 @@ function renderTeamManagerTable() {
     firstNameInput.value = p.firstName || splitNameParts(p.name).firstName || "";
     const photoCell = document.createElement("div");
     photoCell.className = "team-manager-photo-cell";
-    const photoPreview = document.createElement("div");
+    const photoPreview = document.createElement("button");
+    photoPreview.type = "button";
     photoPreview.className = "team-manager-photo-preview" + (p.photo ? "" : " empty");
+    photoPreview.title = p.photo ? "Modifica foto" : "Aggiungi foto";
+    photoPreview.setAttribute("aria-label", p.photo ? "Modifica foto" : "Aggiungi foto");
     if (p.photo) {
       photoPreview.style.backgroundImage = `url(${JSON.stringify(p.photo)})`;
     }
-    const photoActions = document.createElement("div");
-    photoActions.className = "team-manager-photo-actions";
-    const photoBtn = document.createElement("button");
-    photoBtn.type = "button";
-    photoBtn.className = "small secondary";
-    photoBtn.textContent = p.photo ? "Cambia" : "Foto";
-    photoBtn.addEventListener("click", async () => {
+    photoPreview.addEventListener("click", async () => {
       try {
-        const file =
-          typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
-        if (!file) return;
-        const photo =
-          typeof window.preparePlayerPhotoDataUrl === "function"
-            ? await window.preparePlayerPhotoDataUrl(file)
-            : "";
+        let photo = "";
+        if (p.photo && typeof window.openPlayerPhotoEditor === "function") {
+          const edited = await window.openPlayerPhotoEditor(p.photo, { allowRemove: true });
+          if (edited === window.PLAYER_PHOTO_REMOVE_RESULT) {
+            p.photo = "";
+            renderTeamManagerTable();
+            return;
+          }
+          photo = edited || "";
+        } else {
+          const file =
+            typeof window.pickImageFile === "function" ? await window.pickImageFile("image/*") : null;
+          if (!file) return;
+          photo =
+            typeof window.preparePlayerPhotoDataUrl === "function"
+              ? await window.preparePlayerPhotoDataUrl(file, { allowRemove: !!p.photo })
+              : "";
+        }
         if (!photo) return;
         p.photo = photo;
         renderTeamManagerTable();
@@ -4445,19 +4795,7 @@ function renderTeamManagerTable() {
         alert("Immagine non valida o non caricabile.");
       }
     });
-    const removePhotoBtn = document.createElement("button");
-    removePhotoBtn.type = "button";
-    removePhotoBtn.className = "small";
-    removePhotoBtn.textContent = "Rimuovi";
-    removePhotoBtn.disabled = !p.photo;
-    removePhotoBtn.addEventListener("click", () => {
-      p.photo = "";
-      renderTeamManagerTable();
-    });
-    photoActions.appendChild(photoBtn);
-    photoActions.appendChild(removePhotoBtn);
     photoCell.appendChild(photoPreview);
-    photoCell.appendChild(photoActions);
     const syncFullName = () => {
       p.lastName = lastNameInput.value.trim();
       p.firstName = firstNameInput.value.trim();
