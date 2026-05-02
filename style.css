@@ -7877,6 +7877,76 @@ body[data-theme="light"] #team-meta-name:disabled {
   display: grid;
   gap: 0.75rem;
 }
+.camp3-confirm-tablewrap {
+  overflow-x: auto;
+}
+.camp3-confirm-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+.camp3-confirm-table th,
+.camp3-confirm-table td {
+  padding: 0.35rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  text-align: left;
+  vertical-align: middle;
+}
+.camp3-confirm-row--added td {
+  background: rgba(34, 197, 94, 0.08);
+}
+.camp3-confirm-row--modified td {
+  background: rgba(59, 130, 246, 0.08);
+}
+.camp3-confirm-row--unchanged td {
+  background: rgba(148, 163, 184, 0.05);
+}
+.camp3-confirm-table th:nth-child(1),
+.camp3-confirm-table td:nth-child(1) {
+  width: 96px;
+}
+.camp3-confirm-table th:nth-child(2),
+.camp3-confirm-table td:nth-child(2) {
+  width: 72px;
+}
+.camp3-confirm-table th:nth-child(5),
+.camp3-confirm-table td:nth-child(5),
+.camp3-confirm-table th:nth-child(6),
+.camp3-confirm-table td:nth-child(6),
+.camp3-confirm-table th:nth-child(7),
+.camp3-confirm-table td:nth-child(7) {
+  width: 44px;
+  text-align: center;
+}
+.camp3-confirm-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  min-height: 24px;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.camp3-confirm-status--added {
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+.camp3-confirm-status--modified {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+.camp3-confirm-status--unchanged {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+.camp3-confirm-table .team-manager-input {
+  min-width: 0;
+}
 .camp3-confirm-section {
   border: 1px solid #334155;
   border-radius: 6px;
@@ -7893,6 +7963,24 @@ body[data-theme="light"] #team-meta-name:disabled {
 }
 .camp3-confirm-section li {
   margin: 0.18rem 0;
+}
+.camp3-confirm-out-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.camp3-confirm-out-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 6px;
+}
+.camp3-confirm-remove {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
 }
 .player-photo-modal__body {
   display: flex;

@@ -43,11 +43,16 @@ Premendo il tasto **Gestione squadra**, puoi aprire la finestra di modifica squa
 Da questa finestra puoi modificare il nome della squadra e le informazioni secondarie. Per le giocatrici hai due opzioni: modificarle a mano una per una oppure aggiungerle da un elenco.
 Per ogni giocatrice puoi anche caricare una **foto**: prima del salvataggio puoi ritagliarla e zoomarla, così il programma conserva solo una versione compressa e già adattata alla card. Se presente, viene usata come sfondo della card in campo senza cambiarne dimensioni o impaginazione. La stessa foto è modificabile anche dall'**Archivio giocatrici**.
 
-Puoi anche:
+Puoi anche importare la rosa dal **CAMP3**, cioè il modulo gara con le giocatrici convocate e i numeri di maglia. Premi **Importa CAMP3** e seleziona un PDF, un file di testo oppure una foto del modulo. Il PDF originale viene letto direttamente; nel caso di una foto il programma prova a riconoscere il testo, quindi il risultato dipende dalla qualità dell'immagine.
 
-- Indicare i **liberi** tramite l'apposita spunta
-- Selezionare la **capitana**
-- Togliere dalla rosa della partita le giocatrici non convocate, senza rimuoverle definitivamente dalla squadra
+Dopo la lettura si apre una finestra di controllo sopra la gestione squadra. Prima di confermare puoi:
+
+- Vedere quali giocatrici verrebbero aggiunte, aggiornate o lasciate invariate
+- Correggere numero, cognome, nome, libero e capitana
+- Scartare una giocatrice riconosciuta male con il tasto **x**
+- Evitare che una giocatrice venga messa fuori rosa, sempre con il tasto **x**
+
+Quando confermi, il programma aggiorna la tabella squadra: se una giocatrice esiste già aggiorna i dati letti, se non esiste la aggiunge, se è presente in squadra ma non nel CAMP3 la mette fuori rosa. Se stai creando una nuova squadra, le giocatrici predefinite vengono rimosse e sostituite da quelle riconosciute. Le modifiche diventano definitive solo quando premi **Salva** nella finestra di gestione squadra.
 
 Sul lato destro c'è la **formazione di default**: la rotazione con cui la squadra viene schierata all'inizio di ogni partita. Puoi trascinare le giocatrici nelle posizioni che vuoi. Il menu a tendina serve per scegliere chi è il palleggiatore: il programma assegna automaticamente i ruoli a tutte le altre giocatrici in base alla sua posizione, seguendo l'ordine classico (palleggio → 1° schiacciatore → 2° centrale → opposto → 2° schiacciatore → 1° centrale). Per ruotare la squadra usa i tasti appositi, che spostano effettivamente il palleggiatore. Una volta finite le modifiche, premi **Salva**.
 

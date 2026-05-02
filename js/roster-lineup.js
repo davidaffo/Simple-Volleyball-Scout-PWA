@@ -3815,12 +3815,66 @@ function findCamp3PlayerMatch(camp3Player, currentPlayers) {
     );
   }) || null;
 }
-function buildCamp3ImportPlan(camp3Players) {
-  if (!teamManagerState) return null;
-  const currentPlayers = (teamManagerState.players || []).filter(player => {
+function getCamp3ImportCurrentPlayers() {
+  return (teamManagerState && teamManagerState.players ? teamManagerState.players : []).filter(player => {
     const name = player && (player.name || buildFullName(player.lastName, player.firstName));
     return !(typeof isTemplatePlayerName === "function" && isTemplatePlayerName(name));
   });
+}
+function createCamp3ReviewDraft(camp3Players) {
+  const currentPlayers = getCamp3ImportCurrentPlayers();
+  const matchedIds = new Set();
+  const rows = (camp3Players || []).map((player, idx) => {
+    const match = findCamp3PlayerMatch(player, currentPlayers.filter(entry => !matchedIds.has(entry.id)));
+    if (match && match.id) matchedIds.add(match.id);
+    return {
+      id: `camp3_${Date.now()}_${idx}`,
+      enabled: true,
+      matchId: match && match.id ? match.id : "",
+      number: player.number || "",
+      lastName: player.lastName || splitNameParts(player.name || "").lastName || "",
+      firstName: player.firstName || splitNameParts(player.name || "").firstName || "",
+      role: player.role === "L" ? "L" : "",
+      isCaptain: !!player.isCaptain
+    };
+  });
+  const outRows = currentPlayers
+    .filter(player => player && player.id && !matchedIds.has(player.id) && !player.out)
+    .map((player, idx) => ({
+      id: `camp3_out_${Date.now()}_${idx}`,
+      enabled: true,
+      playerId: player.id,
+      name: player.name || buildFullName(player.lastName, player.firstName)
+    }));
+  return { rows, outRows };
+}
+function getCamp3RowKind(row) {
+  if (!row || !row.matchId) return "added";
+  const current = getCamp3ImportCurrentPlayers().find(player => player && player.id === row.matchId);
+  if (!current) return "added";
+  const nextName = normalizePlayers([normalizePlayerNameCase(buildFullName(row.lastName, row.firstName))])[0] || "";
+  const currentName = normalizePlayers([
+    normalizePlayerNameCase(current.name || buildFullName(current.lastName, current.firstName))
+  ])[0] || "";
+  const nextNumber = String(row.number || "").trim();
+  const currentNumber = String(current.number || "").trim();
+  const nextRole = row.role === "L" ? "L" : "";
+  const currentRole = current.role === "L" ? "L" : "";
+  const nextCaptain = !!row.isCaptain;
+  const currentCaptain = !!current.isCaptain;
+  return (
+    nextName !== currentName ||
+    nextNumber !== currentNumber ||
+    nextRole !== currentRole ||
+    nextCaptain !== currentCaptain ||
+    !!current.out
+  )
+    ? "modified"
+    : "unchanged";
+}
+function buildCamp3ImportPlanFromDraft(draft) {
+  if (!teamManagerState || !draft) return null;
+  const currentPlayers = getCamp3ImportCurrentPlayers();
   const recognizedIds = new Set();
   const changes = {
     added: [],
@@ -3831,8 +3885,24 @@ function buildCamp3ImportPlan(camp3Players) {
     captains: []
   };
   const nextPlayers = currentPlayers.map(player => Object.assign({}, player));
-  camp3Players.forEach(camp3Player => {
-    let target = findCamp3PlayerMatch(camp3Player, nextPlayers);
+  const enabledRows = (draft.rows || []).filter(row => row && row.enabled);
+  enabledRows.forEach(row => {
+    const cleanNumber = String(row.number || "").trim();
+    const fullName = normalizePlayers([normalizePlayerNameCase(buildFullName(row.lastName, row.firstName))])[0];
+    if (!fullName) return;
+    const parts = splitNameParts(fullName);
+    const camp3Player = {
+      number: /^[0-9]{1,3}$/.test(cleanNumber) ? cleanNumber : "",
+      name: fullName,
+      lastName: parts.lastName,
+      firstName: parts.firstName,
+      role: row.role === "L" ? "L" : "",
+      isCaptain: !!row.isCaptain
+    };
+    let target = row.matchId ? nextPlayers.find(player => player.id === row.matchId) : null;
+    if (!target) {
+      target = findCamp3PlayerMatch(camp3Player, nextPlayers);
+    }
     let isNewPlayer = false;
     if (!target) {
       const dbMatch =
@@ -3867,8 +3937,8 @@ function buildCamp3ImportPlan(camp3Players) {
     }
     if (camp3Player.role === "L" && target.role !== "L") {
       changes.liberos.push(target.name || camp3Player.name);
-      target.role = "L";
     }
+    target.role = camp3Player.role === "L" ? "L" : "";
     if (camp3Player.isCaptain && !target.isCaptain) {
       changes.captains.push(target.name || camp3Player.name);
     }
@@ -3877,13 +3947,25 @@ function buildCamp3ImportPlan(camp3Players) {
     target.firstName = camp3Player.firstName;
     target.lastName = camp3Player.lastName;
   });
-  nextPlayers.forEach(player => {
-    if (!player || !player.id || recognizedIds.has(player.id) || player.out) return;
+  (draft.outRows || []).filter(row => row && row.enabled).forEach(row => {
+    const player = nextPlayers.find(entry => entry && entry.id === row.playerId);
+    if (!player || player.out) return;
     player.out = true;
     changes.out.push(player.name || buildFullName(player.lastName, player.firstName));
   });
-  enforceSingleCaptainFlag(nextPlayers, (camp3Players.find(player => player.isCaptain) || {}).name || "");
+  const captainName = enabledRows.find(row => row.isCaptain)
+    ? normalizePlayerNameCase(
+        buildFullName(
+          enabledRows.find(row => row.isCaptain).lastName,
+          enabledRows.find(row => row.isCaptain).firstName
+        )
+      )
+    : "";
+  enforceSingleCaptainFlag(nextPlayers, captainName);
   return { nextPlayers, changes };
+}
+function buildCamp3ImportPlan(camp3Players) {
+  return buildCamp3ImportPlanFromDraft(createCamp3ReviewDraft(camp3Players));
 }
 function formatCamp3ImportPreview(changes) {
   const lines = ["Modifiche riconosciute dal CAMP3:"];
@@ -3909,43 +3991,154 @@ function formatCamp3ImportPreview(changes) {
   }
   return lines.join("\n");
 }
-function renderCamp3ConfirmSummary(changes) {
+function renderCamp3ConfirmSummary(draft) {
   if (!elCamp3ConfirmSummary) return;
   elCamp3ConfirmSummary.innerHTML = "";
   const title = document.createElement("p");
   title.className = "section-note";
-  title.textContent = "Controlla le modifiche riconosciute prima di applicarle alla squadra.";
+  title.textContent = "Controlla e modifica le righe riconosciute prima di applicarle alla squadra.";
   elCamp3ConfirmSummary.appendChild(title);
-  const sections = [
-    ["Aggiunte", changes.added],
-    ["Numeri aggiornati", changes.numberUpdated],
-    ["Rimesse in rosa", changes.restored],
-    ["Fuori rosa", changes.out],
-    ["Liberi riconosciuti", changes.liberos],
-    ["Capitana riconosciuta", changes.captains]
-  ];
-  let rendered = false;
-  sections.forEach(([label, list]) => {
-    if (!list || list.length === 0) return;
-    rendered = true;
+  const activeRows = (draft.rows || []).filter(row => row && row.enabled);
+  const activeOutRows = (draft.outRows || []).filter(row => row && row.enabled);
+  if (activeRows.length > 0) {
     const section = document.createElement("section");
     section.className = "camp3-confirm-section";
     const heading = document.createElement("h4");
-    heading.textContent = `${label} (${list.length})`;
-    const ul = document.createElement("ul");
-    list.forEach(item => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      ul.appendChild(li);
+    heading.textContent = `Giocatrici lette dal CAMP3 (${activeRows.length})`;
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "camp3-confirm-tablewrap";
+    const table = document.createElement("table");
+    table.className = "camp3-confirm-table";
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Stato</th>
+          <th>#</th>
+          <th>Cognome</th>
+          <th>Nome</th>
+          <th>L</th>
+          <th>K</th>
+          <th></th>
+        </tr>
+      </thead>
+    `;
+    const tbody = document.createElement("tbody");
+    activeRows.forEach(row => {
+      const tr = document.createElement("tr");
+      const rowKind = getCamp3RowKind(row);
+      tr.className = `camp3-confirm-row camp3-confirm-row--${rowKind}`;
+      const status = document.createElement("span");
+      status.className = `camp3-confirm-status camp3-confirm-status--${rowKind}`;
+      status.textContent =
+        rowKind === "added" ? "Aggiunta" : rowKind === "modified" ? "Modifica" : "Invariata";
+      const syncRowStatus = () => {
+        const nextKind = getCamp3RowKind(row);
+        tr.className = `camp3-confirm-row camp3-confirm-row--${nextKind}`;
+        status.className = `camp3-confirm-status camp3-confirm-status--${nextKind}`;
+        status.textContent =
+          nextKind === "added" ? "Aggiunta" : nextKind === "modified" ? "Modifica" : "Invariata";
+      };
+      const numberInput = document.createElement("input");
+      numberInput.type = "number";
+      numberInput.min = "0";
+      numberInput.max = "999";
+      numberInput.value = row.number || "";
+      numberInput.addEventListener("input", () => {
+        row.number = numberInput.value;
+        syncRowStatus();
+      });
+      const lastNameInput = document.createElement("input");
+      lastNameInput.type = "text";
+      lastNameInput.value = row.lastName || "";
+      lastNameInput.addEventListener("input", () => {
+        row.lastName = lastNameInput.value;
+        syncRowStatus();
+      });
+      const firstNameInput = document.createElement("input");
+      firstNameInput.type = "text";
+      firstNameInput.value = row.firstName || "";
+      firstNameInput.addEventListener("input", () => {
+        row.firstName = firstNameInput.value;
+        syncRowStatus();
+      });
+      const liberoChk = document.createElement("input");
+      liberoChk.type = "checkbox";
+      liberoChk.checked = row.role === "L";
+      liberoChk.addEventListener("change", () => {
+        row.role = liberoChk.checked ? "L" : "";
+        syncRowStatus();
+      });
+      const captainChk = document.createElement("input");
+      captainChk.type = "checkbox";
+      captainChk.checked = !!row.isCaptain;
+      captainChk.addEventListener("change", () => {
+        if (captainChk.checked) {
+          (draft.rows || []).forEach(other => {
+            if (other) other.isCaptain = other.id === row.id;
+          });
+        } else {
+          row.isCaptain = false;
+        }
+        renderCamp3ConfirmSummary(draft);
+      });
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "pill-remove camp3-confirm-remove";
+      removeBtn.textContent = "✕";
+      removeBtn.setAttribute("aria-label", "Elimina modifica");
+      removeBtn.addEventListener("click", () => {
+        row.enabled = false;
+        renderCamp3ConfirmSummary(draft);
+      });
+      [numberInput, lastNameInput, firstNameInput].forEach(input => {
+        input.className = "team-manager-input";
+      });
+      [status, numberInput, lastNameInput, firstNameInput, liberoChk, captainChk, removeBtn].forEach(el => {
+        const td = document.createElement("td");
+        td.appendChild(el);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    section.appendChild(heading);
+    section.appendChild(tableWrap);
+    elCamp3ConfirmSummary.appendChild(section);
+  }
+  if (activeOutRows.length > 0) {
+    const section = document.createElement("section");
+    section.className = "camp3-confirm-section";
+    const heading = document.createElement("h4");
+    heading.textContent = `Da mettere fuori rosa (${activeOutRows.length})`;
+    const list = document.createElement("div");
+    list.className = "camp3-confirm-out-list";
+    activeOutRows.forEach(row => {
+      const item = document.createElement("div");
+      item.className = "camp3-confirm-out-item";
+      const label = document.createElement("span");
+      label.textContent = row.name || "Giocatrice";
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "pill-remove camp3-confirm-remove";
+      removeBtn.textContent = "✕";
+      removeBtn.setAttribute("aria-label", "Non mettere fuori rosa");
+      removeBtn.addEventListener("click", () => {
+        row.enabled = false;
+        renderCamp3ConfirmSummary(draft);
+      });
+      item.appendChild(label);
+      item.appendChild(removeBtn);
+      list.appendChild(item);
     });
     section.appendChild(heading);
-    section.appendChild(ul);
+    section.appendChild(list);
     elCamp3ConfirmSummary.appendChild(section);
-  });
-  if (!rendered) {
+  }
+  if (activeRows.length === 0 && activeOutRows.length === 0) {
     const empty = document.createElement("div");
     empty.className = "players-empty";
-    empty.textContent = "Nessuna modifica necessaria.";
+    empty.textContent = "Nessuna modifica da applicare.";
     elCamp3ConfirmSummary.appendChild(empty);
   }
 }
@@ -3956,14 +4149,15 @@ function closeCamp3ConfirmModal(result = false) {
   elCamp3ConfirmModal.classList.add("hidden");
   if (typeof resolver === "function") resolver(!!result);
 }
-function showCamp3ImportConfirm(changes) {
+function showCamp3ImportConfirm(draft) {
   if (!elCamp3ConfirmModal || !elCamp3ConfirmSummary) {
-    return Promise.resolve(confirm(formatCamp3ImportPreview(changes)));
+    const plan = buildCamp3ImportPlanFromDraft(draft);
+    return Promise.resolve(confirm(formatCamp3ImportPreview(plan ? plan.changes : {})) ? draft : null);
   }
-  renderCamp3ConfirmSummary(changes);
+  renderCamp3ConfirmSummary(draft);
   elCamp3ConfirmModal.classList.remove("hidden");
   return new Promise(resolve => {
-    elCamp3ConfirmModal._camp3Resolve = resolve;
+    elCamp3ConfirmModal._camp3Resolve = result => resolve(result ? draft : null);
   });
 }
 async function importCamp3IntoTeamManager(file) {
@@ -3981,15 +4175,18 @@ async function importCamp3IntoTeamManager(file) {
     alert("Nessuna giocatrice riconosciuta nel CAMP3. Con una foto prova un'immagine più dritta e leggibile.");
     return;
   }
-  const plan = buildCamp3ImportPlan(camp3Players);
-  if (!plan) return;
-  const hasChanges = Object.values(plan.changes).some(list => Array.isArray(list) && list.length > 0);
+  const draft = createCamp3ReviewDraft(camp3Players);
+  const initialPlan = buildCamp3ImportPlanFromDraft(draft);
+  if (!initialPlan) return;
+  const hasChanges = Object.values(initialPlan.changes).some(list => Array.isArray(list) && list.length > 0);
   if (!hasChanges) {
-    alert(formatCamp3ImportPreview(plan.changes));
+    alert(formatCamp3ImportPreview(initialPlan.changes));
     return;
   }
-  const ok = await showCamp3ImportConfirm(plan.changes);
-  if (!ok) return;
+  const editedDraft = await showCamp3ImportConfirm(draft);
+  if (!editedDraft) return;
+  const plan = buildCamp3ImportPlanFromDraft(editedDraft);
+  if (!plan) return;
   teamManagerState.players = plan.nextPlayers;
   teamManagerState.defaultLineup = normalizePlayers(teamManagerState.defaultLineup || []).filter(name =>
     plan.nextPlayers.some(player => player.name === name && !player.out && player.role !== "L")
