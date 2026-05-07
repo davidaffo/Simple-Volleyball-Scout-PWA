@@ -14730,6 +14730,35 @@ function getPlayByPlayTooltipHtml(rally, focusScope) {
     </table>
   `;
 }
+function positionPlayByPlayTooltip(root, tooltip, ev) {
+  if (!root || !tooltip || !ev) return;
+  const gap = 12;
+  const margin = 8;
+  const tipWidth = tooltip.offsetWidth || 260;
+  const tipHeight = tooltip.offsetHeight || 120;
+  const maxLeft = Math.max(margin, window.innerWidth - tipWidth - margin);
+  const maxTop = Math.max(margin, window.innerHeight - tipHeight - margin);
+  let left = ev.clientX + gap;
+  let top = ev.clientY + gap;
+  if (left > maxLeft) left = ev.clientX - tipWidth - gap;
+  if (top > maxTop) top = ev.clientY - tipHeight - gap;
+  tooltip.style.left = `${Math.min(maxLeft, Math.max(margin, left))}px`;
+  tooltip.style.top = `${Math.min(maxTop, Math.max(margin, top))}px`;
+}
+function createPlayByPlayTooltip() {
+  document.querySelectorAll(".play-by-play-tooltip").forEach(el => el.remove());
+  const tooltip = document.createElement("div");
+  tooltip.className = "play-by-play-tooltip hidden";
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+function hidePlayByPlayTooltip(tooltip) {
+  if (!tooltip) return;
+  tooltip.classList.add("hidden");
+  tooltip.innerHTML = "";
+  tooltip.style.left = "";
+  tooltip.style.top = "";
+}
 function renderPlayByPlaySetSelect(rallies) {
   if (!elAnalysisPlayByPlaySet) return "";
   const ui = ensurePlayByPlayUiState();
@@ -14798,6 +14827,7 @@ function renderPlayByPlayAnalysis() {
   const rallies = buildPlayByPlayRallies(scope);
   elAnalysisPlayByPlay.innerHTML = "";
   if (!rallies.length) {
+    document.querySelectorAll(".play-by-play-tooltip").forEach(el => el.remove());
     if (elAnalysisPlayByPlaySummary) elAnalysisPlayByPlaySummary.innerHTML = "";
     elAnalysisPlayByPlay.innerHTML = '<div class="players-empty">Registra o importa eventi con punteggio per vedere il play by play.</div>';
     return;
@@ -14843,7 +14873,6 @@ function renderPlayByPlayAnalysis() {
   const tooltipData = visibleRallies.map(rally => getPlayByPlayTooltipHtml(rally, scope));
   elAnalysisPlayByPlay.innerHTML = `
     <div class="play-by-play-table-shell">
-      <div class="play-by-play-tooltip hidden"></div>
       <table class="play-by-play-table">
         <thead>
           <tr>
@@ -14862,26 +14891,24 @@ function renderPlayByPlayAnalysis() {
     </div>
   `;
   const root = elAnalysisPlayByPlay.querySelector(".play-by-play-table-shell");
-  const tooltip = root ? root.querySelector(".play-by-play-tooltip") : null;
+  const tooltip = root ? createPlayByPlayTooltip() : null;
   if (root && tooltip) {
+    root.addEventListener("scroll", () => hidePlayByPlayTooltip(tooltip), { passive: true });
     root.querySelectorAll(".play-by-play-token").forEach(bar => {
       const rallyIdx = parseInt(bar.dataset.rallyIndex, 10);
-      bar.addEventListener("mouseenter", ev => {
+      const showTooltip = ev => {
         tooltip.innerHTML = tooltipData[rallyIdx] || "";
         tooltip.classList.remove("hidden");
-        const rect = root.getBoundingClientRect();
-        const maxLeft = Math.max(8, rect.width - 260);
-        tooltip.style.left = `${Math.min(maxLeft, Math.max(8, ev.clientX - rect.left + 12))}px`;
-        tooltip.style.top = `${Math.max(8, ev.clientY - rect.top + 12)}px`;
+        positionPlayByPlayTooltip(root, tooltip, ev);
+      };
+      bar.addEventListener("mouseenter", ev => {
+        showTooltip(ev);
       });
       bar.addEventListener("mousemove", ev => {
-        const rect = root.getBoundingClientRect();
-        const maxLeft = Math.max(8, rect.width - 260);
-        tooltip.style.left = `${Math.min(maxLeft, Math.max(8, ev.clientX - rect.left + 12))}px`;
-        tooltip.style.top = `${Math.max(8, ev.clientY - rect.top + 12)}px`;
+        showTooltip(ev);
       });
       bar.addEventListener("mouseleave", () => {
-        tooltip.classList.add("hidden");
+        hidePlayByPlayTooltip(tooltip);
       });
     });
   }

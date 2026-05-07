@@ -5442,8 +5442,8 @@ body[data-theme="light"] .analysis-filter select {
   background: rgba(30, 64, 175, 0.46);
 }
 .play-by-play-tooltip {
-  position: absolute;
-  z-index: 8;
+  position: fixed;
+  z-index: 10000;
   width: min(710px, calc(100% - 1rem));
   padding: 0.35rem 0.5rem;
   border-radius: 0.45rem;
