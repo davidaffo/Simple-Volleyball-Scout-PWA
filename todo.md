@@ -3,7 +3,7 @@ Aggiungere condivisione dati via socket (pagina html statica come esportazione m
 Modalità allenamento (si trova su branch allenamento)
 
 # Minor features
-crea stampa tipo foglio gara
+nel foglio gara manca la stampa
 
 # Features teoricamente implementate
 

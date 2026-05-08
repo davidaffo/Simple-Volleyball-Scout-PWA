@@ -6,14 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#111111" />
   <script>
-    window.__APP_CACHE_VERSION__ = "v372-def98af";
+    window.__APP_CACHE_VERSION__ = "v373-8a32961";
     window.__IS_LOCALHOST_DEV__ =
       location.hostname === "localhost" ||
       location.hostname === "127.0.0.1" ||
       location.hostname === "::1";
     window.__APP_ASSET_SUFFIX__ = window.__IS_LOCALHOST_DEV__
       ? `?dev=${Date.now()}`
-      : `?v=v372-def98af`;
+      : `?v=v373-8a32961`;
     if (location.protocol === "file:") {
       document.documentElement.dataset.fileOrigin = "true";
     }
@@ -774,6 +774,7 @@
           <button class="agg-subtab-btn" data-agg-tab-target="second">Alzate</button>
           <button class="agg-subtab-btn" data-agg-tab-target="trajectory">Attacco</button>
           <button class="agg-subtab-btn" data-agg-tab-target="serve">Battute</button>
+          <button class="agg-subtab-btn" data-agg-tab-target="match-sheet">Foglio gara</button>
           <button class="agg-subtab-btn" data-agg-tab-target="player">Giocatrici</button>
         </div>
         <div class="analysis-filters analysis-team-filter analysis-team-filter--summary">
@@ -1166,7 +1167,12 @@
                 </tr>
               </tbody>
             </table>
-          </div>
+        </div>
+      </div>
+      <div class="agg-subpanel" data-agg-tab="match-sheet">
+        <div class="match-sheet-panel">
+          <div id="match-sheet-page" class="match-sheet-page"></div>
+        </div>
       </div>
       <div class="agg-subpanel" data-agg-tab="player">
           <div class="player-analysis">
